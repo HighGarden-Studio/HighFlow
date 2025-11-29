@@ -32,6 +32,12 @@ dependencies:
   '@vueuse/gesture':
     specifier: ^2.0.0
     version: 2.0.0(vue@3.5.25)
+  abort-controller:
+    specifier: ^3.0.0
+    version: 3.0.0
+  agentkeepalive:
+    specifier: ^4.6.0
+    version: 4.6.0
   ai:
     specifier: ^3.0.0
     version: 3.4.33(openai@4.104.0)(react@19.2.0)(svelte@5.45.2)(vue@3.5.25)(zod@3.25.76)
@@ -47,6 +53,9 @@ dependencies:
   date-fns:
     specifier: ^3.3.1
     version: 3.6.0
+  digest-fetch:
+    specifier: ^3.1.1
+    version: 3.1.1
   discord.js:
     specifier: ^14.14.1
     version: 14.25.1
@@ -65,6 +74,12 @@ dependencies:
   flexsearch:
     specifier: ^0.8.212
     version: 0.8.212
+  form-data-encoder:
+    specifier: ^4.1.0
+    version: 4.1.0
+  formdata-node:
+    specifier: ^6.0.3
+    version: 6.0.3
   fuse.js:
     specifier: ^7.0.0
     version: 7.1.0
@@ -122,6 +137,9 @@ dependencies:
   vue-router:
     specifier: ^4.3.0
     version: 4.6.3(vue@3.5.25)
+  web-streams-polyfill:
+    specifier: ^4.2.0
+    version: 4.2.0
   webidl-conversions:
     specifier: ^8.0.0
     version: 8.0.0
@@ -5268,6 +5286,15 @@ packages:
       md5: 2.3.0
     dev: false
 
+  /digest-fetch@3.1.1:
+    resolution: {integrity: sha512-sfMKKDctvDUTljFnqTBeDl/20vZtKKNZ3XQleht2j3Ky1xuQLuvE9lT+Fvp3EZxJHwAk6RXeEEL4DCmKDSd8xA==}
+    dependencies:
+      base-64: 0.1.0
+      js-sha256: 0.9.0
+      js-sha512: 0.8.0
+      md5: 2.3.0
+    dev: false
+
   /dir-compare@3.3.0:
     resolution: {integrity: sha512-J7/et3WlGUCxjdnD3HAAzQ6nsnc0WL6DD7WcwJb7c39iH1+AWfg+9OqzJNaI6PkBwBvm1mhZNL9iY/nRiZXlPg==}
     dependencies:
@@ -6388,6 +6415,11 @@ packages:
     resolution: {integrity: sha512-qfqtYan3rxrnCk1VYaA4H+Ms9xdpPqvLZa6xmMgFvhO32x7/3J/ExcTd6qpxM0vH2GdMI+poehyBZvqfMTto8A==}
     dev: false
 
+  /form-data-encoder@4.1.0:
+    resolution: {integrity: sha512-G6NsmEW15s0Uw9XnCg+33H3ViYRyiM0hMrMhhqQOR8NFc5GhYrI+6I3u7OTw7b91J2g8rtvMBZJDbcGb2YUniw==}
+    engines: {node: '>= 18'}
+    dev: false
+
   /form-data@2.5.5:
     resolution: {integrity: sha512-jqdObeR2rxZZbPSGL+3VckHMYtu+f9//KXBsVny6JSX/pa38Fy+bGjuG8eW/H6USNQWhLi8Num++cU2yOCNz4A==}
     engines: {node: '>= 0.12'}
@@ -6416,6 +6448,11 @@ packages:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 4.0.0-beta.3
+    dev: false
+
+  /formdata-node@6.0.3:
+    resolution: {integrity: sha512-8e1++BCiTzUno9v5IZ2J6bv4RU+3UKDmqWUQD0MIMVCd9AdhWkO1gw57oo1mNEX1dMq2EGI+FbWz4B92pscSQg==}
+    engines: {node: '>= 18'}
     dev: false
 
   /forwarded-parse@2.1.2:
@@ -7192,6 +7229,14 @@ packages:
     resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
     engines: {node: '>=14'}
     dev: true
+
+  /js-sha256@0.9.0:
+    resolution: {integrity: sha512-sga3MHh9sgQN2+pJ9VYZ+1LPwXOxuBJBA5nrR5/ofPfuiJBE2hnjsaN8se8JznOmGLN2p49Pe5U/ttafcs/apA==}
+    dev: false
+
+  /js-sha512@0.8.0:
+    resolution: {integrity: sha512-PWsmefG6Jkodqt+ePTvBZCSMFgN7Clckjd0O7su3I0+BW2QWUTJNzjktHsztGLhncP2h8mcF9V9Y2Ha59pAViQ==}
+    dev: false
 
   /js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
@@ -10447,6 +10492,11 @@ packages:
   /web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
+    dev: false
+
+  /web-streams-polyfill@4.2.0:
+    resolution: {integrity: sha512-0rYDzGOh9EZpig92umN5g5D/9A1Kff7k0/mzPSSCY8jEQeYkgRMoY7LhbXtUCWzLCMX0TUE9aoHkjFNB7D9pfA==}
+    engines: {node: '>= 8'}
     dev: false
 
   /webidl-conversions@3.0.1:
