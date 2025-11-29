@@ -146,14 +146,7 @@
             "dist-electron",
             "node_modules/**/*"
         ],
-        "asarUnpack": [
-            "node_modules/@anthropic-ai/**/*",
-            "node_modules/node-fetch/**/*",
-            "node_modules/whatwg-url/**/*",
-            "node_modules/webidl-conversions/**/*",
-            "node_modules/tr46/**/*",
-            "node_modules/better-sqlite3/**/*"
-        ],
+        "asar": false,
         "mac": {
             "target": [
                 "dmg",
