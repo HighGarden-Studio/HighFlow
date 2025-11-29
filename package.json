@@ -133,8 +133,8 @@
         "vue-tsc": "^2.0.0"
     },
     "build": {
-        "appId": "com.yourcompany.workflow-manager",
-        "productName": "AI Workflow Manager",
+        "appId": "com.highgarden.highaimanager",
+        "productName": "HighAIManager",
         "directories": {
             "output": "release/${version}"
         },

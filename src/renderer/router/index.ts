@@ -10,82 +10,82 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
  * Route definitions
  */
 const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    name: 'home',
-    redirect: '/projects',
-  },
-  {
-    path: '/projects',
-    name: 'projects',
-    component: () => import('../views/ProjectsView.vue'),
-    meta: {
-      title: 'Projects',
+    {
+        path: '/',
+        name: 'home',
+        redirect: '/projects',
     },
-  },
-  {
-    path: '/projects/:id',
-    name: 'project-detail',
-    component: () => import('../views/ProjectDetailView.vue'),
-    props: true,
-    meta: {
-      title: 'Project',
+    {
+        path: '/projects',
+        name: 'projects',
+        component: () => import('../views/ProjectsView.vue'),
+        meta: {
+            title: 'Projects',
+        },
     },
-  },
-  {
-    path: '/projects/:id/board',
-    name: 'project-board',
-    component: () => import('../views/KanbanBoardView.vue'),
-    props: true,
-    meta: {
-      title: 'Board',
+    {
+        path: '/projects/:id',
+        name: 'project-detail',
+        component: () => import('../views/ProjectDetailView.vue'),
+        props: true,
+        meta: {
+            title: 'Project',
+        },
     },
-  },
-  {
-    path: '/settings',
-    name: 'settings',
-    component: () => import('../views/SettingsView.vue'),
-    meta: {
-      title: 'Settings',
+    {
+        path: '/projects/:id/board',
+        name: 'project-board',
+        component: () => import('../views/KanbanBoardView.vue'),
+        props: true,
+        meta: {
+            title: 'Board',
+        },
     },
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'not-found',
-    component: () => import('../views/NotFoundView.vue'),
-    meta: {
-      title: 'Not Found',
+    {
+        path: '/settings',
+        name: 'settings',
+        component: () => import('../views/SettingsView.vue'),
+        meta: {
+            title: 'Settings',
+        },
     },
-  },
+    {
+        path: '/:pathMatch(.*)*',
+        name: 'not-found',
+        component: () => import('../views/NotFoundView.vue'),
+        meta: {
+            title: 'Not Found',
+        },
+    },
 ];
 
 /**
  * Create router instance
  */
 const router = createRouter({
-  history: createWebHashHistory(),
-  routes,
-  scrollBehavior(_to, _from, savedPosition) {
-    if (savedPosition) {
-      return savedPosition;
-    }
-    return { top: 0 };
-  },
+    history: createWebHashHistory(),
+    routes,
+    scrollBehavior(_to, _from, savedPosition) {
+        if (savedPosition) {
+            return savedPosition;
+        }
+        return { top: 0 };
+    },
 });
 
 /**
  * Navigation guards
  */
 router.beforeEach((to, _from, next) => {
-  // Update document title
-  const title = to.meta.title as string | undefined;
-  document.title = title ? `${title} - AI Workflow Manager` : 'AI Workflow Manager';
+    // Update document title
+    const title = to.meta.title as string | undefined;
+    document.title = title ? `${title} - HighAIManager` : 'HighAIManager';
 
-  next();
+    next();
 });
 
 router.afterEach((_to, _from) => {
-  // Analytics or other post-navigation logic can go here
+    // Analytics or other post-navigation logic can go here
 });
 
 export default router;

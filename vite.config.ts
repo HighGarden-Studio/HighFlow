@@ -33,7 +33,8 @@ export default defineConfig({
           'ai-core': ['openai', '@anthropic-ai/sdk', '@google/generative-ai'],
           'charts': ['echarts', 'vue-echarts'],
           'collaboration': ['yjs', 'y-websocket', 'y-indexeddb'],
-          'ui-components': ['radix-vue', 'cmdk-vue'],
+          // 제거된 cmdk-vue 의존성 대신 radix-vue만 분리
+          'ui-components': ['radix-vue'],
         },
       },
     },
