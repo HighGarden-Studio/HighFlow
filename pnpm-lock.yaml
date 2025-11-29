@@ -95,6 +95,9 @@ dependencies:
   mermaid:
     specifier: ^11.12.1
     version: 11.12.1
+  ms:
+    specifier: ^2.1.3
+    version: 2.1.3
   nanoid:
     specifier: ^5.0.5
     version: 5.1.6
