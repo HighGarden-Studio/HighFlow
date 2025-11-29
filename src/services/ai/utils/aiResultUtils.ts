@@ -1,0 +1,112 @@
+import type { AiResult, AiKind, AiSubType } from '@core/types/ai';
+
+const JSON_PATTERN = /^[\s{\[].*}[\s\]]?$/s;
+const YAML_HINT = /^(---|\w[\w\s-]*:)/m;
+const SQL_HINT = /\b(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|UPSERT)\b/i;
+const DIFF_HINT = /^@@|^\+{3}|^-{3}|^diff\s/m;
+const SHELL_HINT = /^\s*(#!\/|(?:bash|sh|zsh|fish)\b)/m;
+const HTML_HINT = /<\s*(html|body|div|span|section|article|main)\b/i;
+const MARKDOWN_HINT = /^\s{0,3}(#{1,6}|\*|-|\d+\.)\s/m;
+const LOG_HINT = /\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE)\b.*\d{2}:\d{2}:\d{2}/;
+const MERMAID_HINT = /\b(graph\s+(?:LR|RL|TD|BT)|sequenceDiagram|classDiagram|stateDiagram)\b/;
+const SVG_HINT = /<svg[\s>]/i;
+const CSV_HINT =
+    /^(?:\s*"?[\w\s\-.:\/]+"?(?:\s*,\s*"?[\w\s\-.:\/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
+const CODE_FENCE_HINT = /```(?<lang>[\w+-]+)?\s[\s\S]+```/m;
+const PDF_HINT = /%PDF-|JVBER/i;
+
+interface DetectionResult {
+    kind: AiKind;
+    subType: AiSubType;
+    mime?: string;
+    meta?: Record<string, any>;
+}
+
+export function detectTextSubType(value: string): DetectionResult {
+    const trimmed = value?.trim() || '';
+
+    if (!trimmed) {
+        return { kind: 'text', subType: 'text', mime: 'text/plain' };
+    }
+
+    if (PDF_HINT.test(trimmed)) {
+        return { kind: 'document', subType: 'pdf', mime: 'application/pdf' };
+    }
+
+    if (SVG_HINT.test(trimmed)) {
+        return { kind: 'image', subType: 'svg', mime: 'image/svg+xml' };
+    }
+
+    if (JSON_PATTERN.test(trimmed)) {
+        try {
+            JSON.parse(trimmed);
+            return { kind: 'data', subType: 'json', mime: 'application/json' };
+        } catch {
+            // fallthrough
+        }
+    }
+
+    if (YAML_HINT.test(trimmed)) {
+        return { kind: 'data', subType: 'yaml', mime: 'text/yaml' };
+    }
+
+    if (CSV_HINT.test(trimmed)) {
+        return { kind: 'data', subType: 'csv', mime: 'text/csv' };
+    }
+
+    if (SQL_HINT.test(trimmed)) {
+        return { kind: 'code', subType: 'sql', mime: 'text/sql' };
+    }
+
+    if (DIFF_HINT.test(trimmed)) {
+        return { kind: 'code', subType: 'diff', mime: 'text/x-diff' };
+    }
+
+    if (MERMAID_HINT.test(trimmed)) {
+        return { kind: 'document', subType: 'mermaid', mime: 'text/plain' };
+    }
+
+    if (HTML_HINT.test(trimmed)) {
+        return { kind: 'document', subType: 'html', mime: 'text/html' };
+    }
+
+    if (MARKDOWN_HINT.test(trimmed)) {
+        return { kind: 'text', subType: 'markdown', mime: 'text/markdown' };
+    }
+
+    if (SHELL_HINT.test(trimmed)) {
+        return { kind: 'code', subType: 'shell', mime: 'text/x-shellscript' };
+    }
+
+    if (LOG_HINT.test(trimmed)) {
+        return { kind: 'text', subType: 'log', mime: 'text/plain' };
+    }
+
+    const fenced = trimmed.match(CODE_FENCE_HINT);
+    if (fenced) {
+        const lang = fenced.groups?.lang;
+        return {
+            kind: 'code',
+            subType: 'code',
+            mime: 'text/plain',
+            meta: lang ? { language: lang.toLowerCase() } : undefined,
+        };
+    }
+
+    return { kind: 'text', subType: 'text', mime: 'text/plain' };
+}
+
+export function buildPlainTextResult(value: string, meta?: Record<string, any>): AiResult {
+    const detection = detectTextSubType(value);
+    return {
+        kind: detection.kind,
+        subType: detection.subType,
+        format: 'plain',
+        value,
+        mime: detection.mime,
+        meta: {
+            ...(detection.meta || {}),
+            ...(meta || {}),
+        },
+    };
+}

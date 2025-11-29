@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(pnpm install:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm db:generate:*)",
+      "Bash(pnpm db:push:*)",
+      "Bash(pnpm rebuild:*)",
+      "Bash(pnpm db:migrate:*)",
+      "Bash(pnpm db:seed:*)",
+      "Bash(pkill:*)",
+      "Bash(pnpm dev:electron:*)",
+      "Bash(pnpm vite:*)",
+      "Bash(pnpm add:*)",
+      "mcp__jetbrains__get_open_in_editor_file_path",
+      "mcp__jetbrains__get_all_open_file_paths",
+      "mcp__jetbrains__get_project_vcs_status",
+      "mcp__jetbrains__list_directory_tree_in_folder",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx drizzle-kit:*)",
+      "Bash(npx tsx:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(sqlite3:*)",
+      "Bash(claude --version:*)",
+      "Bash(node -e:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx drizzle-kit push:*)",
+      "Bash(npx @electron/rebuild:*)",
+      "Bash(npx electron-rebuild:*)",
+      "Bash(npx electron-builder:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx drizzle-kit push:sqlite:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

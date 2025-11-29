@@ -1,0 +1,55 @@
+{
+    "version": "5",
+    "dialect": "sqlite",
+    "entries": [
+        {
+            "idx": 0,
+            "version": "5",
+            "when": 1763996933400,
+            "tag": "0000_wealthy_radioactive_man",
+            "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "5",
+            "when": 1764040430454,
+            "tag": "0001_nasty_sheva_callister",
+            "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "5",
+            "when": 1764093703283,
+            "tag": "0002_clammy_darkstar",
+            "breakpoints": true
+        },
+        {
+            "idx": 3,
+            "version": "5",
+            "when": 1764152467408,
+            "tag": "0003_quiet_scourge",
+            "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "5",
+            "when": 1732681072000,
+            "tag": "0004_add_ai_execution_fields",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "5",
+            "when": 1764245311760,
+            "tag": "0005_cooing_russian",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "5",
+            "when": 1732800000000,
+            "tag": "0006_review_ai_settings",
+            "breakpoints": true
+        }
+    ]
+}

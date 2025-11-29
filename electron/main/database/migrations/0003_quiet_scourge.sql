@@ -1,0 +1,1 @@
+ALTER TABLE tasks ADD `execution_result` text;
