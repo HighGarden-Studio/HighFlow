@@ -223,8 +223,7 @@ export class AIServiceManager {
             const provider = this.resolveProvider(task.aiProvider as AIProvider | null);
             const model = this.resolveModel(provider, task.aiModel as AIModel | null);
             const explicitMCPs = this.normalizeExplicitRequiredMCPs(task.requiredMCPs);
-            const shouldAutoDetect =
-                this.autoDetectMCPsEnabled && explicitMCPs.length === 0;
+            const shouldAutoDetect = this.autoDetectMCPsEnabled && explicitMCPs.length === 0;
             const detectedMCPs = shouldAutoDetect
                 ? await this.detectRelevantMCPs(task, options.onLog)
                 : [];
@@ -618,9 +617,18 @@ export class AIServiceManager {
                 config.model
             );
 
-            const toolCalls = (aiResult.meta?.toolCalls || aiResult.meta?.tool_calls) as
+            let toolCalls = (aiResult.meta?.toolCalls || aiResult.meta?.tool_calls) as
                 | ToolCall[]
                 | undefined;
+
+            // Fallback: Try to detect JSON tool call in the content if no native tool calls are present
+            if (!toolCalls || toolCalls.length === 0) {
+                const jsonToolCall = this.detectJsonToolCall(aiResult.value);
+                if (jsonToolCall) {
+                    console.log('[MCP Tool Loop] Detected JSON tool call in content');
+                    toolCalls = [jsonToolCall];
+                }
+            }
 
             console.log(`[MCP Tool Loop] Iteration ${iteration + 1}: AI response received`);
             if (toolCalls && toolCalls.length > 0) {
@@ -683,6 +691,44 @@ export class AIServiceManager {
         throw new Error(
             `Exceeded maximum MCP tool iterations (${AIServiceManager.MAX_TOOL_ITERATIONS}) while executing task ${task.id}`
         );
+    }
+
+    /**
+     * Detects a JSON-formatted tool call in the text content.
+     * Supports format: { "tool": "tool_name", "parameters": { ... } }
+     */
+    private detectJsonToolCall(content: string): ToolCall | null {
+        try {
+            const trimmed = content.trim();
+            // Check if it looks like a JSON object
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                const parsed = JSON.parse(trimmed);
+                if (parsed.tool && typeof parsed.tool === 'string') {
+                    return {
+                        id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        name: parsed.tool,
+                        arguments: parsed.parameters || {},
+                    };
+                }
+            }
+
+            // Also try to find JSON block within markdown code blocks
+            const jsonBlockRegex = /```json\s*([\s\S]*?)\s*```/;
+            const match = trimmed.match(jsonBlockRegex);
+            if (match && match[1]) {
+                const parsed = JSON.parse(match[1]);
+                if (parsed.tool && typeof parsed.tool === 'string') {
+                    return {
+                        id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        name: parsed.tool,
+                        arguments: parsed.parameters || {},
+                    };
+                }
+            }
+        } catch (e) {
+            // Not valid JSON or not a tool call, ignore
+        }
+        return null;
     }
 
     private async executeToolCallForAI(
@@ -1057,7 +1103,10 @@ export class AIServiceManager {
     /**
      * Collect MCP tool definitions for function calling
      */
-    private async collectMCPTools(task: Task, requiredMCPs: string[]): Promise<MCPToolDefinition[]> {
+    private async collectMCPTools(
+        task: Task,
+        requiredMCPs: string[]
+    ): Promise<MCPToolDefinition[]> {
         if (!requiredMCPs || requiredMCPs.length === 0) {
             return [];
         }
