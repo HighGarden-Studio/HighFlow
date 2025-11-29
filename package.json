@@ -66,6 +66,7 @@
         "dotenv": "^16.4.5",
         "drizzle-orm": "^0.30.0",
         "echarts": "^5.5.0",
+        "event-target-shim": "^6.0.2",
         "express": "^4.18.2",
         "flexsearch": "^0.8.212",
         "form-data-encoder": "^4.1.0",
