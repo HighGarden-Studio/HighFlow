@@ -81,6 +81,7 @@
         "vue": "^3.4.21",
         "vue-echarts": "^6.7.0",
         "vue-router": "^4.3.0",
+        "whatwg-url": "^15.1.0",
         "y-indexeddb": "^9.0.12",
         "y-protocols": "^1.0.6",
         "y-websocket": "^2.1.0",
@@ -146,6 +147,7 @@
         "asarUnpack": [
             "node_modules/@anthropic-ai/**/*",
             "node_modules/node-fetch/**/*",
+            "node_modules/whatwg-url/**/*",
             "node_modules/better-sqlite3/**/*"
         ],
         "mac": {
