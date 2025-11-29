@@ -104,6 +104,9 @@ dependencies:
   tr46:
     specifier: ^6.0.0
     version: 6.0.0
+  undici:
+    specifier: ^7.16.0
+    version: 7.16.0
   uuid:
     specifier: ^8.3.2
     version: 8.3.2
@@ -10001,6 +10004,11 @@ packages:
   /undici@6.21.3:
     resolution: {integrity: sha512-gBLkYIlEnSp8pFbT64yFgGE6UIB9tAkhukC23PmMDCe5Nd+cRqKxSjw5y54MK2AZMgZfJWMaNE4nYUHgi1XEOw==}
     engines: {node: '>=18.17'}
+    dev: false
+
+  /undici@7.16.0:
+    resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
+    engines: {node: '>=20.18.1'}
     dev: false
 
   /unique-filename@2.0.1:

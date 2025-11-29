@@ -78,6 +78,7 @@
         "socket.io": "^4.8.1",
         "socket.io-client": "^4.8.1",
         "tr46": "^6.0.0",
+        "undici": "^7.16.0",
         "uuid": "^8.3.2",
         "vue": "^3.4.21",
         "vue-echarts": "^6.7.0",
