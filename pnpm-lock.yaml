@@ -80,6 +80,9 @@ dependencies:
   nanoid:
     specifier: ^5.0.5
     version: 5.1.6
+  node-fetch:
+    specifier: '2'
+    version: 2.7.0
   openai:
     specifier: ^4.28.4
     version: 4.104.0(zod@3.25.76)
@@ -185,8 +188,8 @@ devDependencies:
     specifier: ^0.20.14
     version: 0.20.18
   electron:
-    specifier: ^29.0.1
-    version: 29.4.6
+    specifier: '=29.0.1'
+    version: 29.0.1
   electron-builder:
     specifier: ^24.13.3
     version: 24.13.3(electron-builder-squirrel-windows@24.13.3)
@@ -5624,8 +5627,8 @@ packages:
       - supports-color
     dev: true
 
-  /electron@29.4.6:
-    resolution: {integrity: sha512-fz8ndj8cmmf441t4Yh2FDP3Rn0JhLkVGvtUf2YVMbJ5SdJPlc0JWll9jYkhh60jDKVVCr/tBAmfxqRnXMWJpzg==}
+  /electron@29.0.1:
+    resolution: {integrity: sha512-hsQr9clm8NCAMv4uhHlXThHn52UAgrHgyz3ubBAxZIPuUcpKVDtg4HPmx4hbmHIbYICI5OyLN3Ztp7rS+Dn4Lw==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
     requiresBuild: true

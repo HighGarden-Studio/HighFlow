@@ -1,194 +1,201 @@
 {
-  "name": "ai-workflow-manager",
-  "version": "0.1.0",
-  "description": "AI-powered project and task management desktop application",
-  "main": "dist-electron/main/index.cjs",
-  "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com"
-  },
-  "license": "MIT",
-  "private": true,
-  "scripts": {
-    "dev": "vite",
-    "dev:electron": "tsx scripts/dev.ts",
-    "build": "vue-tsc --noEmit && vite build",
-    "build:dir": "vite build && electron-builder --dir",
-    "build:mac": "vite build && electron-builder --mac",
-    "build:win": "vite build && electron-builder --win",
-    "build:linux": "vite build && electron-builder --linux",
-    "electron:build": "electron-builder",
-    "electron:build:mac": "electron-builder --mac --universal",
-    "electron:build:win": "electron-builder --win",
-    "electron:build:linux": "electron-builder --linux",
-    "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.ts,.tsx --fix",
-    "format": "prettier --write \"**/*.{ts,tsx,vue,json,md}\"",
-    "type-check": "vue-tsc --noEmit",
-    "test": "vitest",
-    "test:unit": "vitest run --config vitest.config.ts",
-    "test:integration": "vitest run --config vitest.config.ts tests/integration/**/*.spec.ts",
-    "test:components": "vitest run --config vitest.config.ts src/**/*.spec.ts",
-    "test:perf": "vitest run --config vitest.config.ts tests/performance/**/*.spec.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest watch",
-    "test:all": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
-    "db:generate": "drizzle-kit generate:sqlite",
-    "db:push": "drizzle-kit push:sqlite",
-    "db:studio": "drizzle-kit studio",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts",
-    "postinstall": "electron-builder install-app-deps",
-    "release": "pnpm build && electron-builder --publish always"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.18.0",
-    "@google/generative-ai": "^0.3.1",
-    "@modelcontextprotocol/sdk": "^0.5.0",
-    "@slack/web-api": "^6.12.0",
-    "@supabase/supabase-js": "^2.39.8",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/marked": "^6.0.0",
-    "@vueuse/core": "^10.9.0",
-    "@vueuse/gesture": "^2.0.0",
-    "ai": "^3.0.0",
-    "axios": "^1.6.7",
-    "better-sqlite3": "^9.6.0",
-    "cors": "^2.8.5",
-    "date-fns": "^3.3.1",
-    "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.30.0",
-    "echarts": "^5.5.0",
-    "express": "^4.18.2",
-    "flexsearch": "^0.8.212",
-    "fuse.js": "^7.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "marked": "^17.0.1",
-    "mermaid": "^11.12.1",
-    "nanoid": "^5.0.5",
-    "openai": "^4.28.4",
-    "pinia": "^2.1.7",
-    "pinia-plugin-persistedstate": "^3.2.1",
-    "simple-git": "^3.22.0",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
-    "uuid": "^8.3.2",
-    "vue": "^3.4.21",
-    "vue-echarts": "^6.7.0",
-    "vue-router": "^4.3.0",
-    "y-indexeddb": "^9.0.12",
-    "y-protocols": "^1.0.6",
-    "y-websocket": "^2.1.0",
-    "yjs": "^13.6.27",
-    "zod": "^3.22.4"
-  },
-  "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
-    "@playwright/test": "^1.42.0",
-    "@sentry/electron": "^7.3.0",
-    "@types/better-sqlite3": "^7.6.9",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.24",
-    "@types/uuid": "^11.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.1.0",
-    "@typescript-eslint/parser": "^7.1.0",
-    "@vitejs/plugin-vue": "^5.0.4",
-    "@vitest/coverage-v8": "^4.0.13",
-    "@vitest/ui": "^1.3.1",
-    "@vue/test-utils": "^2.4.4",
-    "@vueuse/motion": "^2.1.0",
-    "autoprefixer": "^10.4.18",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.0",
-    "drizzle-kit": "^0.20.14",
-    "electron": "^29.0.1",
-    "electron-builder": "^24.13.3",
-    "electron-log": "^5.4.3",
-    "electron-rebuild": "^3.2.9",
-    "electron-updater": "^6.6.2",
-    "eslint": "^8.57.0",
-    "eslint-plugin-vue": "^9.22.0",
-    "lucide-vue-next": "^0.344.0",
-    "monaco-editor": "^0.47.0",
-    "playwright": "^1.42.0",
-    "postcss": "^8.4.35",
-    "prebuild-install": "^7.1.3",
-    "prettier": "^3.2.5",
-    "radix-vue": "^1.5.3",
-    "tailwind-merge": "^2.2.1",
-    "tailwindcss": "^3.4.1",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.1.4",
-    "vite-plugin-electron": "^0.28.4",
-    "vite-plugin-electron-renderer": "^0.14.5",
-    "vite-plugin-monaco-editor": "^1.1.0",
-    "vitest": "^1.3.1",
-    "vue-tsc": "^2.0.0"
-  },
-  "build": {
-    "appId": "com.yourcompany.workflow-manager",
-    "productName": "AI Workflow Manager",
-    "directories": {
-      "output": "release/${version}"
+    "name": "ai-workflow-manager",
+    "version": "0.1.0",
+    "description": "AI-powered project and task management desktop application",
+    "main": "dist-electron/main/index.cjs",
+    "author": {
+        "name": "Your Name",
+        "email": "your.email@example.com"
     },
-    "files": [
-      "dist",
-      "dist-electron"
-    ],
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "electron/build/icon.icns",
-      "category": "public.app-category.productivity",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+    "license": "MIT",
+    "private": true,
+    "scripts": {
+        "dev": "vite",
+        "dev:electron": "tsx scripts/dev.ts",
+        "build": "vue-tsc --noEmit && vite build",
+        "build:dir": "vite build && electron-builder --dir",
+        "build:mac": "vite build && electron-builder --mac",
+        "build:win": "vite build && electron-builder --win",
+        "build:linux": "vite build && electron-builder --linux",
+        "electron:build": "electron-builder",
+        "electron:build:mac": "electron-builder --mac --universal",
+        "electron:build:win": "electron-builder --win",
+        "electron:build:linux": "electron-builder --linux",
+        "preview": "vite preview",
+        "lint": "eslint . --ext .vue,.ts,.tsx --fix",
+        "format": "prettier --write \"**/*.{ts,tsx,vue,json,md}\"",
+        "type-check": "vue-tsc --noEmit",
+        "test": "vitest",
+        "test:unit": "vitest run --config vitest.config.ts",
+        "test:integration": "vitest run --config vitest.config.ts tests/integration/**/*.spec.ts",
+        "test:components": "vitest run --config vitest.config.ts src/**/*.spec.ts",
+        "test:perf": "vitest run --config vitest.config.ts tests/performance/**/*.spec.ts",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
+        "test:e2e:debug": "playwright test --debug",
+        "test:coverage": "vitest run --coverage",
+        "test:watch": "vitest watch",
+        "test:all": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+        "db:generate": "drizzle-kit generate:sqlite",
+        "db:push": "drizzle-kit push:sqlite",
+        "db:studio": "drizzle-kit studio",
+        "db:migrate": "tsx scripts/migrate.ts",
+        "db:seed": "tsx scripts/seed.ts",
+        "postinstall": "electron-builder install-app-deps",
+        "release": "pnpm build && electron-builder --publish always"
     },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "electron/build/icon.ico"
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.18.0",
+        "@google/generative-ai": "^0.3.1",
+        "@modelcontextprotocol/sdk": "^0.5.0",
+        "@slack/web-api": "^6.12.0",
+        "@supabase/supabase-js": "^2.39.8",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/marked": "^6.0.0",
+        "@vueuse/core": "^10.9.0",
+        "@vueuse/gesture": "^2.0.0",
+        "ai": "^3.0.0",
+        "axios": "^1.6.7",
+        "better-sqlite3": "^9.6.0",
+        "cors": "^2.8.5",
+        "date-fns": "^3.3.1",
+        "discord.js": "^14.14.1",
+        "dotenv": "^16.4.5",
+        "drizzle-orm": "^0.30.0",
+        "echarts": "^5.5.0",
+        "express": "^4.18.2",
+        "flexsearch": "^0.8.212",
+        "fuse.js": "^7.0.0",
+        "jsonwebtoken": "^9.0.2",
+        "marked": "^17.0.1",
+        "mermaid": "^11.12.1",
+        "nanoid": "^5.0.5",
+        "node-fetch": "2",
+        "openai": "^4.28.4",
+        "pinia": "^2.1.7",
+        "pinia-plugin-persistedstate": "^3.2.1",
+        "simple-git": "^3.22.0",
+        "socket.io": "^4.8.1",
+        "socket.io-client": "^4.8.1",
+        "uuid": "^8.3.2",
+        "vue": "^3.4.21",
+        "vue-echarts": "^6.7.0",
+        "vue-router": "^4.3.0",
+        "y-indexeddb": "^9.0.12",
+        "y-protocols": "^1.0.6",
+        "y-websocket": "^2.1.0",
+        "yjs": "^13.6.27",
+        "zod": "^3.22.4"
     },
-    "linux": {
-      "target": [
-        "AppImage",
-        "snap"
-      ],
-      "category": "Office",
-      "icon": "electron/build/icon.png"
+    "devDependencies": {
+        "@electron/rebuild": "^4.0.1",
+        "@playwright/test": "^1.42.0",
+        "@sentry/electron": "^7.3.0",
+        "@types/better-sqlite3": "^7.6.9",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^4.17.21",
+        "@types/node": "^20.11.24",
+        "@types/uuid": "^11.0.0",
+        "@typescript-eslint/eslint-plugin": "^7.1.0",
+        "@typescript-eslint/parser": "^7.1.0",
+        "@vitejs/plugin-vue": "^5.0.4",
+        "@vitest/coverage-v8": "^4.0.13",
+        "@vitest/ui": "^1.3.1",
+        "@vue/test-utils": "^2.4.4",
+        "@vueuse/motion": "^2.1.0",
+        "autoprefixer": "^10.4.18",
+        "class-variance-authority": "^0.7.0",
+        "clsx": "^2.1.0",
+        "drizzle-kit": "^0.20.14",
+        "electron": "=29.0.1",
+        "electron-builder": "^24.13.3",
+        "electron-log": "^5.4.3",
+        "electron-rebuild": "^3.2.9",
+        "electron-updater": "^6.6.2",
+        "eslint": "^8.57.0",
+        "eslint-plugin-vue": "^9.22.0",
+        "lucide-vue-next": "^0.344.0",
+        "monaco-editor": "^0.47.0",
+        "playwright": "^1.42.0",
+        "postcss": "^8.4.35",
+        "prebuild-install": "^7.1.3",
+        "prettier": "^3.2.5",
+        "radix-vue": "^1.5.3",
+        "tailwind-merge": "^2.2.1",
+        "tailwindcss": "^3.4.1",
+        "tsx": "^4.7.1",
+        "typescript": "^5.3.3",
+        "vite": "^5.1.4",
+        "vite-plugin-electron": "^0.28.4",
+        "vite-plugin-electron-renderer": "^0.14.5",
+        "vite-plugin-monaco-editor": "^1.1.0",
+        "vitest": "^1.3.1",
+        "vue-tsc": "^2.0.0"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+    "build": {
+        "appId": "com.yourcompany.workflow-manager",
+        "productName": "AI Workflow Manager",
+        "directories": {
+            "output": "release/${version}"
+        },
+        "files": [
+            "dist",
+            "dist-electron",
+            "node_modules/**/*"
+        ],
+        "asarUnpack": [
+            "node_modules/@anthropic-ai/**/*",
+            "node_modules/node-fetch/**/*",
+            "node_modules/better-sqlite3/**/*"
+        ],
+        "mac": {
+            "target": [
+                "dmg",
+                "zip"
+            ],
+            "icon": "electron/build/icon.icns",
+            "category": "public.app-category.productivity",
+            "hardenedRuntime": true,
+            "gatekeeperAssess": false,
+            "entitlements": "build/entitlements.mac.plist",
+            "entitlementsInherit": "build/entitlements.mac.plist"
+        },
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "electron/build/icon.ico"
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "snap"
+            ],
+            "category": "Office",
+            "icon": "electron/build/icon.png"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true
+        },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "your-org",
+                "repo": "workflow-manager"
+            }
+        ]
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "your-org",
-        "repo": "workflow-manager"
-      }
-    ]
-  },
-  "engines": {
-    "node": "22.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "packageManager": "pnpm@8.15.4"
+    "engines": {
+        "node": "22.0.0",
+        "pnpm": ">=8.0.0"
+    },
+    "packageManager": "pnpm@8.15.4"
 }
