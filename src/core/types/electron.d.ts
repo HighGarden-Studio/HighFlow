@@ -88,6 +88,7 @@ export interface TaskExecutionOptions {
     openai?: string;
     google?: string;
     groq?: string;
+    lmstudio?: string;
   };
   enabledProviders?: EnabledProviderInfo[];
   mcpServers?: MCPServerRuntimeConfig[];

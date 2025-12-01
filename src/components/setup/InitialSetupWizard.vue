@@ -12,7 +12,7 @@
  */
 
 import { ref, computed, watch, onMounted } from 'vue';
-import { useSettingsStore } from '../../renderer/stores/settingsStore';
+import { useSettingsStore, type AIProviderConfig, type LocalProviderStatus } from '../../renderer/stores/settingsStore';
 
 // Props & Emits
 interface Props {
@@ -85,12 +85,21 @@ const isValidating = ref(false);
 const validationResult = ref<'success' | 'error' | null>(null);
 const isConnectingOAuth = ref(false);
 
-// Multi-modal AI Providers (filtered from settingsStore)
-const multiModalProviders = computed(() => {
-  return settingsStore.aiProviders.filter(p =>
-    p.tags?.includes('multi-modal') || p.tags?.includes('image-analysis')
+const localProviderIds = ['ollama', 'lmstudio'];
+
+// AI Providers available during setup (multi-modal + local providers)
+const aiProviderOptions = computed(() => {
+  return settingsStore.aiProviders.filter(
+    (p) =>
+      p.tags?.includes('multi-modal') ||
+      p.tags?.includes('image-analysis') ||
+      p.tags?.includes('local') ||
+      localProviderIds.includes(p.id)
   );
 });
+
+const providerBaseUrl = ref('');
+const isCheckingLocalProvider = ref(false);
 
 // Provider icons and placeholders
 const providerMeta: Record<string, { icon: string; gradient: string; placeholder: string }> = {
@@ -98,6 +107,7 @@ const providerMeta: Record<string, { icon: string; gradient: string; placeholder
   anthropic: { icon: '🟣', gradient: 'from-orange-400 to-amber-500', placeholder: 'sk-ant-...' },
   google: { icon: '🔵', gradient: 'from-blue-400 to-indigo-500', placeholder: 'AIza...' },
   'azure-openai': { icon: '☁️', gradient: 'from-cyan-500 to-blue-600', placeholder: 'Your Azure API Key' },
+  lmstudio: { icon: '🖥️', gradient: 'from-emerald-500 to-cyan-500', placeholder: 'http://localhost:1234/v1' },
 };
 
 // Step 4: Preferences
@@ -174,12 +184,16 @@ function isStepCompleted(step: WizardStep): boolean {
 }
 
 function isAIProviderCompleted(): boolean {
-  const alreadyConnected = multiModalProviders.value.some(
-    (p) => p.isConnected || (p.apiKey && p.apiKey.length >= 10)
-  );
-  const connectingCurrent =
-    selectedProviderId.value && (apiKey.value.length >= 10 || isOAuthConnected.value);
-  return alreadyConnected || connectingCurrent;
+  const alreadyConnected = aiProviderOptions.value.some((provider) => providerIsReady(provider));
+  if (alreadyConnected) {
+    return true;
+  }
+  const provider = selectedProvider.value;
+  if (!provider) return false;
+  if (isProviderLocal(provider)) {
+    return selectedProviderStatus.value.status === 'available';
+  }
+  return apiKey.value.length >= 10 || isOAuthConnected.value;
 }
 
 const progressPercent = computed(() => {
@@ -191,8 +205,37 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((earned / total) * 100));
 });
 
-const selectedProvider = computed(() => {
-  return multiModalProviders.value.find(p => p.id === selectedProviderId.value);
+const selectedProvider = computed<AIProviderConfig | null>(() => {
+  return aiProviderOptions.value.find((p) => p.id === selectedProviderId.value) || null;
+});
+
+const selectedProviderStatus = computed<LocalProviderStatus>(() => {
+  return selectedProviderId.value
+    ? settingsStore.getLocalProviderStatus(selectedProviderId.value)
+    : { status: 'unknown' };
+});
+
+const selectedProviderReady = computed(() => providerIsReady(selectedProvider.value));
+
+const isSelectedProviderLocal = computed(() => isProviderLocal(selectedProvider.value));
+
+const requiresApiKey = computed(() => {
+  const provider = selectedProvider.value;
+  if (!provider) return false;
+  if (isProviderLocal(provider)) return false;
+  const methods = provider.authMethods || [];
+  return methods.includes('apiKey') || methods.includes('both');
+});
+
+const providerStatusMap = computed<Record<string, { label: string; tone: 'success' | 'warning' | 'muted' }>>(() => {
+  const result: Record<string, { label: string; tone: 'success' | 'warning' | 'muted' }> = {};
+  for (const provider of aiProviderOptions.value) {
+    const badge = computeProviderStatusBadge(provider);
+    if (badge) {
+      result[provider.id] = badge;
+    }
+  }
+  return result;
 });
 
 // Check if selected provider supports OAuth
@@ -209,6 +252,121 @@ const isOAuthConnected = computed(() => {
 // Get provider meta info (icon, gradient, placeholder)
 function getProviderMeta(providerId: string) {
   return providerMeta[providerId] || { icon: '🤖', gradient: 'from-gray-400 to-gray-500', placeholder: 'API Key...' };
+}
+
+function isProviderLocal(provider?: AIProviderConfig | null): boolean {
+  if (!provider) return false;
+  return provider.tags?.includes('local') || localProviderIds.includes(provider.id);
+}
+
+function providerIsReady(provider?: AIProviderConfig | null): boolean {
+  if (!provider) return false;
+  if (provider.isConnected) return true;
+  if (provider.apiKey && provider.apiKey.length >= 10) return true;
+  const status = settingsStore.getLocalProviderStatus(provider.id);
+  return status.status === 'available';
+}
+
+function getDefaultBaseUrl(provider?: AIProviderConfig | null): string {
+  if (!provider) return '';
+  if (provider.baseUrl) return provider.baseUrl;
+  if (provider.id === 'lmstudio') return 'http://localhost:1234/v1';
+  if (provider.id === 'ollama') return 'http://localhost:11434';
+  return '';
+}
+
+function computeProviderStatusBadge(
+  provider: AIProviderConfig
+): { label: string; tone: 'success' | 'warning' | 'muted' } | null {
+  if (provider.isConnected || (provider.apiKey && provider.apiKey.length >= 10)) {
+    return { label: '연결됨', tone: 'success' };
+  }
+  const status = settingsStore.getLocalProviderStatus(provider.id);
+  if (status.status === 'available') {
+    return { label: '로컬 감지', tone: 'success' };
+  }
+  if (status.status === 'checking') {
+    return { label: '확인 중', tone: 'warning' };
+  }
+  if (status.status === 'unavailable' && isProviderLocal(provider)) {
+    return { label: '미실행', tone: 'muted' };
+  }
+  return null;
+}
+
+function getStatusBadgeClass(tone: 'success' | 'warning' | 'muted'): string {
+  switch (tone) {
+    case 'success':
+      return 'bg-emerald-600/80 text-white';
+    case 'warning':
+      return 'bg-amber-500/80 text-gray-900';
+    default:
+      return 'bg-gray-600/80 text-gray-200';
+  }
+}
+
+function getLocalStatusLabel(status: LocalProviderStatus): string {
+  switch (status.status) {
+    case 'available':
+      return '실행 중';
+    case 'checking':
+      return '확인 중';
+    case 'unavailable':
+      return '미실행';
+    default:
+      return '미확인';
+  }
+}
+
+function getLocalStatusTone(status: LocalProviderStatus): 'success' | 'warning' | 'muted' {
+  switch (status.status) {
+    case 'available':
+      return 'success';
+    case 'checking':
+      return 'warning';
+    default:
+      return 'muted';
+  }
+}
+
+function getLocalStatusDescription(status: LocalProviderStatus): string {
+  if (status.status === 'available') {
+    const source = status.baseUrl ? `(${status.baseUrl})` : '';
+    return `LM Studio 서버가 응답 중입니다 ${source}`.trim();
+  }
+  if (status.status === 'unavailable') {
+    return status.details
+      ? `연결 실패: ${status.details}`
+      : 'LM Studio가 실행 중인지 확인해주세요';
+  }
+  if (status.status === 'checking') {
+    return '로컬 서버 상태를 확인 중입니다...';
+  }
+  return '아직 상태를 확인하지 않았습니다';
+}
+
+function selectProvider(provider: AIProviderConfig): void {
+  selectedProviderId.value = provider.id;
+  apiKey.value = '';
+  validationResult.value = null;
+  providerBaseUrl.value = getDefaultBaseUrl(provider);
+  if (isProviderLocal(provider)) {
+    refreshLocalStatus(provider.id, providerBaseUrl.value);
+  }
+}
+
+async function refreshLocalStatus(providerId: string, baseUrl?: string): Promise<void> {
+  isCheckingLocalProvider.value = true;
+  try {
+    await settingsStore.detectLocalProvider(providerId, baseUrl);
+  } finally {
+    isCheckingLocalProvider.value = false;
+  }
+}
+
+async function handleLocalStatusCheck(): Promise<void> {
+  if (!selectedProvider.value || !isProviderLocal(selectedProvider.value)) return;
+  await refreshLocalStatus(selectedProvider.value.id, providerBaseUrl.value);
 }
 
 // Open external URL
@@ -239,6 +397,48 @@ async function connectOAuth() {
     isConnectingOAuth.value = false;
   }
 }
+
+watch(
+  () => aiProviderOptions.value,
+  (providers) => {
+    if (!providers || providers.length === 0) {
+      selectedProviderId.value = null;
+      return;
+    }
+    if (selectedProviderId.value && providers.some((p) => p.id === selectedProviderId.value)) {
+      return;
+    }
+    const readyProvider = providers.find((p) => providerIsReady(p));
+    selectedProviderId.value = (readyProvider || providers[0]).id;
+  },
+  { immediate: true }
+);
+
+watch(
+  () => selectedProviderId.value,
+  (providerId, previousId) => {
+    if (!providerId || providerId === previousId) return;
+    const provider = aiProviderOptions.value.find((p) => p.id === providerId);
+    if (!provider) return;
+    providerBaseUrl.value = getDefaultBaseUrl(provider);
+    if (isProviderLocal(provider)) {
+      refreshLocalStatus(provider.id, providerBaseUrl.value);
+    }
+  }
+);
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) return;
+    aiProviderOptions.value
+      .filter((provider) => isProviderLocal(provider))
+      .forEach((provider) => {
+        settingsStore.detectLocalProvider(provider.id, provider.baseUrl).catch(() => {});
+      });
+  },
+  { immediate: true }
+);
 
 // ========================================
 // Methods - Navigation
@@ -288,7 +488,14 @@ async function saveStepData() {
       });
       break;
     case 'ai-provider':
-      if (selectedProviderId.value && apiKey.value) {
+      if (!selectedProviderId.value || !selectedProvider.value) break;
+      if (isProviderLocal(selectedProvider.value)) {
+        await settingsStore.updateAIProvider(selectedProvider.value.id, {
+          enabled: true,
+          isConnected: true,
+          baseUrl: providerBaseUrl.value || getDefaultBaseUrl(selectedProvider.value),
+        });
+      } else if (apiKey.value) {
         await settingsStore.updateAIProvider(selectedProviderId.value, {
           apiKey: apiKey.value,
           enabled: true,
@@ -570,36 +777,50 @@ watch(() => props.open, (isOpen) => {
           <!-- Step 3: AI Provider -->
           <div v-if="currentStep === 'ai-provider'" class="space-y-6">
             <div class="text-center mb-6">
-              <p class="text-gray-400">멀티모달 AI 서비스를 연결하여 이미지 분석 및 태스크 자동화 기능을 사용하세요</p>
+              <p class="text-gray-400">
+                멀티모달 AI 또는 로컬 LM Studio/Ollama를 연결하여 이미지 분석과 자동화를 사용하세요.
+                로컬 서버가 실행 중이면 자동으로 감지됩니다.
+              </p>
             </div>
 
-            <!-- Provider Selection -->
-            <div class="grid grid-cols-2 gap-3">
+            <div
+              v-if="aiProviderOptions.length === 0"
+              class="p-4 bg-gray-900/40 border border-gray-700 rounded-xl text-center text-sm text-gray-400"
+            >
+              사용할 수 있는 AI 프로바이더가 없습니다. Settings에서 새 프로바이더를 추가하세요.
+            </div>
+            <div v-else class="grid grid-cols-2 gap-3">
               <button
-                v-for="provider in multiModalProviders"
+                v-for="provider in aiProviderOptions"
                 :key="provider.id"
-                @click="selectedProviderId = provider.id; apiKey = ''; validationResult = null;"
+                @click="selectProvider(provider)"
                 :class="[
                   'p-4 border-2 rounded-xl text-left transition-all relative group',
                   selectedProviderId === provider.id
                     ? 'border-blue-500 bg-blue-900/20'
-                    : provider.isConnected || provider.apiKey
+                    : providerIsReady(provider)
                       ? 'border-green-600 bg-green-900/20 hover:border-green-500'
                       : 'border-gray-700 hover:border-gray-600 bg-gray-800/30',
                 ]"
               >
-                <!-- Connection status indicator -->
                 <div
-                  v-if="provider.isConnected || provider.apiKey"
-                  class="absolute top-2 right-2 w-2.5 h-2.5 bg-green-500 rounded-full"
-                  title="연결됨"
-                />
+                  v-if="providerStatusMap[provider.id]"
+                  class="absolute top-2 right-2"
+                >
+                  <span
+                    :class="[
+                      'px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide',
+                      getStatusBadgeClass(providerStatusMap[provider.id].tone)
+                    ]"
+                  >
+                    {{ providerStatusMap[provider.id].label }}
+                  </span>
+                </div>
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-xl">{{ getProviderMeta(provider.id).icon }}</span>
                   <span class="font-medium text-white text-sm">{{ provider.name }}</span>
                 </div>
                 <p class="text-xs text-gray-500 line-clamp-2">{{ provider.description }}</p>
-                <!-- Tags -->
                 <div class="flex flex-wrap gap-1 mt-2">
                   <span
                     v-for="tag in provider.tags?.slice(0, 2)"
@@ -612,9 +833,7 @@ watch(() => props.open, (isOpen) => {
               </button>
             </div>
 
-            <!-- Selected Provider Configuration -->
             <div v-if="selectedProviderId && selectedProvider" class="bg-gray-800/50 rounded-xl p-6 space-y-4">
-              <!-- Header with links -->
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-xl">{{ getProviderMeta(selectedProviderId).icon }}</span>
@@ -625,123 +844,183 @@ watch(() => props.open, (isOpen) => {
                     v-if="selectedProvider.website"
                     @click="openExternal(selectedProvider.website!)"
                     class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors flex items-center gap-1"
-                    title="API 키 발급받기"
                   >
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
-                    API 키 발급
+                    공식 페이지 열기
                   </button>
                 </div>
               </div>
 
-              <!-- OAuth Connection (if supported) -->
-              <div v-if="supportsOAuth" class="space-y-3">
-                <div class="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                  <div class="flex items-center gap-3">
-                    <div
-                      :class="[
-                        'w-8 h-8 rounded-lg flex items-center justify-center',
-                        isOAuthConnected ? 'bg-green-900/30' : 'bg-gray-700'
-                      ]"
+              <div v-if="isSelectedProviderLocal" class="space-y-4">
+                <div class="p-4 border border-emerald-700/40 bg-emerald-900/10 rounded-xl">
+                  <h4 class="text-sm font-semibold text-emerald-300 mb-2">LM Studio 설치 &amp; 연동 가이드</h4>
+                  <ol class="text-xs text-emerald-100 list-decimal list-inside space-y-1">
+                    <li>lmstudio.ai에서 최신 버전을 다운로드하고 설치합니다.</li>
+                    <li>LM Studio를 실행해 <span class="font-semibold">Server &gt; OpenAI Compatible Server</span>를 시작합니다.</li>
+                    <li>사용할 모델을 로드하고 <span class="font-semibold">Start Server</span>로 API 서버를 실행합니다.</li>
+                    <li>아래 Base URL이 LM Studio에서 표시되는 주소(기본 <code class="font-mono text-emerald-200">http://localhost:1234/v1</code>)인지 확인하세요.</li>
+                  </ol>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                      class="px-4 py-2 text-xs font-medium rounded-lg bg-emerald-700/70 hover:bg-emerald-600 text-white transition-colors"
+                      @click="openExternal('https://lmstudio.ai')"
                     >
-                      <svg v-if="isOAuthConnected" class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      LM Studio 다운로드
+                    </button>
+                    <button
+                      class="px-4 py-2 text-xs font-medium rounded-lg border border-emerald-500/60 text-emerald-200 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      :disabled="isCheckingLocalProvider"
+                      @click="handleLocalStatusCheck"
+                    >
+                      <svg
+                        v-if="isCheckingLocalProvider"
+                        class="w-4 h-4 inline-block mr-1 animate-spin"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <svg v-else class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                      </svg>
+                      {{ isCheckingLocalProvider ? '상태 확인 중...' : '상태 재확인' }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div class="p-4 bg-gray-900/40 border border-gray-700 rounded-xl space-y-2">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-sm font-medium text-white">로컬 상태</p>
+                        <p class="text-xs text-gray-500">
+                          {{ getLocalStatusDescription(selectedProviderStatus) }}
+                        </p>
+                      </div>
+                      <span
+                        :class="[
+                          'px-2 py-0.5 text-xs rounded-full font-semibold',
+                          getStatusBadgeClass(getLocalStatusTone(selectedProviderStatus))
+                        ]"
+                      >
+                        {{ getLocalStatusLabel(selectedProviderStatus) }}
+                      </span>
                     </div>
-                    <div>
-                      <div class="text-sm font-medium text-white">OAuth 연결</div>
-                      <div class="text-xs text-gray-500">
-                        {{ isOAuthConnected ? '계정이 연결되었습니다' : 'Google 계정으로 간편하게 연결' }}
+                    <p class="text-xs text-gray-500">
+                      {{
+                        selectedProviderStatus.lastChecked
+                          ? `최근 확인: ${new Date(selectedProviderStatus.lastChecked).toLocaleTimeString()}`
+                          : '최근 확인 기록 없음'
+                      }}
+                    </p>
+                  </div>
+                  <div class="p-4 bg-gray-900/40 border border-gray-700 rounded-xl space-y-2">
+                    <label class="block text-sm font-medium text-gray-300">
+                      Base URL
+                    </label>
+                    <input
+                      v-model="providerBaseUrl"
+                      type="text"
+                      class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono text-sm"
+                      placeholder="http://localhost:1234/v1"
+                    />
+                    <p class="text-xs text-gray-500">LM Studio 서버에서 표시되는 주소와 동일해야 합니다.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else>
+                <div v-if="supportsOAuth" class="space-y-3">
+                  <div class="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-700">
+                    <div class="flex items-center gap-3">
+                      <div
+                        :class="[
+                          'w-8 h-8 rounded-lg flex items-center justify-center',
+                          isOAuthConnected ? 'bg-green-900/30' : 'bg-gray-700'
+                        ]"
+                      >
+                        <svg v-if="isOAuthConnected" class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div class="text-sm font-medium text-white">OAuth 연결</div>
+                        <div class="text-xs text-gray-500">
+                          {{ isOAuthConnected ? '계정이 연결되었습니다' : 'OAuth로 간편하게 연결하세요' }}
+                        </div>
                       </div>
                     </div>
+                    <button
+                      v-if="!isOAuthConnected"
+                      @click="connectOAuth"
+                      :disabled="isConnectingOAuth"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      <svg v-if="isConnectingOAuth" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      {{ isConnectingOAuth ? '연결 중...' : 'OAuth 연결' }}
+                    </button>
+                    <span v-else class="text-green-400 text-sm font-medium">연결됨</span>
                   </div>
-                  <button
-                    v-if="!isOAuthConnected"
-                    @click="connectOAuth"
-                    :disabled="isConnectingOAuth"
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <svg v-if="isConnectingOAuth" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    {{ isConnectingOAuth ? '연결 중...' : 'OAuth 연결' }}
-                  </button>
-                  <span v-else class="text-green-400 text-sm font-medium">연결됨</span>
+
+                  <div class="text-center text-gray-500 text-xs">또는</div>
                 </div>
 
-                <div class="text-center text-gray-500 text-xs">또는</div>
-              </div>
+                <div v-if="requiresApiKey" class="space-y-3">
+                  <label class="text-sm text-gray-400">API 키로 연결</label>
+                  <div class="relative">
+                    <input
+                      v-model="apiKey"
+                      :type="showApiKey ? 'text' : 'password'"
+                      class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 pr-24 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      :placeholder="getProviderMeta(selectedProviderId).placeholder"
+                    />
+                    <button
+                      @click="showApiKey = !showApiKey"
+                      class="absolute right-12 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white"
+                    >
+                      <svg v-if="showApiKey" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268-2.943 9.542-7z" />
+                      </svg>
+                      <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268-2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                    <button
+                      @click="validateApiKey"
+                      :disabled="!apiKey || isValidating"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                    >
+                      {{ isValidating ? '확인중...' : '확인' }}
+                    </button>
+                  </div>
 
-              <!-- API Key Input -->
-              <div class="space-y-3">
-                <label class="text-sm text-gray-400">API 키로 연결</label>
-                <div class="relative">
-                  <input
-                    v-model="apiKey"
-                    :type="showApiKey ? 'text' : 'password'"
-                    class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 pr-24 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                    :placeholder="getProviderMeta(selectedProviderId).placeholder"
-                  />
-                  <button
-                    @click="showApiKey = !showApiKey"
-                    class="absolute right-12 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white"
-                  >
-                    <svg v-if="showApiKey" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  <div v-if="validationResult === 'success'" class="flex items-center gap-2 text-green-400 text-sm">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
                     </svg>
-                    <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <span>{{ isOAuthConnected ? 'OAuth 연결이 완료되었습니다' : 'API 키가 확인되었습니다' }}</span>
+                  </div>
+                  <div v-else-if="validationResult === 'error'" class="flex items-center gap-2 text-red-400 text-sm">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                     </svg>
-                  </button>
-                  <button
-                    @click="validateApiKey"
-                    :disabled="!apiKey || isValidating"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
-                  >
-                    {{ isValidating ? '확인중...' : '확인' }}
-                  </button>
-                </div>
-              </div>
+                    <span>연결에 실패했습니다. 다시 시도해주세요.</span>
+                  </div>
 
-              <!-- Validation result -->
-              <div v-if="validationResult === 'success'" class="flex items-center gap-2 text-green-400 text-sm">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
-                <span>{{ isOAuthConnected ? 'OAuth 연결이 완료되었습니다' : 'API 키가 확인되었습니다' }}</span>
-              </div>
-              <div v-else-if="validationResult === 'error'" class="flex items-center gap-2 text-red-400 text-sm">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                </svg>
-                <span>연결에 실패했습니다. 다시 시도해주세요.</span>
-              </div>
-
-              <p class="text-xs text-gray-500">
-                API 키는 안전하게 로컬에 저장되며 외부로 전송되지 않습니다.
-              </p>
-            </div>
-
-            <div class="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-4">
-              <div class="flex items-start gap-3">
-                <span class="text-xl">💡</span>
-                <div>
-                  <h4 class="font-medium text-yellow-300 text-sm">나중에 설정할 수도 있습니다</h4>
-                  <p class="text-xs text-gray-400 mt-1">
-                    AI 연동 없이도 기본 기능을 사용할 수 있습니다.
-                    나중에 Settings에서 언제든 설정할 수 있습니다.
+                  <p class="text-xs text-gray-500">
+                    API 키는 안전하게 로컬에 저장되며 외부로 전송되지 않습니다.
                   </p>
                 </div>
               </div>
             </div>
           </div>
-
           <!-- Step 4: Preferences -->
           <div v-if="currentStep === 'preferences'" class="space-y-6 max-w-md mx-auto">
             <div class="text-center mb-6">

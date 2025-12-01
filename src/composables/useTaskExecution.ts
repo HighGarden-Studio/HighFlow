@@ -289,7 +289,13 @@ export function useTaskExecution() {
     try {
       // Get API keys from settings store
       const settingsStore = useSettingsStore();
-      const apiKeys: { anthropic?: string; openai?: string; google?: string; groq?: string } = {};
+      const apiKeys: {
+        anthropic?: string;
+        openai?: string;
+        google?: string;
+        groq?: string;
+        lmstudio?: string;
+      } = {};
 
       // Extract API keys from enabled providers
       for (const provider of settingsStore.aiProviders) {
@@ -302,6 +308,8 @@ export function useTaskExecution() {
             apiKeys.google = provider.apiKey;
           } else if (provider.id === 'groq') {
             apiKeys.groq = provider.apiKey;
+          } else if (provider.id === 'lmstudio') {
+            apiKeys.lmstudio = provider.apiKey;
           }
         }
       }

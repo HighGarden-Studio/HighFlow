@@ -50,6 +50,7 @@ export type AIModel =
     | 'gpt-4-turbo'
     | 'gpt-4'
     | 'gpt-3.5-turbo'
+    | 'gpt-image-1'
     | 'claude-3-5-sonnet-20250219'
     | 'claude-3-opus-20240229'
     | 'claude-3-sonnet-20240229'
@@ -57,11 +58,14 @@ export type AIModel =
     | 'gemini-1.5-pro'
     | 'gemini-1.5-flash'
     | 'gemini-pro'
+    | 'imagen-3.0'
+    | 'imagen-3.0-lite'
     | 'llama-3.3-70b-versatile'
     | 'llama-3.1-70b-versatile'
     | 'llama-3.1-8b-instant'
     | 'mixtral-8x7b-32768'
     | 'gemma2-9b-it'
+    | 'local-model'
     | 'antigravity-pro'
     | 'antigravity-standard'
     | 'codex-latest'
@@ -319,6 +323,8 @@ export interface EnabledProviderInfo {
     tags?: string[];
     models?: string[];
     defaultModel?: string;
+    baseUrl?: string;
+    apiKey?: string;
 }
 
 export interface MCPServerRuntimeConfig {
@@ -404,6 +410,9 @@ export type AiSubType =
     | 'mermaid'
     | 'svg'
     | 'png'
+    | 'jpg'
+    | 'jpeg'
+    | 'webp'
     | 'mp4'
     | 'mp3'
     | 'diff'

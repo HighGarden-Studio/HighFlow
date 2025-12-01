@@ -18,6 +18,7 @@ import type {
     AIMessage,
     ToolCall,
     AiResult,
+    AiSubType,
 } from '@core/types/ai';
 import { detectTextSubType } from '../utils/aiResultUtils';
 
@@ -100,6 +101,17 @@ export class GPTProvider extends BaseAIProvider {
             averageLatency: 800,
             features: ['streaming', 'function_calling', 'json_mode', 'system_prompt'],
             bestFor: ['Fast responses', 'Simple tasks', 'High volume', 'Budget-friendly'],
+        },
+        {
+            name: 'gpt-image-1',
+            provider: 'openai',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0,
+            costPerOutputToken: 0,
+            averageLatency: 2000,
+            features: ['vision'],
+            bestFor: ['Image generation', 'Brand assets'],
         },
     ];
 
@@ -264,6 +276,69 @@ export class GPTProvider extends BaseAIProvider {
         };
         result.raw = response;
         return result;
+    }
+
+    async generateImage(
+        prompt: string,
+        config: AIConfig,
+        context?: ExecutionContext,
+        options?: Record<string, any>
+    ): Promise<AiResult> {
+        const client = this.getClient();
+        const imageModel = (config.model as AIModel) || 'gpt-image-1';
+        const size = options?.size || '1024x1024';
+        const quality = options?.quality || 'standard';
+        const style = options?.style;
+        const background = options?.background;
+        const format = options?.format || 'png';
+        const count = options?.count ?? 1;
+
+        const response = await client.images.generate({
+            model: imageModel,
+            prompt,
+            size,
+            quality,
+            style,
+            background,
+            response_format: 'b64_json',
+            n: count,
+            user: context?.userId ? String(context.userId) : undefined,
+        } as any);
+
+        const primary = response.data?.[0];
+        if (!primary) {
+            throw new Error('Image generation failed to return any result.');
+        }
+
+        const base64 = primary.b64_json;
+        const buffer = base64 ? base64 : primary.url;
+        if (!buffer) {
+            throw new Error('Image generation response did not include image data.');
+        }
+
+        const aiResult: AiResult = {
+            kind: 'image',
+            subType: (format as AiSubType) || 'png',
+            format: base64 ? 'base64' : 'url',
+            value: buffer,
+            mime: format === 'png' ? 'image/png' : `image/${format}`,
+            meta: {
+                provider: this.name,
+                model: imageModel,
+                size,
+                quality,
+                style,
+                background,
+                count,
+                raw: response.data?.map((item) => ({
+                    url: item.url,
+                    revised_prompt: (item as any).revised_prompt,
+                })),
+            },
+            raw: response,
+        };
+
+        return aiResult;
     }
 
     /**

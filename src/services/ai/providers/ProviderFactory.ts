@@ -10,12 +10,14 @@ import { ClaudeProvider } from './ClaudeProvider';
 import { GPTProvider } from './GPTProvider';
 import { GeminiProvider } from './GeminiProvider';
 import { GroqProvider } from './GroqProvider';
+import { LmStudioProvider } from './LmStudioProvider';
 
 export interface ProviderApiKeys {
   anthropic?: string;
   openai?: string;
   google?: string;
   groq?: string;
+  lmstudio?: string;
 }
 
 export class ProviderFactory {
@@ -34,6 +36,7 @@ export class ProviderFactory {
     this.providers.set('openai', new GPTProvider());
     this.providers.set('google', new GeminiProvider());
     this.providers.set('groq' as AIProvider, new GroqProvider());
+    this.providers.set('lmstudio', new LmStudioProvider());
   }
 
   /**
@@ -56,6 +59,17 @@ export class ProviderFactory {
       const groqProvider = this.providers.get('groq' as AIProvider) as GroqProvider;
       groqProvider?.setApiKey(keys.groq);
     }
+    if (keys.lmstudio) {
+      const lmStudioProvider = this.providers.get('lmstudio') as LmStudioProvider;
+      lmStudioProvider?.setApiKey(keys.lmstudio);
+    }
+  }
+
+  configureProvider(name: AIProvider, config: Record<string, any>): void {
+    const provider = this.providers.get(name) as BaseAIProvider & {
+      setConfig?: (config: Record<string, any>) => void;
+    };
+    provider?.setConfig?.(config);
   }
 
   /**

@@ -216,6 +216,7 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         isSubdivided: integer('is_subdivided', { mode: 'boolean' }).notNull().default(false), // 서브태스크로 세분화 여부
         subtaskCount: integer('subtask_count').notNull().default(0), // 직접 자식 태스크 수
         executionResult: text('execution_result', { mode: 'json' }), // AI 실행 결과 (content, cost, tokens, duration, provider, model)
+        imageConfig: text('image_config', { mode: 'json' }),
         outputFormat: text('output_format').default('markdown'), // 결과물 형식: text|markdown|html|pdf|json|yaml|csv|sql|shell|mermaid|svg|png|mp4|mp3|diff|log|code
         codeLanguage: text('code_language'), // outputFormat이 'code'일 때 사용할 언어 (typescript, python, java 등)
         // AI 실행 최적화 필드 (인터뷰 기반 자동 생성)

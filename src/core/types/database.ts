@@ -5,7 +5,7 @@
  * These types are shared between frontend and backend.
  */
 
-import type { AiResult } from './ai';
+import type { AiResult, AIProvider } from './ai';
 
 // ========================================
 // Enum Types
@@ -446,6 +446,20 @@ export interface Project extends BaseEntity {
     gitRepository: string | null;
 }
 
+export interface ImageGenerationConfig {
+    provider?: AIProvider | null;
+    model?: string | null;
+    size?: string | null;
+    quality?: 'standard' | 'hd';
+    style?: 'vivid' | 'natural';
+    background?: 'transparent' | 'white' | 'black';
+    format?: 'png' | 'webp' | 'jpg' | 'jpeg';
+    negativePrompt?: string;
+    promptTemplate?: string;
+    count?: number;
+    extra?: Record<string, any>;
+}
+
 export interface Task extends BaseEntity {
     projectId: number;
     title: string;
@@ -494,6 +508,9 @@ export interface Task extends BaseEntity {
     requiredMCPs: string[]; // 필요한 MCP 서버 목록 (filesystem, git, brave-search 등)
     aiOptimizedPrompt: string | null; // AI 실행용 최적화된 프롬프트 (generatedPrompt와 별도)
     executionResult: TaskExecutionResult | null; // AI 실행 결과
+    outputFormat?: string | null;
+    codeLanguage?: string | null;
+    imageConfig?: ImageGenerationConfig | null;
 }
 
 export interface TaskExecutionResult {
@@ -504,7 +521,20 @@ export interface TaskExecutionResult {
     provider?: string;
     model?: string;
     aiResult?: AiResult | null;
+    attachments?: TaskAttachment[];
     [key: string]: any;
+}
+
+export interface TaskAttachment {
+    id: string;
+    name: string;
+    type: 'image' | 'audio' | 'video' | 'document' | 'data' | 'binary';
+    mime: string;
+    encoding: 'base64' | 'url' | 'text';
+    value: string;
+    size?: number;
+    description?: string;
+    sourceTaskId?: number;
 }
 
 export interface TaskExecution extends BaseEntity {

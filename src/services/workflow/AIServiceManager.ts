@@ -5,7 +5,7 @@
  * Integrates with AdvancedTaskExecutor for workflow execution.
  */
 
-import type { Task, MCPIntegration, MCPConfig } from '@core/types/database';
+import type { Task, MCPIntegration, MCPConfig, ImageGenerationConfig } from '@core/types/database';
 import type {
     AIProvider,
     AIModel,
@@ -100,6 +100,7 @@ const DEFAULT_MODELS: Partial<Record<AIProvider, AIModel>> = {
     antigravity: 'antigravity-pro',
     codex: 'codex-latest',
     local: 'gpt-3.5-turbo',
+    lmstudio: 'local-model',
 };
 
 // Default fallback order (used when no enabled providers are configured)
@@ -158,6 +159,24 @@ export class AIServiceManager {
      */
     setEnabledProviders(providers: EnabledProviderInfo[]): void {
         this.enabledProviders = providers;
+        this.applyProviderConfigurations();
+    }
+
+    private applyProviderConfigurations(): void {
+        if (!this.enabledProviders || this.enabledProviders.length === 0) {
+            return;
+        }
+        for (const provider of this.enabledProviders) {
+            if (!provider.id) continue;
+            const hasConfig = provider.baseUrl || provider.apiKey || provider.defaultModel;
+            if (hasConfig) {
+                this.providerFactory.configureProvider(provider.id as AIProvider, {
+                    baseUrl: provider.baseUrl,
+                    apiKey: provider.apiKey,
+                    defaultModel: provider.defaultModel,
+                });
+            }
+        }
     }
 
     /**
@@ -327,6 +346,9 @@ export class AIServiceManager {
                 options
             );
 
+            const outputFormat = this.getTaskOutputFormat(task);
+            const isImageTask = this.isImageOutputFormat(outputFormat);
+
             // Report progress
             options.onProgress?.({
                 phase: 'preparing',
@@ -338,7 +360,16 @@ export class AIServiceManager {
             // Execute with streaming, tool loop, or standard completion
             let result: AIExecutionResult;
 
-            if (hasTools) {
+            if (isImageTask) {
+                result = await this.executeImageGenerationTask(
+                    task,
+                    userPrompt,
+                    aiContext,
+                    provider,
+                    options,
+                    startTime
+                );
+            } else if (hasTools) {
                 if (options.streaming) {
                     console.warn(
                         '[AIServiceManager] Streaming not supported when MCP tools are enabled. Falling back to iterative tool execution.'
@@ -965,6 +996,154 @@ export class AIServiceManager {
             error: new Error('All providers failed'),
             metadata: { allFallbacksFailed: true },
         };
+    }
+
+    private getTaskOutputFormat(task: Task): string | null {
+        const raw =
+            ((task as any).outputFormat as string | undefined) || task.expectedOutputFormat || null;
+        return raw ? raw.toLowerCase() : null;
+    }
+
+    private isImageOutputFormat(format: string | null): boolean {
+        if (!format) {
+            return false;
+        }
+        return ['png', 'jpg', 'jpeg', 'webp'].includes(format);
+    }
+
+    private getImageGenerationConfig(task: Task): ImageGenerationConfig {
+        const config = ((task as any).imageConfig || {}) as ImageGenerationConfig;
+        return {
+            provider: config.provider,
+            model: config.model,
+            size: config.size || '1024x1024',
+            quality: config.quality || 'standard',
+            style: config.style,
+            background: config.background,
+            format: (config.format || 'png') as ImageGenerationConfig['format'],
+            negativePrompt: config.negativePrompt,
+            promptTemplate: config.promptTemplate,
+            count: config.count ?? 1,
+            extra: config.extra,
+        };
+    }
+
+    private async resolveImageModelForProvider(
+        provider: AIProvider,
+        task: Task,
+        imageConfig: ImageGenerationConfig
+    ): Promise<AIModel> {
+        const preferredModel = (imageConfig.model || task.aiModel) as AIModel | undefined;
+        if (preferredModel) {
+            const providerInstance = await this.providerFactory.getProvider(provider);
+            const modelInfo = providerInstance.getModelInfo(preferredModel);
+            if (modelInfo) {
+                return preferredModel;
+            }
+        }
+
+        switch (provider) {
+            case 'openai':
+                return 'gpt-image-1';
+            case 'google':
+                return 'imagen-3.0';
+            default:
+                throw new Error(
+                    `Provider ${provider} does not currently support image generation in this workspace.`
+                );
+        }
+    }
+
+    private async executeImageGenerationTask(
+        task: Task,
+        prompt: string,
+        aiContext: AIExecutionContext,
+        providerName: AIProvider,
+        options: AIExecutionOptions,
+        startTime: number
+    ): Promise<AIExecutionResult> {
+        const imageConfig = this.getImageGenerationConfig(task);
+        const preferredProvider =
+            (imageConfig.provider as AIProvider | null) ||
+            (task.aiProvider as AIProvider | null) ||
+            providerName;
+
+        const promptWithTemplate = imageConfig.promptTemplate
+            ? imageConfig.promptTemplate.replace('{{prompt}}', prompt)
+            : prompt;
+
+        const imageOptions = {
+            size: imageConfig.size,
+            quality: imageConfig.quality,
+            style: imageConfig.style,
+            background: imageConfig.background,
+            format: imageConfig.format,
+            count: imageConfig.count,
+            extra: imageConfig.extra,
+        };
+
+        const model = await this.resolveImageModelForProvider(
+            preferredProvider,
+            task,
+            imageConfig
+        );
+
+        const aiConfig: AIConfig = {
+            model,
+        };
+
+        options.onProgress?.({
+            phase: 'executing',
+            elapsedTime: Date.now() - startTime,
+            provider: preferredProvider,
+            model,
+        });
+
+        try {
+            const aiResult = await this.multiVendorClient.generateImage(
+                {
+                    prompt: promptWithTemplate,
+                    config: aiConfig,
+                    context: aiContext,
+                    options: imageOptions,
+                },
+                preferredProvider
+            );
+
+            const duration = Date.now() - startTime;
+            options.onProgress?.({
+                phase: 'completed',
+                elapsedTime: duration,
+                provider: preferredProvider,
+                model,
+                tokensGenerated: 0,
+            });
+
+            return {
+                success: true,
+                content: aiResult.value,
+                tokensUsed: { prompt: 0, completion: 0, total: 0 },
+                cost: 0,
+                duration,
+                provider: preferredProvider,
+                model,
+                finishReason: 'stop',
+                metadata: {
+                    ...(aiResult.meta || {}),
+                    requestedProvider: preferredProvider,
+                    executedProvider: preferredProvider,
+                    imageConfig,
+                },
+                aiResult,
+            };
+        } catch (error) {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            options.onLog?.(
+                'error',
+                `[AIServiceManager] Image provider ${preferredProvider} failed: ${failure.message}`
+            );
+            throw failure;
+        }
     }
 
     /**

@@ -7,6 +7,8 @@ interface ProviderRecommendation {
     tags?: string[];
     models?: string[];
     defaultModel?: string;
+    baseUrl?: string;
+    apiKey?: string;
 }
 
 export function buildEnabledProvidersPayload(
@@ -25,6 +27,8 @@ export function buildEnabledProvidersPayload(
                 ? provider.models.filter((m) => typeof m === 'string')
                 : undefined,
             defaultModel: provider.defaultModel ?? undefined,
+            baseUrl: provider.baseUrl ?? undefined,
+            apiKey: provider.apiKey ?? undefined,
         };
 
         // Remove undefined values for cleaner payload

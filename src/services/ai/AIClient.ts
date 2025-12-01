@@ -196,10 +196,32 @@ class AIClient {
   private getDefaultModel(provider: AIProviderType): string {
     const models: Record<AIProviderType, string> = {
       anthropic: 'claude-3-5-sonnet-20241022',
-      openai: 'gpt-4-turbo-preview',
+      openai: 'gpt-4o-mini',
       google: 'gemini-1.5-pro',
     };
     return models[provider];
+  }
+
+  private readonly openAIModelLimits: { name: string; limit: number }[] = [
+    { name: 'gpt-4o', limit: 16000 },
+    { name: 'gpt-4o-mini', limit: 8000 },
+    { name: 'gpt-4-turbo-preview', limit: 4096 },
+    { name: 'gpt-4-turbo', limit: 4096 },
+    { name: 'gpt-4', limit: 2048 },
+    { name: 'gpt-3.5-turbo', limit: 2048 },
+  ];
+
+  private getOpenAIModelLimit(model: string): number {
+    const match = this.openAIModelLimits.find((entry) => model.startsWith(entry.name));
+    return match?.limit ?? 4096;
+  }
+
+  private findOpenAIModelForTokens(requestedTokens: number): { name: string; limit: number } | null {
+    return (
+      this.openAIModelLimits.find((entry) => requestedTokens <= entry.limit) ??
+      this.openAIModelLimits[this.openAIModelLimits.length - 1] ??
+      null
+    );
   }
 
   /**
@@ -321,7 +343,33 @@ class AIClient {
       throw new Error('OpenAI API key not configured. Please set it in Settings.');
     }
 
-    const model = options.model || this.getDefaultModel('openai');
+    let model = options.model || this.getDefaultModel('openai');
+    const requestedTokens = options.maxTokens ?? 4096;
+    let maxTokens = requestedTokens;
+    const currentLimit = this.getOpenAIModelLimit(model);
+
+    if (!options.model && requestedTokens > currentLimit) {
+      const upgraded = this.findOpenAIModelForTokens(requestedTokens);
+      if (upgraded && upgraded.name !== model) {
+        console.info(
+          `[AIClient] Upgrading OpenAI model from ${model} to ${upgraded.name} to satisfy maxTokens=${requestedTokens}`
+        );
+        model = upgraded.name;
+        maxTokens = Math.min(requestedTokens, upgraded.limit);
+      } else {
+        console.warn(
+          `[AIClient] Requested maxTokens ${requestedTokens} exceeds limit ${currentLimit} for model ${model}. Clamping to ${currentLimit}`
+        );
+        maxTokens = currentLimit;
+      }
+    } else {
+      maxTokens = Math.min(requestedTokens, currentLimit);
+      if (requestedTokens > currentLimit) {
+        console.warn(
+          `[AIClient] Requested maxTokens ${requestedTokens} exceeds limit ${currentLimit} for model ${model}. Clamping to ${currentLimit}`
+        );
+      }
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -331,7 +379,7 @@ class AIClient {
       },
       body: JSON.stringify({
         model,
-        max_tokens: options.maxTokens || 4096,
+        max_tokens: maxTokens,
         temperature: options.temperature ?? 0.7,
         messages: messages.map(m => ({
           role: m.role,

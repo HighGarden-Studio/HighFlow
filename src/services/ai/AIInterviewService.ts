@@ -463,6 +463,41 @@ export class AIInterviewService {
     private readonly CONFIDENCE_THRESHOLD = 75; // 충분성 판단 기준
     private enabledProviders: EnabledProviderInfo[] = []; // 연동된 Provider 목록
     private preferBestOverall = true; // 연동 여부 무관하게 최적 모델 제안
+    private static readonly ALLOWED_PROVIDERS: AIProvider[] = [
+        'anthropic',
+        'openai',
+        'google',
+        'azure-openai',
+        'groq',
+        'mistral',
+        'cohere',
+        'deepseek',
+        'together',
+        'fireworks',
+        'perplexity',
+        'stability',
+        'runway',
+        'pika',
+        'google-tts',
+        'elevenlabs',
+        'suno',
+        'huggingface',
+        'replicate',
+        'openrouter',
+        'ollama',
+        'lmstudio',
+        'zhipu',
+        'moonshot',
+        'qwen',
+        'baidu',
+        'claude-code',
+        'antigravity',
+        'codex',
+        'local',
+    ];
+    private readonly allowedProviderSet: Set<AIProvider> = new Set(
+        AIInterviewService.ALLOWED_PROVIDERS
+    );
 
     /**
      * 연동된 Provider 목록 설정
@@ -514,6 +549,55 @@ export class AIInterviewService {
      */
     setPreferBestOverall(prefer: boolean): void {
         this.preferBestOverall = prefer;
+    }
+
+    private logPromptRequest(
+        stage: string,
+        provider: string | null | undefined,
+        prompt: string,
+        metadata?: Record<string, any>
+    ): void {
+        try {
+            console.info(`[AIInterviewService][${stage}] Dispatching prompt`, {
+                provider: provider || 'auto',
+                length: prompt.length,
+                metadata,
+            });
+            console.debug(`[AIInterviewService][${stage}] Prompt Body:\n${prompt}`);
+            if (metadata?.systemPrompt) {
+                console.debug(`[AIInterviewService][${stage}] System Prompt:\n${metadata.systemPrompt}`);
+            }
+        } catch (error) {
+            console.warn('[AIInterviewService] Failed to log prompt', error);
+        }
+    }
+
+    private isValidProviderId(value: string): value is AIProvider {
+        return this.allowedProviderSet.has(value as AIProvider);
+    }
+
+    private sanitizeProviderList(list: unknown): AIProvider[] {
+        if (!Array.isArray(list)) {
+            return [];
+        }
+        const sanitized: AIProvider[] = [];
+        for (const entry of list) {
+            if (typeof entry !== 'string') continue;
+            const id = entry.trim().toLowerCase();
+            if (!id || !this.isValidProviderId(id)) continue;
+            if (!sanitized.includes(id as AIProvider)) {
+                sanitized.push(id as AIProvider);
+            }
+        }
+        return sanitized;
+    }
+
+    private resolveRecommendedProviders(task: any): AIProvider[] {
+        const sanitized = this.sanitizeProviderList(task?.recommendedProviders);
+        if (sanitized.length > 0) {
+            return sanitized;
+        }
+        return this.recommendAIProviders(task);
     }
 
     /**
@@ -683,16 +767,22 @@ export class AIInterviewService {
 
 한국어로 따뜻하고 전문적인 톤으로 작성하세요.`;
 
+            const userPrompt = `다음 아이디어에 대해 이해한 내용을 확인하고, 구체화를 위한 첫 질문을 해주세요:\n\n"${idea}"`;
+            const promptMetadata = {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 600,
+                preferredProvider,
+            };
+            this.logPromptRequest('analyze-initial-idea', preferredProvider, userPrompt, promptMetadata);
+
             // preferredProvider를 우선 시도하도록 옵션 설정
-            const response = await aiClient.completeWithInfo(
-                `다음 아이디어에 대해 이해한 내용을 확인하고, 구체화를 위한 첫 질문을 해주세요:\n\n"${idea}"`,
-                {
-                    systemPrompt,
-                    temperature: 0.7,
-                    maxTokens: 600,
-                    preferredProvider: preferredProvider as any, // AIProviderType으로 변환
-                }
-            );
+            const response = await aiClient.completeWithInfo(userPrompt, {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 600,
+                preferredProvider: preferredProvider as any, // AIProviderType으로 변환
+            });
 
             return {
                 content: response.content,
@@ -889,6 +979,10 @@ export class AIInterviewService {
 - 이미 물어본 질문과 중복되지 않도록 작성
 - 한국어로 작성`;
 
+            this.logPromptRequest('generate-next-question', session.aiProvider, prompt, {
+                temperature: 0.4,
+                maxTokens: 200,
+            });
             const response = await aiClient.complete(prompt, {
                 temperature: 0.4,
                 maxTokens: 200,
@@ -1002,10 +1096,7 @@ export class AIInterviewService {
 
         if (confidence >= this.CONFIDENCE_THRESHOLD) {
             // 충분한 정보 수집됨
-            responseContent = await this.generateCompletionMessageWithAI(
-                session.context,
-                userMessage
-            );
+            responseContent = await this.generateCompletionMessageWithAI(session, userMessage);
             session.status = 'completed';
         } else {
             // 추가 질문 필요
@@ -1013,7 +1104,7 @@ export class AIInterviewService {
             if (nextQuestion) {
                 // AI가 설정되어 있으면 AI 응답 사용
                 responseContent = await this.generateFollowUpResponseWithAI(
-                    session.context,
+                    session,
                     nextQuestion,
                     userMessage
                 );
@@ -1284,10 +1375,11 @@ export class AIInterviewService {
      * AI를 사용한 후속 응답 생성
      */
     private async generateFollowUpResponseWithAI(
-        context: InterviewContext,
+        session: InterviewSession,
         nextQuestion: InterviewQuestion,
         userMessage: string
     ): Promise<string> {
+        const context = session.context;
         // AI가 설정되어 있지 않으면 기본 응답 사용
         if (!aiClient.getAvailableProvider()) {
             return this.generateFollowUpResponse(context, nextQuestion);
@@ -1370,14 +1462,19 @@ ${
 
 한국어로 따뜻하고 친근하게, 하지만 전문적인 인터뷰어처럼 응답하세요.`;
 
-            const response = await aiClient.complete(
-                `사용자의 최근 답변을 분석하고, 아이디어를 더 구체화할 수 있는 후속 질문을 생성해주세요.`,
-                {
-                    systemPrompt,
-                    temperature: 0.7,
-                    maxTokens: 800,
-                }
-            );
+            const prompt =
+                '사용자의 최근 답변을 분석하고, 아이디어를 더 구체화할 수 있는 후속 질문을 생성해주세요.';
+            this.logPromptRequest('follow-up-response', session.aiProvider, prompt, {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 800,
+            });
+
+            const response = await aiClient.complete(prompt, {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 800,
+            });
 
             return response;
         } catch (error) {
@@ -1509,9 +1606,10 @@ ${
      * AI를 사용한 완료 메시지 생성
      */
     private async generateCompletionMessageWithAI(
-        context: InterviewContext,
+        session: InterviewSession,
         lastUserMessage: string
     ): Promise<string> {
+        const context = session.context;
         // AI가 설정되어 있지 않으면 기본 메시지 사용
         if (!aiClient.getAvailableProvider()) {
             return this.generateCompletionMessage(context);
@@ -1547,14 +1645,18 @@ ${
 
 한국어로 작성하세요.`;
 
-            const response = await aiClient.complete(
-                `사용자의 마지막 답변: "${lastUserMessage}"\n\n인터뷰를 마무리하고 수집된 정보를 요약해주세요.`,
-                {
-                    systemPrompt,
-                    temperature: 0.7,
-                    maxTokens: 600,
-                }
-            );
+            const prompt = `사용자의 마지막 답변: "${lastUserMessage}"\n\n인터뷰를 마무리하고 수집된 정보를 요약해주세요.`;
+            this.logPromptRequest('interview-completion-message', session.aiProvider, prompt, {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 600,
+            });
+
+            const response = await aiClient.complete(prompt, {
+                systemPrompt,
+                temperature: 0.7,
+                maxTokens: 600,
+            });
 
             return response;
         } catch (error) {
@@ -1666,14 +1768,18 @@ ${
             const truncatedContent =
                 content.length > 4000 ? content.substring(0, 4000) + '...' : content;
 
-            const response = await aiClient.complete(
-                `다음 ${type} 문서를 요약해주세요:\n\n${truncatedContent}`,
-                {
-                    systemPrompt,
-                    temperature: 0.3,
-                    maxTokens: 300,
-                }
-            );
+            const prompt = `다음 ${type} 문서를 요약해주세요:\n\n${truncatedContent}`;
+            this.logPromptRequest('document-summary', null, prompt, {
+                systemPrompt,
+                temperature: 0.3,
+                maxTokens: 300,
+            });
+
+            const response = await aiClient.complete(prompt, {
+                systemPrompt,
+                temperature: 0.3,
+                maxTokens: 300,
+            });
 
             return response;
         } catch (error) {
@@ -1992,6 +2098,11 @@ ${attachmentsText}
 3. **아이디어 특성 반영**: 일반적인 개발 템플릿이 아닌, 이 아이디어만의 고유한 기능을 중심으로 태스크 구성
 4. **promptTemplate 상세화**: 각 태스크가 실제로 실행될 때 AI가 사용할 구체적인 프롬프트 작성`;
 
+        this.logPromptRequest('concretize-idea', null, prompt, {
+            systemPrompt,
+            temperature: 0.5,
+            maxTokens: 8000,
+        });
         const response = await aiClient.complete(prompt, {
             systemPrompt,
             temperature: 0.5,
@@ -1999,9 +2110,7 @@ ${attachmentsText}
         });
 
         try {
-            // JSON 추출 시도 - 가장 바깥쪽 JSON 블록만 선택
-            const jsonMatch = response.match(/```json\n([\s\S]*?)```/) || response.match(/```\n([\s\S]*?)```/);
-            const jsonString = jsonMatch ? jsonMatch[1] : response.trim();
+            const jsonString = this.extractJsonPayload(response);
             if (jsonString) {
                 const parsed = JSON.parse(jsonString);
 
@@ -2029,20 +2138,23 @@ ${attachmentsText}
                         const outputFormats = task.outputFormats || [defaultOutputFormat];
                         const primaryOutputFormat = task.primaryOutputFormat || defaultOutputFormat;
 
-                        return {
-                            title: task.title,
-                            description: task.description,
-                            category: task.category || 'feature',
-                            estimatedMinutes: task.estimatedMinutes || 60,
-                            dependencies: task.dependencies || [],
-                            suggestedAIProvider: this.selectBestProvider(
-                                task.description || task.title
-                            ),
-                            suggestedModel: this.selectBestModel(task.description || task.title),
-                            complexity: task.complexity || 'medium',
-                            // 결과물 관련 필드
-                            outputFormats,
-                            primaryOutputFormat,
+                    const recommendedProviders = this.resolveRecommendedProviders(task);
+                    const suggestedProvider =
+                        recommendedProviders[0] ||
+                        this.selectBestProvider(task.description || task.title || '');
+
+                    return {
+                        title: task.title,
+                        description: task.description,
+                        category: task.category || 'feature',
+                        estimatedMinutes: task.estimatedMinutes || 60,
+                        dependencies: task.dependencies || [],
+                        suggestedAIProvider: suggestedProvider,
+                        suggestedModel: this.selectBestModel(task.description || task.title),
+                        complexity: task.complexity || 'medium',
+                        // 결과물 관련 필드
+                        outputFormats,
+                        primaryOutputFormat,
                             outputDescription:
                                 task.outputDescription ||
                                 this.generateOutputDescription(task, primaryOutputFormat),
@@ -2085,6 +2197,8 @@ ${attachmentsText}
                 );
 
                 return concretized;
+            } else {
+                throw new Error('AI response did not contain a JSON payload');
             }
         } catch (parseError) {
             console.error('AI 응답 파싱 실패:', parseError);
@@ -2161,6 +2275,33 @@ ${attachmentsText}
         }
 
         return 'text'; // 기본값
+    }
+
+    /**
+     * Extract JSON payload from AI responses that may include markdown headers.
+     */
+    private extractJsonPayload(content: string | null | undefined): string | null {
+        if (!content) {
+            return null;
+        }
+        const trimmed = content.trim();
+        const fencedJson = trimmed.match(/```json\s*([\s\S]*?)```/i);
+        if (fencedJson?.[1]) {
+            return fencedJson[1].trim();
+        }
+        const fencedBlock = trimmed.match(/```\s*([\s\S]*?)```/);
+        if (fencedBlock?.[1]) {
+            const candidate = fencedBlock[1].trim();
+            if (candidate.startsWith('{')) {
+                return candidate;
+            }
+        }
+        const firstBrace = trimmed.indexOf('{');
+        const lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            return trimmed.slice(firstBrace, lastBrace + 1).trim();
+        }
+        return null;
     }
 
     /**
@@ -3039,6 +3180,11 @@ ${formatInstructions}
         const userPrompt = this.buildExecutionPlanPrompt(context);
 
         try {
+            this.logPromptRequest('execution-plan', session.aiProvider, userPrompt, {
+                systemPrompt,
+                temperature: 0.4,
+                maxTokens: 4000,
+            });
             const response = await aiClient.completeWithInfo(userPrompt, {
                 systemPrompt,
                 temperature: 0.4, // 창의성을 위해 약간 높임
@@ -3070,6 +3216,7 @@ ${formatInstructions}
                 tasks: planData.tasks.map((task: any, index: number) => {
                     const optimized =
                         task.aiOptimizedPrompt || this.optimizePromptForAI(task, context);
+                    const recommendedProviders = this.resolveRecommendedProviders(task);
                     return {
                         title: task.title,
                         description: task.description,
@@ -3077,8 +3224,7 @@ ${formatInstructions}
                         executionOrder: task.executionOrder || index + 1,
                         dependencies: task.dependencies || [],
                         expectedOutputFormat: task.expectedOutputFormat || 'markdown',
-                        recommendedProviders:
-                            task.recommendedProviders || this.recommendAIProviders(task),
+                        recommendedProviders,
                         requiredMCPs: task.requiredMCPs || this.identifyRequiredMCPs(task, context),
                         estimatedMinutes: task.estimatedMinutes || this.estimateTaskDuration(task),
                         priority: task.priority || 'medium',
@@ -3271,8 +3417,8 @@ ${context.constraints.length > 0 ? context.constraints.map((c) => `- ${c}`).join
     /**
      * AI Provider 추천
      */
-    private recommendAIProviders(task: any): string[] {
-        const providers: string[] = [];
+    private recommendAIProviders(task: any): AIProvider[] {
+        const providers: AIProvider[] = [];
         const description = (task.description || '').toLowerCase();
         const outputFormat = task.expectedOutputFormat || '';
 
@@ -3303,7 +3449,7 @@ ${context.constraints.length > 0 ? context.constraints.map((c) => `- ${c}`).join
             providers.push('google');
         }
 
-        return providers;
+        return Array.from(new Set(providers));
     }
 
     /**

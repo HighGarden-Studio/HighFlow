@@ -10,7 +10,7 @@ import type { Task } from '@core/types/database';
 import type { AiResult, AiSubType } from '@core/types/ai';
 import { extractTaskResult } from '../../renderer/utils/aiResultHelpers';
 import { marked } from 'marked';
-import type { MarkedOptions } from 'marked';
+import type { MarkedOptions, Tokens } from 'marked';
 
 // Output format type
 type OutputFormat =
@@ -113,18 +113,16 @@ const SUBTYPE_EXTENSION_MAP: Partial<Record<AiSubType, string>> = {
 };
 
 const markdownRenderer = new marked.Renderer();
-markdownRenderer.code = (code: string, infoString: string | undefined) => {
-    const language = (infoString || '').trim();
+markdownRenderer.code = ({ text, lang }: Tokens.Code) => {
+    const language = (lang || '').trim();
     const langClass = language ? `language-${language}` : '';
-    return `<pre class="bg-gray-900 p-4 rounded-lg overflow-x-auto"><code class="${langClass} text-sm font-mono text-gray-100">${escapeHtml(code)}</code></pre>`;
+    return `<pre class="bg-gray-900 p-4 rounded-lg overflow-x-auto"><code class="${langClass} text-sm font-mono text-gray-100">${escapeHtml(text)}</code></pre>`;
 };
 
 const markedOptions: MarkedOptions = {
     renderer: markdownRenderer,
     gfm: true,
     breaks: true,
-    headerIds: false,
-    mangle: false,
 };
 
 interface Props {
@@ -198,6 +196,24 @@ const codeLanguage = computed(() => {
 // Get task result content
 const content = computed(() => {
     return aiValue.value || fallbackResultContent.value || '';
+});
+
+const imageMimeType = computed(() => {
+    return aiResult.value?.meta?.mime || 'image/png';
+});
+
+const pngImageSrc = computed(() => {
+    if (outputFormat.value !== 'png') {
+        return '';
+    }
+    const value = content.value || '';
+    if (!value) {
+        return '';
+    }
+    if (value.startsWith('data:') || /^https?:\/\//i.test(value)) {
+        return value;
+    }
+    return `data:${imageMimeType.value};base64,${value}`;
 });
 
 // Format display name
@@ -1202,11 +1218,7 @@ onMounted(() => {
                                     class="h-full flex items-center justify-center"
                                 >
                                     <img
-                                        :src="
-                                            content.startsWith('data:')
-                                                ? content
-                                                : `data:image/png;base64,${content}`
-                                        "
+                                        :src="pngImageSrc"
                                         alt="Result Image"
                                         class="max-w-full max-h-full object-contain rounded-lg shadow-lg"
                                     />

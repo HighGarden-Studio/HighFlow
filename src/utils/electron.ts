@@ -387,7 +387,13 @@ export const mockElectronAPI = {
                 streaming?: boolean;
                 timeout?: number;
                 fallbackProviders?: string[];
-                apiKeys?: { anthropic?: string; openai?: string; google?: string; groq?: string };
+                apiKeys?: {
+                    anthropic?: string;
+                    openai?: string;
+                    google?: string;
+                    groq?: string;
+                    lmstudio?: string;
+                };
             }
         ): Promise<{ success: boolean; result?: unknown; error?: string; stopped?: boolean }> => {
             console.log(`[Mock] Executing task ${taskId}`);
@@ -538,7 +544,13 @@ export const mockElectronAPI = {
             taskId: number,
             _options?: {
                 streaming?: boolean;
-                apiKeys?: { anthropic?: string; openai?: string; google?: string; groq?: string };
+                apiKeys?: {
+                    anthropic?: string;
+                    openai?: string;
+                    google?: string;
+                    groq?: string;
+                    lmstudio?: string;
+                };
             }
         ): Promise<{ success: boolean; result?: unknown; error?: string }> => {
             console.log(`[Mock] Starting auto review for task ${taskId}`);

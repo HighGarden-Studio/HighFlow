@@ -281,6 +281,64 @@ export class GeminiProvider extends BaseAIProvider {
         };
     }
 
+    async generateImage(
+        prompt: string,
+        config: AIConfig,
+        _context?: ExecutionContext,
+        options: Record<string, any> = {}
+    ): Promise<AiResult> {
+        const client = this.getClient();
+        const modelName = config.model || ('imagen-3.0' as AIModel);
+        const model = client.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+                temperature: config.temperature ?? 0.4,
+            },
+        } as any);
+
+        const response = await model.generateContent({
+            contents: [
+                {
+                    role: 'user',
+                    parts: [{ text: prompt }],
+                },
+            ],
+        } as any);
+
+        const inlinePart = response.response?.candidates
+            ?.flatMap((candidate: any) => candidate.content?.parts || [])
+            .find((part: any) => part.inlineData)?.inlineData;
+
+        if (!inlinePart?.data) {
+            throw new Error('Gemini image generation did not return any inline data.');
+        }
+
+        const mime = inlinePart.mimeType || 'image/png';
+
+        return {
+            kind: 'image',
+            subType: this.mapMimeToSubType(mime),
+            format: 'base64',
+            value: inlinePart.data,
+            mime,
+            meta: {
+                provider: this.name,
+                model: modelName,
+                size: options.size,
+                quality: options.quality,
+                style: options.style,
+            },
+            raw: response,
+        };
+    }
+
+    private mapMimeToSubType(mime: string): AiResult['subType'] {
+        if (mime.includes('webp')) return 'webp';
+        if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+        if (mime.includes('svg')) return 'svg';
+        return 'png';
+    }
+
     async generateText(
         messages: AIMessage[],
         config: AIConfig,

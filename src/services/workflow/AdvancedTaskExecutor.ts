@@ -1,4 +1,4 @@
-import type { Task } from '@core/types/database';
+import type { Task, TaskAttachment } from '@core/types/database';
 import type {
     ExecutionContext,
     ExecutionOptions,
@@ -11,7 +11,7 @@ import type {
     Condition,
     ExecutionState,
 } from './types';
-import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai';
+import type { EnabledProviderInfo, MCPServerRuntimeConfig, AiResult } from '@core/types/ai';
 import { buildPlainTextResult } from '../ai/utils/aiResultUtils';
 import { RetryableError, TimeoutError, BudgetExceededError } from './types';
 import { AIServiceManager, type AIExecutionResult } from './AIServiceManager';
@@ -136,6 +136,7 @@ export class AdvancedTaskExecutor {
                         provider: aiResult.provider,
                         model: aiResult.model,
                     });
+                const attachments = this.buildAttachmentsFromAiResult(task.id, finalAiResult);
 
                 return {
                     taskId: task.id,
@@ -146,6 +147,7 @@ export class AdvancedTaskExecutor {
                         model: aiResult.model,
                         finishReason: aiResult.finishReason,
                         metadata: aiResult.metadata,
+                        attachments,
                     },
                     startTime,
                     endTime,
@@ -158,7 +160,9 @@ export class AdvancedTaskExecutor {
                         provider: aiResult.provider,
                         model: aiResult.model,
                         aiResult: finalAiResult,
+                        attachments,
                     },
+                    attachments,
                 };
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
@@ -239,20 +243,16 @@ export class AdvancedTaskExecutor {
         console.log(`[AdvancedTaskExecutor] ExecuteTaskLogic ${processedDescription}`);
 
         // 의존 작업의 결과가 있으면 프롬프트에 자동으로 추가
-        if (context.previousResults && context.previousResults.length > 0) {
-            const resultsSection = context.previousResults
-                .map((result, index) => {
-                    const output =
-                        typeof result.output === 'string'
-                            ? result.output
-                            : JSON.stringify(result.output, null, 2);
-                    return `### 의존 작업 ${index + 1}: ${result.taskTitle || `Task #${result.taskId}`}\n\n${output}`;
-                })
-                .join('\n\n---\n\n');
-
-            processedDescription = `## 참고: 이전 작업 결과\n\n${resultsSection}\n\n---\n\n## 현재 작업\n\n${processedDescription}`;
+        const dependencyResults = this.getRelevantDependencyResults(
+            task,
+            context.previousResults || []
+        );
+        if (dependencyResults.length > 0) {
+            const resultsSection = this.buildDependencyResultsSection(dependencyResults);
+            processedDescription = `${resultsSection}\n\n---\n\n${processedDescription}`;
+            this.attachDependencyArtifactsToContext(context, dependencyResults);
             console.log(
-                `[AdvancedTaskExecutor] Injected ${context.previousResults.length} previous results into prompt`
+                `[AdvancedTaskExecutor] Injected ${dependencyResults.length} dependency results into prompt`
             );
         }
 
@@ -950,7 +950,221 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
                 return instruction;
             }
         }
-        return formatInstructions.markdown;
+        return formatInstructions.markdown ?? 'Markdown 형식으로 결과를 작성해주세요.';
+    }
+
+    private buildAttachmentsFromAiResult(
+        taskId: number,
+        aiResult: AiResult | null
+    ): TaskAttachment[] {
+        if (!aiResult) return [];
+        const attachments: TaskAttachment[] = [];
+        const mime = aiResult.mime || this.guessMimeFromSubType(aiResult.subType);
+        const extension = this.getExtensionFromSubType(aiResult.subType);
+        const baseName = `task-${taskId}-output`;
+
+        if (aiResult.format === 'base64' || aiResult.format === 'binary') {
+            attachments.push({
+                id: `${taskId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                name: `${baseName}.${extension}`,
+                type: this.mapAiKindToAttachmentType(aiResult.kind),
+                mime: mime || 'application/octet-stream',
+                encoding: 'base64',
+                value: aiResult.value,
+                size: Math.round((aiResult.value.length * 3) / 4),
+                sourceTaskId: taskId,
+            });
+        } else if (aiResult.format === 'url') {
+            attachments.push({
+                id: `${taskId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                name: `${baseName}.${extension}`,
+                type: this.mapAiKindToAttachmentType(aiResult.kind),
+                mime: mime || 'application/octet-stream',
+                encoding: 'url',
+                value: aiResult.value,
+                sourceTaskId: taskId,
+            });
+        } else if (aiResult.kind !== 'text' && aiResult.value) {
+            attachments.push({
+                id: `${taskId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                name: `${baseName}.${extension}`,
+                type: this.mapAiKindToAttachmentType(aiResult.kind),
+                mime: mime || 'text/plain',
+                encoding: 'text',
+                value: aiResult.value,
+                sourceTaskId: taskId,
+            });
+        }
+
+        return attachments;
+    }
+
+    private mapAiKindToAttachmentType(kind: AiResult['kind']): TaskAttachment['type'] {
+        switch (kind) {
+            case 'image':
+                return 'image';
+            case 'audio':
+                return 'audio';
+            case 'video':
+                return 'video';
+            case 'document':
+                return 'document';
+            case 'data':
+                return 'data';
+            default:
+                return 'binary';
+        }
+    }
+
+    private getExtensionFromSubType(subType?: string): string {
+        if (!subType) return 'txt';
+        const map: Record<string, string> = {
+            png: 'png',
+            jpg: 'jpg',
+            jpeg: 'jpeg',
+            webp: 'webp',
+            svg: 'svg',
+            mp4: 'mp4',
+            mp3: 'mp3',
+            pdf: 'pdf',
+            json: 'json',
+            yaml: 'yaml',
+            csv: 'csv',
+            sql: 'sql',
+            diff: 'diff',
+            log: 'log',
+            html: 'html',
+            markdown: 'md',
+            code: 'txt',
+        };
+        return map[subType] || 'txt';
+    }
+
+    private guessMimeFromSubType(subType?: string): string | undefined {
+        if (!subType) return undefined;
+        const map: Record<string, string> = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            webp: 'image/webp',
+            svg: 'image/svg+xml',
+            mp4: 'video/mp4',
+            mp3: 'audio/mpeg',
+            pdf: 'application/pdf',
+            json: 'application/json',
+            yaml: 'text/yaml',
+            csv: 'text/csv',
+            sql: 'text/sql',
+            diff: 'text/x-diff',
+            log: 'text/plain',
+            html: 'text/html',
+            markdown: 'text/markdown',
+            code: 'text/plain',
+        };
+        return map[subType];
+    }
+
+    private getRelevantDependencyResults(task: Task, previousResults: TaskResult[]): TaskResult[] {
+        if (!previousResults || previousResults.length === 0) {
+            return [];
+        }
+        const dependencyIds = new Set<number>(
+            (task.dependencies || []).map((id) => Number(id)).filter((id) => !Number.isNaN(id))
+        );
+        const triggerTaskIds =
+            task.triggerConfig?.dependsOn?.taskIds
+                ?.map((id) => Number(id))
+                .filter((id) => !Number.isNaN(id)) || [];
+        triggerTaskIds.forEach((id) => dependencyIds.add(id));
+
+        if (dependencyIds.size === 0) {
+            return previousResults;
+        }
+
+        return previousResults.filter((result) => dependencyIds.has(result.taskId));
+    }
+
+    private buildDependencyResultsSection(results: TaskResult[]): string {
+        const sections = results.map((result, index) => {
+            const header = `### 의존 작업 ${index + 1}: ${
+                result.taskTitle || `Task #${result.taskId}`
+            }`;
+            const output = this.stringifyResultOutput(result);
+            const attachments = (result.attachments ||
+                result.metadata.attachments ||
+                []) as TaskAttachment[];
+            const attachmentBlock = attachments
+                .map((attachment, attachmentIndex) =>
+                    this.formatAttachmentForPrompt(attachment, attachmentIndex)
+                )
+                .filter(Boolean)
+                .join('\n\n');
+
+            return [header, output, attachmentBlock].filter(Boolean).join('\n\n');
+        });
+
+        return `## 참고: 의존 작업 결과\n\n${sections.join('\n\n---\n\n')}`;
+    }
+
+    private stringifyResultOutput(result: TaskResult): string {
+        if (typeof result.output === 'string') {
+            return this.truncateContent(result.output);
+        }
+        if (result.output?.aiResult?.value) {
+            const value = result.output.aiResult.value;
+            return this.truncateContent(
+                typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+            );
+        }
+        try {
+            return this.truncateContent(JSON.stringify(result.output, null, 2));
+        } catch {
+            return this.truncateContent(String(result.output ?? ''));
+        }
+    }
+
+    private truncateContent(value: string, limit = 2000): string {
+        if (!value) return '';
+        if (value.length <= limit) return value;
+        return `${value.slice(0, limit)}\n... (truncated ${value.length - limit} characters)`;
+    }
+
+    private formatAttachmentForPrompt(attachment: TaskAttachment, index: number): string {
+        if (!attachment) return '';
+        const preview =
+            attachment.encoding === 'base64'
+                ? this.truncateContent(attachment.value, 800)
+                : attachment.value;
+        return [
+            `BEGIN ATTACHMENT ${index + 1}`,
+            `Name: ${attachment.name}`,
+            `Type: ${attachment.type}`,
+            `MIME: ${attachment.mime}`,
+            `Encoding: ${attachment.encoding}`,
+            attachment.size ? `Size(bytes): ${attachment.size}` : '',
+            `Content Preview:\n${preview}`,
+            'END ATTACHMENT',
+        ]
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    private attachDependencyArtifactsToContext(
+        context: ExecutionContext,
+        results: TaskResult[]
+    ): void {
+        const aggregated =
+            results.flatMap(
+                (result) =>
+                    result.attachments || (result.metadata.attachments as TaskAttachment[]) || []
+            ) || [];
+        if (aggregated.length === 0) return;
+
+        context.metadata = context.metadata || {};
+        const existing = Array.isArray(context.metadata.attachments)
+            ? (context.metadata.attachments as TaskAttachment[])
+            : [];
+        context.metadata.attachments = [...existing, ...aggregated];
     }
 
     /**

@@ -291,13 +291,13 @@ const canProceed = computed(() => {
             return ideaText.value.trim().length >= 20;
         case 'provider':
             return selectedProvider.value !== null && availableChatProviders.value.length > 0;
-        case 'interview':
-            return (
-                interviewSession.value?.status === 'completed' ||
-                (interviewSession.value?.context.confidence ?? 0) >= 70
-            );
-        case 'concretize':
-            return concretizedIdea.value !== null;
+case 'interview':
+    return (
+        interviewSession.value?.status === 'completed' ||
+        (interviewSession.value?.context.confidence ?? 0) >= 70
+    );
+case 'concretize':
+    return !isConcretizing.value && concretizedIdea.value !== null;
         case 'preview':
             return selectedTasks.value.size > 0;
         case 'optimize':
@@ -583,6 +583,11 @@ function goToStep(step: WizardStep) {
 function startInterview() {
     if (!selectedProvider.value) return;
 
+    console.info('[ProjectCreationWizard] Starting AI interview', {
+        provider: selectedProvider.value,
+        availableProviders: availableChatProviders.value.map((p) => p.id),
+    });
+
     // 연동된 Provider 목록을 aiInterviewService에 설정
     const enabledProviders = settingsStore.getEnabledProvidersForRecommendation();
     aiInterviewService.setEnabledProviders(enabledProviders);
@@ -605,6 +610,10 @@ function startInterview() {
                 updatedSession.fallbackOccurred &&
                 updatedSession.aiProvider !== selectedProvider.value
             ) {
+                console.warn('[ProjectCreationWizard] Interview provider fallback detected', {
+                    previousProvider: selectedProvider.value,
+                    newProvider: updatedSession.aiProvider,
+                });
                 selectedProvider.value = updatedSession.aiProvider;
             }
 
@@ -907,6 +916,9 @@ async function concretizeIdea() {
     if (!interviewSession.value) return;
 
     isConcretizing.value = true;
+    concretizedIdea.value = null;
+    executionPlan.value = null;
+    selectedTasks.value.clear();
     try {
         const result = await aiInterviewService.concretizeIdea(interviewSession.value.id);
         concretizedIdea.value = result;

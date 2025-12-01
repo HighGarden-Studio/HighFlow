@@ -312,6 +312,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     openai?: string;
                     google?: string;
                     groq?: string;
+                    lmstudio?: string;
                 };
                 enabledProviders?: EnabledProviderInfo[];
                 mcpServers?: MCPServerRuntimeConfig[];
@@ -487,6 +488,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     executionState.streamContent = displayContent;
 
                     // Prepare execution result
+                    const attachments =
+                        (result.metadata?.attachments as any) || result.attachments || [];
                     const executionResult = {
                         content: displayContent,
                         aiResult,
@@ -495,6 +498,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         duration: result.duration,
                         provider: aiResult?.meta?.provider || result.metadata?.provider,
                         model: aiResult?.meta?.model || result.metadata?.model,
+                        attachments,
                     };
 
                     // Update task with result and generated prompt
@@ -519,6 +523,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             duration: result.duration,
                             provider: aiResult?.meta?.provider || result.metadata?.provider,
                             model: aiResult?.meta?.model || result.metadata?.model,
+                            attachments,
                         },
                     });
 
@@ -1184,6 +1189,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     openai?: string;
                     google?: string;
                     groq?: string;
+                    lmstudio?: string;
                 };
                 enabledProviders?: EnabledProviderInfo[];
                 mcpServers?: MCPServerRuntimeConfig[];
@@ -1245,23 +1251,17 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 if (shouldResolveMacros) {
                     try {
-                        resolvedPromptForReview = PromptMacroService.replaceMacros(
-                            promptSource,
-                            {
-                                previousResults,
-                                variables: {},
-                                projectName: (task as any).projectName,
-                                projectDescription: (task as any).projectDescription,
-                                currentTaskId: task.id,
-                            }
-                        );
-                        console.log(
-                            '[TaskExecution] Resolved macros for auto-review prompt',
-                            {
-                                taskId,
-                                dependencyCount: dependencyTaskIds.length,
-                            }
-                        );
+                        resolvedPromptForReview = PromptMacroService.replaceMacros(promptSource, {
+                            previousResults,
+                            variables: {},
+                            projectName: (task as any).projectName,
+                            projectDescription: (task as any).projectDescription,
+                            currentTaskId: task.id,
+                        });
+                        console.log('[TaskExecution] Resolved macros for auto-review prompt', {
+                            taskId,
+                            dependencyCount: dependencyTaskIds.length,
+                        });
                     } catch (macroError) {
                         console.error(
                             '[TaskExecution] Failed to resolve macros for auto-review prompt:',
@@ -1504,8 +1504,7 @@ function buildReviewPrompt(
     // 사용자의 원래 입력 프롬프트 (템플릿 치환 전)
     const userOriginalPrompt = task.description || '';
     // 실제 실행된 프롬프트 (템플릿 치환 후)
-    const executedPrompt =
-        executedPromptOverride ?? (task.generatedPrompt || userOriginalPrompt);
+    const executedPrompt = executedPromptOverride ?? (task.generatedPrompt || userOriginalPrompt);
 
     return `작업 결과를 검토하세요. **간결하게** 답변하세요.
 

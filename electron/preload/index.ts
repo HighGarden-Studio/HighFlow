@@ -549,6 +549,7 @@ interface ExecutionOptions {
         openai?: string;
         google?: string;
         groq?: string;
+        lmstudio?: string;
     };
     enabledProviders?: EnabledProviderInfo[];
     mcpServers?: MCPServerRuntimeConfig[];

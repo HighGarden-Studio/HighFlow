@@ -93,6 +93,46 @@ export interface AIProviderConfig {
   maxTokens?: number;
 }
 
+const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
+  ollama: 'http://localhost:11434',
+  lmstudio: 'http://localhost:1234/v1',
+};
+
+const LOCAL_PROVIDER_DETECTION: Record<
+  string,
+  {
+    endpoint: string;
+    mode?: RequestMode;
+    method?: string;
+  }
+> = {
+  ollama: { endpoint: '/api/tags', mode: 'cors' },
+  lmstudio: { endpoint: '/models', mode: 'no-cors' },
+};
+
+const isBrowserDevEnvironment =
+  typeof window !== 'undefined' &&
+  typeof navigator !== 'undefined' &&
+  window.location?.protocol.startsWith('http') &&
+  !navigator.userAgent.toLowerCase().includes('electron');
+
+function normalizeBaseUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  return url.trim().replace(/\/+$/, '');
+}
+
+function resolveProviderBaseUrl(provider?: AIProviderConfig, override?: string): string | undefined {
+  if (!provider) return normalizeBaseUrl(override) || normalizeBaseUrl(provider?.baseUrl);
+  const overrideUrl = normalizeBaseUrl(override);
+  if (overrideUrl) return overrideUrl;
+  const providerUrl = normalizeBaseUrl(provider.baseUrl);
+  if (providerUrl) return providerUrl;
+  if (LOCAL_PROVIDER_DEFAULTS[provider.id]) {
+    return LOCAL_PROVIDER_DEFAULTS[provider.id];
+  }
+  return undefined;
+}
+
 export interface UserProfile {
   id?: number;
   email: string;
@@ -119,6 +159,13 @@ export interface SetupWizardState {
   skipped: boolean;
   skippedAt?: string;
   dontShowAgain: boolean;
+}
+
+export interface LocalProviderStatus {
+  status: 'unknown' | 'checking' | 'available' | 'unavailable';
+  lastChecked?: string;
+  details?: string;
+  baseUrl?: string;
 }
 
 export interface KeyboardShortcut {
@@ -1490,12 +1537,20 @@ export const useSettingsStore = defineStore('settings', () => {
     dontShowAgain: false,
   });
 
+  const localProviderStatus = ref<Record<string, LocalProviderStatus>>({});
+
   // ========================================
   // Getters
   // ========================================
 
   const enabledProviders = computed(() =>
-    aiProviders.value.filter((p) => p.enabled && (p.apiKey || p.isConnected))
+    aiProviders.value.filter((p) => {
+      if (!p.enabled) return false;
+      if (['ollama', 'lmstudio'].includes(p.id)) {
+        return true;
+      }
+      return Boolean(p.apiKey || p.isConnected);
+    })
   );
 
   const defaultProvider = computed(() =>
@@ -1512,6 +1567,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const enabledMCPServers = computed(() =>
     mcpServers.value.filter((s) => s.enabled && s.isConnected)
   );
+
+  function getLocalProviderStatus(providerId: string): LocalProviderStatus {
+    return localProviderStatus.value[providerId] || { status: 'unknown' };
+  }
 
   /**
    * Get all MCP server tags
@@ -1818,6 +1877,20 @@ export const useSettingsStore = defineStore('settings', () => {
       if (storedSetupWizard) {
         setupWizard.value = storedSetupWizard;
       }
+
+      aiProviders.value
+        .filter(
+          (provider) =>
+            provider.enabled &&
+            (provider.tags?.includes('local') ||
+              provider.id === 'lmstudio' ||
+              provider.id === 'ollama')
+        )
+        .forEach((provider) => {
+          detectLocalProvider(provider.id).catch((err) =>
+            console.warn(`Failed to detect provider ${provider.id}:`, err)
+          );
+        });
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load settings';
       console.error('Failed to load settings:', e);
@@ -1839,6 +1912,7 @@ export const useSettingsStore = defineStore('settings', () => {
       saveToStorage('integrations', integrations.value);
       saveToStorage('mcpServers', mcpServers.value);
       saveToStorage('setupWizard', setupWizard.value);
+
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to save settings';
       console.error('Failed to save settings:', e);
@@ -1953,6 +2027,108 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function detectLocalProvider(
+    providerId: string,
+    overrideBaseUrl?: string
+  ): Promise<LocalProviderStatus> {
+    const provider = aiProviders.value.find((p) => p.id === providerId);
+    const isLocal = provider?.tags?.includes('local') || providerId === 'lmstudio' || providerId === 'ollama';
+    if (!isLocal) {
+      const unavailable: LocalProviderStatus = {
+        status: 'unavailable',
+        lastChecked: new Date().toISOString(),
+      };
+      localProviderStatus.value[providerId] = unavailable;
+      return unavailable;
+    }
+
+    const baseUrl = resolveProviderBaseUrl(provider, overrideBaseUrl);
+    if (!baseUrl) {
+      const unavailable: LocalProviderStatus = {
+        status: 'unavailable',
+        lastChecked: new Date().toISOString(),
+        details: 'Base URL not configured',
+      };
+      localProviderStatus.value[providerId] = unavailable;
+      return unavailable;
+    }
+
+    const checking: LocalProviderStatus = { status: 'checking', baseUrl };
+    localProviderStatus.value[providerId] = checking;
+
+    const normalizedUrl = baseUrl.replace(/\/+$/, '');
+    const detection = LOCAL_PROVIDER_DETECTION[providerId] || { endpoint: '/models', mode: 'cors' };
+    const healthEndpoint = `${normalizedUrl}${detection.endpoint}`;
+
+    if (detection.mode === 'no-cors' && isBrowserDevEnvironment) {
+      const assumed: LocalProviderStatus = {
+        status: 'available',
+        lastChecked: new Date().toISOString(),
+        baseUrl: normalizedUrl,
+        details: 'Browser dev server cannot verify LM Studio due to CORS, assuming it is running.',
+      };
+      localProviderStatus.value[providerId] = assumed;
+      return assumed;
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 3000);
+
+    try {
+      const response = await fetch(healthEndpoint, {
+        signal: controller.signal,
+        method: detection.method || 'GET',
+        mode: detection.mode || 'cors',
+        cache: 'no-cache',
+      });
+      const succeeded = response.ok || response.type === 'opaque';
+      if (!succeeded) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const available: LocalProviderStatus = {
+        status: 'available',
+        lastChecked: new Date().toISOString(),
+        baseUrl: normalizedUrl,
+      };
+      localProviderStatus.value[providerId] = available;
+
+      const index = aiProviders.value.findIndex((p) => p.id === providerId);
+      if (index >= 0) {
+        const currentProvider = aiProviders.value[index];
+        if (!currentProvider.isConnected || currentProvider.baseUrl !== normalizedUrl) {
+          aiProviders.value[index] = {
+            ...currentProvider,
+            isConnected: true,
+            baseUrl: currentProvider.baseUrl || normalizedUrl,
+          };
+        }
+      }
+
+      return available;
+    } catch (error) {
+      const unavailable: LocalProviderStatus = {
+        status: 'unavailable',
+        lastChecked: new Date().toISOString(),
+        details: error instanceof Error ? error.message : String(error),
+        baseUrl: normalizedUrl,
+      };
+      localProviderStatus.value[providerId] = unavailable;
+
+      const index = aiProviders.value.findIndex((p) => p.id === providerId);
+      if (index >= 0) {
+        const currentProvider = aiProviders.value[index];
+        if (currentProvider.isConnected) {
+          aiProviders.value[index] = {
+            ...currentProvider,
+            isConnected: false,
+          };
+        }
+      }
+
+      return unavailable;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   /**
    * Validate OpenAI API key
    */
@@ -2463,6 +2639,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loading,
     error,
     setupWizard,
+    localProviderStatus,
 
     // Getters
     enabledProviders,
@@ -2481,6 +2658,7 @@ export const useSettingsStore = defineStore('settings', () => {
     getTagDisplayName,
     tagDisplayNames,
     getEnabledProvidersForRecommendation,
+    getLocalProviderStatus,
 
     // Provider helpers
     providerSupportsStreaming,
@@ -2508,6 +2686,7 @@ export const useSettingsStore = defineStore('settings', () => {
     connectMCPServer,
     disconnectMCPServer,
     installMCPServer,
+    detectLocalProvider,
     connectOAuth,
     disconnectOAuth,
     connectIntegration,

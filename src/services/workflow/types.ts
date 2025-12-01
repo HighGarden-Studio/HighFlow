@@ -1,4 +1,4 @@
-import type { Task } from '@core/types/database';
+import type { Task, TaskAttachment } from '@core/types/database';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -40,6 +40,7 @@ export interface ExecutionOptions {
         openai?: string;
         google?: string;
         groq?: string;
+        lmstudio?: string;
     };
     enabledProviders?: EnabledProviderInfo[];
     mcpServers?: MCPServerRuntimeConfig[];
@@ -69,6 +70,7 @@ export interface TaskResult {
     retries: number;
     checkpointId?: string;
     metadata: Record<string, any>;
+    attachments?: TaskAttachment[];
 }
 
 // ========== Workflow Result ==========

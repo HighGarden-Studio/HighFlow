@@ -561,8 +561,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Get API keys from settings store
             const settingsStore = useSettingsStore();
-            const apiKeys: { anthropic?: string; openai?: string; google?: string; groq?: string } =
-                {};
+            const apiKeys: {
+                anthropic?: string;
+                openai?: string;
+                google?: string;
+                groq?: string;
+                lmstudio?: string;
+            } = {};
 
             // Extract API keys from enabled providers
             for (const provider of settingsStore.aiProviders) {
@@ -575,6 +580,8 @@ export const useTaskStore = defineStore('tasks', () => {
                         apiKeys.google = provider.apiKey;
                     } else if (provider.id === 'groq') {
                         apiKeys.groq = provider.apiKey;
+                    } else if (provider.id === 'lmstudio') {
+                        apiKeys.lmstudio = provider.apiKey;
                     }
                 }
             }
@@ -584,6 +591,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 hasOpenAI: !!apiKeys.openai,
                 hasGoogle: !!apiKeys.google,
                 hasGroq: !!apiKeys.groq,
+                hasLmStudio: !!apiKeys.lmstudio,
             });
 
             const enabledProviderPayload = buildEnabledProvidersPayload(
@@ -1062,8 +1070,13 @@ export const useTaskStore = defineStore('tasks', () => {
             }
 
             // Get API keys from settings store
-            const apiKeys: { anthropic?: string; openai?: string; google?: string; groq?: string } =
-                {};
+            const apiKeys: {
+                anthropic?: string;
+                openai?: string;
+                google?: string;
+                groq?: string;
+                lmstudio?: string;
+            } = {};
 
             for (const provider of settingsStore.aiProviders) {
                 if (provider.apiKey) {
@@ -1071,6 +1084,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     else if (provider.id === 'openai') apiKeys.openai = provider.apiKey;
                     else if (provider.id === 'google') apiKeys.google = provider.apiKey;
                     else if (provider.id === 'groq') apiKeys.groq = provider.apiKey;
+                    else if (provider.id === 'lmstudio') apiKeys.lmstudio = provider.apiKey;
                 }
             }
 
