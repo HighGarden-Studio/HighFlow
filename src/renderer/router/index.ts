@@ -42,6 +42,15 @@ const routes: RouteRecordRaw[] = [
         },
     },
     {
+        path: '/projects/:id/timeline',
+        name: 'project-timeline',
+        component: () => import('../views/TimelineView.vue'),
+        props: true,
+        meta: {
+            title: 'Timeline',
+        },
+    },
+    {
         path: '/settings',
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),

@@ -425,19 +425,20 @@ export class MCPManager {
         const mcpInfo = await this.getMCPById(mcpId);
         const runtimeEntry = mcpInfo ? this.runtimeIntegrationMap.get(mcpInfo.id) : null;
 
+        const override = this.getTaskOverride(options.taskId, {
+            id: runtimeEntry?.config.id || mcpInfo?.slug || mcpInfo?.name,
+            name: mcpInfo?.name,
+            slug: runtimeEntry?.slug || mcpInfo?.slug,
+        });
+        const mergedParams =
+            override?.params && Object.keys(override.params).length > 0
+                ? { ...override.params, ...params }
+                : params;
+
         try {
             this.enforcePermissions(mcpId, toolName);
             this.enforceFeatureScopes(mcpId, toolName);
 
-            const override = this.getTaskOverride(options.taskId, {
-                id: runtimeEntry?.config.id || mcpInfo?.slug || mcpInfo?.name,
-                name: mcpInfo?.name,
-                slug: runtimeEntry?.slug || mcpInfo?.slug,
-            });
-            const mergedParams =
-                override?.params && Object.keys(override.params).length > 0
-                    ? { ...override.params, ...params }
-                    : params;
             const sanitizedParams = this.sanitizeParameters(mergedParams);
 
             console.log(
@@ -788,9 +789,7 @@ export class MCPManager {
             ...this.sanitizeEnv(process.env),
             ...this.sanitizeEnv(runtimeConfig?.env),
         };
-        const envFromRuntimeConfig = runtimeConfig
-            ? this.buildEnvFromConfig(runtimeConfig)
-            : {};
+        const envFromRuntimeConfig = runtimeConfig ? this.buildEnvFromConfig(runtimeConfig) : {};
         const envFromOverrideConfig =
             Object.keys(mergedRuntimeConfig).length > 0
                 ? this.buildEnvFromConfig({
@@ -1174,3 +1173,6 @@ export class MCPManager {
         return text.length > limit ? `${text.slice(0, limit)}…` : text;
     }
 }
+
+// Singleton instance export
+export const mcpManager = new MCPManager();

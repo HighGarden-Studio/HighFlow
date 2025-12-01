@@ -1,0 +1,14 @@
+diff --git a/lib/agent.js b/lib/agent.js
+index 8bd354effa05ec3d80244e9c60763dd56ed8fbd7..a74a88d5327ec3746d65048cbf4d3a652cd019fd 100644
+--- a/lib/agent.js
++++ b/lib/agent.js
+@@ -1,7 +1,8 @@
+ 'use strict';
+ 
+ const OriginalAgent = require('http').Agent;
+-const ms = require('humanize-ms');
++const msLib = require('ms');
++const ms = function(t) { if(typeof t === 'number') return t; return msLib(t); };
+ const debug = require('util').debuglog('agentkeepalive');
+ const {
+   INIT_SOCKET,

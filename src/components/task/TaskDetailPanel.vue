@@ -189,6 +189,7 @@ const autoReview = ref(false);
 const triggerType = ref<'none' | 'dependency' | 'time'>('none');
 const dependencyTaskIds = ref<string>(''); // Comma-separated task IDs
 const dependencyOperator = ref<'all' | 'any'>('all');
+const dependencyExecutionPolicy = ref<'once' | 'repeat'>('once'); // 자동 실행 정책
 const scheduleType = ref<'once' | 'recurring'>('once');
 const scheduledDatetime = ref('');
 const cronExpression = ref('');
@@ -224,6 +225,8 @@ watch(
                     triggerType.value = 'dependency';
                     dependencyTaskIds.value = newTask.triggerConfig.dependsOn.taskIds.join(', ');
                     dependencyOperator.value = newTask.triggerConfig.dependsOn.operator;
+                    dependencyExecutionPolicy.value =
+                        newTask.triggerConfig.dependsOn.executionPolicy || 'once';
                 } else if (newTask.triggerConfig.scheduledAt) {
                     triggerType.value = 'time';
                     scheduleType.value = newTask.triggerConfig.scheduledAt.type;
@@ -304,9 +307,7 @@ watch(
 watch(
     () => reviewProviderModelOptions.value,
     () => {
-        if (
-            !reviewProviderModelOptions.value.some((opt) => opt.id === reviewAiModel.value)
-        ) {
+        if (!reviewProviderModelOptions.value.some((opt) => opt.id === reviewAiModel.value)) {
             reviewAiModel.value = getDefaultModelForProvider(reviewAiProvider.value);
         }
     },
@@ -724,6 +725,7 @@ function handleSave() {
                 dependsOn: {
                     taskIds,
                     operator: dependencyOperator.value,
+                    executionPolicy: dependencyExecutionPolicy.value,
                 },
             };
         }
@@ -1810,7 +1812,8 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             executionMode === 'local'
                                                 ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                                                 : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600',
-                                            (!hasInstalledLocalAgent || !isDevProject) && 'opacity-50',
+                                            (!hasInstalledLocalAgent || !isDevProject) &&
+                                                'opacity-50',
                                         ]"
                                     >
                                         <input
@@ -2058,7 +2061,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </div>
 
                                 <!-- Review AI Settings -->
-                                <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                <div
+                                    class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4"
+                                >
                                     <div class="flex items-center justify-between mb-3">
                                         <div>
                                             <p
@@ -2066,15 +2071,20 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             >
                                                 리뷰용 AI 설정
                                             </p>
-                                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                자동/수동 리뷰 실행 시 사용할 Provider와 모델을 지정하세요
+                                            <p
+                                                class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
+                                            >
+                                                자동/수동 리뷰 실행 시 사용할 Provider와 모델을
+                                                지정하세요
                                             </p>
                                         </div>
                                         <span
                                             class="text-xs px-2 py-0.5 rounded-full"
-                                            :class="autoReview
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'"
+                                            :class="
+                                                autoReview
+                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                                            "
                                         >
                                             {{ autoReview ? '자동 리뷰 활성화' : '자동 리뷰 꺼짐' }}
                                         </span>
@@ -2148,8 +2158,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <p
                                                     class="text-xs text-yellow-700 dark:text-yellow-300 mt-1"
                                                 >
-                                                    리뷰 Provider가 연동되지 않았습니다. 설정 &gt; AI Providers에서
-                                                    API 키를 등록하거나 연결 상태를 확인하세요.
+                                                    리뷰 Provider가 연동되지 않았습니다. 설정 &gt;
+                                                    AI Providers에서 API 키를 등록하거나 연결 상태를
+                                                    확인하세요.
                                                 </p>
                                             </div>
                                         </div>
@@ -2291,10 +2302,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </div>
 
                                 <!-- MCP Configuration -->
-                                <div
-                                    v-if="selectedMCPTools.length > 0"
-                                    class="mt-4 space-y-4"
-                                >
+                                <div v-if="selectedMCPTools.length > 0" class="mt-4 space-y-4">
                                     <div
                                         v-for="serverId in selectedMCPTools"
                                         :key="`mcp-config-${serverId}`"
@@ -2302,10 +2310,16 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     >
                                         <div class="flex items-start justify-between mb-3">
                                             <div>
-                                                <p class="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                                                    {{ getMCPServerById(serverId)?.name || serverId }}
+                                                <p
+                                                    class="text-sm font-semibold text-gray-800 dark:text-gray-200"
+                                                >
+                                                    {{
+                                                        getMCPServerById(serverId)?.name || serverId
+                                                    }}
                                                 </p>
-                                                <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                <p
+                                                    class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                                                >
                                                     {{
                                                         getMCPServerById(serverId)?.description ||
                                                         'MCP 실행에 필요한 세부 정보를 입력하세요.'
@@ -2320,7 +2334,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         <!-- Environment Variables -->
                                         <div class="space-y-2">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                                <span
+                                                    class="text-xs font-medium text-gray-600 dark:text-gray-300"
+                                                >
                                                     환경변수
                                                 </span>
                                                 <button
@@ -2357,14 +2373,17 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 </button>
                                             </div>
                                             <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                                MCP 서버가 요구하는 토큰, 채널 등 환경변수를 설정하세요.
+                                                MCP 서버가 요구하는 토큰, 채널 등 환경변수를
+                                                설정하세요.
                                             </p>
                                         </div>
 
                                         <!-- Default Parameters -->
                                         <div class="space-y-2 mt-4">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                                <span
+                                                    class="text-xs font-medium text-gray-600 dark:text-gray-300"
+                                                >
                                                     기본 파라미터
                                                 </span>
                                                 <button
@@ -2406,8 +2425,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 </div>
                                             </div>
                                             <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                                Slack 채널 ID, 기본 검색어 등 MCP 호출 시 전달할 값을 지정합니다.
-                                                제공된 값은 AI가 호출하는 MCP 도구의 기본 파라미터로 병합됩니다.
+                                                Slack 채널 ID, 기본 검색어 등 MCP 호출 시 전달할
+                                                값을 지정합니다. 제공된 값은 AI가 호출하는 MCP
+                                                도구의 기본 파라미터로 병합됩니다.
                                             </p>
                                         </div>
 
@@ -2535,16 +2555,59 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 >
                                             </label>
                                             <label class="flex items-center gap-2">
-                                                <input
-                                                    v-model="dependencyOperator"
-                                                    type="radio"
-                                                    value="any"
-                                                    class="text-indigo-600 focus:ring-indigo-500"
-                                                />
+                                                <input v-model="dependencyOperator" type="radio" />
                                                 <span
                                                     class="text-sm text-indigo-700 dark:text-indigo-300"
                                                     >하나라도 완료되면 실행</span
                                                 >
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- 자동 실행 정책 -->
+                                    <div>
+                                        <label
+                                            class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
+                                        >
+                                            자동 실행 정책
+                                        </label>
+                                        <div class="space-y-2">
+                                            <label class="flex items-center gap-2">
+                                                <input
+                                                    v-model="dependencyExecutionPolicy"
+                                                    type="radio"
+                                                    value="once"
+                                                    class="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <div class="flex flex-col">
+                                                    <span
+                                                        class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
+                                                        >1회만 실행 (권장)</span
+                                                    >
+                                                    <span
+                                                        class="text-xs text-indigo-500 dark:text-indigo-400"
+                                                        >TODO 상태일 때만 자동 실행</span
+                                                    >
+                                                </div>
+                                            </label>
+                                            <label class="flex items-center gap-2">
+                                                <input
+                                                    v-model="dependencyExecutionPolicy"
+                                                    type="radio"
+                                                    value="repeat"
+                                                    class="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <div class="flex flex-col">
+                                                    <span
+                                                        class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
+                                                        >매번 자동 실행</span
+                                                    >
+                                                    <span
+                                                        class="text-xs text-indigo-500 dark:text-indigo-400"
+                                                        >조건 충족 시 현재 상태와 무관하게
+                                                        실행</span
+                                                    >
+                                                </div>
                                             </label>
                                         </div>
                                     </div>

@@ -85,6 +85,15 @@ const isConnectionMode = ref(false);
 const connectionLineStart = ref<{ x: number; y: number } | null>(null);
 const connectionLineEnd = ref<{ x: number; y: number } | null>(null);
 
+function toggleConnectionMode() {
+    isConnectionMode.value = !isConnectionMode.value;
+    if (!isConnectionMode.value) {
+        connectionLineStart.value = null;
+        connectionLineEnd.value = null;
+        draggedTask.value = null;
+    }
+}
+
 // Computed
 const project = computed(() => projectStore.currentProject);
 const groupedTasks = computed(() => taskStore.groupedTasks);
@@ -752,70 +761,108 @@ onMounted(async () => {
         </div>
 
         <!-- Header -->
-        <header class="border-b border-gray-800 px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                    <button
-                        @click="router.push('/projects')"
-                        class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                    >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                            />
-                        </svg>
-                    </button>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <InlineEdit
-                                v-if="project"
-                                :value="project.title"
-                                size="xl"
-                                @save="handleProjectNameUpdate"
-                            />
-                            <h1 v-else class="text-xl font-bold text-white">Loading...</h1>
-                            <!-- Project Info Button -->
-                            <button
-                                v-if="project"
-                                @click="showProjectInfoModal = true"
-                                class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                                title="프로젝트 정보"
+        <header
+            class="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0"
+        >
+            <div class="flex items-center gap-4">
+                <button
+                    @click="router.push('/projects')"
+                    class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                        />
+                    </svg>
+                </button>
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold text-white">{{ project?.title }}</h1>
+                        <button
+                            v-if="project"
+                            @click="showProjectInfoModal = true"
+                            class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                            title="Project Info"
+                        >
+                            <svg
+                                class="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
                             >
-                                <svg
-                                    class="w-5 h-5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-                        <p class="text-gray-400 text-sm">Kanban Board</p>
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                        </button>
                     </div>
+                    <p class="text-gray-400 text-sm">Kanban Board</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <!-- View Switcher -->
+                <div class="flex bg-gray-800 rounded-lg p-1">
+                    <button
+                        @click="router.push(`/projects/${projectId}`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Overview
+                    </button>
+                    <button
+                        class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
+                    >
+                        Board
+                    </button>
+                    <button
+                        @click="router.push(`/projects/${projectId}/timeline`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Timeline
+                    </button>
                 </div>
 
-                <div class="flex items-center gap-3">
-                    <!-- Progress -->
-                    <div class="flex items-center gap-2 text-sm text-gray-400">
-                        <span>{{ taskStore.completedTasks }}/{{ taskStore.totalTasks }}</span>
-                        <div class="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                                class="h-full bg-green-500 transition-all duration-300"
-                                :style="{ width: `${taskStore.completionRate}%` }"
-                            ></div>
-                        </div>
-                        <span>{{ taskStore.completionRate }}%</span>
-                    </div>
-                </div>
+                <!-- Connection Mode Toggle -->
+                <button
+                    @click="toggleConnectionMode"
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    :class="
+                        isConnectionMode
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    "
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                        />
+                    </svg>
+                    {{ isConnectionMode ? 'Connecting...' : 'Connect Tasks' }}
+                </button>
+
+                <button
+                    @click="openCreateModal('todo')"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M12 4v16m8-8H4"
+                        />
+                    </svg>
+                    New Task
+                </button>
             </div>
         </header>
 

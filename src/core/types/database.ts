@@ -357,6 +357,9 @@ export interface TaskTriggerConfig {
     dependsOn?: {
         taskIds: number[]; // 이 태스크들이 모두 DONE일 때 트리거
         operator: 'all' | 'any'; // all: 모두 완료, any: 하나라도 완료
+        executionPolicy?: 'once' | 'repeat'; // 실행 정책 (기본값: 'once')
+        // once: TODO 상태일 때만 1회 자동 실행 (기본 동작)
+        // repeat: 조건 충족 시 매번 자동 실행 (상태 무관)
     };
     // 시간 기반 트리거
     scheduledAt?: {
@@ -426,6 +429,8 @@ export interface Project extends BaseEntity {
     baseDevFolder?: string | null;
     status: ProjectStatus;
     aiProvider: AIProvider | null;
+    aiModel: string | null; // 프로젝트 기본 AI 모델
+    mcpConfig: MCPConfig | null; // 프로젝트 레벨 MCP 설정
     templateId: number | null;
     coverImage: string | null;
     color: string | null;
@@ -759,6 +764,8 @@ export interface CreateProjectDTO {
     mainPrompt?: string;
     status?: ProjectStatus;
     aiProvider?: AIProvider;
+    aiModel?: string; // 프로젝트 기본 AI 모델
+    mcpConfig?: MCPConfig; // 프로젝트 레벨 MCP 설정
     templateId?: number;
     coverImage?: string;
     color?: string;

@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  agentkeepalive@4.6.0:
+    hash: svr6z2n4zjg7ccbvg2hpzroelu
+    path: patches/agentkeepalive@4.6.0.patch
+
 dependencies:
   '@anthropic-ai/sdk':
     specifier: ^0.18.0
@@ -37,7 +42,7 @@ dependencies:
     version: 3.0.0
   agentkeepalive:
     specifier: ^4.6.0
-    version: 4.6.0
+    version: 4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu)
   ai:
     specifier: ^3.0.0
     version: 3.4.33(openai@4.104.0)(react@19.2.0)(svelte@5.45.2)(vue@3.5.25)(zod@3.25.76)
@@ -87,8 +92,8 @@ dependencies:
     specifier: ^7.0.0
     version: 7.1.0
   humanize-ms:
-    specifier: ^2.0.0
-    version: 2.0.0
+    specifier: ^1.2.1
+    version: 1.2.1
   jsonwebtoken:
     specifier: ^9.0.2
     version: 9.0.2
@@ -147,8 +152,8 @@ dependencies:
     specifier: ^4.3.0
     version: 4.6.3(vue@3.5.25)
   web-streams-polyfill:
-    specifier: ^4.2.0
-    version: 4.2.0
+    specifier: ^3.2.1
+    version: 3.2.1
   webidl-conversions:
     specifier: ^8.0.0
     version: 8.0.0
@@ -435,12 +440,12 @@ packages:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
       abort-controller: 3.0.0
-      agentkeepalive: 4.6.0
+      agentkeepalive: 4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu)
       digest-fetch: 1.3.0
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
-      web-streams-polyfill: 3.3.3
+      web-streams-polyfill: 3.2.1
     transitivePeerDependencies:
       - encoding
     dev: false
@@ -3766,11 +3771,12 @@ packages:
     engines: {node: '>= 14'}
     dev: true
 
-  /agentkeepalive@4.6.0:
+  /agentkeepalive@4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu):
     resolution: {integrity: sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==}
     engines: {node: '>= 8.0.0'}
     dependencies:
       humanize-ms: 1.2.1
+    patched: true
 
   /aggregate-error@3.1.0:
     resolution: {integrity: sha512-4I7Td01quW/RpocfNayFdFVk1qSuoh0E7JrbRJ16nH01HhKFQ88INq9Sd+nd72zqRySlr9BmDA8xlEJ6vJMrYA==}
@@ -6925,13 +6931,6 @@ packages:
     dependencies:
       ms: 2.1.3
 
-  /humanize-ms@2.0.0:
-    resolution: {integrity: sha512-TFN/YZLNqeL9OLdGHBb4Via7hAh766lHMckhEI0XuKUv4zF4qqxULc55x7x3TfgKPJ+ny1+0UeVtPE0HM2gawA==}
-    engines: {node: '>= 14.0.0'}
-    dependencies:
-      ms: 2.1.3
-    dev: false
-
   /iceberg-js@0.8.0:
     resolution: {integrity: sha512-kmgmea2nguZEvRqW79gDqNXyxA3OS5WIgMVffrHpqXV4F/J4UmNIw2vstixioLTNSkd5rFB8G0s3Lwzogm6OFw==}
     engines: {node: '>=20.0.0'}
@@ -7743,7 +7742,7 @@ packages:
     resolution: {integrity: sha512-NgOPbRiaQM10DYXvN3/hhGVI2M5MtITFryzBGxHM5p4wnFxsVCbxkrBrDsk+EZ5OB4jEOT7AjDxtdF+KVEFT7w==}
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
     dependencies:
-      agentkeepalive: 4.6.0
+      agentkeepalive: 4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu)
       cacache: 16.1.3
       http-cache-semantics: 4.2.0
       http-proxy-agent: 5.0.0
@@ -8407,7 +8406,7 @@ packages:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
       abort-controller: 3.0.0
-      agentkeepalive: 4.6.0
+      agentkeepalive: 4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu)
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
@@ -10505,19 +10504,14 @@ packages:
       defaults: 1.0.4
     dev: true
 
-  /web-streams-polyfill@3.3.3:
-    resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
+  /web-streams-polyfill@3.2.1:
+    resolution: {integrity: sha512-e0MO3wdXWKrLbL0DgGnUV7WHVuw9OUvL4hjgnPkIeEvESk74gAITi5G606JtZPp39cd8HA9VQzCIvA49LpPN5Q==}
     engines: {node: '>= 8'}
     dev: false
 
   /web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
-    dev: false
-
-  /web-streams-polyfill@4.2.0:
-    resolution: {integrity: sha512-0rYDzGOh9EZpig92umN5g5D/9A1Kff7k0/mzPSSCY8jEQeYkgRMoY7LhbXtUCWzLCMX0TUE9aoHkjFNB7D9pfA==}
-    engines: {node: '>= 8'}
     dev: false
 
   /webidl-conversions@3.0.1:
