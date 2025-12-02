@@ -1082,11 +1082,7 @@ export class AIServiceManager {
             extra: imageConfig.extra,
         };
 
-        const model = await this.resolveImageModelForProvider(
-            preferredProvider,
-            task,
-            imageConfig
-        );
+        const model = await this.resolveImageModelForProvider(preferredProvider, task, imageConfig);
 
         const aiConfig: AIConfig = {
             model,
@@ -1416,7 +1412,11 @@ export class AIServiceManager {
 - Be concise but thorough
 
 ## Output Format
-You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or explanatory text outside the JSON object.
+${
+    (task as any).outputFormat === 'json'
+        ? 'You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or explanatory text outside the JSON object.'
+        : 'Follow the output format instructions provided in the task description.'
+}
 `;
 
         return systemPrompt;

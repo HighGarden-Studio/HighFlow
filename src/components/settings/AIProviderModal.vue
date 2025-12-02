@@ -5,7 +5,7 @@
  * Modal for configuring AI provider settings
  */
 import { ref, computed, watch } from 'vue';
-import type { AIProviderConfig } from '../../renderer/stores/settingsStore';
+import type { AIProviderConfig, LocalProviderStatus } from '../../renderer/stores/settingsStore';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 
 interface Props {
@@ -38,6 +38,7 @@ const isValidating = ref(false);
 const validationResult = ref<'success' | 'error' | null>(null);
 const validationMessage = ref('');
 const isConnectingOAuth = ref(false);
+const isSyncingLocalModels = ref(false);
 
 // Watch for provider changes
 watch(() => props.provider, (newProvider) => {
@@ -52,7 +53,7 @@ watch(() => props.provider, (newProvider) => {
     validationResult.value = null;
     validationMessage.value = '';
   }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 // Provider Info - Extended with all providers
 const providerInfo = computed(() => {
@@ -187,6 +188,13 @@ const isLocalProvider = computed(() => {
   return props.provider?.id === 'ollama' || props.provider?.id === 'lmstudio';
 });
 
+const localStatus = computed<LocalProviderStatus>(() => {
+  if (!props.provider) {
+    return { status: 'unknown' };
+  }
+  return settingsStore.localProviderStatus[props.provider.id] || { status: 'unknown' };
+});
+
 // Check if provider needs base URL configuration
 const requiresBaseUrl = computed(() => {
   return props.provider?.id === 'azure-openai' || props.provider?.id === 'ollama' || props.provider?.id === 'lmstudio';
@@ -271,6 +279,21 @@ async function handleDisconnectOAuth() {
 
   await settingsStore.disconnectOAuth(props.provider.id);
   form.value.activeAuthMethod = 'apiKey';
+}
+
+async function refreshLocalModels(): Promise<void> {
+  if (!props.provider || !isLocalProvider.value) return;
+  isSyncingLocalModels.value = true;
+  try {
+    await settingsStore.detectLocalProvider(
+      props.provider.id,
+      form.value.baseUrl || props.provider.baseUrl
+    );
+  } catch (error) {
+    console.error('Failed to refresh local provider status:', error);
+  } finally {
+    isSyncingLocalModels.value = false;
+  }
 }
 
 function handleClose() {
@@ -437,9 +460,32 @@ function _maskApiKey(key: string): string {
               <!-- API Key Section -->
               <div v-if="supportsApiKey && (form.activeAuthMethod === 'apiKey' || !supportsOAuth)">
                 <!-- Local Provider Notice -->
-                <div v-if="isLocalProvider" class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg mb-4">
+              <div v-if="isLocalProvider" class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg mb-4 space-y-1.5">
                   <p class="text-sm text-yellow-700 dark:text-yellow-300">
                     This is a local provider. Make sure {{ provider.name }} is running on your machine.
+                  </p>
+                  <p class="text-xs text-yellow-800 dark:text-yellow-200">
+                    <template v-if="localStatus.status === 'available'">
+                      Connected to {{ localStatus.baseUrl || provider.baseUrl || form.baseUrl || 'local server' }}.
+                      <span v-if="localStatus.models?.length">
+                        {{ localStatus.models.length }} model(s) detected
+                        <span v-if="localStatus.preferredModel">
+                          (recommended: {{ localStatus.preferredModel }})
+                        </span>
+                      </span>
+                      <span v-else>
+                        No installed models were reported by LM Studio.
+                      </span>
+                    </template>
+                    <template v-else-if="localStatus.status === 'checking'">
+                      Checking LM Studio status...
+                    </template>
+                    <template v-else-if="localStatus.status === 'unavailable'">
+                      {{ localStatus.details || 'LM Studio가 실행 중인지 확인해주세요.' }}
+                    </template>
+                    <template v-else>
+                      Status has not been checked yet.
+                    </template>
                   </p>
                 </div>
 
@@ -554,21 +600,40 @@ function _maskApiKey(key: string): string {
 
               <!-- Default Model -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Default Model
-                </label>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Default Model
+                  </label>
+                  <button
+                    v-if="isLocalProvider"
+                    type="button"
+                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                    :disabled="isSyncingLocalModels"
+                    @click="refreshLocalModels"
+                  >
+                    {{ isSyncingLocalModels ? 'Syncing...' : 'Sync from LM Studio' }}
+                  </button>
+                </div>
                 <select
                   v-model="form.defaultModel"
                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
+                  :disabled="isLocalProvider && (!provider.models || provider.models.length === 0)"
                 >
                   <option
-                    v-for="model in provider.models"
+                    v-for="model in provider.models || []"
                     :key="model"
                     :value="model"
                   >
                     {{ model }}
                   </option>
                 </select>
+                <p
+                  v-if="isLocalProvider && (!provider.models || provider.models.length === 0)"
+                  class="mt-2 text-xs text-yellow-600 dark:text-yellow-400"
+                >
+                  LM Studio에서 설치된 모델을 찾지 못했습니다. LM Studio 앱에서 모델을 다운로드한 뒤
+                  &quot;Sync from LM Studio&quot; 버튼을 눌러 목록을 새로고침하세요.
+                </p>
               </div>
 
               <!-- Enable Toggle -->

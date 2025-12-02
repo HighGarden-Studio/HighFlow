@@ -1068,8 +1068,10 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
         if (!previousResults || previousResults.length === 0) {
             return [];
         }
+        // Ensure dependencies is an array (handle both JSON string and already-parsed array)
+        const dependenciesArray = Array.isArray(task.dependencies) ? task.dependencies : [];
         const dependencyIds = new Set<number>(
-            (task.dependencies || []).map((id) => Number(id)).filter((id) => !Number.isNaN(id))
+            dependenciesArray.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
         );
         const triggerTaskIds =
             task.triggerConfig?.dependsOn?.taskIds

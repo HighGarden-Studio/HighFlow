@@ -189,7 +189,7 @@ onUnmounted(() => {
         <!-- Sidebar -->
         <aside
             :class="[
-                'flex-shrink-0 bg-gray-950 border-r border-gray-800 transition-all duration-300 flex flex-col',
+                'flex-shrink-0 bg-gray-950 border-r border-gray-800 transition-all duration-300 flex flex-col pt-12',
                 sidebarOpen ? 'w-64' : 'w-16',
             ]"
         >
@@ -197,7 +197,7 @@ onUnmounted(() => {
             <div class="h-14 flex items-center justify-between px-4 border-b border-gray-800">
                 <div v-if="sidebarOpen" class="flex items-center gap-2">
                     <span class="text-xl">🤖</span>
-                    <span class="font-bold text-sm">AI Workflow</span>
+                    <!-- App name removed as per user request (duplicated in header) -->
                 </div>
                 <button
                     @click="toggleSidebar"
@@ -310,90 +310,100 @@ onUnmounted(() => {
             <!-- Custom Title Bar (for frameless window on macOS) -->
             <div
                 v-if="$route.meta.showTitleBar !== false"
-                class="h-9 bg-gray-950 flex items-center justify-between px-4 select-none"
+                class="h-12 bg-gray-950 grid grid-cols-3 items-center px-4 select-none border-b border-gray-800/50"
                 style="-webkit-app-region: drag"
             >
-                <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
-                    <!-- macOS traffic lights space -->
-                    <div class="w-16"></div>
+                <!-- Left: macOS traffic lights space -->
+                <div class="flex items-center justify-start">
+                    <div class="w-20"></div>
                 </div>
 
-                <!-- Search Bar (clickable) -->
-                <button
-                    @click="showSearch = true"
-                    class="flex items-center gap-2 px-3 py-1 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-lg transition-colors"
+                <!-- Center: App Title -->
+                <div class="flex items-center justify-center">
+                    <span class="font-bold text-sm text-gray-400">HighAIFlow</span>
+                </div>
+
+                <!-- Right: Search Bar & Window Controls -->
+                <div
+                    class="flex items-center justify-end gap-2"
                     style="-webkit-app-region: no-drag"
                 >
-                    <svg
-                        class="w-4 h-4 text-gray-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                    <!-- Search Bar (clickable) -->
+                    <button
+                        @click="showSearch = true"
+                        class="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-lg transition-colors"
                     >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                    </svg>
-                    <span class="text-xs text-gray-500">검색...</span>
-                    <kbd
-                        class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 bg-gray-700/50 rounded"
-                    >
-                        <span>⌘</span><span>K</span>
-                    </kbd>
-                </button>
+                        <svg
+                            class="w-4 h-4 text-gray-500"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                        </svg>
+                        <span class="text-xs text-gray-500">검색...</span>
+                        <kbd
+                            class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 bg-gray-700/50 rounded"
+                        >
+                            <span>⌘</span><span>K</span>
+                        </kbd>
+                    </button>
 
-                <div class="flex items-center gap-1" style="-webkit-app-region: no-drag">
-                    <!-- Windows controls (hidden on macOS) -->
-                    <template v-if="false">
-                        <button @click="minimizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
-                            <svg
-                                class="w-4 h-4 text-gray-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M20 12H4"
-                                />
-                            </svg>
-                        </button>
-                        <button @click="maximizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
-                            <svg
-                                class="w-4 h-4 text-gray-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                                />
-                            </svg>
-                        </button>
-                        <button @click="closeWindow" class="p-1.5 hover:bg-red-600 rounded">
-                            <svg
-                                class="w-4 h-4 text-gray-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12"
-                                />
-                            </svg>
-                        </button>
-                    </template>
+                    <!-- Windows controls (hidden on macOS via v-if="false" in original code) -->
+                    <div class="flex items-center gap-1">
+                        <template v-if="false">
+                            <button @click="minimizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
+                                <svg
+                                    class="w-4 h-4 text-gray-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M20 12H4"
+                                    />
+                                </svg>
+                            </button>
+                            <button @click="maximizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
+                                <svg
+                                    class="w-4 h-4 text-gray-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                    />
+                                </svg>
+                            </button>
+                            <button @click="closeWindow" class="p-1.5 hover:bg-red-600 rounded">
+                                <svg
+                                    class="w-4 h-4 text-gray-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </template>
+                    </div>
                 </div>
             </div>
 

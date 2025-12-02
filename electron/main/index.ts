@@ -11,9 +11,14 @@ import { TaskRepository } from './database/repositories/task-repository';
 import { registerWorkflowHandlers } from './ipc/workflow-handlers';
 import { registerFsHandlers } from './ipc/fs-handlers';
 import { registerLocalAgentsHandlers } from './ipc/local-agents-handlers';
-import { registerTaskExecutionHandlers, resetStuckTasks } from './ipc/task-execution-handlers';
+import {
+    registerTaskExecutionHandlers,
+    resetStuckTasks,
+    checkAndExecuteDependentTasks,
+} from './ipc/task-execution-handlers';
 import { registerTaskHistoryHandlers } from './ipc/task-history-handlers';
 import { registerSystemHandlers } from './ipc/system-handlers';
+import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
 import type { ProjectStatus } from '@core/types/database';
@@ -254,6 +259,11 @@ async function registerIpcHandlers(): Promise<void> {
             mainWindow?.webContents.send('task:updated', task);
             if (data.status) {
                 mainWindow?.webContents.send('task:status-changed', { id, status: data.status });
+
+                // Check for dependent tasks if status changed to 'done'
+                if (data.status === 'done') {
+                    await checkAndExecuteDependentTasks(id, task);
+                }
             }
             return task;
         } catch (error) {
@@ -347,6 +357,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register local agents handlers
     registerLocalAgentsHandlers(mainWindow);
+
+    // Register local provider handlers
+    registerLocalProviderHandlers();
 
     // Register task execution handlers
     registerTaskExecutionHandlers(mainWindow);

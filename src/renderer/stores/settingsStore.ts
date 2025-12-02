@@ -122,15 +122,110 @@ function normalizeBaseUrl(url?: string): string | undefined {
 }
 
 function resolveProviderBaseUrl(provider?: AIProviderConfig, override?: string): string | undefined {
-  if (!provider) return normalizeBaseUrl(override) || normalizeBaseUrl(provider?.baseUrl);
   const overrideUrl = normalizeBaseUrl(override);
-  if (overrideUrl) return overrideUrl;
-  const providerUrl = normalizeBaseUrl(provider.baseUrl);
-  if (providerUrl) return providerUrl;
-  if (LOCAL_PROVIDER_DEFAULTS[provider.id]) {
-    return LOCAL_PROVIDER_DEFAULTS[provider.id];
+  if (overrideUrl) {
+    return overrideUrl;
+  }
+  if (provider) {
+    const providerUrl = normalizeBaseUrl(provider.baseUrl);
+    if (providerUrl) {
+      return providerUrl;
+    }
+    if (LOCAL_PROVIDER_DEFAULTS[provider.id]) {
+      return LOCAL_PROVIDER_DEFAULTS[provider.id];
+    }
   }
   return undefined;
+}
+
+function sanitizeModelIdentifier(model: unknown): string | null {
+  if (!model) return null;
+  if (typeof model === 'string') {
+    const trimmed = model.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return null;
+}
+
+function sanitizeModelList(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  const deduped = new Set<string>();
+  for (const entry of models) {
+    const id = sanitizeModelIdentifier(entry);
+    if (id && !deduped.has(id)) {
+      deduped.add(id);
+    }
+  }
+  return Array.from(deduped);
+}
+
+function scoreLmStudioModel(modelId: string): number {
+  const name = modelId.toLowerCase();
+  let score = 0;
+  const moeMatch = name.match(/(\d+)\s*(x|×)\s*(\d+)\s*b/);
+  if (moeMatch) {
+    const experts = parseInt(moeMatch[1], 10);
+    const size = parseInt(moeMatch[3], 10);
+    if (!isNaN(experts) && !isNaN(size)) {
+      score = experts * size;
+    }
+  }
+  if (score === 0) {
+    const billionMatch = name.match(/(\d+(\.\d+)?)\s*(b|billion)/);
+    if (billionMatch) {
+      score = parseFloat(billionMatch[1]);
+    }
+  }
+  if (score === 0) {
+    const shorthandMatch = name.match(/(\d+(\.\d+)?)b/);
+    if (shorthandMatch) {
+      score = parseFloat(shorthandMatch[1]);
+    }
+  }
+  if (score === 0) {
+    const millionMatch = name.match(/(\d+(\.\d+)?)m/);
+    if (millionMatch) {
+      score = parseFloat(millionMatch[1]) / 1000;
+    }
+  }
+  if (score === 0) {
+    if (name.includes('tiny')) score = 0.25;
+    else if (name.includes('mini')) score = 0.5;
+    else if (name.includes('small')) score = 1;
+    else if (name.includes('medium')) score = 3;
+    else if (name.includes('large')) score = 7;
+  }
+  if (name.includes('70b')) score = Math.max(score, 70);
+  if (name.includes('405b')) score = Math.max(score, 405);
+  if (name.includes('instruct')) score += 0.3;
+  if (name.includes('coder') || name.includes('code')) score += 0.2;
+  if (name.includes('chat')) score += 0.1;
+  if (name.includes('q4') || name.includes('q5')) score -= 0.3;
+  if (name.includes('q6') || name.includes('q8')) score -= 0.2;
+  return score;
+}
+
+function selectPreferredLmStudioModel(models: string[], current?: string): string {
+  if (current && (!models.length || models.includes(current))) {
+    return current;
+  }
+  if (models.length === 0) {
+    return current || 'local-model';
+  }
+  const sorted = [...models].sort((a, b) => scoreLmStudioModel(b) - scoreLmStudioModel(a));
+  return sorted[0] || current || 'local-model';
+}
+
+function shallowEqualStringArrays(a?: string[], b?: string[]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export interface UserProfile {
@@ -166,6 +261,8 @@ export interface LocalProviderStatus {
   lastChecked?: string;
   details?: string;
   baseUrl?: string;
+  models?: string[];
+  preferredModel?: string;
 }
 
 export interface KeyboardShortcut {
@@ -2027,12 +2124,51 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  function applyLmStudioModelUpdates(models: string[], baseUrl?: string): {
+    preferredModel: string;
+    models: string[];
+  } | null {
+    const providerIndex = aiProviders.value.findIndex((p) => p.id === 'lmstudio');
+    if (providerIndex === -1) {
+      return null;
+    }
+
+    const provider = aiProviders.value[providerIndex];
+    const sanitized = sanitizeModelList(models);
+    const preferredModel = selectPreferredLmStudioModel(sanitized, provider.defaultModel);
+
+    let changed = false;
+
+    if (!shallowEqualStringArrays(provider.models, sanitized)) {
+      provider.models = sanitized;
+      changed = true;
+    }
+
+    if (preferredModel && provider.defaultModel !== preferredModel) {
+      provider.defaultModel = preferredModel;
+      changed = true;
+    }
+
+    if (baseUrl && provider.baseUrl !== baseUrl) {
+      provider.baseUrl = baseUrl;
+      changed = true;
+    }
+
+    if (changed) {
+      aiProviders.value = [...aiProviders.value];
+      return { preferredModel, models: sanitized };
+    }
+
+    return null;
+  }
+
   async function detectLocalProvider(
     providerId: string,
     overrideBaseUrl?: string
   ): Promise<LocalProviderStatus> {
     const provider = aiProviders.value.find((p) => p.id === providerId);
-    const isLocal = provider?.tags?.includes('local') || providerId === 'lmstudio' || providerId === 'ollama';
+    const isLocal =
+      provider?.tags?.includes('local') || providerId === 'lmstudio' || providerId === 'ollama';
     if (!isLocal) {
       const unavailable: LocalProviderStatus = {
         status: 'unavailable',
@@ -2053,10 +2189,71 @@ export const useSettingsStore = defineStore('settings', () => {
       return unavailable;
     }
 
-    const checking: LocalProviderStatus = { status: 'checking', baseUrl };
-    localProviderStatus.value[providerId] = checking;
-
     const normalizedUrl = baseUrl.replace(/\/+$/, '');
+    localProviderStatus.value[providerId] = { status: 'checking', baseUrl: normalizedUrl };
+
+    const electronAPI = getElectronAPI();
+
+    if (providerId === 'lmstudio' && electronAPI?.localProviders?.fetchLmStudioModels) {
+      try {
+        const result = await electronAPI.localProviders.fetchLmStudioModels(normalizedUrl);
+        const sanitized = sanitizeModelList(result?.models || []);
+        const preferredModel = selectPreferredLmStudioModel(
+          sanitized,
+          provider?.defaultModel || undefined
+        );
+
+        let changed = false;
+        const updates = applyLmStudioModelUpdates(sanitized, normalizedUrl);
+        if (updates) {
+          changed = true;
+        }
+        if (provider && !provider.isConnected) {
+          provider.isConnected = true;
+          changed = true;
+          aiProviders.value = [...aiProviders.value];
+        }
+        if (changed) {
+          await saveSettings();
+        }
+
+        const available: LocalProviderStatus = {
+          status: 'available',
+          lastChecked: new Date().toISOString(),
+          baseUrl: normalizedUrl,
+          models: sanitized,
+          preferredModel,
+          details:
+            sanitized.length === 0
+              ? 'LM Studio 응답은 정상이나 모델 목록이 비어 있습니다. LM Studio에서 모델을 다운로드한 후 다시 시도하세요.'
+              : undefined,
+        };
+        localProviderStatus.value[providerId] = available;
+        return available;
+      } catch (error) {
+        console.warn('Failed to detect LM Studio via Electron bridge:', error);
+        const unavailable: LocalProviderStatus = {
+          status: 'unavailable',
+          lastChecked: new Date().toISOString(),
+          baseUrl: normalizedUrl,
+          details: error instanceof Error ? error.message : String(error),
+        };
+        localProviderStatus.value[providerId] = unavailable;
+
+        const index = aiProviders.value.findIndex((p) => p.id === providerId);
+        if (index >= 0) {
+          const currentProvider = aiProviders.value[index];
+          if (currentProvider.isConnected) {
+            aiProviders.value[index] = {
+              ...currentProvider,
+              isConnected: false,
+            };
+          }
+        }
+        return unavailable;
+      }
+    }
+
     const detection = LOCAL_PROVIDER_DETECTION[providerId] || { endpoint: '/models', mode: 'cors' };
     const healthEndpoint = `${normalizedUrl}${detection.endpoint}`;
 
@@ -2065,11 +2262,13 @@ export const useSettingsStore = defineStore('settings', () => {
         status: 'available',
         lastChecked: new Date().toISOString(),
         baseUrl: normalizedUrl,
-        details: 'Browser dev server cannot verify LM Studio due to CORS, assuming it is running.',
+        details:
+          'Browser dev server cannot verify LM Studio due to CORS, assuming it is running. Launch via Electron for an accurate status.',
       };
       localProviderStatus.value[providerId] = assumed;
       return assumed;
     }
+
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 3000);
 

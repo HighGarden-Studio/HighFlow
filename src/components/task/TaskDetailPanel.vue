@@ -98,17 +98,18 @@ function getDefaultModelForProvider(providerId: string | null): string | null {
     if (provider.defaultModel && provider.models?.includes(provider.defaultModel)) {
         return provider.defaultModel;
     }
-    if (provider.models && provider.models.length > 0) {
-        return provider.models[0];
-    }
-    const fallbackDefaults: Record<string, string> = {
-        anthropic: 'claude-3-5-sonnet-20250219',
-        openai: 'gpt-4o-mini',
-        google: 'gemini-1.5-pro',
-        groq: 'llama-3.3-70b-versatile',
-        mistral: 'mistral-large-latest',
-    };
-    return fallbackDefaults[providerId] || null;
+  if (provider.models && provider.models.length > 0) {
+    return provider.models[0];
+  }
+  const fallbackDefaults: Record<string, string> = {
+    anthropic: 'claude-3-5-sonnet-20250219',
+    openai: 'gpt-4o-mini',
+    google: 'gemini-1.5-pro',
+    groq: 'llama-3.3-70b-versatile',
+    mistral: 'mistral-large-latest',
+    lmstudio: 'local-model',
+  };
+  return fallbackDefaults[providerId] || null;
 }
 const temperature = ref(0.7);
 const maxTokens = ref(2000);

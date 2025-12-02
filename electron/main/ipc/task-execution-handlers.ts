@@ -151,7 +151,7 @@ async function buildDependencyContext(
  * Finds all tasks that have a triggerConfig.dependsOn containing the completed taskId
  * and auto-executes them if all their dependencies are satisfied
  */
-async function checkAndExecuteDependentTasks(
+export async function checkAndExecuteDependentTasks(
     completedTaskId: number,
     completedTask: Task
 ): Promise<void> {
@@ -1356,6 +1356,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // Parse review score from content
                     const reviewScore = parseReviewScore(reviewResult.content || '');
+                    console.log(
+                        `[TaskExecution] Review completed for task ${taskId}. Score: ${reviewScore} (Passed: ${reviewScore >= 8})`
+                    );
                     const reviewPassed = reviewScore >= 8;
 
                     // Save review result
@@ -1558,6 +1561,10 @@ function buildPermissionDeniedContent(error: MCPPermissionError): string {
 function parseReviewScore(content: string): number {
     if (!content) return 5;
 
+    console.log(
+        `[ReviewScore] Parsing content (len: ${content.length}): ${content.slice(0, 100).replace(/\n/g, ' ')}...`
+    );
+
     // Various patterns to match score
     const patterns = [
         /평가\s*점수[:\s]*(\d+)\s*[\/점]/i,
@@ -1569,15 +1576,20 @@ function parseReviewScore(content: string): number {
         /총점[:\s]*(\d+)/i,
         /최종\s*점수[:\s]*(\d+)/i,
         /종합\s*점수[:\s]*(\d+)/i,
-        /\*\*(\d+)[\/점]/i,
+        /\*\*(\d+)[/점]/i,
         /:\s*(\d+)\s*점/i,
+        // Enhanced patterns
+        /\[(\d+)\/10\]/i, // [10/10]
+        /(\d+)\s*\/\s*10/i, // 10/10 (simple)
+        /점수\s*:\s*(\d+)/i, // 점수 : 10
+        /Rating\s*:\s*(\d+)/i, // Rating: 10
     ];
 
     for (const pattern of patterns) {
         const match = content.match(pattern);
         if (match && match[1]) {
             const score = parseInt(match[1], 10);
-            if (score >= 1 && score <= 10) {
+            if (!isNaN(score) && score >= 0 && score <= 10) {
                 console.log(`[ReviewScore] Parsed score: ${score} from pattern: ${pattern}`);
                 return score;
             }
@@ -1589,29 +1601,37 @@ function parseReviewScore(content: string): number {
     if (
         lowerContent.includes('훌륭') ||
         lowerContent.includes('완벽') ||
-        lowerContent.includes('excellent')
+        lowerContent.includes('excellent') ||
+        lowerContent.includes('perfect')
     ) {
+        console.log('[ReviewScore] Inferred score 9 from keywords');
         return 9;
     }
     if (
         lowerContent.includes('좋음') ||
         lowerContent.includes('good') ||
-        lowerContent.includes('잘 수행')
+        lowerContent.includes('잘 수행') ||
+        lowerContent.includes('passed')
     ) {
+        console.log('[ReviewScore] Inferred score 8 from keywords');
         return 8;
     }
     if (
         lowerContent.includes('개선 필요') ||
         lowerContent.includes('부족') ||
-        lowerContent.includes('미흡')
+        lowerContent.includes('미흡') ||
+        lowerContent.includes('failed')
     ) {
+        console.log('[ReviewScore] Inferred score 6 from keywords');
         return 6;
     }
     if (
         lowerContent.includes('실패') ||
         lowerContent.includes('잘못') ||
-        lowerContent.includes('오류')
+        lowerContent.includes('오류') ||
+        lowerContent.includes('error')
     ) {
+        console.log('[ReviewScore] Inferred score 4 from keywords');
         return 4;
     }
 

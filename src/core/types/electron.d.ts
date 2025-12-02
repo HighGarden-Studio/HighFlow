@@ -282,6 +282,10 @@ export interface LocalAgentsAPI {
   onSessionClosed: (callback: (sessionId: string) => void) => () => void;
 }
 
+export interface LocalProvidersAPI {
+  fetchLmStudioModels: (baseUrl?: string) => Promise<{ models: string[] }>;
+}
+
 // Task Execution Types
 export type TaskExecutionStatus = 'running' | 'paused' | 'stopped' | 'completed' | 'failed' | 'needs_approval';
 
@@ -421,6 +425,7 @@ export interface ElectronAPI {
   checkpoint: CheckpointAPI;
   automationRule: AutomationRuleAPI;
   localAgents: LocalAgentsAPI;
+  localProviders: LocalProvidersAPI;
   taskExecution: TaskExecutionAPI;
   taskHistory: TaskHistoryAPI;
   store?: StoreAPI;

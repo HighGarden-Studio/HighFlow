@@ -526,6 +526,15 @@ const localAgentsAPI = {
 };
 
 // ========================================
+// Local Providers API
+// ========================================
+
+const localProvidersAPI = {
+    fetchLmStudioModels: (baseUrl?: string) =>
+        ipcRenderer.invoke('localProviders:fetchLmStudioModels', baseUrl),
+};
+
+// ========================================
 // Task Execution API
 // ========================================
 
@@ -972,6 +981,7 @@ const electronAPI = {
     checkpoint: checkpointAPI,
     automationRule: automationRuleAPI,
     localAgents: localAgentsAPI,
+    localProviders: localProvidersAPI,
     taskExecution: taskExecutionAPI,
     taskHistory: taskHistoryAPI,
 };

@@ -95,22 +95,26 @@ export class LmStudioProvider extends BaseAIProvider {
         return this.chat(messages, config, context);
     }
 
-    async streamExecute(
+    streamExecute(
         prompt: string,
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
-        const response = await this.execute(prompt, config, context);
-        if (response.content) {
-            onToken(response.content);
-        }
-        yield {
-            delta: response.content,
-            accumulated: response.content,
-            done: true,
-            metadata: response.metadata,
+        const self = this;
+        const generator = async function* () {
+            const response = await self.execute(prompt, config, context);
+            if (response.content) {
+                onToken(response.content);
+            }
+            yield {
+                delta: response.content,
+                accumulated: response.content,
+                done: true,
+                metadata: response.metadata,
+            };
         };
+        return generator();
     }
 
     async chat(
@@ -127,10 +131,8 @@ export class LmStudioProvider extends BaseAIProvider {
         const choice = data.choices?.[0];
         const content = choice?.message?.content || '';
         const promptTokens =
-            data.usage?.prompt_tokens ??
-            this.estimateTokens(JSON.stringify(payload.messages));
-        const completionTokens =
-            data.usage?.completion_tokens ?? this.estimateTokens(content);
+            data.usage?.prompt_tokens ?? this.estimateTokens(JSON.stringify(payload.messages));
+        const completionTokens = data.usage?.completion_tokens ?? this.estimateTokens(content);
 
         return {
             content,
@@ -215,25 +217,70 @@ export class LmStudioProvider extends BaseAIProvider {
             headers.Authorization = `Bearer ${this.apiKey}`;
         }
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-        });
+        console.log(`[LmStudioProvider] Sending request to ${url}`);
+        console.log(`[LmStudioProvider] Payload:`, JSON.stringify(body, null, 2));
 
-        if (!response.ok) {
-            const error = await response
-                .json()
-                .catch(() => ({ error: { message: response.statusText } }));
-            throw new Error(error.error?.message || response.statusText);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(
+                    `[LmStudioProvider] Request failed: ${response.status} ${response.statusText}`
+                );
+                console.error(`[LmStudioProvider] Error details:`, errorText);
+
+                let errorJson;
+                try {
+                    errorJson = JSON.parse(errorText);
+                } catch {
+                    // Ignore parsing error
+                }
+
+                throw new Error(
+                    errorJson?.error?.message ||
+                        `LM Studio request failed: ${response.status} ${response.statusText}`
+                );
+            }
+
+            const data = await response.json();
+            console.log(`[LmStudioProvider] Response received successfully`);
+            return data;
+        } catch (error) {
+            console.error(`[LmStudioProvider] Network or parsing error:`, error);
+            throw error;
         }
-
-        return response.json();
     }
 
-    private mapFinishReason(
-        reason: string | undefined
-    ): AIResponse['finishReason'] {
+    /**
+     * Override validateConfig to allow any model name for LM Studio
+     * since users can load any model locally.
+     */
+    protected validateConfig(config: AIConfig): void {
+        if (
+            config.temperature !== undefined &&
+            (config.temperature < 0 || config.temperature > 2)
+        ) {
+            throw new Error('Temperature must be between 0 and 2');
+        }
+
+        if (config.maxTokens !== undefined && config.maxTokens < 1) {
+            throw new Error('maxTokens must be at least 1');
+        }
+
+        if (config.topP !== undefined && (config.topP < 0 || config.topP > 1)) {
+            throw new Error('topP must be between 0 and 1');
+        }
+
+        // Skip model validation for LM Studio
+        // We accept any model name since it's running locally
+    }
+
+    private mapFinishReason(reason: string | undefined): AIResponse['finishReason'] {
         switch (reason) {
             case 'length':
                 return 'length';

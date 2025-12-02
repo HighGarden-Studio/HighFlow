@@ -1386,16 +1386,7 @@ export class AIInterviewService {
         }
 
         try {
-            // 옵션이 있는 경우 번호와 함께 포맷팅
-            let optionsText = '';
-            if (nextQuestion.options) {
-                optionsText = '\n\n다음 질문에는 선택 옵션이 있습니다:\n';
-                nextQuestion.options.forEach((opt, i) => {
-                    optionsText += `${i + 1}번. ${opt}\n`;
-                });
-                optionsText +=
-                    '응답 시 선택 옵션을 **1번. 옵션이름** 형식으로 번호와 함께 제시해주세요.';
-            }
+            const formattedQuestion = this.formatQuestionWithOptions(nextQuestion);
 
             // 지금까지 수집된 핵심 정보 요약
             const collectedInfoSummary =
@@ -1425,17 +1416,21 @@ export class AIInterviewService {
 
 ## 다음 질문 정보
 - 질문 유형: ${nextQuestion.type}
-- 기본 질문: ${nextQuestion.question}${optionsText}
+- 기본 질문: ${nextQuestion.question}
+- 선택지: ${
+        nextQuestion.options && nextQuestion.options.length > 0
+            ? nextQuestion.options.map((opt, idx) => `${idx + 1}번. ${opt}`).join(' | ')
+            : '없음'
+    }
 
 ## 응답 가이드라인
 1. **사용자 답변 인정**: 사용자가 말한 내용에서 핵심 포인트를 짧게 언급 (1문장)
 2. **진행률 표시**: 📊 **진행률:** XX% 형식
-3. **맥락에 맞는 질문**:
-   - 기본 질문을 그대로 사용하지 말고, 사용자가 방금 말한 내용과 연결하여 자연스럽게 질문
-   - 사용자의 아이디어를 더 구체화할 수 있는 방향으로 질문
-   - **비전문가도 쉽게 답할 수 있도록** 쉬운 단어 사용, 필요하면 예시 제시
-4. 선택 옵션이 있다면 **1번. 옵션이름** 형식으로 번호와 함께 제시
-5. 마지막에 간단한 안내 추가
+3. **맥락 연결 브리징**:
+   - 사용자의 답변을 기반으로 다음 질문이 왜 필요한지 1~2문장으로 자연스럽게 설명
+   - 예시나 선택 팁을 간단히 제시해 사용자가 고민을 줄일 수 있게 도와주세요.
+4. 질문과 선택지는 별도로 제공되므로 **다시 작성하지 마세요.**
+5. 마지막 문장은 "아래 선택지를 참고해 알려주세요." 형태로 끝내세요.
 
 ${
     isVagueAnswer
@@ -1463,7 +1458,7 @@ ${
 한국어로 따뜻하고 친근하게, 하지만 전문적인 인터뷰어처럼 응답하세요.`;
 
             const prompt =
-                '사용자의 최근 답변을 분석하고, 아이디어를 더 구체화할 수 있는 후속 질문을 생성해주세요.';
+                '사용자의 최근 답변을 분석하고, 다음 질문으로 자연스럽게 이어지는 안내 메시지를 작성해주세요.';
             this.logPromptRequest('follow-up-response', session.aiProvider, prompt, {
                 systemPrompt,
                 temperature: 0.7,
@@ -1476,7 +1471,15 @@ ${
                 maxTokens: 800,
             });
 
-            return response;
+            const aiText =
+                typeof response === 'string'
+                    ? response
+                    : typeof response?.content === 'string'
+                      ? response.content
+                      : '';
+
+            const bridge = aiText?.trim() || '다음 질문으로 이어가 볼게요.';
+            return `${bridge}\n\n${formattedQuestion}`;
         } catch (error) {
             console.error('AI 후속 응답 생성 실패:', error);
             return this.generateFollowUpResponse(context, nextQuestion);
@@ -2446,66 +2449,66 @@ ${attachmentsText}
                 ? `## 관련 프로젝트 요구사항\n${relevantRequirements.map((r, i) => `- ${r}`).join('\n')}`
                 : '';
 
-        // 코드 태스크인 경우 더 상세한 프롬프트 생성
-        if (primaryFormat === 'code') {
-            return `# ${task.title}
+        const persona = this.deriveTaskPersona(task, primaryFormat);
+        const stepBlueprint = this.formatStepBlueprint(
+            this.buildStepBlueprint(task, primaryFormat)
+        );
+        const artifactSection = this.buildArtifactSection(task, primaryFormat, outputFormats);
+        const toolSection =
+            (task.mcpTools?.length ?? 0) > 0
+                ? `## 사용 가능한 MCP/도구\n${task.mcpTools
+                      .map(
+                          (t: any) =>
+                              `- ${t.server}: ${Array.isArray(t.tools) ? t.tools.join(', ') : t.tools}${
+                                  t.required ? ' (필수)' : ''
+                              }`
+                      )
+                      .join('\n')}\n\n`
+                : '';
+        const goalBullets = this.extractStructuredBullets(task.description)
+            .map((line) => `- ${line}`)
+            .join('\n');
+        const constraints =
+            context.constraints.length > 0 ? context.constraints.join(', ') : '없음';
 
-${guidelinesSection}## 목표
-${task.description}
-
-## 프로젝트 컨텍스트
-- **프로젝트**: ${context.originalIdea}
-- **기술 스택**: ${techStack}
-- **제약사항**: ${context.constraints.length > 0 ? context.constraints.join(', ') : '없음'}
-
-${requirementsSection}
-
-## 구현 요구사항
-${task.description}
-
-## 기술 스펙
-- **언어**: ${codeLanguage}
-${context.technicalStack.length > 0 ? `- **프레임워크/라이브러리**: ${context.technicalStack.join(', ')}` : ''}
-
-## 품질 기준
-1. 명확한 타입 정의 (TypeScript 사용 시)
-2. 적절한 에러 처리
-3. 재사용 가능한 구조
-4. 가독성 있는 코드와 필요한 주석
-
-## 결과물 형식
-${formatInstructions}
-
-위 요구사항에 맞게 **완성된 코드**를 제공해주세요. 코드는 즉시 사용 가능한 수준이어야 합니다.`.trim();
-        }
-
-        // 일반적인 태스크 프롬프트
         return `# ${task.title}
 
-${guidelinesSection}## 목표
-${task.description}
+당신은 **${persona}** 역할의 시니어 전문가입니다. 아래 맥락을 정확히 반영하여 태스크를 완료하세요.
 
-## 프로젝트 컨텍스트
-- **프로젝트**: ${context.originalIdea}
+${guidelinesSection}## 프로젝트 컨텍스트
+- **프로젝트 목적**: ${context.originalIdea}
+- **태스크 범위**: ${task.description}
+- **산출물 설명**: ${task.outputDescription || '태스크 완료 시 생성될 구체 결과물을 명시하세요.'}
 - **기술 스택**: ${techStack}
+- **제약사항**: ${constraints}
+${requirementsSection ? `\n${requirementsSection}\n` : ''}
 
-${requirementsSection}
+## 구현 목표
+${goalBullets || `- ${task.description}`}
 
-## 상세 요구사항
-${task.description}
+## 단계별 실행 계획
+${stepBlueprint}
 
-## 결과물 형식
-**형식**: ${primaryFormat}
-${outputFormats.length > 1 ? `**추가 형식**: ${outputFormats.filter((f) => f !== primaryFormat).join(', ')}` : ''}
+${artifactSection}
 
+${toolSection}## 결과물 형식 지침
+- **주 형식**: ${primaryFormat}
+${outputFormats.length > 1 ? `- **추가 형식**: ${outputFormats.filter((f) => f !== primaryFormat).join(', ')}` : ''}
+- **언어/플랫폼**: ${codeLanguage}
 ${formatInstructions}
 
-## 결과물 품질 기준
-1. 완성도 높은 결과물 제공
-2. 명확하고 이해하기 쉬운 구조
-3. 실제 사용 가능한 수준의 품질
+## 품질 및 검증 기준
+1. 단계별 로그 또는 결정 사항을 요약하고 핵심 근거를 남길 것
+2. 코드/문서는 재사용 가능하고 테스트 가능한 구조로 작성할 것
+3. 린트/타입 오류가 없도록 확인하고, 주요 경계 조건 테스트나 시나리오를 제시할 것
+4. 최종 응답에는 **산출물 요약, 테스트/검증 방법, 차기 작업 제안** 섹션을 포함할 것
 
-위 요구사항에 맞게 결과물을 제공해주세요.`.trim();
+### 제출 시 포함해야 할 내용
+1. 생성된 아티팩트 전체 코드/문서
+2. \`단계별 진행 로그\` (각 단계별 핵심 결정/이슈/결과 요약)
+3. \`검증 결과\` (수동 테스트 또는 설명)
+
+위 지침을 따라 즉시 사용 가능한 수준의 결과물을 제공합니다.`.trim();
     }
 
     /**
@@ -2584,6 +2587,135 @@ ${formatInstructions}
         };
 
         return instructions[format] || instructions.text;
+    }
+
+    private deriveTaskPersona(task: any, format: TaskOutputFormat): string {
+        const categoryPersonaMap: Record<string, string> = {
+            core: '풀스택 아키텍트',
+            feature: '제품 중심 프론트엔드/백엔드 엔지니어',
+            integration: '플랫폼 통합 엔지니어',
+            infrastructure: 'DevOps/인프라 엔지니어',
+            enhancement: '리팩토링 전문가',
+            documentation: '테크니컬 라이터',
+            analysis: '시니어 비즈니스 애널리스트',
+            design: '프로덕트 디자이너',
+            research: '리서처',
+        };
+        const fallback = format === 'code' ? '시니어 소프트웨어 엔지니어' : '전문 컨텐츠 크리에이터';
+        return categoryPersonaMap[task.category] || fallback;
+    }
+
+    private extractStructuredBullets(text: string): string[] {
+        if (!text) return [];
+        const lines = text
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const bulletLines = lines.filter((line) => /^[-*•\d.]/.test(line));
+        if (bulletLines.length > 0) {
+            return bulletLines.map((line) => line.replace(/^[-*•\d.\s]+/, '').trim());
+        }
+        const sentences = text.split(/[\n.]+/).map((s) => s.trim());
+        return sentences.filter((s) => s.length > 0);
+    }
+
+    private formatStepBlueprint(steps: { title: string; details: string }[]): string {
+        if (!steps.length) return '- 세부 단계 정보를 파악하여 순차적으로 진행하세요.';
+        return steps
+            .map(
+                (step, index) =>
+                    `${index + 1}단계 — ${step.title}\n${step.details.trim()}`
+            )
+            .join('\n\n');
+    }
+
+    private buildStepBlueprint(task: any, format: TaskOutputFormat): {
+        title: string;
+        details: string;
+    }[] {
+        return this.buildDefaultStepBlueprint(task, format);
+    }
+
+    private buildDefaultStepBlueprint(
+        task: any,
+        format: TaskOutputFormat
+    ): { title: string; details: string }[] {
+        const isCode = format === 'code';
+        return [
+            {
+                title: '요구사항 정제 및 설계',
+                details:
+                    '- 프로젝트 컨텍스트와 관련 요구사항을 재정리하고 누락된 전제 조건을 추론하세요.\n' +
+                    '- 필요한 의존성, 폴더 구조, 데이터 흐름을 결정하고 설계 결정을 요약하세요.',
+            },
+            {
+                title: isCode ? '핵심 로직/컴포넌트 구현' : '핵심 콘텐츠 작성',
+                details: isCode
+                    ? '- 모듈화/재사용성을 고려하여 코드를 작성하고, 예외/경계 케이스를 처리하세요.\n- 필요 시 mock 데이터나 helper를 정의하고, 각 함수/컴포넌트에 책임을 명확히 하세요.'
+                    : '- 요구된 문서/콘텐츠를 구조화하여 작성하고, 독자가 바로 활용할 수 있도록 구체적인 지침·예시를 포함하세요.',
+            },
+            {
+                title: '검증 및 품질 보증',
+                details:
+                    '- 최소 한 개 이상의 수동 또는 자동 테스트 시나리오를 실행/기술하세요.\n' +
+                    '- 린트/타입 체크 혹은 리뷰 관점의 셀프 체크리스트를 통해 품질을 보증하세요.',
+            },
+            {
+                title: '출력 정리 및 인도',
+                details:
+                    '- 산출물 파일/코드/문서를 구조화하여 제시하고, 중요한 의사결정과 TODO를 요약하세요.\n' +
+                    '- 추후 작업자나 사용자에게 필요한 실행/설치/확장 가이드를 포함하세요.',
+            },
+        ];
+    }
+
+    private buildArtifactSection(
+        task: any,
+        primaryFormat: TaskOutputFormat,
+        outputFormats: TaskOutputFormat[]
+    ): string {
+        const artifactCandidates = this.extractArtifactCandidates(
+            `${task.description || ''}\n${task.outputDescription || ''}`
+        );
+        const lines: string[] = [];
+        lines.push('## 산출물 및 파일 구조');
+        lines.push(
+            `- **주 산출물 형식**: ${primaryFormat}${
+                outputFormats.length > 1
+                    ? ` (추가: ${outputFormats.filter((f) => f !== primaryFormat).join(', ')})`
+                    : ''
+            }`
+        );
+        if (task.outputDescription) {
+            lines.push(`- **산출물 설명**: ${task.outputDescription}`);
+        }
+        if (artifactCandidates.length) {
+            lines.push('- **우선 생성/갱신할 아티팩트**:');
+            artifactCandidates.forEach((artifact) => lines.push(`  - ${artifact}`));
+        } else {
+            lines.push('- **우선 생성/갱신할 아티팩트**: 요구사항을 분석해 파일/모듈 단위로 명시하세요.');
+        }
+        lines.push(
+            '- 필요 시 파일별 역할, 주요 함수, 노출 API를 정리하고 제출 시 파일 트리를 함께 제공하세요.'
+        );
+        return `${lines.join('\n')}\n`;
+    }
+
+    private extractArtifactCandidates(text: string): string[] {
+        if (!text) return [];
+        const candidates = new Set<string>();
+        const fileRegex = /[\w-/]+(?:\.[a-z0-9]+)+/gi;
+        let match: RegExpExecArray | null;
+        while ((match = fileRegex.exec(text))) {
+            const value = match[0]
+                .replace(/^[./]+/, '')
+                .replace(/[`"'']/g, '')
+                .trim();
+            if (value) {
+                candidates.add(value);
+            }
+        }
+        return Array.from(candidates).slice(0, 10);
     }
 
     /**
