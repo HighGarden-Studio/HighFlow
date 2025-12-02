@@ -103,15 +103,26 @@ export class GPTProvider extends BaseAIProvider {
             bestFor: ['Fast responses', 'Simple tasks', 'High volume', 'Budget-friendly'],
         },
         {
-            name: 'gpt-image-1',
+            name: 'dall-e-3',
+            provider: 'openai',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0,
+            costPerOutputToken: 0,
+            averageLatency: 3000,
+            features: [],
+            bestFor: ['High-quality image generation', 'Brand assets', 'Illustrations'],
+        },
+        {
+            name: 'dall-e-2',
             provider: 'openai',
             contextWindow: 0,
             maxOutputTokens: 0,
             costPerInputToken: 0,
             costPerOutputToken: 0,
             averageLatency: 2000,
-            features: ['vision'],
-            bestFor: ['Image generation', 'Brand assets'],
+            features: [],
+            bestFor: ['Fast image generation', 'Simple illustrations'],
         },
     ];
 
@@ -284,61 +295,92 @@ export class GPTProvider extends BaseAIProvider {
         context?: ExecutionContext,
         options?: Record<string, any>
     ): Promise<AiResult> {
-        const client = this.getClient();
-        const imageModel = (config.model as AIModel) || 'gpt-image-1';
-        const size = options?.size || '1024x1024';
-        const quality = options?.quality || 'standard';
-        const style = options?.style;
-        const background = options?.background;
-        const format = options?.format || 'png';
-        const count = options?.count ?? 1;
+        console.log('[GPTProvider] generateImage called with:', {
+            prompt: prompt.substring(0, 100) + '...',
+            model: config.model,
+            options,
+        });
 
-        const response = await client.images.generate({
-            model: imageModel,
-            prompt,
-            size,
-            quality,
-            style,
-            background,
-            response_format: 'b64_json',
-            n: count,
-            user: context?.userId ? String(context.userId) : undefined,
-        } as any);
+        try {
+            const client = this.getClient();
+            // DALL-E 모델 이름 수정: 'dall-e-3' 또는 'dall-e-2'
+            const imageModel = config.model || 'dall-e-3';
+            const size = options?.size || '1024x1024';
+            const quality = options?.quality || 'standard';
+            const style = options?.style;
+            const background = options?.background;
+            const format = options?.format || 'png';
+            const count = options?.count ?? 1;
 
-        const primary = response.data?.[0];
-        if (!primary) {
-            throw new Error('Image generation failed to return any result.');
-        }
-
-        const base64 = primary.b64_json;
-        const buffer = base64 ? base64 : primary.url;
-        if (!buffer) {
-            throw new Error('Image generation response did not include image data.');
-        }
-
-        const aiResult: AiResult = {
-            kind: 'image',
-            subType: (format as AiSubType) || 'png',
-            format: base64 ? 'base64' : 'url',
-            value: buffer,
-            mime: format === 'png' ? 'image/png' : `image/${format}`,
-            meta: {
-                provider: this.name,
+            console.log('[GPTProvider] Calling OpenAI images.generate with:', {
                 model: imageModel,
                 size,
                 quality,
                 style,
-                background,
                 count,
-                raw: response.data?.map((item) => ({
-                    url: item.url,
-                    revised_prompt: (item as any).revised_prompt,
-                })),
-            },
-            raw: response,
-        };
+            });
 
-        return aiResult;
+            const response = await client.images.generate({
+                model: imageModel,
+                prompt,
+                size,
+                quality,
+                style,
+                background,
+                response_format: 'b64_json',
+                n: count,
+                user: context?.userId ? String(context.userId) : undefined,
+            } as any);
+
+            console.log('[GPTProvider] OpenAI images.generate response received:', {
+                dataLength: response.data?.length,
+                hasB64: !!response.data?.[0]?.b64_json,
+                hasUrl: !!response.data?.[0]?.url,
+            });
+
+            const primary = response.data?.[0];
+            if (!primary) {
+                throw new Error('Image generation failed to return any result.');
+            }
+
+            const base64 = primary.b64_json;
+            const buffer = base64 ? base64 : primary.url;
+            if (!buffer) {
+                throw new Error('Image generation response did not include image data.');
+            }
+
+            const aiResult: AiResult = {
+                kind: 'image',
+                subType: (format as AiSubType) || 'png',
+                format: base64 ? 'base64' : 'url',
+                value: buffer,
+                mime: format === 'png' ? 'image/png' : `image/${format}`,
+                meta: {
+                    provider: this.name,
+                    model: imageModel,
+                    size,
+                    quality,
+                    style,
+                    background,
+                    count,
+                    raw: response.data?.map((item) => ({
+                        url: item.url,
+                        revised_prompt: (item as any).revised_prompt,
+                    })),
+                },
+                raw: response,
+            };
+
+            console.log('[GPTProvider] Image generation successful, returning AiResult');
+            return aiResult;
+        } catch (error) {
+            console.error('[GPTProvider] Image generation FAILED:', {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                name: error instanceof Error ? error.name : undefined,
+            });
+            throw error;
+        }
     }
 
     /**

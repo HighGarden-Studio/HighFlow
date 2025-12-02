@@ -257,7 +257,8 @@ export class AdvancedTaskExecutor {
         }
 
         // 결과물 형식 지시사항 추가
-        const outputFormat = (task as any).outputFormat || 'markdown';
+        // expectedOutputFormat을 우선적으로 사용 (사용자가 UI에서 설정한 값)
+        const outputFormat = task.expectedOutputFormat || (task as any).outputFormat || 'markdown';
         const codeLanguage = (task as any).codeLanguage;
         const outputFormatInstruction = this.buildOutputFormatInstruction(
             outputFormat,

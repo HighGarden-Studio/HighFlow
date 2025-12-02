@@ -989,9 +989,6 @@ export class AIServiceManager {
             content: '',
             tokensUsed: { prompt: 0, completion: 0, total: 0 },
             cost: 0,
-            duration: Date.now() - startTime,
-            provider: (task.aiProvider as AIProvider) || 'anthropic',
-            model: (task.aiModel as AIModel) || DEFAULT_MODELS.anthropic,
             finishReason: 'error',
             error: new Error('All providers failed'),
             metadata: { allFallbacksFailed: true },
@@ -999,16 +996,25 @@ export class AIServiceManager {
     }
 
     private getTaskOutputFormat(task: Task): string | null {
+        // expectedOutputFormat을 우선 사용 (사용자가 UI에서 설정한 값)
         const raw =
-            ((task as any).outputFormat as string | undefined) || task.expectedOutputFormat || null;
-        return raw ? raw.toLowerCase() : null;
+            task.expectedOutputFormat || ((task as any).outputFormat as string | undefined) || null;
+        const result = raw ? raw.toLowerCase() : null;
+        console.log(
+            `[AIServiceManager] getTaskOutputFormat: outputFormat="${(task as any).outputFormat}", expectedOutputFormat="${task.expectedOutputFormat}" => result="${result}"`
+        );
+        return result;
     }
 
     private isImageOutputFormat(format: string | null): boolean {
         if (!format) {
             return false;
         }
-        return ['png', 'jpg', 'jpeg', 'webp'].includes(format);
+        const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(format);
+        console.log(
+            `[AIServiceManager] isImageOutputFormat check: format="${format}" => ${isImage}`
+        );
+        return isImage;
     }
 
     private getImageGenerationConfig(task: Task): ImageGenerationConfig {
@@ -1034,17 +1040,44 @@ export class AIServiceManager {
         imageConfig: ImageGenerationConfig
     ): Promise<AIModel> {
         const preferredModel = (imageConfig.model || task.aiModel) as AIModel | undefined;
-        if (preferredModel) {
+
+        // Valid image models for each provider
+        const validImageModels: Record<AIProvider, string[]> = {
+            openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
+            google: ['imagen-3.0', 'imagen-2.0'],
+            anthropic: [],
+            groq: [],
+            lmstudio: [],
+            ollama: [],
+            mistral: [],
+            deepseek: [],
+            cohere: [],
+            together: [],
+            fireworks: [],
+            perplexity: [],
+            openrouter: [],
+        };
+
+        // Check if preferred model is actually a valid image model
+        if (preferredModel && validImageModels[provider]?.includes(preferredModel)) {
             const providerInstance = await this.providerFactory.getProvider(provider);
             const modelInfo = providerInstance.getModelInfo(preferredModel);
             if (modelInfo) {
+                console.log(`[AIServiceManager] Using preferred image model: ${preferredModel}`);
                 return preferredModel;
             }
         }
 
+        // If preferred model is not an image model, log and use default
+        if (preferredModel) {
+            console.log(
+                `[AIServiceManager] Model "${preferredModel}" is not a valid image model for ${provider}, using default`
+            );
+        }
+
         switch (provider) {
             case 'openai':
-                return 'gpt-image-1';
+                return 'dall-e-3';
             case 'google':
                 return 'imagen-3.0';
             default:

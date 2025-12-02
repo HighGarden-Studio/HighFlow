@@ -98,18 +98,18 @@ function getDefaultModelForProvider(providerId: string | null): string | null {
     if (provider.defaultModel && provider.models?.includes(provider.defaultModel)) {
         return provider.defaultModel;
     }
-  if (provider.models && provider.models.length > 0) {
-    return provider.models[0];
-  }
-  const fallbackDefaults: Record<string, string> = {
-    anthropic: 'claude-3-5-sonnet-20250219',
-    openai: 'gpt-4o-mini',
-    google: 'gemini-1.5-pro',
-    groq: 'llama-3.3-70b-versatile',
-    mistral: 'mistral-large-latest',
-    lmstudio: 'local-model',
-  };
-  return fallbackDefaults[providerId] || null;
+    if (provider.models && provider.models.length > 0) {
+        return provider.models[0];
+    }
+    const fallbackDefaults: Record<string, string> = {
+        anthropic: 'claude-3-5-sonnet-20250219',
+        openai: 'gpt-4o-mini',
+        google: 'gemini-1.5-pro',
+        groq: 'llama-3.3-70b-versatile',
+        mistral: 'mistral-large-latest',
+        lmstudio: 'local-model',
+    };
+    return fallbackDefaults[providerId] || null;
 }
 const temperature = ref(0.7);
 const maxTokens = ref(2000);
@@ -123,6 +123,27 @@ const newComment = ref('');
 // Task history state
 const taskHistoryEntries = ref<TaskHistoryEntry[]>([]);
 const isLoadingHistory = ref(false);
+
+// Output format options
+const outputFormatOptions = [
+    { value: 'text', label: '텍스트 (Text)' },
+    { value: 'markdown', label: '마크다운 (Markdown)' },
+    { value: 'json', label: 'JSON' },
+    { value: 'code', label: '코드 (Code)' },
+    { value: 'html', label: 'HTML' },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'csv', label: 'CSV' },
+    { value: 'yaml', label: 'YAML' },
+    { value: 'sql', label: 'SQL' },
+    { value: 'shell', label: 'Shell Script' },
+    { value: 'mermaid', label: 'Mermaid 다이어그램' },
+    { value: 'svg', label: 'SVG 이미지' },
+    { value: 'png', label: 'PNG 이미지' },
+    { value: 'mp4', label: 'MP4 비디오' },
+    { value: 'mp3', label: 'MP3 오디오' },
+    { value: 'diff', label: 'Diff (코드 변경사항)' },
+    { value: 'log', label: 'Log 파일' },
+];
 
 // 프롬프트 도구 상태
 const showPromptEnhancer = ref(false);
@@ -517,6 +538,7 @@ function persistExecutionSettings() {
         localAgentWorkingDir: localAgentWorkingDir.value,
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: buildMCPConfigPayload(),
+        expectedOutputFormat: localTask.value.expectedOutputFormat,
     } as Task);
 }
 
@@ -761,6 +783,7 @@ function handleSave() {
         triggerConfig,
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: buildMCPConfigPayload(),
+        expectedOutputFormat: localTask.value.expectedOutputFormat,
     };
 
     emit('save', updatedTask as Task);
@@ -1685,29 +1708,28 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         </span>
                                     </div>
 
-                                    <!-- Expected Output -->
-                                    <div v-if="localTask?.expectedOutputFormat" class="col-span-2">
-                                        <span class="text-gray-500 dark:text-gray-400 block text-xs"
-                                            >결과물 형식</span
+                                    <!-- Expected Output (Editable) -->
+                                    <div class="col-span-2">
+                                        <label
+                                            class="text-gray-500 dark:text-gray-400 block text-xs mb-1"
                                         >
-                                        <span
-                                            class="font-medium text-gray-900 dark:text-white flex items-center gap-1"
+                                            결과물 형식 (예상)
+                                        </label>
+                                        <select
+                                            v-if="localTask"
+                                            v-model="localTask.expectedOutputFormat"
+                                            class="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+                                            @change="persistExecutionSettings"
                                         >
-                                            <svg
-                                                class="w-3.5 h-3.5 text-gray-400"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
+                                            <option :value="undefined">자동 감지</option>
+                                            <option
+                                                v-for="opt in outputFormatOptions"
+                                                :key="opt.value"
+                                                :value="opt.value"
                                             >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                />
-                                            </svg>
-                                            {{ localTask.expectedOutputFormat }}
-                                        </span>
+                                                {{ opt.label }}
+                                            </option>
+                                        </select>
                                     </div>
 
                                     <!-- Dependencies -->
