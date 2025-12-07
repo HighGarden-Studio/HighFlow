@@ -125,13 +125,22 @@ export const useProjectStore = defineStore('projects', () => {
         ownerId: number;
         baseDevFolder?: string | null;
         projectGuidelines?: string | null;
+        aiProvider?: string | null;
+        aiModel?: string | null;
+        mcpConfig?: any;
+        technicalStack?: string[];
+        aiGuidelines?: string | null;
+        executionPlan?: any;
+        metadata?: any;
     }): Promise<Project | null> {
         loading.value = true;
         error.value = null;
 
         try {
             const api = getAPI();
-            const project = await api.projects.create(data);
+            // Deep clone to remove Vue Proxies
+            const plainData = JSON.parse(JSON.stringify(data));
+            const project = await api.projects.create(plainData);
             projects.value.unshift(project);
             return project;
         } catch (e) {

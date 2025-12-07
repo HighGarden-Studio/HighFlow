@@ -289,6 +289,9 @@ const fsAPI = {
     // Check directory for repository type
     checkRepoType: (dirPath: string): Promise<RepoTypeCheck> =>
         ipcRenderer.invoke('fs:checkRepoType', dirPath),
+
+    // Read Claude Desktop configuration
+    readClaudeSettings: (): Promise<any | null> => ipcRenderer.invoke('fs:readClaudeSettings'),
 };
 
 // ========================================

@@ -93,16 +93,30 @@ async function handleUpdateGuidelines(guidelines: string) {
     }
 }
 
-async function handleUpdateBaseFolder(folder: string) {
+async function handleUpdateBaseFolder(folder: string): Promise<void> {
     if (!props.project) return;
     try {
         const api = getAPI();
         await api.projects.update(props.project.id, {
-            baseDevFolder: folder || null,
-        } as any);
-        (props.project as any).baseDevFolder = folder || null;
+            baseDevFolder: folder,
+        });
+        (props.project as any).baseDevFolder = folder;
+        emit('update');
     } catch (error) {
         console.error('Failed to update base folder:', error);
+    }
+}
+
+async function handleUpdateOutputType(type: string | null) {
+    if (!props.project) return;
+    try {
+        const api = getAPI();
+        await api.projects.update(props.project.id, {
+            outputType: type,
+        } as any);
+        (props.project as any).outputType = type;
+    } catch (error) {
+        console.error('Failed to update output type:', error);
     }
 }
 
@@ -121,6 +135,36 @@ async function handleUpdateAISettings(settings: {
         (props.project as any).aiModel = settings.aiModel;
     } catch (error) {
         console.error('Failed to update AI settings:', error);
+    }
+}
+
+async function handleUpdateAutoReviewSettings(settings: {
+    aiProvider: string | null;
+    aiModel: string | null;
+}) {
+    if (!props.project) return;
+    try {
+        const api = getAPI();
+        // Store in metadata
+        const metadata = (props.project as any).metadata || {};
+        const newMetadata = {
+            ...metadata,
+            autoReviewProvider: settings.aiProvider,
+            autoReviewModel: settings.aiModel,
+        };
+
+        await api.projects.update(props.project.id, {
+            metadata: newMetadata,
+        } as any);
+
+        // Update local state
+        if (!(props.project as any).metadata) {
+            (props.project as any).metadata = {};
+        }
+        (props.project as any).metadata.autoReviewProvider = settings.aiProvider;
+        (props.project as any).metadata.autoReviewModel = settings.aiModel;
+    } catch (error) {
+        console.error('Failed to update Auto Review settings:', error);
     }
 }
 
@@ -251,7 +295,9 @@ watch(
                                 @open-output="handleOpenOutput"
                                 @update-guidelines="handleUpdateGuidelines"
                                 @update-base-folder="handleUpdateBaseFolder"
+                                @update-output-type="handleUpdateOutputType"
                                 @update-ai-settings="handleUpdateAISettings"
+                                @update-auto-review-settings="handleUpdateAutoReviewSettings"
                                 @update-mcp-config="handleUpdateMCPConfig"
                             />
                         </div>

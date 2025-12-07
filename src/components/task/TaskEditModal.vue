@@ -9,6 +9,9 @@ import type { Task, AIProvider } from '@core/types/database';
 import TagInput from '../common/TagInput.vue';
 import MacroInsertButton from '../common/MacroInsertButton.vue';
 import { estimationService, type EstimationResult } from '../../services/task/EstimationService';
+import { useProjectStore } from '../../renderer/stores/projectStore';
+
+const projectStore = useProjectStore();
 
 interface Props {
     task: Task | null;
@@ -77,6 +80,7 @@ watch(
     () => props.task,
     (newTask) => {
         if (newTask) {
+            // Editing existing task
             form.value = {
                 title: newTask.title || '',
                 description: newTask.description || '',
@@ -96,6 +100,42 @@ watch(
                 aiModel: newTask.aiModel || null,
             };
             errors.value = {};
+        } else if (props.open && !newTask) {
+            // Creating new task - auto-select AI provider based on local assistants
+            const currentProject = projectStore.currentProject as any;
+            const localRepoTypes = currentProject?.metadata?.localRepo?.types;
+
+            if (localRepoTypes && Array.isArray(localRepoTypes)) {
+                // Priority: claude-code > antigravity > codex
+                let autoProvider: AIProvider | null = null;
+                let autoModel: string | null = null;
+
+                // Initialize with project defaults if available
+                if (props.project) {
+                    form.value.aiProvider = props.project.aiProvider || 'anthropic';
+                    form.value.aiModel = props.project.aiModel || 'claude-3-5-sonnet-20250219';
+                }
+
+                if (localRepoTypes.includes('claude-code')) {
+                    autoProvider = 'anthropic';
+                    autoModel = currentProject.aiModel || 'claude-3-5-sonnet-20240620';
+                } else if (localRepoTypes.includes('antigravity')) {
+                    autoProvider = 'google';
+                    autoModel = currentProject.aiModel || 'gemini-1.5-pro';
+                } else if (localRepoTypes.includes('codex')) {
+                    autoProvider = 'openai';
+                    autoModel = currentProject.aiModel || 'gpt-4o';
+                }
+
+                if (autoProvider) {
+                    form.value.aiProvider = autoProvider;
+                    form.value.aiModel = autoModel;
+                    console.log(
+                        `[TaskEditModal] Auto-selected AI provider: ${autoProvider} based on local repos:`,
+                        localRepoTypes
+                    );
+                }
+            }
         }
     },
     { immediate: true }

@@ -148,6 +148,7 @@ interface DiscoveredRepo {
     path: string;
     name: string;
     type: 'git' | 'claude-code' | 'codex' | 'antigravity';
+    types?: string[]; // All detected assistant types
     lastModified: Date;
     description?: string;
     remoteUrl?: string;
@@ -291,13 +292,13 @@ const canProceed = computed(() => {
             return ideaText.value.trim().length >= 20;
         case 'provider':
             return selectedProvider.value !== null && availableChatProviders.value.length > 0;
-case 'interview':
-    return (
-        interviewSession.value?.status === 'completed' ||
-        (interviewSession.value?.context.confidence ?? 0) >= 70
-    );
-case 'concretize':
-    return !isConcretizing.value && concretizedIdea.value !== null;
+        case 'interview':
+            return (
+                interviewSession.value?.status === 'completed' ||
+                (interviewSession.value?.context.confidence ?? 0) >= 70
+            );
+        case 'concretize':
+            return !isConcretizing.value && concretizedIdea.value !== null;
         case 'preview':
             return selectedTasks.value.size > 0;
         case 'optimize':
@@ -439,10 +440,18 @@ async function selectCustomDirectory() {
                 path: repoInfo.path,
                 name: repoInfo.name,
                 type: repoInfo.types[0] as DiscoveredRepo['type'],
+                types: repoInfo.types, // Store all detected types
                 lastModified: new Date(),
                 description: repoInfo.description,
                 remoteUrl: repoInfo.remoteUrl,
             };
+
+            console.log(
+                '[ProjectCreationWizard] Selected repo:',
+                repo.name,
+                'with types:',
+                repo.types
+            );
 
             // Add to list if not already there
             if (!discoveredRepos.value.find((r) => r.path === repo.path)) {
@@ -456,6 +465,7 @@ async function selectCustomDirectory() {
                 path: dirPath,
                 name: repoInfo.name,
                 type: 'git', // default type
+                types: repoInfo.types.length > 0 ? repoInfo.types : ['git'], // Store types or default to git
                 lastModified: new Date(),
                 description: repoInfo.description,
             };
@@ -506,20 +516,18 @@ function getRepoTypeIcon(type: DiscoveredRepo['type']): string {
     }
 }
 
-function getRepoTypeColor(type: DiscoveredRepo['type']): string {
-    switch (type) {
-        case 'git':
-            return 'bg-orange-500';
-        case 'claude-code':
-            return 'bg-violet-500';
-        case 'codex':
-            return 'bg-cyan-500';
-        case 'antigravity':
-            return 'bg-rose-500';
-        default:
-            return 'bg-gray-500';
-    }
-}
+const getRepoTypeColor = (type: string) => {
+    const t = type.toLowerCase();
+    if (t === 'git') return 'bg-gray-600 text-white';
+    if (t === 'claude-code') return 'bg-violet-500 text-white';
+    if (t === 'codex') return 'bg-cyan-500 text-white';
+    if (t.includes('antigravity')) return 'bg-fuchsia-500 text-white'; // Handle Antigravity (Gemini)
+    if (t === 'cursor') return 'bg-blue-500 text-white';
+    if (t === 'windsurf') return 'bg-teal-500 text-white';
+    if (t === 'aider') return 'bg-green-500 text-white';
+    if (t === 'copilot') return 'bg-slate-700 text-white';
+    return 'bg-gray-500 text-white';
+};
 
 function formatRelativeTime(date: Date): string {
     const now = new Date();
@@ -1203,16 +1211,34 @@ async function createProject() {
         technicalStack = concretizedIdea.value.technicalSpecification?.stack || [];
     }
 
-    // 스마트 AI 제공자/모델 선택
+    // Read Claude Code settings if this is a Claude Code repo
+    let claudeSettings: any = null;
+
+    if (creationMode.value === 'local-repo' && selectedRepo.value?.type === 'claude-code') {
+        try {
+            const claudeConfig = await (window as any).electron.fs.readClaudeSettings();
+            if (claudeConfig) {
+                const { claudeCodeSettingsParser } =
+                    await import('../../services/integration/ClaudeCodeSettingsParser');
+                claudeSettings = claudeCodeSettingsParser.parseSettings(claudeConfig);
+                console.log('[ProjectCreationWizard] Loaded Claude Code settings:', claudeSettings);
+            }
+        } catch (error) {
+            console.warn('[ProjectCreationWizard] Failed to read Claude settings:', error);
+        }
+    }
+
+    // 스마트 AI 제공자/모델 선택 (Claude 설정 우선)
     const connectedProviders = settingsStore.getEnabledProvidersForRecommendation();
-    const aiDefaults = aiProviderSelectionService.selectBestProviderAndModel(connectedProviders);
+    const aiDefaults =
+        claudeSettings || aiProviderSelectionService.selectBestProviderAndModel(connectedProviders);
 
     const project = {
         title: projectTitle.value,
         description: projectDescription.value,
-        aiProvider: aiDefaults?.provider || selectedProvider.value || 'anthropic',
-        aiModel: aiDefaults?.model || null,
-        mcpConfig: null, // 기본값: null (프로젝트 설정에서 나중에 구성)
+        aiProvider: aiDefaults?.aiProvider || selectedProvider.value || 'anthropic',
+        aiModel: aiDefaults?.aiModel || null,
+        mcpConfig: aiDefaults?.mcpConfig || null, // Claude MCP 설정 적용
         aiGuidelines, // AI 지침서 포함
         technicalStack, // 기술 스택 포함
         executionPlan: executionPlan.value,
@@ -1246,12 +1272,16 @@ async function createProject() {
         })),
         metadata: {
             createdVia: creationMode.value === 'local-repo' ? 'local-repo' : 'ai-wizard',
+            claudeCodeIntegration: !!claudeSettings, // Track Claude sync
+            settingsOverridden: false, // Not manually overridden yet
+            lastSyncedAt: claudeSettings ? new Date().toISOString() : undefined,
             interviewSessionId: interviewSession.value?.id,
             concretizedIdea: concretizedIdea.value,
             localRepo: selectedRepo.value
                 ? {
                       path: selectedRepo.value.path,
                       type: selectedRepo.value.type,
+                      types: selectedRepo.value.types || [selectedRepo.value.type],
                       remoteUrl: selectedRepo.value.remoteUrl,
                   }
                 : undefined,
@@ -1259,42 +1289,154 @@ async function createProject() {
         },
     };
 
+    console.log('[createProject] Saving metadata with types:', project.metadata.localRepo?.types);
+
     emit('created', project);
     emit('close');
 }
 
 async function createProjectFromLocalRepo() {
     // Direct creation from local repo without AI interview
-    // 스마트 AI 제공자/모델 선택 (빈 프로젝트에도 적용)
+
+    // Read Claude Code settings if this is a Claude Code repo
+    let claudeSettings: any = null;
+
+    if (selectedRepo.value?.type === 'claude-code') {
+        try {
+            const claudeConfig = await (window as any).electron.fs.readClaudeSettings();
+            if (claudeConfig) {
+                const { claudeCodeSettingsParser } =
+                    await import('../../services/integration/ClaudeCodeSettingsParser');
+                claudeSettings = claudeCodeSettingsParser.parseSettings(claudeConfig);
+                console.log('[ProjectCreationWizard] Loaded Claude Code settings:', claudeSettings);
+            }
+        } catch (error) {
+            console.warn('[ProjectCreationWizard] Failed to read Claude settings:', error);
+        }
+    }
+
+    // 스마트 AI 제공자/모델 선택 (Claude 설정 우선, 없으면 기본 선택)
     const connectedProviders = settingsStore.getEnabledProvidersForRecommendation();
-    const aiDefaults = aiProviderSelectionService.selectBestProviderAndModel(connectedProviders);
+    const aiDefaults =
+        claudeSettings || aiProviderSelectionService.selectBestProviderAndModel(connectedProviders);
+
+    // Determine AI Provider:
+    // 1. If it's a known local agent type (checking types array), use that.
+    // 2. Otherwise use the default selection logic.
+    let aiProvider = aiDefaults?.aiProvider || selectedProvider.value || 'anthropic';
+
+    if (selectedRepo.value) {
+        const repoTypes = selectedRepo.value.types || [selectedRepo.value.type];
+
+        // Priority: Antigravity > Codex > Claude Code
+        if (repoTypes.includes('antigravity')) {
+            aiProvider = 'antigravity';
+        } else if (repoTypes.includes('codex')) {
+            aiProvider = 'codex';
+        } else if (repoTypes.includes('claude-code')) {
+            aiProvider = 'claude-code';
+        }
+    }
 
     const project = {
         title: projectTitle.value,
         description: projectDescription.value,
-        aiProvider: aiDefaults?.provider || selectedProvider.value || 'anthropic',
-        aiModel: aiDefaults?.model || null,
-        mcpConfig: null, // 기본값: null
+        aiProvider: aiProvider,
+        aiModel: aiDefaults?.aiModel || null,
+        mcpConfig: aiDefaults?.mcpConfig || null, // Claude MCP 설정 적용
+        baseDevFolder: selectedRepo.value?.path || null, // 로컬 저장소 경로를 baseDevFolder로 설정
+        projectGuidelines: await readLocalGuidelinesIfExists(selectedRepo.value?.path), // 로컬 저장소의 AI 지침서 읽기
         tasks: [], // No pre-generated tasks
         metadata: {
             createdVia: 'local-repo',
+            claudeCodeIntegration: !!claudeSettings, // Track Claude sync
+            settingsOverridden: false, // Not manually overridden yet
+            lastSyncedAt: claudeSettings ? new Date().toISOString() : undefined,
             localRepo: selectedRepo.value
                 ? {
                       path: selectedRepo.value.path,
                       type: selectedRepo.value.type,
+                      types: selectedRepo.value.types || [selectedRepo.value.type],
                       remoteUrl: selectedRepo.value.remoteUrl,
                   }
                 : undefined,
         },
     };
 
+    console.log(
+        '[createProjectFromLocalRepo] Saving metadata with types:',
+        project.metadata.localRepo?.types
+    );
+
     emit('created', project);
     emit('close');
+}
+
+// Helper function to read AI guidelines from local repo
+async function readLocalGuidelinesIfExists(repoPath?: string): Promise<string | null> {
+    if (!repoPath) return null;
+
+    try {
+        // Try to read CLAUDE.md first
+        try {
+            const claudeMdPath = `${repoPath}/CLAUDE.md`;
+            const exists = await (window as any)?.electron?.fs?.exists(claudeMdPath);
+            if (exists) {
+                const content = await (window as any)?.electron?.fs?.readFile(claudeMdPath);
+                console.log('[ProjectCreationWizard] Read CLAUDE.md guidelines');
+                return content;
+            }
+        } catch (e) {
+            // Ignore and try next
+        }
+
+        // Try .claude/guidelines.md
+        try {
+            const guidelinesPath = `${repoPath}/.claude/guidelines.md`;
+            const exists = await (window as any)?.electron?.fs?.exists(guidelinesPath);
+            if (exists) {
+                const content = await (window as any)?.electron?.fs?.readFile(guidelinesPath);
+                console.log('[ProjectCreationWizard] Read .claude/guidelines.md');
+                return content;
+            }
+        } catch (e) {
+            // Ignore
+        }
+
+        return null;
+    } catch (error) {
+        console.warn('[ProjectCreationWizard] Failed to read guidelines:', error);
+        return null;
+    }
 }
 
 // ========================================
 // Methods - Utility
 // ========================================
+
+function getRepoIcon(type: string): string {
+    const icons: Record<string, string> = {
+        git: '📁',
+        'claude-code': '🤖',
+        codex: '🔮',
+        antigravity: '🚀',
+    };
+    return icons[type] || '📁';
+}
+
+function getRepoTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+        git: 'Git',
+        'claude-code': 'Claude Code',
+        codex: 'Codex',
+        antigravity: 'Antigravity',
+        cursor: 'Cursor',
+        windsurf: 'Windsurf',
+        aider: 'Aider',
+        copilot: 'Copilot',
+    };
+    return labels[type] || type;
+}
 
 function getProviderIcon(provider: AIProvider): string {
     const icons: Record<string, string> = {
@@ -1740,27 +1882,47 @@ watch(
                                                     d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                                                     clip-rule="evenodd"
                                                 />
+                                                ```
                                             </svg>
                                         </div>
 
                                         <!-- Repo info -->
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <span
-                                                    :class="[
-                                                        'w-6 h-6 rounded flex items-center justify-center text-white text-xs',
-                                                        getRepoTypeColor(repo.type),
-                                                    ]"
-                                                >
-                                                    {{ getRepoTypeIcon(repo.type) }}
-                                                </span>
+                                            <div class="flex items-center gap-2 mb-1 flex-wrap">
                                                 <h4 class="font-medium text-white truncate">
                                                     {{ repo.name }}
                                                 </h4>
-                                                <span
-                                                    class="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-300"
-                                                    >{{ repo.type }}</span
-                                                >
+                                                <!-- Multiple Assistant Type Tags -->
+                                                <div class="flex items-center gap-1 flex-wrap">
+                                                    <!-- Debug: Show types array -->
+                                                    <template
+                                                        v-if="repo.types && repo.types.length > 0"
+                                                    >
+                                                        <span
+                                                            v-for="type in repo.types"
+                                                            :key="type"
+                                                            :class="[
+                                                                'px-2 py-0.5 text-xs rounded',
+                                                                getRepoTypeColor(type),
+                                                            ]"
+                                                            :title="type"
+                                                        >
+                                                            {{ type }}
+                                                        </span>
+                                                    </template>
+                                                    <!-- Fallback to single type -->
+                                                    <template v-else>
+                                                        <span
+                                                            :class="[
+                                                                'px-2 py-0.5 text-xs rounded',
+                                                                getRepoTypeColor(repo.type),
+                                                            ]"
+                                                            :title="getRepoTypeLabel(repo.type)"
+                                                        >
+                                                            {{ getRepoTypeLabel(repo.type) }}
+                                                        </span>
+                                                    </template>
+                                                </div>
                                             </div>
                                             <p class="text-xs text-gray-500 truncate mb-1">
                                                 {{ repo.path }}

@@ -211,12 +211,22 @@ async function handleImportProject(event: Event) {
 async function handleAIWizardCreated(projectData: any) {
     creating.value = true;
     try {
-        // Create the project
+        console.log('[ProjectsView] Creating project with data:', projectData);
+
+        // Create the project with ALL fields from projectData
         const project = await projectStore.createProject({
             title: projectData.title,
             description: projectData.description,
             ownerId: 1, // Default user for now
-            // aiProvider: projectData.aiProvider, // Not in type definition yet
+            baseDevFolder: projectData.baseDevFolder,
+            projectGuidelines: projectData.projectGuidelines || projectData.aiGuidelines,
+            aiProvider: projectData.aiProvider,
+            aiModel: projectData.aiModel,
+            mcpConfig: projectData.mcpConfig,
+            technicalStack: projectData.technicalStack,
+            aiGuidelines: projectData.aiGuidelines,
+            executionPlan: projectData.executionPlan,
+            metadata: projectData.metadata,
         });
 
         if (project) {

@@ -15,6 +15,7 @@ import { marked } from 'marked';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 import type { MCPConfig } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
+import { projectClaudeSyncService } from '../../services/integration/ProjectClaudeSyncService';
 
 const settingsStore = useSettingsStore();
 
@@ -49,6 +50,8 @@ interface Project {
     actualHours?: number | null;
     createdAt: Date;
     updatedAt: Date;
+    mcpConfig?: MCPConfig;
+    metadata?: any;
 }
 
 // ========================================
@@ -69,6 +72,11 @@ const emit = defineEmits<{
         e: 'update-ai-settings',
         settings: { aiProvider: string | null; aiModel: string | null }
     ): void;
+    (e: 'update-output-type', type: string | null): void;
+    (
+        e: 'update-auto-review-settings',
+        settings: { aiProvider: string | null; aiModel: string | null }
+    ): void;
     (e: 'update-mcp-config', config: MCPConfig | null): void;
 }>();
 
@@ -83,6 +91,16 @@ const editedBaseFolder = ref('');
 const isEditingAI = ref(false);
 const editedAIProvider = ref<string | null>(null);
 const editedAIModel = ref<string | null>(null);
+
+// Output Type State
+const isEditingOutputType = ref(false);
+const editedOutputType = ref<string | null>(null);
+
+// Auto Review State
+const isEditingAutoReview = ref(false);
+const editedAutoReviewProvider = ref<string | null>(null);
+const editedAutoReviewModel = ref<string | null>(null);
+
 const isEditingMCP = ref(false);
 const selectedMCPServers = ref<string[]>([]);
 const mcpConfig = ref<
@@ -107,8 +125,20 @@ const aiProviderDisplay = computed(() => {
         google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
         local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
     };
+
+    const providerId = props.project.aiProvider;
+
+    // Check if it's a local agent
+    if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
+        return {
+            name: getAssistantLabel(providerId),
+            color: 'text-gray-400',
+            icon: getAssistantIcon(providerId),
+        };
+    }
+
     return (
-        providers[props.project.aiProvider || ''] || {
+        providers[providerId || ''] || {
             name: '미설정',
             color: 'text-gray-500',
             icon: '❓',
@@ -131,18 +161,19 @@ const aiModelDisplay = computed(() => {
     return models[props.project.aiModel || ''] || props.project.aiModel || '미설정';
 });
 
+const outputTypes = {
+    web: { name: '웹 프로젝트', icon: '🌐', description: 'HTML/CSS/JS 웹 애플리케이션' },
+    document: { name: '문서', icon: '📄', description: 'Markdown, PDF 등 문서 파일' },
+    image: { name: '이미지', icon: '🖼️', description: '이미지 생성/편집 결과물' },
+    video: { name: '비디오', icon: '🎬', description: '비디오 컨텐츠' },
+    code: { name: '코드', icon: '💻', description: '소스 코드 및 스크립트' },
+    data: { name: '데이터', icon: '📊', description: 'JSON, CSV 등 데이터 파일' },
+    other: { name: '기타', icon: '📦', description: '기타 형식의 결과물' },
+};
+
 const outputTypeDisplay = computed(() => {
-    const types: Record<string, { name: string; icon: string; description: string }> = {
-        web: { name: '웹 프로젝트', icon: '🌐', description: 'HTML/CSS/JS 웹 애플리케이션' },
-        document: { name: '문서', icon: '📄', description: 'Markdown, PDF 등 문서 파일' },
-        image: { name: '이미지', icon: '🖼️', description: '이미지 생성/편집 결과물' },
-        video: { name: '비디오', icon: '🎬', description: '비디오 컨텐츠' },
-        code: { name: '코드', icon: '💻', description: '소스 코드 및 스크립트' },
-        data: { name: '데이터', icon: '📊', description: 'JSON, CSV 등 데이터 파일' },
-        other: { name: '기타', icon: '📦', description: '기타 형식의 결과물' },
-    };
     return (
-        types[props.project.outputType || ''] || {
+        outputTypes[props.project.outputType as keyof typeof outputTypes] || {
             name: '미지정',
             icon: '❓',
             description: '결과물 타입이 지정되지 않음',
@@ -194,6 +225,15 @@ const hasGuidelines = computed(() => {
     return !!effectiveGuidelines.value && effectiveGuidelines.value.trim().length > 0;
 });
 
+// Claude Code sync status
+const claudeSyncStatus = computed(() => {
+    return projectClaudeSyncService.getSyncStatusText(props.project as any);
+});
+
+const claudeSyncColor = computed(() => {
+    return projectClaudeSyncService.getSyncStatusColor(props.project as any);
+});
+
 // MCP 서버 목록
 const connectedMCPServers = computed<MCPServerInfo[]>(() => {
     // Renderer process에서는 electron API를 통해 MCP 서버 정보를 가져옴
@@ -218,12 +258,117 @@ const connectedMCPServers = computed<MCPServerInfo[]>(() => {
 
 // AI Provider 목록
 const availableProviders = computed(() => {
-    return settingsStore.aiProviders.filter((p) => p.enabled && p.apiKey);
+    // Get standard providers from settings
+    const standardProviders = settingsStore.aiProviders.filter((p) => p.enabled && p.apiKey);
+
+    // Get local agents from settings
+    const localAgents = settingsStore.localAgents
+        ? settingsStore.localAgents
+              .filter((agent: any) => agent.enabled)
+              .map((agent: any) => ({
+                  id: agent.type,
+                  name: agent.name, // Use name directly
+                  enabled: true,
+                  apiKey: 'local',
+                  isLocal: true,
+              }))
+        : [];
+
+    // Ensure we have at least the detected types from the project if they are not in settings yet
+    // This handles the case where a user opens a project with a local agent that isn't "installed" in global settings yet
+    const projectProvider = props.project.aiProvider;
+    const allProviders = [...standardProviders, ...localAgents];
+
+    if (projectProvider && !allProviders.find((p) => p.id === projectProvider)) {
+        // If project has a provider set that isn't in the list (e.g. 'claude-code'), add it temporarily
+        if (['claude-code', 'antigravity', 'codex'].includes(projectProvider)) {
+            allProviders.push({
+                id: projectProvider,
+                name: getAssistantLabel(projectProvider),
+                enabled: true,
+                apiKey: 'local',
+                isLocal: true,
+            });
+        }
+    }
+
+    return allProviders;
 });
 
 // 선택된 provider의 사용 가능한 모델 목록
 const availableModels = computed(() => {
     const providerId = isEditingAI.value ? editedAIProvider.value : props.project.aiProvider;
+    if (!providerId) return [];
+
+    // 기본 모델 목록 (실제로는 settingsStore에서 가져와야 함)
+    const modelsByProvider: Record<string, string[]> = {
+        google: [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro',
+            'gemini-pro-vision',
+        ],
+        anthropic: [
+            'claude-3-5-sonnet-20241022',
+            'claude-3-5-sonnet-latest',
+            'claude-3-opus-20240229',
+            'claude-3-sonnet-20240229',
+            'claude-3-haiku-20240307',
+        ],
+        openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+    };
+
+    return modelsByProvider[providerId] || [];
+});
+
+// Auto Review Display
+const autoReviewProviderDisplay = computed(() => {
+    const providerId = props.project.metadata?.autoReviewProvider;
+    const providers: Record<string, { name: string; color: string; icon: string }> = {
+        openai: { name: 'OpenAI', color: 'text-green-400', icon: '🤖' },
+        anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '🧠' },
+        google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
+        local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
+    };
+
+    // Check if it's a local agent
+    if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
+        return {
+            name: getAssistantLabel(providerId),
+            color: 'text-gray-400',
+            icon: getAssistantIcon(providerId),
+        };
+    }
+
+    return (
+        providers[providerId || ''] || {
+            name: '미설정',
+            color: 'text-gray-500',
+            icon: '❓',
+        }
+    );
+});
+
+const autoReviewModelDisplay = computed(() => {
+    const modelId = props.project.metadata?.autoReviewModel;
+    const models: Record<string, string> = {
+        'gpt-4-turbo': 'GPT-4 Turbo',
+        'gpt-4': 'GPT-4',
+        'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+        'claude-3-5-sonnet': 'Claude 3.5 Sonnet',
+        'claude-3-opus': 'Claude 3 Opus',
+        'claude-3-sonnet': 'Claude 3 Sonnet',
+        'claude-3-haiku': 'Claude 3 Haiku',
+        'gemini-pro': 'Gemini Pro',
+        'gemini-ultra': 'Gemini Ultra',
+    };
+    return models[modelId || ''] || modelId || '미설정';
+});
+
+const availableAutoReviewModels = computed(() => {
+    const providerId = isEditingAutoReview.value
+        ? editedAutoReviewProvider.value
+        : props.project.metadata?.autoReviewProvider;
     if (!providerId) return [];
 
     // 기본 모델 목록 (실제로는 settingsStore에서 가져와야 함)
@@ -323,11 +468,29 @@ function cancelEditAI(): void {
     editedAIModel.value = null;
 }
 
-function saveAISettings(): void {
+async function saveAISettings(): Promise<void> {
+    // Check if this is a Claude Code synced project
+    const metadata = (props.project as any).metadata || {};
+    const wasClaudeCodeSynced = metadata.claudeCodeIntegration && !metadata.settingsOverridden;
+
+    // Emit settings update
     emit('update-ai-settings', {
         aiProvider: editedAIProvider.value,
         aiModel: editedAIModel.value,
     });
+
+    // If project was synced with Claude, mark as manually overridden
+    if (wasClaudeCodeSynced) {
+        try {
+            const api = getAPI();
+            const overrideUpdate = projectClaudeSyncService.markAsOverridden(props.project as any);
+            await api.projects.update(props.project.id, overrideUpdate);
+            console.log('[ProjectInfoPanel] Marked project settings as manually overridden');
+        } catch (error) {
+            console.error('[ProjectInfoPanel] Failed to mark as overridden:', error);
+        }
+    }
+
     isEditingAI.value = false;
 }
 
@@ -456,6 +619,68 @@ function saveMCPSettings(): void {
 
     emit('update-mcp-config', Object.keys(payload).length > 0 ? payload : null);
     isEditingMCP.value = false;
+}
+
+// Output Type Methods
+function startEditOutputType(): void {
+    editedOutputType.value = props.project.outputType || null;
+    isEditingOutputType.value = true;
+}
+
+function cancelEditOutputType(): void {
+    isEditingOutputType.value = false;
+    editedOutputType.value = null;
+}
+
+function saveOutputType(): void {
+    emit('update-output-type', editedOutputType.value);
+    isEditingOutputType.value = false;
+}
+
+// Auto Review Methods
+function startEditAutoReview(): void {
+    editedAutoReviewProvider.value = props.project.metadata?.autoReviewProvider || null;
+    editedAutoReviewModel.value = props.project.metadata?.autoReviewModel || null;
+    isEditingAutoReview.value = true;
+}
+
+function cancelEditAutoReview(): void {
+    isEditingAutoReview.value = false;
+    editedAutoReviewProvider.value = null;
+    editedAutoReviewModel.value = null;
+}
+
+function saveAutoReviewSettings(): void {
+    emit('update-auto-review-settings', {
+        aiProvider: editedAutoReviewProvider.value,
+        aiModel: editedAutoReviewModel.value,
+    });
+    isEditingAutoReview.value = false;
+}
+
+// Helper functions for displaying assistant types
+function getAssistantIcon(type: string): string {
+    const icons: Record<string, string> = {
+        git: '📁',
+        'claude-code': '🤖',
+        codex: '🔮',
+        antigravity: '🚀',
+    };
+    return icons[type] || '📁';
+}
+
+function getAssistantLabel(type: string): string {
+    const labels: Record<string, string> = {
+        git: 'Git',
+        'claude-code': 'Claude Code',
+        codex: 'Codex',
+        antigravity: 'Antigravity',
+        cursor: 'Cursor',
+        windsurf: 'Windsurf',
+        aider: 'Aider',
+        copilot: 'Copilot',
+    };
+    return labels[type] || type;
 }
 </script>
 
@@ -657,44 +882,111 @@ function saveMCPSettings(): void {
                 </div>
             </div>
 
-            <!-- Base Dev Folder -->
+            <!-- Output Type -->
             <div class="space-y-2 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">개발 베이스 폴더</label>
+                    <label class="text-sm font-medium text-gray-400">결과물 타입</label>
                     <button
-                        class="text-xs text-blue-400 hover:text-blue-300"
-                        @click="pickBaseFolder"
+                        v-if="!isEditingOutputType"
+                        @click="startEditOutputType"
+                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
                     >
-                        폴더 선택
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                        </svg>
+                        <span>편집</span>
                     </button>
                 </div>
-                <div class="flex gap-2">
-                    <input
-                        v-model="editedBaseFolder"
-                        type="text"
-                        class="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm"
-                        placeholder="/path/to/project"
-                    />
-                    <button
-                        class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
-                        @click="saveBaseFolder"
-                    >
-                        저장
-                    </button>
+
+                <!-- View Mode -->
+                <div v-if="!isEditingOutputType" class="flex items-center space-x-2">
+                    <span class="text-xl">{{ outputTypeDisplay.icon }}</span>
+                    <div>
+                        <div class="text-sm font-medium text-gray-300">
+                            {{ outputTypeDisplay.name }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            {{ outputTypeDisplay.description }}
+                        </div>
+                    </div>
                 </div>
-                <p class="text-xs text-gray-500">
-                    Local agent 실행 시 기본 작업 디렉토리로 사용됩니다.
-                </p>
+
+                <!-- Edit Mode -->
+                <div v-else class="space-y-2">
+                    <select
+                        v-model="editedOutputType"
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    >
+                        <option :value="null">선택 안 함</option>
+                        <option v-for="(info, type) in outputTypes" :key="type" :value="type">
+                            {{ info.icon }} {{ info.name }}
+                        </option>
+                    </select>
+                    <div class="flex justify-end space-x-2">
+                        <button
+                            @click="cancelEditOutputType"
+                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                        >
+                            취소
+                        </button>
+                        <button
+                            @click="saveOutputType"
+                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                        >
+                            저장
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <!-- AI Settings -->
+            <!-- AI Settings (Project Default) -->
             <div class="space-y-3 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-300">AI 설정</label>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-medium text-gray-300"
+                            >프로젝트 기본 AI 설정</label
+                        >
+                        <!-- Claude Code Sync Status Badge -->
+                        <span
+                            v-if="claudeSyncStatus"
+                            class="px-2 py-0.5 text-xs rounded-full flex items-center gap-1"
+                            :class="
+                                claudeSyncColor === 'green'
+                                    ? 'bg-green-900/30 text-green-300 border border-green-700/50'
+                                    : 'bg-gray-700/50 text-gray-400 border border-gray-600/50'
+                            "
+                        >
+                            <svg
+                                v-if="claudeSyncColor === 'green'"
+                                class="w-3 h-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            <span>{{ claudeSyncStatus }}</span>
+                        </span>
+                    </div>
                     <button
                         v-if="!isEditingAI"
-                        @click="startEditAI"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        @click.stop="startEditAI"
+                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer z-10"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -810,6 +1102,32 @@ function saveMCPSettings(): void {
                 </div>
             </div>
 
+            <!-- Base Dev Folder -->
+            <div class="space-y-2 border-t border-gray-700 pt-4">
+                <label class="text-sm font-medium text-gray-300">개발 베이스 폴더</label>
+                <div class="flex items-center space-x-2">
+                    <div
+                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
+                    >
+                        {{ project.baseDevFolder || '미설정' }}
+                    </div>
+                    <button
+                        @click="pickBaseFolder"
+                        class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
+                        title="폴더 변경"
+                    >
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                            />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
             <!-- MCP 설정 -->
             <div class="space-y-3 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
@@ -903,11 +1221,10 @@ function saveMCPSettings(): void {
                             </div>
 
                             <!-- 환경변수 -->
-                            <div class="space-y-2">
+                            <div class="space-y-2 mb-3">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-xs font-medium text-gray-400">환경변수</span>
+                                    <label class="text-xs text-gray-400">환경변수</label>
                                     <button
-                                        type="button"
                                         @click="addEnvRow(serverId)"
                                         class="text-xs text-blue-400 hover:text-blue-300"
                                     >
@@ -915,40 +1232,34 @@ function saveMCPSettings(): void {
                                     </button>
                                 </div>
                                 <div
-                                    v-for="row in mcpConfig[serverId]?.env || []"
+                                    v-for="row in ensureMCPConfigEntry(serverId).env"
                                     :key="row.id"
-                                    class="flex items-center gap-2"
+                                    class="flex gap-2"
                                 >
                                     <input
                                         v-model="row.key"
-                                        type="text"
                                         placeholder="KEY"
-                                        class="flex-1 px-2 py-1 text-xs bg-gray-900 border border-gray-600 rounded text-white"
+                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
                                     />
                                     <input
                                         v-model="row.value"
-                                        type="text"
                                         placeholder="VALUE"
-                                        class="flex-1 px-2 py-1 text-xs bg-gray-900 border border-gray-600 rounded text-white"
+                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
                                     />
                                     <button
-                                        type="button"
                                         @click="removeEnvRow(serverId, row.id)"
-                                        class="text-gray-400 hover:text-red-400"
+                                        class="text-red-400 hover:text-red-300"
                                     >
-                                        ✕
+                                        ×
                                     </button>
                                 </div>
                             </div>
 
-                            <!-- 기본 파라미터 -->
-                            <div class="space-y-2 mt-4">
+                            <!-- 파라미터 -->
+                            <div class="space-y-2 mb-3">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-xs font-medium text-gray-400"
-                                        >기본 파라미터</span
-                                    >
+                                    <label class="text-xs text-gray-400">파라미터</label>
                                     <button
-                                        type="button"
                                         @click="addParamRow(serverId)"
                                         class="text-xs text-blue-400 hover:text-blue-300"
                                     >
@@ -956,42 +1267,36 @@ function saveMCPSettings(): void {
                                     </button>
                                 </div>
                                 <div
-                                    v-for="row in mcpConfig[serverId]?.params || []"
+                                    v-for="row in ensureMCPConfigEntry(serverId).params"
                                     :key="row.id"
-                                    class="flex items-center gap-2"
+                                    class="flex gap-2"
                                 >
                                     <input
                                         v-model="row.key"
-                                        type="text"
-                                        placeholder="필드명"
-                                        class="flex-1 px-2 py-1 text-xs bg-gray-900 border border-gray-600 rounded text-white"
+                                        placeholder="KEY"
+                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
                                     />
                                     <input
                                         v-model="row.value"
-                                        type="text"
-                                        placeholder="기본값"
-                                        class="flex-1 px-2 py-1 text-xs bg-gray-900 border border-gray-600 rounded text-white"
+                                        placeholder="VALUE"
+                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
                                     />
                                     <button
-                                        type="button"
                                         @click="removeParamRow(serverId, row.id)"
-                                        class="text-gray-400 hover:text-red-400"
+                                        class="text-red-400 hover:text-red-300"
                                     >
-                                        ✕
+                                        ×
                                     </button>
                                 </div>
                             </div>
 
                             <!-- 노트 -->
-                            <div class="mt-4">
-                                <label class="text-xs font-medium text-gray-400 block mb-1"
-                                    >노트</label
-                                >
+                            <div class="space-y-1">
+                                <label class="text-xs text-gray-400">노트 (선택사항)</label>
                                 <textarea
-                                    v-model="mcpConfig[serverId].notes"
-                                    rows="2"
-                                    placeholder="이 MCP 서버 사용 시 참고사항..."
-                                    class="w-full px-2 py-1 text-xs bg-gray-900 border border-gray-600 rounded text-white resize-none"
+                                    v-model="ensureMCPConfigEntry(serverId).notes"
+                                    class="w-full px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white h-16 resize-none"
+                                    placeholder="설정 관련 메모..."
                                 ></textarea>
                             </div>
                         </div>
@@ -1038,41 +1343,148 @@ function saveMCPSettings(): void {
                 </div>
             </div>
 
-            <!-- Output Settings -->
-            <div class="space-y-2 border-t border-gray-700 pt-4">
-                <!-- AI Provider -->
-                <div class="space-y-1">
-                    <label class="text-xs text-gray-500">AI 제공자</label>
-                    <div class="flex items-center space-x-2">
-                        <span>{{ aiProviderDisplay.icon }}</span>
-                        <span :class="aiProviderDisplay.color" class="text-sm font-medium">
-                            {{ aiProviderDisplay.name }}
-                        </span>
-                    </div>
+            <!-- Auto Review Settings -->
+            <div class="space-y-3 border-t border-gray-700 pt-4">
+                <div class="flex items-center justify-between">
+                    <label class="text-sm font-medium text-gray-300">자동 리뷰 설정</label>
+                    <button
+                        v-if="!isEditingAutoReview"
+                        @click="startEditAutoReview"
+                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                    >
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                        </svg>
+                        <span>편집</span>
+                    </button>
                 </div>
 
-                <!-- AI Model -->
-                <div class="space-y-1">
-                    <label class="text-xs text-gray-500">AI 모델</label>
-                    <div class="text-sm font-medium text-gray-300">
-                        {{ aiModelDisplay }}
-                    </div>
-                </div>
-            </div>
-
-            <div class="space-y-2">
-                <label class="text-xs text-gray-500">결과물 타입</label>
-                <div class="flex items-center space-x-3 bg-gray-900/30 rounded-lg p-3">
-                    <span class="text-2xl">{{ outputTypeDisplay.icon }}</span>
-                    <div>
-                        <div class="text-sm font-medium text-gray-200">
-                            {{ outputTypeDisplay.name }}
+                <!-- View Mode -->
+                <div v-if="!isEditingAutoReview" class="grid grid-cols-2 gap-4">
+                    <!-- AI Provider -->
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-500">AI 제공자</label>
+                        <div class="flex items-center space-x-2">
+                            <span>{{ autoReviewProviderDisplay.icon }}</span>
+                            <span
+                                :class="autoReviewProviderDisplay.color"
+                                class="text-sm font-medium"
+                            >
+                                {{ autoReviewProviderDisplay.name }}
+                            </span>
                         </div>
-                        <div class="text-xs text-gray-500">{{ outputTypeDisplay.description }}</div>
+                    </div>
+
+                    <!-- AI Model -->
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-500">AI 모델</label>
+                        <div class="text-sm font-medium text-gray-300">
+                            {{ autoReviewModelDisplay }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edit Mode -->
+                <div v-else class="space-y-3">
+                    <!-- AI Provider Select -->
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-400">AI 제공자</label>
+                        <select
+                            v-model="editedAutoReviewProvider"
+                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        >
+                            <option :value="null">선택 안 함</option>
+                            <option
+                                v-for="provider in availableProviders"
+                                :key="provider.id"
+                                :value="provider.id"
+                            >
+                                {{ provider.name }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- AI Model Select -->
+                    <div v-if="editedAutoReviewProvider" class="space-y-1">
+                        <label class="text-xs text-gray-400">AI 모델</label>
+                        <select
+                            v-model="editedAutoReviewModel"
+                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        >
+                            <option :value="null">기본 모델 사용</option>
+                            <option
+                                v-for="model in availableAutoReviewModels"
+                                :key="model"
+                                :value="model"
+                            >
+                                {{ model }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-2">
+                        <button
+                            @click="cancelEditAutoReview"
+                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                        >
+                            취소
+                        </button>
+                        <button
+                            @click="saveAutoReviewSettings"
+                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                        >
+                            저장
+                        </button>
                     </div>
                 </div>
             </div>
 
+            <!-- Local Repository Info -->
+            <div v-if="project.metadata?.localRepo" class="space-y-2 border-t border-gray-700 pt-4">
+                <label class="text-sm font-medium text-gray-400">로컬 저장소 정보</label>
+
+                <div class="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                    <div class="text-sm text-gray-300 font-mono truncate">
+                        {{ project.metadata.localRepo.path }}
+                    </div>
+
+                    <!-- Multiple Assistant Icons -->
+                    <div v-if="project.metadata.localRepo.types" class="flex items-center gap-2">
+                        <span class="text-xs text-gray-500">사용 중인 어시스턴트:</span>
+                        <div class="flex items-center gap-1.5">
+                            <span
+                                v-for="type in project.metadata.localRepo.types.filter(
+                                    (t: string) => t !== 'git'
+                                )"
+                                :key="type"
+                                class="px-2 py-1 bg-gray-800 rounded-md text-xs flex items-center gap-1.5"
+                            >
+                                <span>{{ getAssistantIcon(type) }}</span>
+                                <span>{{ getAssistantLabel(type) }}</span>
+                            </span>
+                            <span
+                                v-if="
+                                    project.metadata.localRepo.types.length === 1 &&
+                                    project.metadata.localRepo.types[0] === 'git'
+                                "
+                                class="text-xs text-gray-500"
+                                >Git만 사용</span
+                            >
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- Output Path -->
             <div v-if="project.outputPath" class="space-y-1">
                 <label class="text-xs text-gray-500">결과물 경로</label>
