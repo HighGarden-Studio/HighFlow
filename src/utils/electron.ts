@@ -236,6 +236,29 @@ export const mockElectronAPI = {
                 mockProjects.splice(index, 1);
             }
         },
+        export: async (id: number) => {
+            const project = mockProjects.find((p) => p.id === id);
+            if (!project) throw new Error('Project not found');
+            return {
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                project: { ...project },
+                tasks: mockTasks
+                    .filter((t) => t.projectId === id)
+                    .map((t) => ({ ...t, tempId: t.id, dependencies: [] })),
+            };
+        },
+        import: async (data: any) => {
+            const newProject = {
+                ...data.project,
+                id: Date.now(),
+                title: `${data.project.title} (Imported)`,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            mockProjects.push(newProject);
+            return newProject;
+        },
     },
     tasks: {
         list: async (projectId: number) => mockTasks.filter((t) => t.projectId === projectId),

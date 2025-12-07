@@ -363,12 +363,16 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
     // Start from RIGHT edge of source task (end of from task)
     // Use actual width including minimum constraint (150px)
     const fromX = getXForDate(from.start);
+    if (isNaN(fromX)) return { d: '', label: null, labelX: 0, labelY: 0 };
+
     const actualWidth = Math.max(from.durationMs * PIXELS_PER_MS.value, 150);
     const startX = fromX + actualWidth;
     const startY = from.y + from.height / 2;
 
     // End at LEFT edge of target task (start of to task)
     const endX = getXForDate(to.start);
+    if (isNaN(endX)) return { d: '', label: null, labelX: 0, labelY: 0 };
+
     const endY = to.y + to.height / 2;
 
     // Calculate mid point for label

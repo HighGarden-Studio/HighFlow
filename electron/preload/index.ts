@@ -48,6 +48,10 @@ const projectsAPI = {
         ipcRenderer.invoke('projects:update', id, data),
 
     delete: (id: number) => ipcRenderer.invoke('projects:delete', id),
+
+    export: (id: number) => ipcRenderer.invoke('projects:export', id),
+
+    import: (data: unknown) => ipcRenderer.invoke('projects:import', data),
 };
 
 // ========================================

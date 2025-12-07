@@ -805,6 +805,21 @@ export interface CreateProjectDTO {
     gitRepository?: string;
 }
 
+export interface ProjectExportData {
+    version: number;
+    exportedAt: string;
+    project: Omit<Project, 'id' | 'ownerId' | 'teamId' | 'createdAt' | 'updatedAt'>;
+    tasks: Array<
+        Omit<
+            Task,
+            'id' | 'projectId' | 'assigneeId' | 'createdAt' | 'updatedAt' | 'dependencies'
+        > & {
+            tempId: number;
+            dependencies: number[]; // Array of tempIds
+        }
+    >;
+}
+
 export interface UpdateProjectDTO extends Partial<CreateProjectDTO> {
     isArchived?: boolean;
     isFavorite?: boolean;

@@ -21,7 +21,7 @@ import { registerSystemHandlers } from './ipc/system-handlers';
 import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
-import type { ProjectStatus } from '@core/types/database';
+import type { ProjectStatus, ProjectExportData } from '@core/types/database';
 
 // Environment configuration
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -206,6 +206,28 @@ async function registerIpcHandlers(): Promise<void> {
             mainWindow?.webContents.send('project:deleted', id);
         } catch (error) {
             console.error('Error deleting project:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('projects:export', async (_event, id: number) => {
+        try {
+            return await projectRepo.exportProject(id);
+        } catch (error) {
+            console.error('Error exporting project:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('projects:import', async (_event, data: ProjectExportData) => {
+        try {
+            // Default ownerId to 1 for now
+            const ownerId = 1;
+            const project = await projectRepo.importProject(data, ownerId);
+            mainWindow?.webContents.send('project:created', project);
+            return project;
+        } catch (error) {
+            console.error('Error importing project:', error);
             throw error;
         }
     });
