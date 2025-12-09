@@ -1581,7 +1581,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 let reviewerOperator: any = null;
 
                 if (task.projectId) {
-                    const operators = await operatorRepository.findAllByProject(task.projectId);
+                    const operators = await operatorRepository.findByProject(task.projectId);
                     reviewerOperator = operators.find(
                         (op: any) => op.isReviewer === 1 || op.isReviewer === true
                     );
