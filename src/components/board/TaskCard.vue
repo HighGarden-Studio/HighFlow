@@ -1514,14 +1514,6 @@ const subtaskProgress = computed(() => {
                     {{ task.assigneeId }}
                 </div>
 
-                <!-- AI Provider Badge -->
-                <span
-                    v-if="task.aiProvider"
-                    :class="['px-2 py-0.5 rounded text-xs font-medium', aiProviderColor]"
-                >
-                    {{ task.aiProvider }}
-                </span>
-            </div>
 
             <!-- Estimated Duration -->
             <div
