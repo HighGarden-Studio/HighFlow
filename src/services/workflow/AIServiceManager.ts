@@ -992,6 +992,9 @@ export class AIServiceManager {
             finishReason: 'error',
             error: new Error('All providers failed'),
             metadata: { allFallbacksFailed: true },
+            duration: Date.now() - startTime,
+            provider: (task.aiProvider as AIProvider) || 'anthropic',
+            model: (task.aiModel as AIModel) || ('claude-3-5-sonnet-20250219' as AIModel),
         };
     }
 
@@ -1042,9 +1045,14 @@ export class AIServiceManager {
         const preferredModel = (imageConfig.model || task.aiModel) as AIModel | undefined;
 
         // Valid image models for each provider
-        const validImageModels: Record<AIProvider, string[]> = {
+        const validImageModels: Partial<Record<AIProvider, string[]>> = {
             openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
-            google: ['imagen-3.0', 'imagen-2.0'],
+            google: [
+                'imagen-3.0',
+                'imagen-2.0',
+                'gemini-2.5-flash-image',
+                'gemini-3-pro-image-preview',
+            ],
             anthropic: [],
             groq: [],
             lmstudio: [],
@@ -1148,23 +1156,44 @@ export class AIServiceManager {
                 tokensGenerated: 0,
             });
 
-            return {
+            // Construct AIExecutionResult from AiResult
+            const executionResult: AIExecutionResult = {
                 success: true,
                 content: aiResult.value,
                 tokensUsed: { prompt: 0, completion: 0, total: 0 },
                 cost: 0,
-                duration,
-                provider: preferredProvider,
-                model,
                 finishReason: 'stop',
+                duration: duration,
+                provider: preferredProvider,
+                model: model,
                 metadata: {
-                    ...(aiResult.meta || {}),
-                    requestedProvider: preferredProvider,
-                    executedProvider: preferredProvider,
-                    imageConfig,
+                    ...aiResult.meta,
+                    kind: aiResult.kind,
+                    format: aiResult.format,
+                    ...(aiResult.meta?.files && { resultFiles: aiResult.meta.files }),
                 },
-                aiResult,
+                aiResult, // Include full aiResult for proper typing
             };
+
+            // Check for fallback and log it
+            if (
+                task.aiProvider &&
+                task.aiModel &&
+                (preferredProvider !== task.aiProvider || model !== task.aiModel)
+            ) {
+                executionResult.metadata = {
+                    ...executionResult.metadata,
+                    usedFallback: true,
+                    originalProvider: task.aiProvider,
+                    fallbackMetadata: {
+                        originalProvider: task.aiProvider,
+                        originalModel: task.aiModel,
+                        fallbackReason: `Requested combination (${task.aiProvider}/${task.aiModel}) is not valid for image generation. System used ${preferredProvider}/${model} instead.`,
+                    },
+                };
+            }
+
+            return executionResult;
         } catch (error) {
             const failure = error instanceof Error ? error : new Error(String(error));
             options.onLog?.(

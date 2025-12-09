@@ -6,7 +6,7 @@
  * Supports: text, markdown, html, pdf, json, yaml, csv, sql, shell, mermaid, svg, png, mp4, mp3, diff, log, code
  */
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
-import type { Task } from '@core/types/database';
+import type { Task, TaskHistoryEntry } from '@core/types/database';
 import type { AiResult, AiSubType } from '@core/types/ai';
 import { extractTaskResult } from '../../renderer/utils/aiResultHelpers';
 import { marked } from 'marked';
@@ -149,7 +149,45 @@ const renderedMermaid = ref('');
 const copySuccess = ref(false);
 const markdownHtml = ref('');
 
-const taskResult = computed(() => extractTaskResult(props.task as any));
+// History state
+const history = ref<TaskHistoryEntry[]>([]);
+const selectedVersionId = ref<number | null>(null);
+
+const fetchHistory = async () => {
+    if (!props.task?.id) return;
+    try {
+        const entries = await (window as any).electron.taskHistory.getByTask(props.task.id);
+        // Filter for execution completions
+        history.value = entries.filter(
+            (e: TaskHistoryEntry) => e.eventType === 'execution_completed'
+        );
+    } catch (error: any) {
+        console.error('Failed to fetch task history:', error);
+    }
+};
+
+const handleViewVersion = (version: TaskHistoryEntry) => {
+    selectedVersionId.value = version.id;
+};
+
+const handleResetVersion = () => {
+    selectedVersionId.value = null;
+};
+
+const taskResult = computed(() => {
+    const result = extractTaskResult(props.task as any);
+    console.log('[EnhancedResultPreview] taskResult extracted:', {
+        hasAiResult: !!result.aiResult,
+        aiResultKind: result.aiResult?.kind,
+        aiResultSubType: result.aiResult?.subType,
+        aiResultFormat: result.aiResult?.format,
+        contentLength: result.content?.length,
+        contentPreview: result.content?.substring(0, 100),
+        provider: result.provider,
+        model: result.model,
+    });
+    return result;
+});
 const aiResult = computed<AiResult | null>(() => taskResult.value.aiResult);
 const aiMimeType = computed(() => guessMimeFromAiResult(aiResult.value));
 const aiFileExtension = computed(() => inferExtensionFromAiResult(aiResult.value));
@@ -166,12 +204,22 @@ const aiValue = computed(() => {
 
 const fallbackResultContent = computed(() => taskResult.value.content || '');
 
-// Get output format from task or AiResult subtype
+// Get output format from selected file or task
 const outputFormat = computed<OutputFormat>(() => {
+    if (selectedFile.value) {
+        return getFormatFromExtension(selectedFile.value.extension);
+    }
+
     const subType = aiResult.value?.subType;
     if (subType) {
         const mapped = SUBTYPE_TO_FORMAT[subType];
         if (mapped) {
+            console.log(
+                '[EnhancedResultPreview] Using mapped outputFormat:',
+                mapped,
+                'from subType:',
+                subType
+            );
             return mapped;
         }
     }
@@ -182,21 +230,280 @@ const outputFormat = computed<OutputFormat>(() => {
         (props.task as any)?.executionResult?.contentType ||
         'markdown';
 
-    return coerceOutputFormat(format);
+    const result = coerceOutputFormat(format);
+    console.log('[EnhancedResultPreview] Final outputFormat:', result, 'aiResult:', aiResult.value);
+    return result;
 });
 
 // Get code language if output format is 'code'
 const codeLanguage = computed(() => {
+    if (selectedFile.value) {
+        const ext = selectedFile.value.extension?.toLowerCase().replace(/^\./, '');
+        const langMap: Record<string, string> = {
+            js: 'javascript',
+            ts: 'typescript',
+            py: 'python',
+            vue: 'vue',
+            jsx: 'javascript',
+            tsx: 'typescript',
+            html: 'html',
+            css: 'css',
+            scss: 'scss',
+            json: 'json',
+            yaml: 'yaml',
+            xml: 'xml',
+            sh: 'bash',
+            sql: 'sql',
+        };
+        return langMap[ext || ''] || ext || 'plaintext';
+    }
+
     if (aiResult.value?.meta?.language) {
         return aiResult.value.meta.language;
     }
     return taskResult.value.language || 'plaintext';
 });
 
+// File handling
+interface ResultFile {
+    path: string;
+    absolutePath: string;
+    type: 'created' | 'modified';
+    content?: string;
+    size: number;
+    extension: string;
+}
+
+const safeExecutionResult = computed(() => {
+    // If a specific version is selected, try to load its result
+    if (selectedVersionId.value) {
+        const versionEntry = history.value.find((h) => h.id === selectedVersionId.value);
+        if (versionEntry?.eventData) {
+            let data = versionEntry.eventData;
+            // Parse if string
+            if (typeof data === 'string') {
+                try {
+                    data = JSON.parse(data);
+                } catch (e) {
+                    console.error('Failed to parse history eventData:', e);
+                }
+            }
+
+            // Check for executionResult in the event data (new format)
+            if (data.executionResult) {
+                let execRes = data.executionResult;
+                if (typeof execRes === 'string') {
+                    try {
+                        execRes = JSON.parse(execRes);
+                    } catch (e) {
+                        return null;
+                    }
+                }
+                return execRes;
+            }
+
+            // Fallback for older entries or partial data
+            // Construct minimal execution result from event data
+            return {
+                content: data.content,
+                transcript: [], // Old history might not have transcript
+                files: [],
+            };
+        }
+    }
+
+    // Default to current task result
+    const raw = (props.task as any)?.executionResult;
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            console.error('Failed to parse executionResult:', e);
+            return null;
+        }
+    }
+    return raw;
+});
+
+const resultFiles = computed<ResultFile[]>(() => {
+    const existingFiles = safeExecutionResult.value?.files || [];
+    const metadataFiles = safeExecutionResult.value?.metadata?.resultFiles || [];
+    const transcriptData = safeExecutionResult.value?.transcript || [];
+
+    // Map existing files
+    const filesMap = new Map<string, ResultFile>();
+    existingFiles.forEach((f: any) => {
+        filesMap.set(f.absolutePath || f.path, f);
+    });
+
+    // Add metadata files (from Gemini multi-image generation)
+    metadataFiles.forEach((f: any) => {
+        const filePath = f.path;
+        if (filePath && !filesMap.has(filePath)) {
+            const fs = require('fs');
+            let size = 0;
+            let content: string | undefined;
+            try {
+                const stats = fs.statSync(filePath);
+                size = stats.size;
+                // For images, we don't need to load content
+            } catch (e) {
+                console.warn(`Failed to stat file: ${filePath}`, e);
+            }
+
+            filesMap.set(filePath, {
+                path: filePath,
+                absolutePath: filePath,
+                type: f.type || 'created',
+                size,
+                extension: filePath.split('.').pop() || '',
+            });
+        }
+    });
+
+    // Extract files from transcript tool results
+    transcriptData.forEach((item: any) => {
+        if (item.role === 'user' && item.type === 'tool_result' && item.metadata?.result) {
+            const result = item.metadata.result;
+            // Check for file object in result (Claude Code style)
+            if (result.file && result.file.filePath) {
+                const path = result.file.filePath;
+                if (!filesMap.has(path)) {
+                    filesMap.set(path, {
+                        path: path, // standardized in map
+                        absolutePath: path,
+                        type: 'created',
+                        content: result.file.content,
+                        size: result.file.content?.length || 0,
+                        extension: path.split('.').pop() || 'txt',
+                    } as ResultFile);
+                } else {
+                    // Update content if empty in existing (FS monitor might be faster but transcript has content guaranteed for write)
+                    const existing = filesMap.get(path)!;
+                    if (!existing.content && result.file.content) {
+                        existing.content = result.file.content;
+                    }
+                }
+            }
+        }
+    });
+
+    const files = Array.from(filesMap.values());
+    console.log('[EnhancedResultPreview] resultFiles computed:', {
+        existingFilesCount: existingFiles.length,
+        metadataFilesCount: metadataFiles.length,
+        transcriptFilesCount: transcriptData.filter(
+            (item: any) =>
+                item.role === 'user' && item.type === 'tool_result' && item.metadata?.result?.file
+        ).length,
+        totalFiles: files.length,
+        files: files.map((f) => ({ path: f.path, size: f.size, extension: f.extension })),
+    });
+    return files;
+});
+
+const transcript = computed(() => {
+    return safeExecutionResult.value?.transcript || [];
+});
+
+const viewMode = ref<'preview' | 'log'>('preview');
+
+watch(
+    () => props.open,
+    (isOpen) => {
+        if (isOpen) {
+            // Debug logging
+            const rawExecResult = (props.task as any)?.executionResult;
+            console.log('[EnhancedResultPreview] Task opened:', {
+                taskId: props.task?.id,
+                hasExecutionResult: !!rawExecResult,
+                executionResultType: typeof rawExecResult,
+                executionResultKeys:
+                    rawExecResult && typeof rawExecResult === 'object'
+                        ? Object.keys(rawExecResult)
+                        : [],
+                transcriptLength:
+                    typeof transcript.value === 'string'
+                        ? 'string'
+                        : (transcript.value as any[])?.length,
+            });
+
+            // Load history
+            fetchHistory();
+
+            // Default to preview if files exist, else log if transcript exists
+            if (resultFiles.value.length > 0) {
+                viewMode.value = 'preview';
+                // selectedFile.value = null; // Already reset in other watcher
+            } else if (transcript.value.length > 0) {
+                viewMode.value = 'log';
+            }
+        } else {
+            selectedVersionId.value = null; // Reset version when closing
+        }
+    }
+);
+
+const selectedFile = ref<ResultFile | null>(null);
+
 // Get task result content
 const content = computed(() => {
-    return aiValue.value || fallbackResultContent.value || '';
+    if (selectedFile.value) {
+        // If content is already loaded, use it
+        if (selectedFile.value.content) {
+            return selectedFile.value.content;
+        }
+
+        // For images and other files without preloaded content, load from file
+        const filePath = selectedFile.value.absolutePath;
+        if (filePath) {
+            try {
+                const fs = require('fs');
+                const ext = selectedFile.value.extension.toLowerCase();
+
+                // For images, load as base64
+                if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
+                    const buffer = fs.readFileSync(filePath);
+                    const base64 = buffer.toString('base64');
+                    console.log(
+                        `[EnhancedResultPreview] Loaded image file: ${filePath} (${Math.round(buffer.length / 1024)}KB)`
+                    );
+                    return base64;
+                }
+
+                // For text files, load as text
+                return fs.readFileSync(filePath, 'utf-8');
+            } catch (e) {
+                console.error(`[EnhancedResultPreview] Failed to load file: ${filePath}`, e);
+                return '';
+            }
+        }
+        return '';
+    }
+    const result = aiValue.value || fallbackResultContent.value || '';
+    console.log('[EnhancedResultPreview] content computed:', {
+        hasAiValue: !!aiValue.value,
+        hasFallback: !!fallbackResultContent.value,
+        contentLength: result.length,
+        contentPreview: result.substring(0, 100),
+        aiResultKind: aiResult.value?.kind,
+        aiResultSubType: aiResult.value?.subType,
+        aiResultFormat: aiResult.value?.format,
+    });
+    return result;
 });
+
+// Auto-select first file if available and main content is short/empty
+watch(
+    () => resultFiles.value,
+    (files) => {
+        if (files && files.length > 0 && !selectedFile.value) {
+            // Optional: Auto-select criteria
+        }
+    },
+    { immediate: true }
+);
 
 const imageMimeType = computed(() => {
     return aiResult.value?.meta?.mime || 'image/png';
@@ -243,24 +550,58 @@ const formatDisplayName = computed(() => {
 // Format icon
 const formatIcon = computed(() => {
     const icons: Record<OutputFormat, string> = {
-        text: 'M4 6h16M4 12h16m-7 6h7',
-        markdown: 'M4 5h16M4 10h16M4 15h8',
-        html: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-        pdf: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
-        json: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
-        yaml: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
-        csv: 'M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
-        sql: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4',
-        shell: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+        // Text - File-Text (Phosphor regular weight)
+        text: 'M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-40-64a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,152Zm0-32a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,120Z',
+
+        // Markdown - Article (Phosphor)
+        markdown:
+            'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216V96H40ZM40,112H216v88H40Zm32,28a8,8,0,0,1,8-8h40a8,8,0,0,1,0,16H80A8,8,0,0,1,72,140Zm96,36a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h80A8,8,0,0,1,168,176Z',
+
+        // HTML - Code (Phosphor)
+        html: 'M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z',
+
+        // PDF - File-Pdf (Phosphor)
+        pdf: 'M224,152a8,8,0,0,1-8,8H192v16h16a8,8,0,0,1,0,16H192v16a8,8,0,0,1-16,0V152a8,8,0,0,1,8-8h32A8,8,0,0,1,224,152ZM92,172a28,28,0,0,1-28,28H56v8a8,8,0,0,1-16,0V152a8,8,0,0,1,8-8H64A28,28,0,0,1,92,172Zm-16,0a12,12,0,0,0-12-12H56v24h8A12,12,0,0,0,76,172Zm88,8a36,36,0,0,1-36,36H112a8,8,0,0,1-8-8V152a8,8,0,0,1,8-8h16A36,36,0,0,1,164,180Zm-16,0a20,20,0,0,0-20-20h-8v40h8A20,20,0,0,0,148,180ZM40,112V40A16,16,0,0,1,56,24h96a8,8,0,0,1,5.66,2.34l56,56A8,8,0,0,1,216,88v24a8,8,0,0,1-16,0V96H152a8,8,0,0,1-8-8V40H56v72a8,8,0,0,1-16,0ZM160,80h28.69L160,51.31Z',
+
+        // JSON - Brackets-Curly (Phosphor)
+        json: 'M48,48V88a32,32,0,0,1-32,32,8,8,0,0,0,0,16,32,32,0,0,1,32,32v40a16,16,0,0,0,16,16H68a8,8,0,0,0,0-16H64a.78.78,0,0,1,0-.13V168a48.07,48.07,0,0,0-20.58-39.68A47.87,47.87,0,0,0,64,88.13V48a.78.78,0,0,1,0-.13H68a8,8,0,0,0,0-16H64A16,16,0,0,0,48,48Zm196,72a8,8,0,0,0,0-16,32,32,0,0,1-32-32V48a16,16,0,0,0-16-16h-4a8,8,0,0,0,0,16h4a.78.78,0,0,1,0,.13V88a48.07,48.07,0,0,0,20.58,39.68A47.87,47.87,0,0,0,196,167.87v40.26s0,.09,0,.13h-4a8,8,0,0,0,0,16h4a16,16,0,0,0,16-16V168A32,32,0,0,1,244,136Z',
+
+        // YAML - Database (Phosphor)
+        yaml: 'M128,24C74.17,24,32,48.6,32,80v96c0,31.4,42.17,56,96,56s96-24.6,96-56V80C224,48.6,181.83,24,128,24Zm80,104c0,9.62-7.88,19.43-21.61,26.92C170.93,163.35,150.19,168,128,168s-42.93-4.65-58.39-13.08C55.88,147.43,48,137.62,48,128V111.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64ZM69.61,53.08C85.07,44.65,105.81,40,128,40s42.93,4.65,58.39,13.08C200.12,60.57,208,70.38,208,80s-7.88,19.43-21.61,26.92C170.93,115.35,150.19,120,128,120s-42.93-4.65-58.39-13.08C55.88,99.43,48,89.62,48,80S55.88,60.57,69.61,53.08ZM186.39,202.92C170.93,211.35,150.19,216,128,216s-42.93-4.65-58.39-13.08C55.88,195.43,48,185.62,48,176V159.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64V176C208,185.62,200.12,195.43,186.39,202.92Z',
+
+        // CSV - Table (Phosphor)
+        csv: 'M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM40,112H80v32H40Zm56,0H216v32H96ZM216,64V96H40V64ZM40,160H80v32H40Zm176,32H96V160H216v32Z',
+
+        // SQL - Database (Phosphor - same as YAML but represents SQL databases)
+        sql: 'M128,24C74.17,24,32,48.6,32,80v96c0,31.4,42.17,56,96,56s96-24.6,96-56V80C224,48.6,181.83,24,128,24Zm80,104c0,9.62-7.88,19.43-21.61,26.92C170.93,163.35,150.19,168,128,168s-42.93-4.65-58.39-13.08C55.88,147.43,48,137.62,48,128V111.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64ZM69.61,53.08C85.07,44.65,105.81,40,128,40s42.93,4.65,58.39,13.08C200.12,60.57,208,70.38,208,80s-7.88,19.43-21.61,26.92C170.93,115.35,150.19,120,128,120s-42.93-4.65-58.39-13.08C55.88,99.43,48,89.62,48,80S55.88,60.57,69.61,53.08ZM186.39,202.92C170.93,211.35,150.19,216,128,216s-42.93-4.65-58.39-13.08C55.88,195.43,48,185.62,48,176V159.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64V176C208,185.62,200.12,195.43,186.39,202.92Z',
+
+        // Shell - Terminal (Phosphor)
+        shell: 'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216V88H40ZM40,200V104H216v96Zm37.66-61.66a8,8,0,0,1,.34-11.23l28.6-30.58-28.6-26.65a8,8,0,0,1,11.12-11.56l32,29.91a8,8,0,0,1-.4,12l-32,34.09a8,8,0,0,1-11.06.02ZM144,176a8,8,0,0,1-8,8H120a8,8,0,0,1,0-16h16A8,8,0,0,1,144,176Z',
+
+        // Mermaid - Chart-Bar (Phosphor)
         mermaid:
-            'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2',
-        svg: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z',
-        png: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z',
-        mp4: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
-        mp3: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3',
-        diff: 'M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2',
-        log: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-        code: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+            'M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z',
+
+        // SVG - Vector-Three (Phosphor - represents vector graphics)
+        svg: 'M229.66,90.34l-64-64a8,8,0,0,0-11.32,0l-64,64a8,8,0,0,0,11.32,11.32L152,51.31V96a8,8,0,0,0,16,0V51.31l50.34,50.35a8,8,0,0,0,11.32-11.32ZM208,144a40,40,0,1,0-40,40A40,40,0,0,0,208,144Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,144,144ZM88,104A40,40,0,1,0,48,144,40,40,0,0,0,88,104ZM64,144a24,24,0,1,1,24-24A24,24,0,0,1,64,144Zm176,72a40,40,0,1,0-40,40A40,40,0,0,0,240,216Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,176,216Z',
+
+        // PNG - Image (Phosphor)
+        png: 'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216v77.38l-24.69-24.7a16,16,0,0,0-22.62,0L144,133.37,100.69,90.07a16,16,0,0,0-22.62,0L40,128.69Zm0,144V154.35L89.66,104.69l53.65,53.65a8,8,0,0,0,11.32,0l34.05-34L216,151.63V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z',
+
+        // MP4 - Film-Strip (Phosphor)
+        mp4: 'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,72H80V96H40ZM40,112H80v32H40Zm0,88V160H80v40Zm176,0H96V72H216V200ZM96,56h64V40H96Zm80,0h40V40H176Z',
+
+        // MP3 - Music-Note (Phosphor)
+        mp3: 'M210.35,41.93A8,8,0,0,0,200,32H80a8,8,0,0,0,0,16h98.74L112,87.09V180a36,36,0,1,0,16,29.92V104.7l74.35-42.77A8,8,0,0,0,210.35,41.93ZM112,228a20,20,0,1,1,20-20A20,20,0,0,1,112,228Z',
+
+        // Diff - Git-Diff (Phosphor)
+        diff: 'M112,152v56a8,8,0,0,1-16,0V168H88a64,64,0,0,1-64-64V64a8,8,0,0,1,8-8H88a8,8,0,0,1,0,16H40v32a48,48,0,0,0,48,48h8V136a8,8,0,0,1,16,0ZM216,56H168a8,8,0,0,0,0,16h48v32a48,48,0,0,1-48,48h-8V136a8,8,0,0,0-16,0v56a8,8,0,0,0,16,0V168h8a64,64,0,0,0,64-64V64A8,8,0,0,0,216,56ZM80,96h8a8,8,0,0,0,0-16H80a8,8,0,0,0,0,16Zm96,64h-8a8,8,0,0,0,0,16h8a8,8,0,0,0,0-16Z',
+
+        // Log - List-Bullets (Phosphor)
+        log: 'M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z',
+
+        // Code - Code (Phosphor)
+        code: 'M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z',
     };
     return icons[outputFormat.value] || icons.text;
 });
@@ -406,10 +747,29 @@ async function renderMermaid() {
     }
 }
 
+// Reset selection on open
+watch(
+    () => props.open,
+    (isOpen) => {
+        if (isOpen) {
+            selectedFile.value = null;
+        }
+    }
+);
+
 function renderMarkdownContent(rawText: string): string {
     if (!rawText) return '';
 
-    const rendered = marked.parse(rawText, { ...markedOptions, async: false });
+    // Simple heuristic to linkify absolute file paths in text
+    // Matches strings starting with / that look like paths, avoiding obvious code tokens
+    const textWithLinks = rawText.replace(
+        /(?<!\]\()(?<!=["'])(\/(?:Users|home|usr|var|tmp|etc|opt)[^\s`'"<>,;:()[\]]+)/g,
+        (match) => {
+            return `<a href="#" data-file-path="${match}" class="text-blue-400 hover:underline cursor-pointer file-link">${match}</a>`;
+        }
+    );
+
+    const rendered = marked.parse(textWithLinks, { ...markedOptions, async: false });
     return typeof rendered === 'string' ? rendered : '';
 }
 
@@ -547,6 +907,29 @@ function handleDownload() {
     emit('download');
 }
 
+function handleMarkdownClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'A' && target.dataset.filePath) {
+        event.preventDefault();
+        const path = target.dataset.filePath;
+
+        // Try to find the file in resultFiles
+        const file = resultFiles.value.find(
+            (f) => f.absolutePath === path || path.endsWith(f.path)
+        );
+
+        if (file) {
+            selectedFile.value = file;
+        } else {
+            // If file is not in the captured results, we could emit an event to open it externally
+            // or just notify the user. For now, let's try to open it externally if possible via simple link behavior?
+            // But we prevented default.
+            // Let's rely on standard copy/paste if not in preview, or maybe open URI?
+            // window.open(`file://${path}`, '_blank'); // Security might block this
+        }
+    }
+}
+
 function handleRetry() {
     if (!props.task || !feedback.value.trim()) return;
     emit('retry', props.task, feedback.value);
@@ -646,6 +1029,59 @@ function inferExtensionFromAiResult(result: AiResult | null): string | undefined
 function inferExtensionFromSubType(subType?: AiSubType): string | undefined {
     if (!subType) return undefined;
     return SUBTYPE_EXTENSION_MAP[subType];
+}
+
+// Helper to determine format from extension
+function getFormatFromExtension(ext?: string): OutputFormat {
+    if (!ext) return 'text';
+    const normalized = ext.toLowerCase().replace(/^\./, '');
+    const map: Record<string, OutputFormat> = {
+        md: 'markdown',
+        markdown: 'markdown',
+        html: 'html',
+        htm: 'html',
+        json: 'json',
+        yaml: 'yaml',
+        yml: 'yaml',
+        csv: 'csv',
+        sql: 'sql',
+        sh: 'shell',
+        bash: 'shell',
+        zsh: 'shell',
+        mmd: 'mermaid',
+        mermaid: 'mermaid',
+        svg: 'svg',
+        png: 'png',
+        jpg: 'png',
+        jpeg: 'png',
+        gif: 'png',
+        mp4: 'mp4',
+        mp3: 'mp3',
+        diff: 'diff',
+        patch: 'diff',
+        log: 'log',
+        js: 'code',
+        ts: 'code',
+        jsx: 'code',
+        tsx: 'code',
+        vue: 'code',
+        py: 'code',
+        java: 'code',
+        c: 'code',
+        cpp: 'code',
+        cs: 'code',
+        go: 'code',
+        rs: 'code',
+        php: 'code',
+        rb: 'code',
+        swift: 'code',
+        kt: 'code',
+        css: 'code',
+        scss: 'code',
+        less: 'code',
+        xml: 'code',
+    };
+    return map[normalized] || 'text';
 }
 
 function coerceOutputFormat(format: unknown, fallback: OutputFormat = 'markdown'): OutputFormat {
@@ -851,17 +1287,31 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <!-- Main Content -->
-                    <div class="flex-1 flex overflow-hidden pb-10">
-                        <!-- Preview Area -->
-                        <div class="flex-1 flex flex-col overflow-hidden">
-                            <!-- File Info Bar -->
+                    <!-- Layout Container -->
+                    <div class="flex-1 flex overflow-hidden">
+                        <!-- Sidebar (File List) -->
+                        <div
+                            v-if="resultFiles.length > 0"
+                            class="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex flex-col"
+                        >
                             <div
-                                class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+                                class="p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
                             >
-                                <div class="flex items-center gap-3">
+                                생성된 파일 ({{ resultFiles.length }})
+                            </div>
+                            <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
+                                <!-- Main Result Item -->
+                                <button
+                                    class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                                    :class="
+                                        !selectedFile
+                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                    "
+                                    @click="selectedFile = null"
+                                >
                                     <svg
-                                        class="w-5 h-5 text-gray-500"
+                                        class="w-4 h-4"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -870,393 +1320,97 @@ onMounted(() => {
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                             stroke-width="2"
-                                            :d="formatIcon"
+                                            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                                         />
                                     </svg>
-                                    <span class="font-medium text-gray-900 dark:text-white">
-                                        {{ formatDisplayName }} 형식
-                                    </span>
-                                    <span
-                                        v-if="outputFormat === 'code'"
-                                        class="text-sm text-gray-500 dark:text-gray-400"
+                                    <span class="truncate">에이전트 메시지</span>
+                                </button>
+
+                                <!-- File Items -->
+                                <button
+                                    v-for="file in resultFiles"
+                                    :key="file.path"
+                                    class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors group"
+                                    :class="
+                                        selectedFile === file
+                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                    "
+                                    @click="selectedFile = file"
+                                >
+                                    <!-- File Icon based on extension -->
+                                    <svg
+                                        class="w-4 h-4 flex-shrink-0"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
                                     >
-                                        ({{ codeLanguage }})
-                                    </span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <button
-                                        class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                        :class="{
-                                            'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300':
-                                                copySuccess,
-                                        }"
-                                        @click="copyToClipboard"
-                                    >
-                                        <svg
-                                            v-if="!copySuccess"
-                                            class="w-4 h-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                        />
+                                    </svg>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="truncate">{{ file.path }}</div>
+                                        <div
+                                            class="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-                                            />
-                                        </svg>
-                                        <svg
-                                            v-else
-                                            class="w-4 h-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M5 13l4 4L19 7"
-                                            />
-                                        </svg>
-                                        {{ copySuccess ? '복사됨!' : '복사' }}
-                                    </button>
-                                    <button
-                                        class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                                        @click="handleDownload"
-                                    >
-                                        <svg
-                                            class="w-4 h-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                                            />
-                                        </svg>
-                                        다운로드
-                                    </button>
-                                </div>
+                                            {{ file.type === 'created' ? 'Created' : 'Modified' }}
+                                        </div>
+                                    </div>
+                                </button>
                             </div>
+                        </div>
 
-                            <!-- Content Viewer -->
-                            <div
-                                class="flex-1 overflow-auto p-4"
-                                :style="{ fontSize: `${zoomLevel}%` }"
-                            >
-                                <!-- No Content -->
-                                <div
-                                    v-if="!content"
-                                    class="h-full flex items-center justify-center"
-                                >
-                                    <div class="text-center text-gray-500 dark:text-gray-400">
-                                        <svg
-                                            class="w-16 h-16 mx-auto mb-4 opacity-50"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                            />
-                                        </svg>
-                                        <p class="text-lg font-medium">결과물이 없습니다</p>
-                                        <p class="text-sm mt-1">
-                                            태스크가 실행되면 결과가 여기에 표시됩니다.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Text View -->
-                                <div v-else-if="outputFormat === 'text'" class="h-full">
-                                    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-                                        <pre
-                                            class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono"
-                                            >{{ content }}</pre
-                                        >
-                                    </div>
-                                </div>
-
-                                <!-- Markdown View -->
-                                <div v-else-if="outputFormat === 'markdown'" class="h-full">
+                        <!-- Main Content -->
+                        <div class="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">
+                            <!-- Upper Area: Preview + Version History -->
+                            <div class="flex-1 flex overflow-hidden relative min-h-0">
+                                <!-- Preview Area -->
+                                <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+                                    <!-- View Mode Tabs -->
                                     <div
-                                        class="prose dark:prose-invert max-w-none bg-gray-800 rounded-lg p-6"
+                                        v-if="transcript.length > 0"
+                                        class="flex-shrink-0 flex items-center border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
                                     >
-                                        <div v-html="markdownHtml" class="markdown-content" />
+                                        <button
+                                            @click="viewMode = 'preview'"
+                                            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+                                            :class="[
+                                                viewMode === 'preview'
+                                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                                            ]"
+                                        >
+                                            Result Preview
+                                        </button>
+                                        <button
+                                            @click="viewMode = 'log'"
+                                            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+                                            :class="[
+                                                viewMode === 'log'
+                                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                                            ]"
+                                        >
+                                            Interaction Log
+                                        </button>
                                     </div>
-                                </div>
 
-                                <!-- HTML View -->
-                                <div v-else-if="outputFormat === 'html'" class="h-full">
+                                    <!-- Content Container -->
                                     <div
-                                        class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                                        v-if="viewMode === 'preview'"
+                                        class="flex-1 flex flex-col overflow-hidden"
                                     >
+                                        <!-- File Info Bar -->
                                         <div
-                                            class="mb-4 text-xs text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700"
+                                            class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
                                         >
-                                            HTML 미리보기
-                                        </div>
-                                        <iframe
-                                            :srcdoc="content"
-                                            class="w-full h-[calc(100%-2rem)] min-h-[400px] bg-white rounded border border-gray-200"
-                                            sandbox="allow-scripts"
-                                        />
-                                    </div>
-                                </div>
-
-                                <!-- JSON View -->
-                                <div v-else-if="outputFormat === 'json'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg p-4 overflow-auto space-y-4">
-                                        <div
-                                            v-if="jsonMarkdownHtml"
-                                            class="prose dark:prose-invert max-w-none"
-                                        >
-                                            <div
-                                                v-html="jsonMarkdownHtml"
-                                                class="markdown-content"
-                                            />
-                                        </div>
-                                        <div v-else-if="parsedJsonData">
-                                            <pre
-                                                class="text-sm font-mono"
-                                                v-html="renderJsonTree(parsedJsonData)"
-                                            />
-                                        </div>
-                                        <pre
-                                            v-else
-                                            class="text-sm font-mono text-gray-100 whitespace-pre-wrap"
-                                            >{{ content }}</pre
-                                        >
-                                    </div>
-                                </div>
-
-                                <!-- YAML View -->
-                                <div v-else-if="outputFormat === 'yaml'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div class="flex">
-                                            <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
-                                            >
-                                                <div
-                                                    v-for="(_, index) in content.split('\n')"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
-                                                >
-                                                    {{ index + 1 }}
-                                                </div>
-                                            </div>
-                                            <div class="flex-1 px-4 py-4 overflow-x-auto">
-                                                <pre
-                                                    class="text-sm font-mono leading-6 language-yaml"
-                                                ><code class="text-gray-100">{{ content }}</code></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- CSV View -->
-                                <div
-                                    v-else-if="outputFormat === 'csv' && parsedCsvData"
-                                    class="h-full overflow-auto"
-                                >
-                                    <table class="min-w-full border-collapse">
-                                        <thead class="bg-gray-100 dark:bg-gray-800 sticky top-0">
-                                            <tr>
-                                                <th
-                                                    v-for="header in parsedCsvData.headers"
-                                                    :key="header"
-                                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700"
-                                                >
-                                                    {{ header }}
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody
-                                            class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700"
-                                        >
-                                            <tr
-                                                v-for="(row, rowIndex) in parsedCsvData.rows"
-                                                :key="rowIndex"
-                                                class="hover:bg-gray-50 dark:hover:bg-gray-800"
-                                            >
-                                                <td
-                                                    v-for="(cell, cellIndex) in row"
-                                                    :key="cellIndex"
-                                                    class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap"
-                                                >
-                                                    {{ cell }}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <!-- SQL View -->
-                                <div v-else-if="outputFormat === 'sql'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div class="flex">
-                                            <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
-                                            >
-                                                <div
-                                                    v-for="(_, index) in content.split('\n')"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
-                                                >
-                                                    {{ index + 1 }}
-                                                </div>
-                                            </div>
-                                            <div class="flex-1 px-4 py-4 overflow-x-auto">
-                                                <pre
-                                                    class="text-sm font-mono leading-6"
-                                                ><code class="text-blue-300">{{ content }}</code></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Shell Script View -->
-                                <div v-else-if="outputFormat === 'shell'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div
-                                            class="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700"
-                                        >
-                                            <div class="flex gap-1.5">
-                                                <div class="w-3 h-3 rounded-full bg-red-500" />
-                                                <div class="w-3 h-3 rounded-full bg-yellow-500" />
-                                                <div class="w-3 h-3 rounded-full bg-green-500" />
-                                            </div>
-                                            <span class="text-xs text-gray-400 font-mono"
-                                                >terminal</span
-                                            >
-                                        </div>
-                                        <div class="flex">
-                                            <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800/50"
-                                            >
-                                                <div
-                                                    v-for="(_, index) in content.split('\n')"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
-                                                >
-                                                    {{ index + 1 }}
-                                                </div>
-                                            </div>
-                                            <div class="flex-1 px-4 py-4 overflow-x-auto">
-                                                <pre
-                                                    class="text-sm font-mono leading-6"
-                                                ><code class="text-green-400">{{ content }}</code></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Mermaid Diagram View -->
-                                <div v-else-if="outputFormat === 'mermaid'" class="h-full">
-                                    <div class="bg-gray-800 rounded-lg p-6 overflow-auto">
-                                        <div
-                                            v-if="renderedMermaid"
-                                            v-html="renderedMermaid"
-                                            class="flex justify-center mermaid-container"
-                                        />
-                                        <div v-else class="flex items-center justify-center h-64">
-                                            <div
-                                                class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
-                                            />
-                                        </div>
-                                        <details class="mt-4">
-                                            <summary
-                                                class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
-                                            >
-                                                소스 코드 보기
-                                            </summary>
-                                            <pre
-                                                class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto"
-                                                >{{ content }}</pre
-                                            >
-                                        </details>
-                                    </div>
-                                </div>
-
-                                <!-- SVG View -->
-                                <div
-                                    v-else-if="outputFormat === 'svg'"
-                                    class="h-full flex flex-col"
-                                >
-                                    <div
-                                        class="flex-1 bg-gray-800 rounded-lg p-6 flex items-center justify-center overflow-auto"
-                                    >
-                                        <div
-                                            v-html="content"
-                                            class="max-w-full max-h-full svg-container"
-                                        />
-                                    </div>
-                                    <details class="mt-4">
-                                        <summary
-                                            class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
-                                        >
-                                            SVG 소스 보기
-                                        </summary>
-                                        <pre
-                                            class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto max-h-48"
-                                            >{{ content }}</pre
-                                        >
-                                    </details>
-                                </div>
-
-                                <!-- PNG/Image View -->
-                                <div
-                                    v-else-if="outputFormat === 'png'"
-                                    class="h-full flex items-center justify-center"
-                                >
-                                    <img
-                                        :src="pngImageSrc"
-                                        alt="Result Image"
-                                        class="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                                    />
-                                </div>
-
-                                <!-- MP4 Video View -->
-                                <div
-                                    v-else-if="outputFormat === 'mp4'"
-                                    class="h-full flex items-center justify-center"
-                                >
-                                    <video
-                                        controls
-                                        class="max-w-full max-h-full rounded-lg shadow-lg"
-                                    >
-                                        <source
-                                            :src="
-                                                content.startsWith('data:')
-                                                    ? content
-                                                    : `data:video/mp4;base64,${content}`
-                                            "
-                                            type="video/mp4"
-                                        />
-                                        브라우저가 비디오 재생을 지원하지 않습니다.
-                                    </video>
-                                </div>
-
-                                <!-- MP3 Audio View -->
-                                <div
-                                    v-else-if="outputFormat === 'mp3'"
-                                    class="h-full flex items-center justify-center"
-                                >
-                                    <div class="bg-gray-800 rounded-xl p-8 w-full max-w-md">
-                                        <div class="flex items-center justify-center mb-6">
-                                            <div
-                                                class="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center"
-                                            >
+                                            <div class="flex items-center gap-3">
                                                 <svg
-                                                    class="w-12 h-12 text-white"
+                                                    class="w-5 h-5 text-gray-500"
                                                     fill="none"
                                                     stroke="currentColor"
                                                     viewBox="0 0 24 24"
@@ -1265,293 +1419,920 @@ onMounted(() => {
                                                         stroke-linecap="round"
                                                         stroke-linejoin="round"
                                                         stroke-width="2"
-                                                        d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                                                        :d="formatIcon"
                                                     />
                                                 </svg>
+                                                <span
+                                                    class="font-medium text-gray-900 dark:text-white"
+                                                >
+                                                    {{ formatDisplayName }} 형식
+                                                </span>
+                                                <span
+                                                    v-if="outputFormat === 'code'"
+                                                    class="text-sm text-gray-500 dark:text-gray-400"
+                                                >
+                                                    ({{ codeLanguage }})
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                                    :class="{
+                                                        'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300':
+                                                            copySuccess,
+                                                    }"
+                                                    @click="copyToClipboard"
+                                                >
+                                                    <svg
+                                                        v-if="!copySuccess"
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                                        />
+                                                    </svg>
+                                                    <svg
+                                                        v-else
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M5 13l4 4L19 7"
+                                                        />
+                                                    </svg>
+                                                    {{ copySuccess ? '복사됨!' : '복사' }}
+                                                </button>
+                                                <button
+                                                    class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                                    @click="handleDownload"
+                                                >
+                                                    <svg
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                                        />
+                                                    </svg>
+                                                    다운로드
+                                                </button>
                                             </div>
                                         </div>
-                                        <audio controls class="w-full">
-                                            <source
-                                                :src="
-                                                    content.startsWith('data:')
-                                                        ? content
-                                                        : `data:audio/mpeg;base64,${content}`
+
+                                        <!-- Content Viewer -->
+                                        <div
+                                            class="flex-1 overflow-auto p-4"
+                                            :style="{ fontSize: `${zoomLevel}%` }"
+                                        >
+                                            <!-- No Content -->
+                                            <div
+                                                v-if="!content"
+                                                class="h-full flex items-center justify-center"
+                                            >
+                                                <div
+                                                    class="text-center text-gray-500 dark:text-gray-400"
+                                                >
+                                                    <svg
+                                                        class="w-16 h-16 mx-auto mb-4 opacity-50"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                        />
+                                                    </svg>
+                                                    <p class="text-lg font-medium">
+                                                        결과물이 없습니다
+                                                    </p>
+                                                    <p class="text-sm mt-1">
+                                                        태스크가 실행되면 결과가 여기에 표시됩니다.
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <!-- Text View -->
+                                            <div v-else-if="outputFormat === 'text'" class="h-full">
+                                                <div
+                                                    class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6"
+                                                >
+                                                    <pre
+                                                        class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono"
+                                                        >{{ content }}</pre
+                                                    >
+                                                </div>
+                                            </div>
+
+                                            <!-- Markdown View -->
+                                            <div
+                                                v-else-if="outputFormat === 'markdown'"
+                                                class="h-full"
+                                            >
+                                                <div
+                                                    class="prose dark:prose-invert max-w-none bg-gray-800 rounded-lg p-6"
+                                                >
+                                                    <div
+                                                        v-html="markdownHtml"
+                                                        class="markdown-content"
+                                                        @click="handleMarkdownClick"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <!-- HTML View -->
+                                            <div v-else-if="outputFormat === 'html'" class="h-full">
+                                                <div
+                                                    class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                                                >
+                                                    <div
+                                                        class="mb-4 text-xs text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700"
+                                                    >
+                                                        HTML 미리보기
+                                                    </div>
+                                                    <iframe
+                                                        :srcdoc="content"
+                                                        class="w-full h-[calc(100%-2rem)] min-h-[400px] bg-white rounded border border-gray-200"
+                                                        sandbox="allow-scripts"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <!-- JSON View -->
+                                            <div v-else-if="outputFormat === 'json'" class="h-full">
+                                                <div
+                                                    class="bg-gray-900 rounded-lg p-4 overflow-auto space-y-4"
+                                                >
+                                                    <div
+                                                        v-if="jsonMarkdownHtml"
+                                                        class="prose dark:prose-invert max-w-none"
+                                                    >
+                                                        <div
+                                                            v-html="jsonMarkdownHtml"
+                                                            class="markdown-content"
+                                                        />
+                                                    </div>
+                                                    <div v-else-if="parsedJsonData">
+                                                        <pre
+                                                            class="text-sm font-mono"
+                                                            v-html="renderJsonTree(parsedJsonData)"
+                                                        />
+                                                    </div>
+                                                    <pre
+                                                        v-else
+                                                        class="text-sm font-mono text-gray-100 whitespace-pre-wrap"
+                                                        >{{ content }}</pre
+                                                    >
+                                                </div>
+                                            </div>
+
+                                            <!-- YAML View -->
+                                            <div v-else-if="outputFormat === 'yaml'" class="h-full">
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
+                                                        >
+                                                            <div
+                                                                v-for="(_, index) in content.split(
+                                                                    '\n'
+                                                                )"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            class="flex-1 px-4 py-4 overflow-x-auto"
+                                                        >
+                                                            <pre
+                                                                class="text-sm font-mono leading-6 language-yaml"
+                                                            ><code class="text-gray-100">{{ content }}</code></pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- CSV View -->
+                                            <div
+                                                v-else-if="outputFormat === 'csv' && parsedCsvData"
+                                                class="h-full overflow-auto"
+                                            >
+                                                <table class="min-w-full border-collapse">
+                                                    <thead
+                                                        class="bg-gray-100 dark:bg-gray-800 sticky top-0"
+                                                    >
+                                                        <tr>
+                                                            <th
+                                                                v-for="header in parsedCsvData.headers"
+                                                                :key="header"
+                                                                class="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700"
+                                                            >
+                                                                {{ header }}
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody
+                                                        class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700"
+                                                    >
+                                                        <tr
+                                                            v-for="(
+                                                                row, rowIndex
+                                                            ) in parsedCsvData.rows"
+                                                            :key="rowIndex"
+                                                            class="hover:bg-gray-50 dark:hover:bg-gray-800"
+                                                        >
+                                                            <td
+                                                                v-for="(cell, cellIndex) in row"
+                                                                :key="cellIndex"
+                                                                class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                                                            >
+                                                                {{ cell }}
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- SQL View -->
+                                            <div v-else-if="outputFormat === 'sql'" class="h-full">
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
+                                                        >
+                                                            <div
+                                                                v-for="(_, index) in content.split(
+                                                                    '\n'
+                                                                )"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            class="flex-1 px-4 py-4 overflow-x-auto"
+                                                        >
+                                                            <pre
+                                                                class="text-sm font-mono leading-6"
+                                                            ><code class="text-blue-300">{{ content }}</code></pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Shell Script View -->
+                                            <div
+                                                v-else-if="outputFormat === 'shell'"
+                                                class="h-full"
+                                            >
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div
+                                                        class="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700"
+                                                    >
+                                                        <div class="flex gap-1.5">
+                                                            <div
+                                                                class="w-3 h-3 rounded-full bg-red-500"
+                                                            />
+                                                            <div
+                                                                class="w-3 h-3 rounded-full bg-yellow-500"
+                                                            />
+                                                            <div
+                                                                class="w-3 h-3 rounded-full bg-green-500"
+                                                            />
+                                                        </div>
+                                                        <span
+                                                            class="text-xs text-gray-400 font-mono"
+                                                            >terminal</span
+                                                        >
+                                                    </div>
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800/50"
+                                                        >
+                                                            <div
+                                                                v-for="(_, index) in content.split(
+                                                                    '\n'
+                                                                )"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            class="flex-1 px-4 py-4 overflow-x-auto"
+                                                        >
+                                                            <pre
+                                                                class="text-sm font-mono leading-6"
+                                                            ><code class="text-green-400">{{ content }}</code></pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Mermaid Diagram View -->
+                                            <div
+                                                v-else-if="outputFormat === 'mermaid'"
+                                                class="h-full"
+                                            >
+                                                <div
+                                                    class="bg-gray-800 rounded-lg p-6 overflow-auto"
+                                                >
+                                                    <div
+                                                        v-if="renderedMermaid"
+                                                        v-html="renderedMermaid"
+                                                        class="flex justify-center mermaid-container"
+                                                    />
+                                                    <div
+                                                        v-else
+                                                        class="flex items-center justify-center h-64"
+                                                    >
+                                                        <div
+                                                            class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+                                                        />
+                                                    </div>
+                                                    <details class="mt-4">
+                                                        <summary
+                                                            class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
+                                                        >
+                                                            소스 코드 보기
+                                                        </summary>
+                                                        <pre
+                                                            class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto"
+                                                            >{{ content }}</pre
+                                                        >
+                                                    </details>
+                                                </div>
+                                            </div>
+
+                                            <!-- SVG View -->
+                                            <div
+                                                v-else-if="outputFormat === 'svg'"
+                                                class="h-full flex flex-col"
+                                            >
+                                                <div
+                                                    class="flex-1 bg-gray-800 rounded-lg p-6 flex items-center justify-center overflow-auto"
+                                                >
+                                                    <div
+                                                        v-html="content"
+                                                        class="max-w-full max-h-full svg-container"
+                                                    />
+                                                </div>
+                                                <details class="mt-4">
+                                                    <summary
+                                                        class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
+                                                    >
+                                                        SVG 소스 보기
+                                                    </summary>
+                                                    <pre
+                                                        class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto max-h-48"
+                                                        >{{ content }}</pre
+                                                    >
+                                                </details>
+                                            </div>
+
+                                            <!-- PNG/Image View -->
+                                            <div
+                                                v-else-if="outputFormat === 'png'"
+                                                class="h-full flex items-center justify-center"
+                                            >
+                                                <img
+                                                    :src="pngImageSrc"
+                                                    alt="Result Image"
+                                                    class="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                                                />
+                                            </div>
+
+                                            <!-- MP4 Video View -->
+                                            <div
+                                                v-else-if="outputFormat === 'mp4'"
+                                                class="h-full flex items-center justify-center"
+                                            >
+                                                <video
+                                                    controls
+                                                    class="max-w-full max-h-full rounded-lg shadow-lg"
+                                                >
+                                                    <source
+                                                        :src="
+                                                            content.startsWith('data:')
+                                                                ? content
+                                                                : `data:video/mp4;base64,${content}`
+                                                        "
+                                                        type="video/mp4"
+                                                    />
+                                                    브라우저가 비디오 재생을 지원하지 않습니다.
+                                                </video>
+                                            </div>
+
+                                            <!-- MP3 Audio View -->
+                                            <div
+                                                v-else-if="outputFormat === 'mp3'"
+                                                class="h-full flex items-center justify-center"
+                                            >
+                                                <div
+                                                    class="bg-gray-800 rounded-xl p-8 w-full max-w-md"
+                                                >
+                                                    <div
+                                                        class="flex items-center justify-center mb-6"
+                                                    >
+                                                        <div
+                                                            class="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center"
+                                                        >
+                                                            <svg
+                                                                class="w-12 h-12 text-white"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <path
+                                                                    stroke-linecap="round"
+                                                                    stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                                                                />
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                    <audio controls class="w-full">
+                                                        <source
+                                                            :src="
+                                                                content.startsWith('data:')
+                                                                    ? content
+                                                                    : `data:audio/mpeg;base64,${content}`
+                                                            "
+                                                            type="audio/mpeg"
+                                                        />
+                                                        브라우저가 오디오 재생을 지원하지 않습니다.
+                                                    </audio>
+                                                </div>
+                                            </div>
+
+                                            <!-- Diff View -->
+                                            <div v-else-if="outputFormat === 'diff'" class="h-full">
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
+                                                        >
+                                                            <div
+                                                                v-for="(
+                                                                    _, index
+                                                                ) in parsedDiffLines"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div class="flex-1 py-4 overflow-x-auto">
+                                                            <div
+                                                                v-for="(
+                                                                    line, index
+                                                                ) in parsedDiffLines"
+                                                                :key="index"
+                                                                class="px-4 text-sm font-mono leading-6"
+                                                                :class="{
+                                                                    'bg-green-900/50 text-green-300':
+                                                                        line.type === 'added',
+                                                                    'bg-red-900/50 text-red-300':
+                                                                        line.type === 'removed',
+                                                                    'bg-blue-900/30 text-blue-300':
+                                                                        line.type === 'header',
+                                                                    'text-gray-300':
+                                                                        line.type === 'normal',
+                                                                }"
+                                                            >
+                                                                {{ line.text }}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Log View -->
+                                            <div v-else-if="outputFormat === 'log'" class="h-full">
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div
+                                                        class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
+                                                    >
+                                                        <span class="text-sm text-gray-400"
+                                                            >로그 뷰어</span
+                                                        >
+                                                        <div
+                                                            class="flex items-center gap-2 text-xs"
+                                                        >
+                                                            <span class="flex items-center gap-1"
+                                                                ><span
+                                                                    class="w-2 h-2 rounded-full bg-red-500"
+                                                                />
+                                                                Error</span
+                                                            >
+                                                            <span class="flex items-center gap-1"
+                                                                ><span
+                                                                    class="w-2 h-2 rounded-full bg-yellow-500"
+                                                                />
+                                                                Warn</span
+                                                            >
+                                                            <span class="flex items-center gap-1"
+                                                                ><span
+                                                                    class="w-2 h-2 rounded-full bg-blue-500"
+                                                                />
+                                                                Info</span
+                                                            >
+                                                            <span class="flex items-center gap-1"
+                                                                ><span
+                                                                    class="w-2 h-2 rounded-full bg-gray-500"
+                                                                />
+                                                                Debug</span
+                                                            >
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800/50"
+                                                        >
+                                                            <div
+                                                                v-for="(_, index) in parsedLogLines"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div class="flex-1 py-4 overflow-x-auto">
+                                                            <div
+                                                                v-for="(
+                                                                    line, index
+                                                                ) in parsedLogLines"
+                                                                :key="index"
+                                                                class="px-4 text-sm font-mono leading-6"
+                                                                :class="{
+                                                                    'text-red-400':
+                                                                        line.level === 'error',
+                                                                    'text-yellow-400':
+                                                                        line.level === 'warn',
+                                                                    'text-blue-400':
+                                                                        line.level === 'info',
+                                                                    'text-gray-500':
+                                                                        line.level === 'debug',
+                                                                    'text-gray-300':
+                                                                        line.level === 'normal',
+                                                                }"
+                                                            >
+                                                                {{ line.text }}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Code View -->
+                                            <div v-else-if="outputFormat === 'code'" class="h-full">
+                                                <div class="bg-gray-900 rounded-lg overflow-hidden">
+                                                    <div
+                                                        class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
+                                                    >
+                                                        <span
+                                                            class="text-sm text-gray-400 font-mono"
+                                                            >{{ codeLanguage }}</span
+                                                        >
+                                                    </div>
+                                                    <div class="flex">
+                                                        <div
+                                                            class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
+                                                        >
+                                                            <div
+                                                                v-for="(_, index) in content.split(
+                                                                    '\n'
+                                                                )"
+                                                                :key="index"
+                                                                class="text-gray-500 text-sm font-mono leading-6"
+                                                            >
+                                                                {{ index + 1 }}
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            class="flex-1 px-4 py-4 overflow-x-auto"
+                                                        >
+                                                            <pre
+                                                                class="text-sm font-mono leading-6"
+                                                                :class="syntaxHighlightClass"
+                                                            ><code class="text-gray-100">{{ content }}</code></pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- PDF View (placeholder - actual PDF rendering would need a library) -->
+                                            <div
+                                                v-else-if="outputFormat === 'pdf'"
+                                                class="h-full flex items-center justify-center"
+                                            >
+                                                <div
+                                                    class="text-center text-gray-500 dark:text-gray-400"
+                                                >
+                                                    <svg
+                                                        class="w-16 h-16 mx-auto mb-4 text-red-500"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                                                        />
+                                                    </svg>
+                                                    <p class="text-lg font-medium">PDF 파일</p>
+                                                    <p class="text-sm mt-1 mb-4">
+                                                        다운로드하여 PDF 뷰어에서 확인하세요.
+                                                    </p>
+                                                    <button
+                                                        class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                                                        @click="handleDownload"
+                                                    >
+                                                        PDF 다운로드
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Default/Unknown View -->
+                                            <div v-else class="h-full">
+                                                <div
+                                                    class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6"
+                                                >
+                                                    <pre
+                                                        class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono"
+                                                        >{{ content }}</pre
+                                                    >
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Close Content Container (Preview) -->
+
+                                    <!-- Log Viewer -->
+                                    <div
+                                        v-else
+                                        class="flex-1 overflow-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900"
+                                    >
+                                        <div
+                                            v-for="(item, index) in transcript"
+                                            :key="index"
+                                            class="flex flex-col gap-2"
+                                        >
+                                            <div
+                                                class="flex items-center gap-2 text-xs text-gray-500"
+                                            >
+                                                <span
+                                                    class="font-bold uppercase"
+                                                    :class="{
+                                                        'text-blue-600': item.role === 'assistant',
+                                                        'text-green-600': item.role === 'user',
+                                                        'text-gray-600': item.role === 'system',
+                                                    }"
+                                                    >{{ item.role }}</span
+                                                >
+                                                <span>{{
+                                                    new Date(item.timestamp).toLocaleTimeString()
+                                                }}</span>
+                                            </div>
+
+                                            <!-- Assistant Message -->
+                                            <div
+                                                v-if="
+                                                    item.role === 'assistant' &&
+                                                    item.type === 'message'
                                                 "
-                                                type="audio/mpeg"
-                                            />
-                                            브라우저가 오디오 재생을 지원하지 않습니다.
-                                        </audio>
-                                    </div>
-                                </div>
+                                                class="prose dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm text-sm"
+                                            >
+                                                <!-- We might need to handle mixed blocks here, but for now raw text content -->
+                                                <!-- Claude Code content is array of blocks. Need parsing? -->
+                                                <!-- For now, check if metadata.raw.content is string or array -->
+                                                <div
+                                                    v-if="
+                                                        Array.isArray(
+                                                            (item.metadata?.raw as any)?.content
+                                                        )
+                                                    "
+                                                >
+                                                    <div
+                                                        v-for="(block, bIdx) in (
+                                                            item.metadata?.raw as any
+                                                        ).content"
+                                                        :key="bIdx"
+                                                    >
+                                                        <div
+                                                            v-if="block.type === 'text'"
+                                                            v-html="
+                                                                renderMarkdownContent(block.text)
+                                                            "
+                                                        ></div>
+                                                        <div
+                                                            v-else-if="block.type === 'tool_use'"
+                                                            class="text-xs text-gray-500 italic mt-2"
+                                                        >
+                                                            Tool Call: {{ block.name }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div v-else>No content</div>
+                                            </div>
 
-                                <!-- Diff View -->
-                                <div v-else-if="outputFormat === 'diff'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div class="flex">
+                                            <!-- User Tool Result -->
                                             <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
+                                                v-else-if="
+                                                    item.role === 'user' &&
+                                                    item.type === 'tool_result'
+                                                "
+                                                class="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono overflow-x-auto"
                                             >
                                                 <div
-                                                    v-for="(_, index) in parsedDiffLines"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
+                                                    v-if="(item.metadata?.result as any)?.file"
+                                                    class="text-green-600 font-bold mb-1"
                                                 >
-                                                    {{ index + 1 }}
+                                                    File Op:
+                                                    {{
+                                                        (item.metadata?.result as any).file.filePath
+                                                    }}
                                                 </div>
-                                            </div>
-                                            <div class="flex-1 py-4 overflow-x-auto">
-                                                <div
-                                                    v-for="(line, index) in parsedDiffLines"
-                                                    :key="index"
-                                                    class="px-4 text-sm font-mono leading-6"
-                                                    :class="{
-                                                        'bg-green-900/50 text-green-300':
-                                                            line.type === 'added',
-                                                        'bg-red-900/50 text-red-300':
-                                                            line.type === 'removed',
-                                                        'bg-blue-900/30 text-blue-300':
-                                                            line.type === 'header',
-                                                        'text-gray-300': line.type === 'normal',
-                                                    }"
-                                                >
-                                                    {{ line.text }}
-                                                </div>
+                                                <pre>{{
+                                                    (item.metadata?.result as any)?.file?.content ||
+                                                    JSON.stringify(item.metadata?.result, null, 2)
+                                                }}</pre>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Close Preview Area -->
 
-                                <!-- Log View -->
-                                <div v-else-if="outputFormat === 'log'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div
-                                            class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
-                                        >
-                                            <span class="text-sm text-gray-400">로그 뷰어</span>
-                                            <div class="flex items-center gap-2 text-xs">
-                                                <span class="flex items-center gap-1"
-                                                    ><span
-                                                        class="w-2 h-2 rounded-full bg-red-500"
-                                                    />
-                                                    Error</span
-                                                >
-                                                <span class="flex items-center gap-1"
-                                                    ><span
-                                                        class="w-2 h-2 rounded-full bg-yellow-500"
-                                                    />
-                                                    Warn</span
-                                                >
-                                                <span class="flex items-center gap-1"
-                                                    ><span
-                                                        class="w-2 h-2 rounded-full bg-blue-500"
-                                                    />
-                                                    Info</span
-                                                >
-                                                <span class="flex items-center gap-1"
-                                                    ><span
-                                                        class="w-2 h-2 rounded-full bg-gray-500"
-                                                    />
-                                                    Debug</span
-                                                >
-                                            </div>
-                                        </div>
-                                        <div class="flex">
-                                            <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800/50"
-                                            >
-                                                <div
-                                                    v-for="(_, index) in parsedLogLines"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
-                                                >
-                                                    {{ index + 1 }}
-                                                </div>
-                                            </div>
-                                            <div class="flex-1 py-4 overflow-x-auto">
-                                                <div
-                                                    v-for="(line, index) in parsedLogLines"
-                                                    :key="index"
-                                                    class="px-4 text-sm font-mono leading-6"
-                                                    :class="{
-                                                        'text-red-400': line.level === 'error',
-                                                        'text-yellow-400': line.level === 'warn',
-                                                        'text-blue-400': line.level === 'info',
-                                                        'text-gray-500': line.level === 'debug',
-                                                        'text-gray-300': line.level === 'normal',
-                                                    }"
-                                                >
-                                                    {{ line.text }}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Code View -->
-                                <div v-else-if="outputFormat === 'code'" class="h-full">
-                                    <div class="bg-gray-900 rounded-lg overflow-hidden">
-                                        <div
-                                            class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
-                                        >
-                                            <span class="text-sm text-gray-400 font-mono">{{
-                                                codeLanguage
-                                            }}</span>
-                                        </div>
-                                        <div class="flex">
-                                            <div
-                                                class="flex-shrink-0 px-4 py-4 text-right select-none bg-gray-800"
-                                            >
-                                                <div
-                                                    v-for="(_, index) in content.split('\n')"
-                                                    :key="index"
-                                                    class="text-gray-500 text-sm font-mono leading-6"
-                                                >
-                                                    {{ index + 1 }}
-                                                </div>
-                                            </div>
-                                            <div class="flex-1 px-4 py-4 overflow-x-auto">
-                                                <pre
-                                                    class="text-sm font-mono leading-6"
-                                                    :class="syntaxHighlightClass"
-                                                ><code class="text-gray-100">{{ content }}</code></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- PDF View (placeholder - actual PDF rendering would need a library) -->
+                                <!-- Version History Sidebar -->
                                 <div
-                                    v-else-if="outputFormat === 'pdf'"
-                                    class="h-full flex items-center justify-center"
+                                    v-if="showVersionHistory"
+                                    class="w-64 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 overflow-y-auto"
                                 >
-                                    <div class="text-center text-gray-500 dark:text-gray-400">
-                                        <svg
-                                            class="w-16 h-16 mx-auto mb-4 text-red-500"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                                            />
-                                        </svg>
-                                        <p class="text-lg font-medium">PDF 파일</p>
-                                        <p class="text-sm mt-1 mb-4">
-                                            다운로드하여 PDF 뷰어에서 확인하세요.
-                                        </p>
-                                        <button
-                                            class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                                            @click="handleDownload"
-                                        >
-                                            PDF 다운로드
-                                        </button>
-                                    </div>
-                                </div>
+                                    <div class="p-4 space-y-4">
+                                        <div class="space-y-2">
+                                            <div
+                                                class="text-xs font-semibold text-gray-500 uppercase"
+                                            >
+                                                버전 기록
+                                            </div>
+                                            <div class="space-y-2">
+                                                <!-- Current Version -->
+                                                <div
+                                                    class="flex flex-col p-3 rounded-lg text-sm border cursor-pointer transition-colors"
+                                                    :class="
+                                                        !selectedVersionId
+                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                                    "
+                                                    @click="handleResetVersion"
+                                                >
+                                                    <div
+                                                        class="flex items-center justify-between mb-1"
+                                                    >
+                                                        <span
+                                                            class="font-medium text-gray-900 dark:text-gray-100"
+                                                        >
+                                                            최신 버전 (Current)
+                                                        </span>
+                                                        <span
+                                                            v-if="!selectedVersionId"
+                                                            class="text-xs text-blue-600 dark:text-blue-400 font-bold"
+                                                        >
+                                                            Viewing
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-xs text-gray-500">
+                                                        {{
+                                                            task?.completedAt
+                                                                ? new Date(
+                                                                      task.completedAt
+                                                                  ).toLocaleString()
+                                                                : '작업 중'
+                                                        }}
+                                                    </div>
+                                                </div>
 
-                                <!-- Default/Unknown View -->
-                                <div v-else class="h-full">
-                                    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-                                        <pre
-                                            class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono"
-                                            >{{ content }}</pre
-                                        >
+                                                <!-- History Items -->
+                                                <div
+                                                    v-for="(item, index) in history"
+                                                    :key="item.id"
+                                                    class="flex flex-col p-3 rounded-lg text-sm border cursor-pointer transition-colors"
+                                                    :class="
+                                                        selectedVersionId === item.id
+                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                                    "
+                                                    @click="handleViewVersion(item)"
+                                                >
+                                                    <div
+                                                        class="flex items-center justify-between mb-1"
+                                                    >
+                                                        <span
+                                                            class="font-medium text-gray-900 dark:text-gray-100"
+                                                        >
+                                                            버전 {{ history.length - index }}
+                                                        </span>
+                                                        <span class="text-xs text-gray-500">
+                                                            {{
+                                                                new Date(
+                                                                    item.createdAt
+                                                                ).toLocaleTimeString()
+                                                            }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-xs text-gray-500 mt-1">
+                                                        {{
+                                                            new Date(
+                                                                item.createdAt
+                                                            ).toLocaleDateString()
+                                                        }}
+                                                    </div>
+                                                </div>
+
+                                                <div
+                                                    v-if="history.length === 0"
+                                                    class="text-center text-gray-500 text-xs py-4"
+                                                >
+                                                    저장된 버전 기록이 없습니다.
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                            <!-- Close Upper Area -->
 
-                        <!-- Version History Sidebar -->
-                        <div
-                            v-if="showVersionHistory"
-                            class="w-64 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 overflow-y-auto"
-                        >
-                            <div class="p-4">
-                                <h3
-                                    class="text-sm font-semibold text-gray-900 dark:text-white mb-3"
-                                >
-                                    버전 기록
-                                </h3>
-                                <div class="space-y-2">
-                                    <div
-                                        v-for="i in 5"
-                                        :key="i"
-                                        class="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-500 transition-colors"
+                            <!-- Footer Area -->
+                            <div
+                                class="flex-shrink-0 flex flex-col border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 z-10"
+                            >
+                                <!-- Feedback Section -->
+                                <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                                    <label
+                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                     >
-                                        <div class="flex items-center justify-between mb-1">
-                                            <span
-                                                class="text-sm font-medium text-gray-900 dark:text-white"
-                                            >
-                                                v{{ 6 - i }}.0
-                                            </span>
-                                            <span class="text-xs text-gray-500">
-                                                {{ i === 1 ? '현재' : `${i * 2}시간 전` }}
-                                            </span>
-                                        </div>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            {{ i === 1 ? '최신 버전' : `자동 저장 버전` }}
-                                        </p>
-                                        <div v-if="i > 1" class="mt-2">
+                                        수정 요청
+                                    </label>
+                                    <textarea
+                                        v-model="feedback"
+                                        rows="2"
+                                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
+                                        placeholder="수정이 필요한 내용을 입력하세요..."
+                                    />
+                                </div>
+
+                                <!-- Actions -->
+                                <div class="px-4 py-3">
+                                    <div class="flex items-center justify-between">
+                                        <button
+                                            class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                                            @click="handleClose"
+                                        >
+                                            닫기
+                                        </button>
+                                        <div class="flex gap-2">
                                             <button
-                                                class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                                                @click="emit('rollback', `v${6 - i}`)"
+                                                class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                :disabled="!feedback.trim()"
+                                                @click="handleRetry"
                                             >
-                                                이 버전으로 복원
+                                                피드백과 함께 재시도
+                                            </button>
+                                            <button
+                                                v-if="task?.status === 'in_review'"
+                                                class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                                @click="handleApprove"
+                                            >
+                                                승인
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Feedback Section -->
-                    <div
-                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800 relative"
-                        style="bottom: 30px"
-                    >
-                        <label
-                            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                        >
-                            수정 요청
-                        </label>
-                        <textarea
-                            v-model="feedback"
-                            rows="2"
-                            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                            placeholder="수정이 필요한 내용을 입력하세요..."
-                        />
-                    </div>
-
-                    <!-- Actions -->
-                    <div
-                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-4 py-3 sticky bg-gray-50 dark:bg-gray-800 z-10"
-                        style="bottom: 30px"
-                    >
-                        <div class="flex items-center justify-between">
-                            <button
-                                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                                @click="handleClose"
-                            >
-                                닫기
-                            </button>
-                            <div class="flex gap-2">
-                                <button
-                                    class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    :disabled="!feedback.trim()"
-                                    @click="handleRetry"
-                                >
-                                    피드백과 함께 재시도
-                                </button>
-                                <button
-                                    v-if="task?.status === 'in_review'"
-                                    class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-                                    @click="handleApprove"
-                                >
-                                    승인
-                                </button>
                             </div>
                         </div>
                     </div>

@@ -58,6 +58,10 @@ const projectsAPI = {
 // Tasks API
 // ========================================
 
+// ========================================
+// Tasks API
+// ========================================
+
 const tasksAPI = {
     list: (projectId: number, filters?: { status?: string }) =>
         ipcRenderer.invoke('tasks:list', projectId, filters),
@@ -951,6 +955,8 @@ const taskExecutionAPI = {
 
 const taskHistoryAPI = {
     // Get all history entries for a task
+    getByTask: (taskId: number) => ipcRenderer.invoke('taskHistory:getByTask', taskId),
+
     getByTaskId: (taskId: number, limit?: number) =>
         ipcRenderer.invoke('taskHistory:getByTaskId', taskId, limit),
 

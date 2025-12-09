@@ -502,6 +502,32 @@ const liveReviewContent = computed(() => {
 function getMissingProviderForTask(task: Task): MissingProviderInfo | null {
     // Task에 명시적으로 지정된 aiProvider가 있는 경우
     if (task.aiProvider) {
+        // Check if it's a local agent
+        const localAgentMap: Record<string, string> = {
+            'claude-code': 'claude',
+            codex: 'codex',
+            antigravity: 'antigravity',
+        };
+
+        const localAgentType = localAgentMap[task.aiProvider];
+        if (localAgentType) {
+            // For local agents, check if they are installed
+            // We don't have access to useLocalAgentExecution here, so we assume
+            // local agents with baseDevFolder are connected
+            const project = projectStore.currentProject;
+            if (project?.baseDevFolder) {
+                // Local agent is available if project has baseDevFolder
+                return null;
+            }
+            // If no baseDevFolder, local agent is not available
+            const providerInfo = settingsStore.aiProviders.find((p) => p.id === task.aiProvider);
+            return {
+                id: task.aiProvider as string,
+                name: providerInfo?.name || (task.aiProvider as string),
+            };
+        }
+
+        // For API providers, check if enabled
         const enabledProviders = settingsStore.enabledProviders;
         const isProviderEnabled = enabledProviders.some(
             (p) => p.id === task.aiProvider && p.enabled

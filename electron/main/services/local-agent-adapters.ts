@@ -1,0 +1,153 @@
+/**
+ * Local Agent Message Adapters
+ *
+ * Converts internal message format to agent-specific formats
+ * Each local agent may have different message format requirements
+ */
+
+export interface LocalAgentMessageAdapter {
+    /**
+     * Format a message for the specific agent
+     */
+    formatMessage(content: string, options?: { model?: string; tools?: string[] }): string;
+
+    /**
+     * Parse response from the agent
+     */
+    parseResponse(output: string): { type: string; content: string; done?: boolean };
+}
+
+/**
+ * Claude Code Adapter
+ * Formats messages for Claude Code CLI stream-json format
+ */
+export class ClaudeCodeAdapter implements LocalAgentMessageAdapter {
+    formatMessage(content: string, options?: { model?: string }): string {
+        // Claude Code stream-json format expects:
+        // { type: 'user', message: { role: 'user', content: [...] } }
+        return JSON.stringify({
+            type: 'user',
+            message: {
+                role: 'user',
+                content: [
+                    {
+                        type: 'text',
+                        text: content,
+                    },
+                ],
+            },
+            ...(options?.model && { model: options.model }),
+        });
+    }
+
+    parseResponse(output: string): { type: string; content: string; done?: boolean } {
+        try {
+            const parsed = JSON.parse(output);
+
+            // Handle different message types from Claude Code
+            if (parsed.type === 'result' || parsed.type === 'assistant') {
+                const contentBlocks = parsed.message?.content || parsed.content || [];
+                const textContent = contentBlocks
+                    .filter((block: any) => block.type === 'text')
+                    .map((block: any) => block.text)
+                    .join('');
+
+                return {
+                    type: parsed.type,
+                    content: textContent,
+                    done: parsed.type === 'result',
+                };
+            }
+
+            return {
+                type: parsed.type || 'unknown',
+                content: String(parsed.content || parsed.text || ''),
+                done: false,
+            };
+        } catch {
+            return {
+                type: 'text',
+                content: output,
+                done: false,
+            };
+        }
+    }
+}
+
+/**
+ * Codex Adapter
+ * Formats messages for OpenAI Codex CLI
+ */
+export class CodexAdapter implements LocalAgentMessageAdapter {
+    formatMessage(content: string, options?: { model?: string }): string {
+        return JSON.stringify({
+            prompt: content,
+            ...(options?.model && { model: options.model }),
+        });
+    }
+
+    parseResponse(output: string): { type: string; content: string; done?: boolean } {
+        try {
+            const parsed = JSON.parse(output);
+            return {
+                type: 'response',
+                content: parsed.completion || parsed.output || String(parsed),
+                done: parsed.done || parsed.finished || false,
+            };
+        } catch {
+            return {
+                type: 'text',
+                content: output,
+                done: false,
+            };
+        }
+    }
+}
+
+/**
+ * Antigravity Adapter
+ * Formats messages for Antigravity CLI
+ */
+export class AntigravityAdapter implements LocalAgentMessageAdapter {
+    formatMessage(content: string, options?: { model?: string }): string {
+        return JSON.stringify({
+            prompt: content,
+            ...(options?.model && { model: options.model }),
+        });
+    }
+
+    parseResponse(output: string): { type: string; content: string; done?: boolean } {
+        try {
+            const parsed = JSON.parse(output);
+            return {
+                type: 'response',
+                content: parsed.result || parsed.output || String(parsed),
+                done: parsed.done || false,
+            };
+        } catch {
+            return {
+                type: 'text',
+                content: output,
+                done: false,
+            };
+        }
+    }
+}
+
+/**
+ * Get adapter for agent type
+ */
+export function getAdapterForAgent(
+    agentType: 'claude' | 'codex' | 'antigravity'
+): LocalAgentMessageAdapter {
+    switch (agentType) {
+        case 'claude':
+            return new ClaudeCodeAdapter();
+        case 'codex':
+            return new CodexAdapter();
+        case 'antigravity':
+            return new AntigravityAdapter();
+        default:
+            throw new Error(`Unknown agent type: ${agentType}`);
+    }
+}

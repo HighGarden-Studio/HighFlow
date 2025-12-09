@@ -4,7 +4,7 @@
  * Google Gemini AI provider implementation
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { BaseAIProvider } from './BaseAIProvider';
 import type {
     AIProvider,
@@ -23,7 +23,36 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class GeminiProvider extends BaseAIProvider {
     readonly name: AIProvider = 'google';
+    private readonly IMAGE_MODEL = 'gemini-3-pro-image-preview'; // Premium model with 4K support
+
     readonly models: ModelInfo[] = [
+        {
+            name: 'gemini-3-pro-image-preview',
+            provider: 'google',
+            contextWindow: 65536,
+            maxOutputTokens: 32768,
+            costPerInputToken: 5.0,
+            costPerOutputToken: 15.0,
+            averageLatency: 5000,
+            features: ['vision', 'function_calling'],
+            bestFor: [
+                'High-fidelity 4K image generation',
+                'Text rendering in images',
+                'Complex design mockups',
+                'Google Search grounding',
+            ],
+        },
+        {
+            name: 'gemini-2.5-flash-image',
+            provider: 'google',
+            contextWindow: 65536,
+            maxOutputTokens: 32768,
+            costPerInputToken: 0.1,
+            costPerOutputToken: 0.4,
+            averageLatency: 2000,
+            features: ['vision', 'function_calling'],
+            bestFor: ['Fast image generation', 'Cost-effective', '1024px resolution'],
+        },
         {
             name: 'gemini-1.5-pro',
             provider: 'google',
@@ -59,7 +88,7 @@ export class GeminiProvider extends BaseAIProvider {
         },
     ];
 
-    private client: GoogleGenerativeAI | null = null;
+    private client: GoogleGenAI | null = null;
     private injectedApiKey: string | null = null;
 
     /**
@@ -73,7 +102,7 @@ export class GeminiProvider extends BaseAIProvider {
     /**
      * Initialize Google AI client
      */
-    private getClient(): GoogleGenerativeAI {
+    private getClient(): GoogleGenAI {
         if (!this.client) {
             const apiKey = this.injectedApiKey || process.env.GOOGLE_API_KEY;
             if (!apiKey) {
@@ -81,7 +110,7 @@ export class GeminiProvider extends BaseAIProvider {
                     'GOOGLE_API_KEY not configured. Please set your API key in Settings > AI Providers.'
                 );
             }
-            this.client = new GoogleGenerativeAI(apiKey);
+            this.client = new GoogleGenAI({ apiKey });
         }
         return this.client;
     }
@@ -100,21 +129,19 @@ export class GeminiProvider extends BaseAIProvider {
             const { systemInstruction, contents } = this.buildGeminiConversation(messages, config);
             const toolDeclarations = this.mapTools(config.tools);
 
-            const model = client.getGenerativeModel({
+            const result = await client.models.generateContent({
                 model: config.model,
-                generationConfig: {
+                contents: contents,
+                config: {
                     temperature: config.temperature,
                     topP: config.topP,
                     maxOutputTokens: config.maxTokens || 8192,
                     stopSequences: config.stopSequences,
+                    ...(systemInstruction && { systemInstruction }),
+                    ...(toolDeclarations && { tools: toolDeclarations }),
                 },
-                ...(systemInstruction && ({ systemInstruction } as any)),
-                ...(toolDeclarations && ({ tools: toolDeclarations } as any)),
-            } as any);
-
-            const result = await model.generateContent({ contents } as any);
-            const response = result.response;
-            const topCandidate = response.candidates?.[0];
+            });
+            const topCandidate = result.candidates?.[0];
             const parts: any[] = topCandidate?.content?.parts || [];
 
             const textParts = parts.filter((part) => part.text).map((part) => part.text as string);
@@ -125,7 +152,7 @@ export class GeminiProvider extends BaseAIProvider {
                     ? ('tool_calls' as const)
                     : this.mapFinishReason(topCandidate?.finishReason);
 
-            const usage = (response as any).usageMetadata;
+            const usage = result.usageMetadata;
             const tokensUsed = {
                 prompt: usage?.promptTokenCount || this.estimateTokens(JSON.stringify(contents)),
                 completion:
@@ -143,15 +170,15 @@ export class GeminiProvider extends BaseAIProvider {
             );
 
             return {
-                content: textParts.join('\n').trim() || response.text(),
+                content: textParts.join('\n').trim() || result.text || '',
                 tokensUsed,
                 cost,
                 duration: Date.now() - startTime,
                 model: config.model,
                 finishReason,
                 metadata: {
-                    candidates: response.candidates?.length || 0,
-                    promptFeedback: response.promptFeedback,
+                    candidates: result.candidates?.length || 0,
+                    promptFeedback: result.promptFeedback,
                 },
                 toolCalls,
             };
@@ -175,25 +202,21 @@ export class GeminiProvider extends BaseAIProvider {
             const systemPrompt = config.systemPrompt
                 ? this.buildSystemPrompt(config, context)
                 : undefined;
-            const model = client.getGenerativeModel({
+            const result = await client.models.generateContent({
                 model: config.model,
-                generationConfig: {
+                contents: prompt,
+                config: {
                     temperature: config.temperature,
                     topP: config.topP,
                     maxOutputTokens: config.maxTokens || 8192,
                     stopSequences: config.stopSequences,
+                    ...(systemPrompt && { systemInstruction: systemPrompt }),
                 },
-                ...(systemPrompt && { systemInstruction: systemPrompt }),
-            } as any);
-
-            const result = await model.generateContent(prompt);
-            const response = result.response;
+            });
 
             const duration = Date.now() - startTime;
-
-            // Estimate tokens (Gemini doesn't always provide usage)
             const estimatedPromptTokens = this.estimateTokens(prompt);
-            const content = response.text();
+            const content = result.text || '';
             const estimatedCompletionTokens = this.estimateTokens(content);
 
             const tokensUsed = {
@@ -220,10 +243,10 @@ export class GeminiProvider extends BaseAIProvider {
                 cost,
                 duration,
                 model: config.model,
-                finishReason: this.mapFinishReason(response.candidates?.[0]?.finishReason),
+                finishReason: this.mapFinishReason(result.candidates?.[0]?.finishReason),
                 metadata: {
-                    candidates: response.candidates?.length || 0,
-                    promptFeedback: response.promptFeedback,
+                    candidates: result.candidates?.length || 0,
+                    promptFeedback: result.promptFeedback,
                 },
             };
         });
@@ -245,22 +268,21 @@ export class GeminiProvider extends BaseAIProvider {
             ? this.buildSystemPrompt(config, context)
             : undefined;
 
-        const model = client.getGenerativeModel({
+        const result = await client.models.generateContentStream({
             model: config.model,
-            generationConfig: {
+            contents: prompt,
+            config: {
                 temperature: config.temperature,
                 topP: config.topP,
                 maxOutputTokens: config.maxTokens || 8192,
+                ...(systemPrompt && { systemInstruction: systemPrompt }),
             },
-            ...(systemPrompt && { systemInstruction: systemPrompt }),
-        } as any);
-
-        const result = await model.generateContentStream(prompt);
+        });
 
         let accumulated = '';
 
-        for await (const chunk of result.stream) {
-            const delta = chunk.text();
+        for await (const chunk of result) {
+            const delta = chunk.text || '';
             accumulated += delta;
             onToken(delta);
 
@@ -287,49 +309,133 @@ export class GeminiProvider extends BaseAIProvider {
         _context?: ExecutionContext,
         options: Record<string, any> = {}
     ): Promise<AiResult> {
-        const client = this.getClient();
-        const modelName = config.model || ('imagen-3.0' as AIModel);
-        const model = client.getGenerativeModel({
-            model: modelName,
-            generationConfig: {
-                temperature: config.temperature ?? 0.4,
-            },
-        } as any);
+        try {
+            const client = this.getClient();
+            // Use gemini-3-pro-image-preview unless explicitly overridden
+            const modelName =
+                config.model === 'gemini-pro' || !config.model ? this.IMAGE_MODEL : config.model;
 
-        const response = await model.generateContent({
-            contents: [
-                {
-                    role: 'user',
-                    parts: [{ text: prompt }],
-                },
-            ],
-        } as any);
+            console.log(`[GeminiProvider] Attempting image generation with model: ${modelName}`);
 
-        const inlinePart = response.response?.candidates
-            ?.flatMap((candidate: any) => candidate.content?.parts || [])
-            .find((part: any) => part.inlineData)?.inlineData;
-
-        if (!inlinePart?.data) {
-            throw new Error('Gemini image generation did not return any inline data.');
-        }
-
-        const mime = inlinePart.mimeType || 'image/png';
-
-        return {
-            kind: 'image',
-            subType: this.mapMimeToSubType(mime),
-            format: 'base64',
-            value: inlinePart.data,
-            mime,
-            meta: {
-                provider: this.name,
+            // New SDK API: client.models.generateContent
+            const response = await client.models.generateContent({
                 model: modelName,
-                size: options.size,
-                quality: options.quality,
-                style: options.style,
-            },
-            raw: response,
-        };
+                contents: prompt,
+                config: {
+                    temperature: config.temperature ?? 0.4,
+                },
+            });
+
+            console.log(`[GeminiProvider] API response received:`, {
+                hasCandidates: !!response.candidates,
+                candidateCount: response.candidates?.length,
+            });
+
+            // Log response structure for debugging
+            console.log(`[GeminiProvider] Response structure:`, {
+                candidates: response.candidates?.map((c: any) => ({
+                    contentParts: c.content?.parts?.length,
+                    hasInlineData: c.content?.parts?.some((p: any) => p.inlineData),
+                })),
+            });
+
+            // Log all parts to see what we got
+            const allParts = response.candidates?.flatMap((c: any) => c.content?.parts || []) || [];
+            console.log(`[GeminiProvider] All parts:`, {
+                totalParts: allParts.length,
+                parts: allParts.map((p: any, idx: number) => ({
+                    index: idx,
+                    hasText: !!p.text,
+                    hasInlineData: !!p.inlineData,
+                    inlineDataMime: p.inlineData?.mimeType,
+                    textPreview: p.text ? p.text.substring(0, 100) : undefined,
+                })),
+            });
+
+            // Extract ALL inline images
+            const imageParts = allParts.filter((part: any) => part.inlineData);
+
+            if (imageParts.length === 0) {
+                console.error(
+                    `[GeminiProvider] No inline data in response. Full response:`,
+                    JSON.stringify(response, null, 2)
+                );
+                throw new Error('Gemini image generation did not return any inline data.');
+            }
+
+            console.log(`[GeminiProvider] Found ${imageParts.length} images in response`);
+
+            // Use the first image as the primary result
+            const firstImage = imageParts[0].inlineData;
+            const mime = firstImage.mimeType || 'image/png';
+            const base64Data = firstImage.data;
+            const dataSizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
+
+            console.log(`[GeminiProvider] Primary image:`, {
+                mime,
+                dataSizeKB,
+                dataLength: base64Data.length,
+            });
+
+            // Warn if image is very large (>10MB)
+            if (dataSizeKB > 10240) {
+                console.warn(
+                    `[GeminiProvider] Large image generated (${dataSizeKB}KB). May cause rendering issues.`
+                );
+            }
+
+            // Save all images as files for multi-image results
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const os = await import('os');
+
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-images-'));
+            const files: Array<{ path: string; type: 'created' }> = [];
+
+            for (let i = 0; i < imageParts.length; i++) {
+                const imageData = imageParts[i].inlineData;
+                const imageMime = imageData.mimeType || 'image/png';
+                const ext = imageMime.split('/')[1] || 'png';
+                const fileName = `image_${i + 1}.${ext}`;
+                const filePath = path.join(tempDir, fileName);
+
+                // Write base64 to file
+                const buffer = Buffer.from(imageData.data, 'base64');
+                await fs.writeFile(filePath, buffer);
+
+                files.push({ path: filePath, type: 'created' });
+                console.log(
+                    `[GeminiProvider] Saved image ${i + 1}/${imageParts.length}: ${filePath} (${Math.round(buffer.length / 1024)}KB)`
+                );
+            }
+
+            return {
+                kind: 'image',
+                subType: this.mapMimeToSubType(mime),
+                format: 'base64',
+                value: base64Data,
+                mime,
+                meta: {
+                    provider: this.name,
+                    model: modelName,
+                    size: options.size,
+                    quality: options.quality,
+                    style: options.style,
+                    dataSizeKB,
+                    imageCount: imageParts.length,
+                    files, // Include file paths
+                },
+                raw: response,
+            };
+        } catch (error) {
+            console.error(`[GeminiProvider] Image generation error:`, error);
+            console.error(`[GeminiProvider] Error details:`, {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                raw: error,
+            });
+            throw error;
+        }
     }
 
     private mapMimeToSubType(mime: string): AiResult['subType'] {
@@ -345,6 +451,27 @@ export class GeminiProvider extends BaseAIProvider {
         context?: ExecutionContext
     ): Promise<AiResult> {
         const prompt = messages.map((msg) => msg.content).join('\n');
+
+        // Check for image generation intent
+        if (this.isImageGenerationPrompt(prompt) && !config.model.includes('image-preview')) {
+            console.log(
+                '[GeminiProvider] Detected image generation intent, switching to image model'
+            );
+            try {
+                return await this.generateImage(
+                    prompt,
+                    { ...config, model: this.IMAGE_MODEL },
+                    context
+                );
+            } catch (error) {
+                console.warn(
+                    '[GeminiProvider] Image generation failed, falling back to text',
+                    error
+                );
+                // Fallback to text generation if image fails
+            }
+        }
+
         const response = await this.execute(prompt, config, context);
         let parsed: unknown;
         try {
@@ -549,5 +676,21 @@ export class GeminiProvider extends BaseAIProvider {
         } catch {
             return { result: content };
         }
+    }
+
+    private isImageGenerationPrompt(prompt: string): boolean {
+        const lower = prompt.toLowerCase();
+        const keywords = [
+            'generate an image',
+            'create an image',
+            'draw a',
+            'paint a',
+            'make a picture',
+            'generate a picture',
+            'create a picture',
+            'sketch of',
+            'illustration of',
+        ];
+        return keywords.some((k) => lower.includes(k));
     }
 }

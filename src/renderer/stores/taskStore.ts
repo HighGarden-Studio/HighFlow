@@ -218,7 +218,12 @@ export const useTaskStore = defineStore('tasks', () => {
 
         try {
             const api = getAPI();
-            const task = await api.tasks.create(data);
+            // Auto-populate description with title if not provided
+            const taskData = {
+                ...data,
+                description: data.description || data.title,
+            };
+            const task = await api.tasks.create(taskData);
             upsertTask(task as Task);
             return task as Task;
         } catch (e) {

@@ -34,6 +34,7 @@ import {
     promptEnhancementService,
     type EnhancementOptions,
 } from '../../services/prompt/PromptEnhancementService';
+import IconRenderer from '../common/IconRenderer.vue';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 import { eventBus, type BaseEvent } from '../../services/events/EventBus';
 import { aiGuidelinesService } from '../../services/ai/AIGuidelinesService';
@@ -1607,8 +1608,8 @@ watch(
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                                <span class="text-2xl">✨</span>
-                                AI 프로젝트 생성 위자드
+                                <IconRenderer emoji="🚀" class="w-5 h-5" />
+                                <span>프로젝트 생성</span> 위자드
                             </h2>
                             <p class="text-sm text-gray-400 mt-1">
                                 {{ currentStepInfo?.description }}
@@ -1682,8 +1683,9 @@ watch(
                                 ]"
                             >
                                 <div class="flex items-center gap-3 mb-2">
-                                    <span class="text-2xl">✨</span>
-                                    <div class="font-semibold text-white">AI 위자드로 생성</div>
+                                    <IconRenderer emoji="✨" class="w-6 h-6" />
+                                    <span class="font-medium text-white">빠른 시작</span>위자드로
+                                    생성
                                 </div>
                                 <p class="text-sm text-gray-400">
                                     AI와 대화하며 아이디어를 구체화하고 태스크를 자동 생성합니다.
@@ -1703,8 +1705,8 @@ watch(
                                 ]"
                             >
                                 <div class="flex items-center gap-3 mb-2">
-                                    <span class="text-2xl">📂</span>
-                                    <div class="font-semibold text-white">로컬 저장소로 생성</div>
+                                    <IconRenderer emoji="📂" class="w-6 h-6" />
+                                    <span class="font-medium text-white">Import from Git</span>
                                 </div>
                                 <p class="text-sm text-gray-400">
                                     기존 Git 저장소 또는 AI 에이전트 설정 폴더를 선택합니다.
@@ -1842,7 +1844,7 @@ watch(
                                 v-else-if="filteredRepos.length === 0"
                                 class="text-center py-12 bg-gray-800/50 rounded-lg"
                             >
-                                <span class="text-4xl mb-3 block">📭</span>
+                                <IconRenderer emoji="📭" class="w-12 h-12 mx-auto mb-3" />
                                 <p class="text-gray-400">발견된 저장소가 없습니다</p>
                                 <p class="text-xs text-gray-500 mt-1">
                                     폴더 직접 선택 버튼을 사용하여 저장소를 추가하세요
@@ -1970,7 +1972,7 @@ watch(
                                 class="bg-violet-900/20 border border-violet-800/30 rounded-lg p-4"
                             >
                                 <div class="flex items-start gap-3">
-                                    <span class="text-xl">✅</span>
+                                    <IconRenderer emoji="✅" class="w-5 h-5" />
                                     <div class="flex-1">
                                         <h4 class="font-medium text-violet-300">선택된 저장소</h4>
                                         <p class="text-sm text-gray-400 mt-1">
@@ -1997,7 +1999,7 @@ watch(
                             class="bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-4"
                         >
                             <div class="flex items-start gap-3">
-                                <span class="text-2xl">⚠️</span>
+                                <IconRenderer emoji="⚠️" class="w-6 h-6" />
                                 <div>
                                     <h4 class="font-medium text-yellow-300">
                                         활성화된 AI 프로바이더가 없습니다

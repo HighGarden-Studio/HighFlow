@@ -8,6 +8,7 @@ import { ref, computed, watch } from 'vue';
 import type { Task, AIProvider } from '@core/types/database';
 import TagInput from '../common/TagInput.vue';
 import MacroInsertButton from '../common/MacroInsertButton.vue';
+import IconRenderer from '../common/IconRenderer.vue';
 import { estimationService, type EstimationResult } from '../../services/task/EstimationService';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 
@@ -735,7 +736,7 @@ async function estimateTimeWithAI() {
                                         :title="option.description"
                                         @click="form.aiProvider = option.value"
                                     >
-                                        <span class="text-base">{{ option.icon }}</span>
+                                        <IconRenderer :emoji="option.icon" class="w-4 h-4" />
                                         <span>{{ option.label }}</span>
                                     </button>
                                 </div>

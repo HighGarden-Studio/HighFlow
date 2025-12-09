@@ -6,6 +6,7 @@
 
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import path from 'node:path';
+import { release } from 'os'; // Added for Electron app setup
 import { ProjectRepository } from './database/repositories/project-repository';
 import { TaskRepository } from './database/repositories/task-repository';
 import { registerWorkflowHandlers } from './ipc/workflow-handlers';
@@ -22,6 +23,33 @@ import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
 import type { ProjectStatus, ProjectExportData } from '@core/types/database';
+import log from 'electron-log'; // Added for logging
+
+// Configure logging
+log.initialize();
+// Log to file by default - location:
+// on Linux: ~/.config/{app name}/logs/main.log
+// on macOS: ~/Library/Logs/{app name}/main.log
+// on Windows: %USERPROFILE%\AppData\Roaming\{app name}\logs\main.log
+log.transports.file.level = 'info';
+log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
+log.transports.file.fileName = 'main.log';
+log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
+
+// Hook console logging to electron-log
+Object.assign(console, log.functions);
+
+// Handle unhandled errors automatically
+log.errorHandler.startCatching();
+
+console.info('Application starting...');
+console.info(`Log file path: ${log.transports.file.getFile().path}`);
+
+// Disable GPU Acceleration for Windows 7
+if (release().startsWith('6.1')) app.disableHardwareAcceleration();
+
+// Set application name for Windows 10+ notifications
+if (process.platform === 'win32') app.setAppUserModelId(app.getName());
 
 // Environment configuration
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -458,10 +486,3 @@ app.on('web-contents-created', (_event, contents) => {
 });
 
 // Error handling
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});

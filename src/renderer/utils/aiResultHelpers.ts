@@ -46,24 +46,27 @@ export function extractTaskResult(task?: TaskLike | null): TaskResultPayload {
         };
     }
 
-    const executionResult = task.executionResult || null;
-    const aiResult =
-        normalizeAiResult(executionResult?.aiResult) ||
-        normalizeAiResult(task.aiResult);
+    let executionResult = task.executionResult || null;
 
-    const content =
-        aiResult?.value ??
-        executionResult?.content ??
-        task.result ??
-        '';
+    // Handle stringified execution result
+    if (typeof executionResult === 'string') {
+        try {
+            executionResult = JSON.parse(executionResult);
+        } catch (e) {
+            console.error('Failed to parse executionResult in helper:', e);
+            executionResult = null;
+        }
+    }
+
+    const aiResult =
+        normalizeAiResult(executionResult?.aiResult) || normalizeAiResult(task.aiResult);
+
+    const content = aiResult?.value ?? executionResult?.content ?? task.result ?? '';
 
     const provider = executionResult?.provider || aiResult?.meta?.provider;
     const model = executionResult?.model || aiResult?.meta?.model;
     const language =
-        aiResult?.meta?.language ||
-        executionResult?.language ||
-        task.codeLanguage ||
-        undefined;
+        aiResult?.meta?.language || executionResult?.language || task.codeLanguage || undefined;
 
     return {
         aiResult,

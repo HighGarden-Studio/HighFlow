@@ -12,47 +12,43 @@
 
 import { computed, ref, watch } from 'vue';
 import { marked } from 'marked';
-import { useSettingsStore } from '../../renderer/stores/settingsStore';
-import type { MCPConfig } from '@core/types/database';
+
+import type { MCPConfig, Project } from '@core/types/database';
+import type { AIProvider } from '../../services/ai/AIInterviewService';
 import { getAPI } from '../../utils/electron';
 import { projectClaudeSyncService } from '../../services/integration/ProjectClaudeSyncService';
+import UnifiedAISelector from '../common/UnifiedAISelector.vue';
+import MCPToolSelector from '../common/MCPToolSelector.vue';
+import IconRenderer from '../common/IconRenderer.vue';
+import { useConfigurationInheritance } from '../../composables/useConfigurationInheritance';
 
-const settingsStore = useSettingsStore();
+const { resolveAIProvider, resolveAutoReviewProvider } = useConfigurationInheritance();
+
+// Helper to check if a provider is a local agent
+function isLocalAgentProvider(provider: string | null): {
+    isLocal: boolean;
+    agentType: string | null;
+} {
+    if (!provider) return { isLocal: false, agentType: null };
+
+    const localAgentMap: Record<string, string> = {
+        'claude-code': 'claude',
+        codex: 'codex',
+        antigravity: 'antigravity',
+    };
+
+    const agentType = localAgentMap[provider];
+    return {
+        isLocal: !!agentType,
+        agentType: agentType || null,
+    };
+}
 
 // MCP 서버 타입 정의
-type MCPServerInfo = {
-    id: string;
-    name: string;
-    description?: string;
-};
 
 // ========================================
 // Types
 // ========================================
-
-interface Project {
-    id: number;
-    title: string;
-    description?: string | null;
-    mainPrompt?: string | null;
-    aiGuidelines?: string | null; // 레거시 지침서 필드
-    projectGuidelines?: string | null; // 최신 프로젝트 지침
-    technicalStack?: string[] | null; // 기술 스택
-    status: string;
-    aiProvider?: string | null;
-    aiModel?: string | null;
-    outputType?: string | null;
-    outputPath?: string | null;
-    baseDevFolder?: string | null;
-    totalCost: number;
-    totalTokens: number;
-    estimatedHours?: number | null;
-    actualHours?: number | null;
-    createdAt: Date;
-    updatedAt: Date;
-    mcpConfig?: MCPConfig;
-    metadata?: any;
-}
 
 // ========================================
 // Props & Emits
@@ -89,8 +85,10 @@ const isEditingGuidelines = ref(false);
 const editedGuidelines = ref('');
 const editedBaseFolder = ref('');
 const isEditingAI = ref(false);
-const editedAIProvider = ref<string | null>(null);
+const editedAIProvider = ref<AIProvider | null>(null);
 const editedAIModel = ref<string | null>(null);
+const editedAIMode = ref<'api' | 'local'>('api');
+const editedLocalAgent = ref<string | null>(null);
 
 // Output Type State
 const isEditingOutputType = ref(false);
@@ -98,25 +96,22 @@ const editedOutputType = ref<string | null>(null);
 
 // Auto Review State
 const isEditingAutoReview = ref(false);
-const editedAutoReviewProvider = ref<string | null>(null);
+const editedAutoReviewProvider = ref<AIProvider | null>(null);
 const editedAutoReviewModel = ref<string | null>(null);
+const editedAutoReviewMode = ref<'api' | 'local'>('api');
+const editedAutoReviewLocalAgent = ref<string | null>(null);
 
 const isEditingMCP = ref(false);
 const selectedMCPServers = ref<string[]>([]);
-const mcpConfig = ref<
-    Record<
-        string,
-        {
-            env: Array<{ id: string; key: string; value: string }>;
-            params: Array<{ id: string; key: string; value: string }>;
-            notes: string;
-        }
-    >
->({});
+const editedMCPConfig = ref<MCPConfig | null>(null);
 
 // ========================================
 // Computed
 // ========================================
+
+const effectiveAI = computed(() => {
+    return resolveAIProvider(null, props.project);
+});
 
 const aiProviderDisplay = computed(() => {
     const providers: Record<string, { name: string; color: string; icon: string }> = {
@@ -126,7 +121,8 @@ const aiProviderDisplay = computed(() => {
         local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
     };
 
-    const providerId = props.project.aiProvider;
+    // Use edited value if editing, else effective resolved value
+    const providerId = isEditingAI.value ? editedAIProvider.value : effectiveAI.value.provider;
 
     // Check if it's a local agent
     if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
@@ -147,28 +143,58 @@ const aiProviderDisplay = computed(() => {
 });
 
 const aiModelDisplay = computed(() => {
-    const models: Record<string, string> = {
-        'gpt-4-turbo': 'GPT-4 Turbo',
-        'gpt-4': 'GPT-4',
-        'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-        'claude-3-5-sonnet': 'Claude 3.5 Sonnet',
-        'claude-3-opus': 'Claude 3 Opus',
-        'claude-3-sonnet': 'Claude 3 Sonnet',
-        'claude-3-haiku': 'Claude 3 Haiku',
-        'gemini-pro': 'Gemini Pro',
-        'gemini-ultra': 'Gemini Ultra',
-    };
-    return models[props.project.aiModel || ''] || props.project.aiModel || '미설정';
+    // configured model | effective model | default
+    const modelId = isEditingAI.value
+        ? editedAIModel.value
+        : effectiveAI.value.model || props.project.aiModel;
+
+    // Simple display fallback
+    return modelId || '미설정';
 });
 
 const outputTypes = {
-    web: { name: '웹 프로젝트', icon: '🌐', description: 'HTML/CSS/JS 웹 애플리케이션' },
-    document: { name: '문서', icon: '📄', description: 'Markdown, PDF 등 문서 파일' },
-    image: { name: '이미지', icon: '🖼️', description: '이미지 생성/편집 결과물' },
-    video: { name: '비디오', icon: '🎬', description: '비디오 컨텐츠' },
-    code: { name: '코드', icon: '💻', description: '소스 코드 및 스크립트' },
-    data: { name: '데이터', icon: '📊', description: 'JSON, CSV 등 데이터 파일' },
-    other: { name: '기타', icon: '📦', description: '기타 형식의 결과물' },
+    web: {
+        name: '웹 프로젝트',
+        svgPath:
+            'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM96.22,176h63.56a145.91,145.91,0,0,1-31.78,43.82A145.91,145.91,0,0,1,96.22,176Zm-3.06-16a140.07,140.07,0,0,1,0-64h69.68a140.07,140.07,0,0,1,0,64Zm66.62-80H96.22a145.91,145.91,0,0,1,31.78-43.82A145.91,145.91,0,0,1,159.78,80ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128Zm114.51,27.36a161.79,161.79,0,0,0,0-54.72,88.32,88.32,0,0,1,46.6,54.72Zm46.6-79.08a88.32,88.32,0,0,1-46.6,54.72,161.79,161.79,0,0,0,0-54.72ZM55,100.64a88.32,88.32,0,0,1,46.6-54.72,161.79,161.79,0,0,0,0,54.72Zm0,54.72a161.79,161.79,0,0,0,0,54.72,88.32,88.32,0,0,1-46.6-54.72Z',
+        description: 'HTML/CSS/JS 웹 애플리케이션',
+    },
+    document: {
+        name: '문서',
+        svgPath:
+            'M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-40-64a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,152Zm0-32a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,120Z',
+        description: 'Markdown, PDF 등 문서 파일',
+    },
+    image: {
+        name: '이미지',
+        svgPath:
+            'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216v77.38l-24.69-24.7a16,16,0,0,0-22.62,0L144,133.37,100.69,90.07a16,16,0,0,0-22.62,0L40,128.69Zm0,144V154.35L89.66,104.69l53.65,53.65a8,8,0,0,0,11.32,0l34.05-34L216,151.63V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z',
+        description: '이미지 생성/편집 결과물',
+    },
+    video: {
+        name: '비디오',
+        svgPath:
+            'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,72H80V96H40ZM40,112H80v32H40Zm0,88V160H80v40Zm176,0H96V72H216V200ZM96,56h64V40H96Zm80,0h40V40H176Z',
+        description: '비디오 컨텐츠',
+    },
+    code: {
+        name: '코드',
+        svgPath:
+            'M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z',
+        description: '소스 코드 및 스크립트',
+    },
+    data: {
+        name: '데이터',
+        svgPath:
+            'M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM40,112H80v32H40Zm56,0H216v32H96ZM216,64V96H40V64ZM40,160H80v32H40Zm176,32H96V160H216v32Z',
+        description: 'JSON, CSV 등 데이터 파일',
+    },
+    other: {
+        name: '기타',
+        svgPath:
+            'M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z',
+        description: '기타 형식의 결과물',
+    },
 };
 
 const outputTypeDisplay = computed(() => {
@@ -234,102 +260,54 @@ const claudeSyncColor = computed(() => {
     return projectClaudeSyncService.getSyncStatusColor(props.project as any);
 });
 
-// MCP 서버 목록
-const connectedMCPServers = computed<MCPServerInfo[]>(() => {
-    // Renderer process에서는 electron API를 통해 MCP 서버 정보를 가져옴
-    // 실제 MCP 서버 정보는 main process의 MCPManager가 관리
-    // 여기서는 설정에서 연결된 MCP 서버 기본 정보만 표시
-    const api = (window as any)?.electron;
-    if (!api?.mcp?.listServers) {
-        // Fallback: 기본 MCP 목록
-        return [
-            { id: 'filesystem', name: 'Filesystem', description: 'Local file operations' },
-            { id: 'git', name: 'Git', description: 'Git repository operations' },
-            { id: 'slack', name: 'Slack', description: 'Slack messaging' },
-        ];
-    }
-    try {
-        // API 호출 시도 (동기적으로 가능한 경우)
-        return [];
-    } catch {
-        return [];
-    }
-});
-
-// AI Provider 목록
-const availableProviders = computed(() => {
-    // Get standard providers from settings
-    const standardProviders = settingsStore.aiProviders.filter((p) => p.enabled && p.apiKey);
-
-    // Get local agents from settings
-    const localAgents = settingsStore.localAgents
-        ? settingsStore.localAgents
-              .filter((agent: any) => agent.enabled)
-              .map((agent: any) => ({
-                  id: agent.type,
-                  name: agent.name, // Use name directly
-                  enabled: true,
-                  apiKey: 'local',
-                  isLocal: true,
-              }))
-        : [];
-
-    // Ensure we have at least the detected types from the project if they are not in settings yet
-    // This handles the case where a user opens a project with a local agent that isn't "installed" in global settings yet
-    const projectProvider = props.project.aiProvider;
-    const allProviders = [...standardProviders, ...localAgents];
-
-    if (projectProvider && !allProviders.find((p) => p.id === projectProvider)) {
-        // If project has a provider set that isn't in the list (e.g. 'claude-code'), add it temporarily
-        if (['claude-code', 'antigravity', 'codex'].includes(projectProvider)) {
-            allProviders.push({
-                id: projectProvider,
-                name: getAssistantLabel(projectProvider),
-                enabled: true,
-                apiKey: 'local',
-                isLocal: true,
-            });
-        }
-    }
-
-    return allProviders;
-});
-
-// 선택된 provider의 사용 가능한 모델 목록
-const availableModels = computed(() => {
-    const providerId = isEditingAI.value ? editedAIProvider.value : props.project.aiProvider;
-    if (!providerId) return [];
-
-    // 기본 모델 목록 (실제로는 settingsStore에서 가져와야 함)
-    const modelsByProvider: Record<string, string[]> = {
-        google: [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro',
-            'gemini-pro-vision',
-        ],
-        anthropic: [
-            'claude-3-5-sonnet-20241022',
-            'claude-3-5-sonnet-latest',
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307',
-        ],
-        openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-    };
-
-    return modelsByProvider[providerId] || [];
-});
-
 // Auto Review Display
+const effectiveAutoReview = computed(() => {
+    return resolveAutoReviewProvider(null, props.project);
+});
+
 const autoReviewProviderDisplay = computed(() => {
-    const providerId = props.project.metadata?.autoReviewProvider;
-    const providers: Record<string, { name: string; color: string; icon: string }> = {
-        openai: { name: 'OpenAI', color: 'text-green-400', icon: '🤖' },
-        anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '🧠' },
-        google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
-        local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
+    // SVG paths for provider icons (Phosphor style)
+    const providers: Record<string, { name: string; color: string; svgPath: string }> = {
+        openai: {
+            name: 'OpenAI',
+            color: 'text-green-400',
+            svgPath:
+                'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11.89-8.42l-22.26-3a16.09,16.09,0,0,0-13.38,4.93L40,132.19A88,88,0,0,1,128,40a87.53,87.53,0,0,1,15.87,1.46L159.3,56a16,16,0,0,0,12.26,5.61h19.41A88.22,88.22,0,0,1,216,128Z',
+        },
+        anthropic: {
+            name: 'Anthropic',
+            color: 'text-purple-400',
+            svgPath:
+                'M224,128a96,96,0,1,1-96-96A96.11,96.11,0,0,1,224,128ZM208,128a80,80,0,1,0-80,80A80.09,80.09,0,0,0,208,128ZM140,80.28V160a12,12,0,0,1-24,0V80.28a12,12,0,0,1,24,0Zm32,20V160a12,12,0,0,1-24,0V100.28a12,12,0,0,1,24,0Zm-64,0V160a12,12,0,0,1-24,0V100.28a12,12,0,0,1,24,0Z',
+        },
+        google: {
+            name: 'Google AI',
+            color: 'text-blue-400',
+            svgPath:
+                'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z',
+        },
+        local: {
+            name: 'Local',
+            color: 'text-gray-400',
+            svgPath:
+                'M240,128a16,16,0,0,1-16,16H205.43a80.09,80.09,0,0,1-79.24,64,80,80,0,0,1,0-160,80.09,80.09,0,0,1,79.24,64H224A16,16,0,0,1,240,128Z',
+        },
     };
+
+    // Use edited value if editing
+    // If NOT editing, use metadata (if set) OR effective value (inheritance)
+    // But effectiveAutoReview handles both metadata and fallback.
+    // However, we want to know if it is inherited to show "(Default)" text.
+
+    // Logic:
+    // If props.project.metadata?.autoReviewProvider is set -> Explicit
+    // Else -> Inherited (from Project AI)
+
+    const isExplicit = !!props.project.metadata?.autoReviewProvider;
+    const providerId = isEditingAutoReview.value
+        ? editedAutoReviewProvider.value
+        : // If not editing, use existing metadata OR effective value
+          effectiveAutoReview.value.provider;
 
     // Check if it's a local agent
     if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
@@ -337,59 +315,30 @@ const autoReviewProviderDisplay = computed(() => {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
             icon: getAssistantIcon(providerId),
+            isInherited: !isExplicit && !isEditingAutoReview.value,
         };
     }
 
-    return (
-        providers[providerId || ''] || {
-            name: '미설정',
-            color: 'text-gray-500',
-            icon: '❓',
-        }
-    );
+    const display = providers[providerId || ''] || {
+        name: '미설정',
+        color: 'text-gray-500',
+        icon: '❓',
+    };
+
+    return {
+        ...display,
+        isInherited: !isExplicit && !isEditingAutoReview.value && !!providerId,
+    };
 });
 
 const autoReviewModelDisplay = computed(() => {
-    const modelId = props.project.metadata?.autoReviewModel;
-    const models: Record<string, string> = {
-        'gpt-4-turbo': 'GPT-4 Turbo',
-        'gpt-4': 'GPT-4',
-        'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-        'claude-3-5-sonnet': 'Claude 3.5 Sonnet',
-        'claude-3-opus': 'Claude 3 Opus',
-        'claude-3-sonnet': 'Claude 3 Sonnet',
-        'claude-3-haiku': 'Claude 3 Haiku',
-        'gemini-pro': 'Gemini Pro',
-        'gemini-ultra': 'Gemini Ultra',
-    };
-    return models[modelId || ''] || modelId || '미설정';
-});
+    // If editing, show edited value
+    if (isEditingAutoReview.value) {
+        return editedAutoReviewModel.value || '미설정';
+    }
 
-const availableAutoReviewModels = computed(() => {
-    const providerId = isEditingAutoReview.value
-        ? editedAutoReviewProvider.value
-        : props.project.metadata?.autoReviewProvider;
-    if (!providerId) return [];
-
-    // 기본 모델 목록 (실제로는 settingsStore에서 가져와야 함)
-    const modelsByProvider: Record<string, string[]> = {
-        google: [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro',
-            'gemini-pro-vision',
-        ],
-        anthropic: [
-            'claude-3-5-sonnet-20241022',
-            'claude-3-5-sonnet-latest',
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307',
-        ],
-        openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-    };
-
-    return modelsByProvider[providerId] || [];
+    // Normal display: use effective model
+    return effectiveAutoReview.value.model || '미설정';
 });
 
 // Init base folder display
@@ -457,8 +406,22 @@ async function pickBaseFolder(): Promise<void> {
 }
 
 function startEditAI(): void {
-    editedAIProvider.value = props.project.aiProvider || null;
-    editedAIModel.value = props.project.aiModel || null;
+    // Use effective values (including inherited) to show current active settings
+    const effectiveProvider = props.project.aiProvider || effectiveAI.value.provider;
+    editedAIProvider.value = effectiveProvider;
+    editedAIModel.value = props.project.aiModel || effectiveAI.value.model;
+
+    // Check if the effective provider is a local agent
+    const localAgentInfo = isLocalAgentProvider(effectiveProvider);
+    if (localAgentInfo.isLocal) {
+        editedAIMode.value = 'local';
+        editedLocalAgent.value = localAgentInfo.agentType;
+        // Clear API provider when in local mode
+        editedAIProvider.value = null;
+    } else {
+        editedAIMode.value = 'api';
+        editedLocalAgent.value = null;
+    }
     isEditingAI.value = true;
 }
 
@@ -466,6 +429,8 @@ function cancelEditAI(): void {
     isEditingAI.value = false;
     editedAIProvider.value = null;
     editedAIModel.value = null;
+    editedAIMode.value = 'api';
+    editedLocalAgent.value = null;
 }
 
 async function saveAISettings(): Promise<void> {
@@ -484,7 +449,7 @@ async function saveAISettings(): Promise<void> {
         try {
             const api = getAPI();
             const overrideUpdate = projectClaudeSyncService.markAsOverridden(props.project as any);
-            await api.projects.update(props.project.id, overrideUpdate);
+            await api.projects.update(props.project.id, overrideUpdate as any);
             console.log('[ProjectInfoPanel] Marked project settings as manually overridden');
         } catch (error) {
             console.error('[ProjectInfoPanel] Failed to mark as overridden:', error);
@@ -496,128 +461,20 @@ async function saveAISettings(): Promise<void> {
 
 // MCP 관련 함수
 function startEditMCP(): void {
-    // 프로젝트의 기존 MCP 설정 로드
     const projectMCP = props.project.mcpConfig || {};
     selectedMCPServers.value = Object.keys(projectMCP);
-
-    // 기존 설정을 UI 형식으로 변환
-    mcpConfig.value = {};
-    for (const [serverId, config] of Object.entries(projectMCP)) {
-        const envPairs: Array<{ id: string; key: string; value: string }> = [];
-        const paramPairs: Array<{ id: string; key: string; value: string }> = [];
-
-        if (config.env) {
-            for (const [k, v] of Object.entries(config.env)) {
-                envPairs.push({ id: `${Date.now()}-${Math.random()}`, key: k, value: String(v) });
-            }
-        }
-        if (config.params) {
-            for (const [k, v] of Object.entries(config.params)) {
-                paramPairs.push({ id: `${Date.now()}-${Math.random()}`, key: k, value: String(v) });
-            }
-        }
-
-        mcpConfig.value[serverId] = {
-            env: envPairs,
-            params: paramPairs,
-            notes: (config.context as any)?.notes || '',
-        };
-    }
-
+    editedMCPConfig.value = projectMCP;
     isEditingMCP.value = true;
 }
 
 function cancelEditMCP(): void {
     isEditingMCP.value = false;
     selectedMCPServers.value = [];
-    mcpConfig.value = {};
-}
-
-function toggleMCPServer(serverId: string): void {
-    const idx = selectedMCPServers.value.indexOf(serverId);
-    if (idx >= 0) {
-        selectedMCPServers.value.splice(idx, 1);
-        delete mcpConfig.value[serverId];
-    } else {
-        selectedMCPServers.value.push(serverId);
-        ensureMCPConfigEntry(serverId);
-    }
-}
-
-function ensureMCPConfigEntry(serverId: string) {
-    if (!mcpConfig.value[serverId]) {
-        mcpConfig.value[serverId] = {
-            env: [],
-            params: [],
-            notes: '',
-        };
-    }
-    return mcpConfig.value[serverId];
-}
-
-function addEnvRow(serverId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.env.push({ id: `${Date.now()}-${Math.random()}`, key: '', value: '' });
-}
-
-function removeEnvRow(serverId: string, rowId: string): void {
-    const entry = mcpConfig.value[serverId];
-    if (entry) {
-        entry.env = entry.env.filter((row) => row.id !== rowId);
-    }
-}
-
-function addParamRow(serverId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.params.push({ id: `${Date.now()}-${Math.random()}`, key: '', value: '' });
-}
-
-function removeParamRow(serverId: string, rowId: string): void {
-    const entry = mcpConfig.value[serverId];
-    if (entry) {
-        entry.params = entry.params.filter((row) => row.id !== rowId);
-    }
+    editedMCPConfig.value = null;
 }
 
 function saveMCPSettings(): void {
-    // UI 형식을 MCP Config 형식으로 변환
-    const payload: MCPConfig = {};
-
-    for (const serverId of selectedMCPServers.value) {
-        const entry = mcpConfig.value[serverId];
-        if (!entry) continue;
-
-        const env: Record<string, string> = {};
-        for (const row of entry.env) {
-            if (row.key.trim()) {
-                env[row.key.trim()] = row.value;
-            }
-        }
-
-        const params: Record<string, string> = {};
-        for (const row of entry.params) {
-            if (row.key.trim()) {
-                params[row.key.trim()] = row.value;
-            }
-        }
-
-        const configEntry: Record<string, unknown> = {};
-        if (Object.keys(env).length > 0) {
-            configEntry.env = env;
-        }
-        if (Object.keys(params).length > 0) {
-            configEntry.params = params;
-        }
-        if (entry.notes?.trim()) {
-            configEntry.context = { notes: entry.notes.trim() };
-        }
-
-        if (Object.keys(configEntry).length > 0) {
-            payload[serverId] = configEntry;
-        }
-    }
-
-    emit('update-mcp-config', Object.keys(payload).length > 0 ? payload : null);
+    emit('update-mcp-config', editedMCPConfig.value);
     isEditingMCP.value = false;
 }
 
@@ -639,8 +496,24 @@ function saveOutputType(): void {
 
 // Auto Review Methods
 function startEditAutoReview(): void {
-    editedAutoReviewProvider.value = props.project.metadata?.autoReviewProvider || null;
-    editedAutoReviewModel.value = props.project.metadata?.autoReviewModel || null;
+    // Use effective values (including inherited) to show current active settings
+    const effectiveProvider =
+        props.project.metadata?.autoReviewProvider || effectiveAutoReview.value.provider;
+    editedAutoReviewProvider.value = effectiveProvider;
+    editedAutoReviewModel.value =
+        props.project.metadata?.autoReviewModel || effectiveAutoReview.value.model;
+
+    // Check if the effective provider is a local agent
+    const localAgentInfo = isLocalAgentProvider(effectiveProvider);
+    if (localAgentInfo.isLocal) {
+        editedAutoReviewMode.value = 'local';
+        editedAutoReviewLocalAgent.value = localAgentInfo.agentType;
+        // Clear API provider when in local mode
+        editedAutoReviewProvider.value = null;
+    } else {
+        editedAutoReviewMode.value = 'api';
+        editedAutoReviewLocalAgent.value = null;
+    }
     isEditingAutoReview.value = true;
 }
 
@@ -648,6 +521,8 @@ function cancelEditAutoReview(): void {
     isEditingAutoReview.value = false;
     editedAutoReviewProvider.value = null;
     editedAutoReviewModel.value = null;
+    editedAutoReviewMode.value = 'api';
+    editedAutoReviewLocalAgent.value = null;
 }
 
 function saveAutoReviewSettings(): void {
@@ -660,13 +535,16 @@ function saveAutoReviewSettings(): void {
 
 // Helper functions for displaying assistant types
 function getAssistantIcon(type: string): string {
+    // Return Phosphor SVG paths for local agents
     const icons: Record<string, string> = {
-        git: '📁',
-        'claude-code': '🤖',
-        codex: '🔮',
-        antigravity: '🚀',
+        git: 'M216,104v104a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V104A16,16,0,0,1,56,88h49.15a4,4,0,0,1,4,4.14,33.31,33.31,0,0,1-3.63,12.94A7.68,7.68,0,0,1,98.94,109l-8,8a16,16,0,0,0,0,22.63l18.43,18.43a16,16,0,0,0,22.63,0l10-10a7.72,7.72,0,0,1,3.92-2.21,27.32,27.32,0,0,1,10.41-1.71,3.94,3.94,0,0,1,4.3,3.54,37.6,37.6,0,0,1,.37,5.32H152a8,8,0,0,0,0,16h8.66V184a8,8,0,0,0,16,0V168H184a8,8,0,0,0,0-16h-47.35a53.71,53.71,0,0,0-1.51-12.16,20,20,0,0,0-21.59-14.88,47.68,47.68,0,0,0-18.93,5.12l-6-6,5.47-5.47a22.79,22.79,0,0,0,8.51-15.18A49.13,49.13,0,0,0,103.69,88H56l.14.17L56,48a16,16,0,0,1,16-16h65.61a8.07,8.07,0,0,1,7.2,4.47L165.4,69.54A7.92,7.92,0,0,1,192,76.55V56a8,8,0,0,1,8-8h8a8,8,0,0,1,0,16h-8L168,104H200A16,16,0,0,1,216,104Z',
+        'claude-code':
+            'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11.89-8.42l-22.26-3a16.09,16.09,0,0,0-13.38,4.93L40,132.19A88,88,0,0,1,128,40a87.53,87.53,0,0,1,15.87,1.46L159.3,56a16,16,0,0,0,12.26,5.61h19.41A88.22,88.22,0,0,1,216,128Z',
+        codex: 'M229.66,90.34l-64-64a8,8,0,0,0-11.32,0l-64,64a8,8,0,0,0,11.32,11.32L152,51.31V96a8,8,0,0,0,16,0V51.31l50.34,50.35a8,8,0,0,0,11.32-11.32ZM208,144a40,40,0,1,0-40,40A40,40,0,0,0,208,144Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,144,144ZM88,104A40,40,0,1,0,48,144,40,40,0,0,0,88,104ZM64,144a24,24,0,1,1,24-24A24,24,0,0,1,64,144Zm176,72a40,40,0,1,0-40,40A40,40,0,0,0,240,216Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,176,216Z',
+        antigravity:
+            'M101.85,178.22,90.19,169c-15.51,25.75-19.2,46.24-19.83,54.86a7.86,7.86,0,0,1-1.25,3.84L32,280h64l49.34-74,7.13,5.44a8,8,0,0,0,11.3-1.79l30.86-41.15-31.66-24.12Zm92.27,11.45a8,8,0,0,0-1.79,11.29L201.57,213,176,235.28l-13.95-10.63a8,8,0,1,0-9.51,12.85l20,15.23a8,8,0,0,0,11.3-1.79L224,185A8,8,0,0,0,194.12,189.67ZM229.16,50.26a16,16,0,0,0-18.41-3.89L90.05,107.82,103.85,117l-3.57,4.69L184,124.09V80a16,16,0,0,1,32,0v44.09l19.13,2.31a16,16,0,0,1,13,18.59l-8,48.37a8,8,0,0,1-15.74-2.6l8-48.37L190.74,139a16,16,0,0,1-13.89-11.76L144,64H115.59L77,97.39l33.78,25.74L96.79,143.41,40.47,99.57a16,16,0,0,1-4.19-22.25l24-32a16,16,0,0,1,20.94-3.47l143.35,83.62a16,16,0,0,0,23.7-14.82Z',
     };
-    return icons[type] || '📁';
+    return icons[type] || icons.git;
 }
 
 function getAssistantLabel(type: string): string {
@@ -910,7 +788,7 @@ function getAssistantLabel(type: string): string {
 
                 <!-- View Mode -->
                 <div v-if="!isEditingOutputType" class="flex items-center space-x-2">
-                    <span class="text-xl">{{ outputTypeDisplay.icon }}</span>
+                    <IconRenderer :emoji="outputTypeDisplay.icon" class="w-5 h-5" />
                     <div>
                         <div class="text-sm font-medium text-gray-300">
                             {{ outputTypeDisplay.name }}
@@ -1011,7 +889,7 @@ function getAssistantLabel(type: string): string {
                     <div class="space-y-1">
                         <label class="text-xs text-gray-500">AI 제공자</label>
                         <div class="flex items-center space-x-2">
-                            <span>{{ aiProviderDisplay.icon }}</span>
+                            <IconRenderer :emoji="aiProviderDisplay.icon" class="w-4 h-4" />
                             <span :class="aiProviderDisplay.color" class="text-sm font-medium">
                                 {{ aiProviderDisplay.name }}
                             </span>
@@ -1023,43 +901,33 @@ function getAssistantLabel(type: string): string {
                         <label class="text-xs text-gray-500">AI 모델</label>
                         <div class="text-sm font-medium text-gray-300">
                             {{ aiModelDisplay }}
+                            <span
+                                v-if="effectiveAI.source === 'global' && !props.project.aiModel"
+                                class="text-xs text-gray-500 ml-1"
+                            >
+                                (설정 기본값)
+                            </span>
+                            <span
+                                v-if="effectiveAI.source === 'project' && props.project.aiProvider"
+                                class="text-xs text-blue-400 ml-1"
+                            >
+                                (프로젝트)
+                            </span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-3">
-                    <!-- AI Provider Select -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-400">AI 제공자</label>
-                        <select
-                            v-model="editedAIProvider"
-                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                        >
-                            <option :value="null">선택 안 함</option>
-                            <option
-                                v-for="provider in availableProviders"
-                                :key="provider.id"
-                                :value="provider.id"
-                            >
-                                {{ provider.name || provider.id }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- AI Model Select -->
-                    <div v-if="editedAIProvider" class="space-y-1">
-                        <label class="text-xs text-gray-400">AI 모델</label>
-                        <select
-                            v-model="editedAIModel"
-                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                        >
-                            <option :value="null">기본 모델 사용</option>
-                            <option v-for="model in availableModels" :key="model" :value="model">
-                                {{ model }}
-                            </option>
-                        </select>
-                    </div>
+                    <!-- Unified AI Selector -->
+                    <UnifiedAISelector
+                        v-model:mode="editedAIMode"
+                        v-model:provider="editedAIProvider"
+                        v-model:model="editedAIModel"
+                        v-model:localAgent="editedLocalAgent"
+                        :isDevProject="!!project.baseDevFolder"
+                        label="프로젝트 기본 AI 설정"
+                    />
 
                     <!-- Info Banner -->
                     <div class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3">
@@ -1179,128 +1047,10 @@ function getAssistantLabel(type: string): string {
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-4">
-                    <!-- MCP 서버 선택 -->
-                    <div class="space-y-2">
-                        <div v-if="connectedMCPServers.length === 0" class="text-sm text-gray-500">
-                            연결된 MCP 서버가 없습니다. 설정에서 MCP 서버를 연결하세요.
-                        </div>
-                        <div v-else class="space-y-2">
-                            <div
-                                v-for="server in connectedMCPServers"
-                                :key="server.id"
-                                class="flex items-start space-x-2"
-                            >
-                                <input
-                                    type="checkbox"
-                                    :id="`mcp-${server.id}`"
-                                    :checked="selectedMCPServers.includes(server.id)"
-                                    @change="toggleMCPServer(server.id)"
-                                    class="mt-1"
-                                />
-                                <label :for="`mcp-${server.id}`" class="flex-1 cursor-pointer">
-                                    <div class="text-sm font-medium text-gray-300">
-                                        {{ server.name }}
-                                    </div>
-                                    <div v-if="server.description" class="text-xs text-gray-500">
-                                        {{ server.description }}
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 선택된 MCP 서버 설정 -->
-                    <div v-if="selectedMCPServers.length > 0" class="space-y-4">
-                        <div
-                            v-for="serverId in selectedMCPServers"
-                            :key="`config-${serverId}`"
-                            class="border border-gray-700 rounded-lg p-3 bg-gray-900/50"
-                        >
-                            <div class="text-sm font-semibold text-gray-200 mb-3">
-                                {{ serverId }}
-                            </div>
-
-                            <!-- 환경변수 -->
-                            <div class="space-y-2 mb-3">
-                                <div class="flex items-center justify-between">
-                                    <label class="text-xs text-gray-400">환경변수</label>
-                                    <button
-                                        @click="addEnvRow(serverId)"
-                                        class="text-xs text-blue-400 hover:text-blue-300"
-                                    >
-                                        + 추가
-                                    </button>
-                                </div>
-                                <div
-                                    v-for="row in ensureMCPConfigEntry(serverId).env"
-                                    :key="row.id"
-                                    class="flex gap-2"
-                                >
-                                    <input
-                                        v-model="row.key"
-                                        placeholder="KEY"
-                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
-                                    />
-                                    <input
-                                        v-model="row.value"
-                                        placeholder="VALUE"
-                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
-                                    />
-                                    <button
-                                        @click="removeEnvRow(serverId, row.id)"
-                                        class="text-red-400 hover:text-red-300"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 파라미터 -->
-                            <div class="space-y-2 mb-3">
-                                <div class="flex items-center justify-between">
-                                    <label class="text-xs text-gray-400">파라미터</label>
-                                    <button
-                                        @click="addParamRow(serverId)"
-                                        class="text-xs text-blue-400 hover:text-blue-300"
-                                    >
-                                        + 추가
-                                    </button>
-                                </div>
-                                <div
-                                    v-for="row in ensureMCPConfigEntry(serverId).params"
-                                    :key="row.id"
-                                    class="flex gap-2"
-                                >
-                                    <input
-                                        v-model="row.key"
-                                        placeholder="KEY"
-                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
-                                    />
-                                    <input
-                                        v-model="row.value"
-                                        placeholder="VALUE"
-                                        class="flex-1 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white"
-                                    />
-                                    <button
-                                        @click="removeParamRow(serverId, row.id)"
-                                        class="text-red-400 hover:text-red-300"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 노트 -->
-                            <div class="space-y-1">
-                                <label class="text-xs text-gray-400">노트 (선택사항)</label>
-                                <textarea
-                                    v-model="ensureMCPConfigEntry(serverId).notes"
-                                    class="w-full px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white h-16 resize-none"
-                                    placeholder="설정 관련 메모..."
-                                ></textarea>
-                            </div>
-                        </div>
-                    </div>
+                    <MCPToolSelector
+                        v-model:selectedIds="selectedMCPServers"
+                        v-model:config="editedMCPConfig"
+                    />
 
                     <!-- Info Banner -->
                     <div class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3">
@@ -1375,7 +1125,7 @@ function getAssistantLabel(type: string): string {
                     <div class="space-y-1">
                         <label class="text-xs text-gray-500">AI 제공자</label>
                         <div class="flex items-center space-x-2">
-                            <span>{{ autoReviewProviderDisplay.icon }}</span>
+                            <IconRenderer :emoji="autoReviewProviderDisplay.icon" class="w-4 h-4" />
                             <span
                                 :class="autoReviewProviderDisplay.color"
                                 class="text-sm font-medium"
@@ -1396,41 +1146,15 @@ function getAssistantLabel(type: string): string {
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-3">
-                    <!-- AI Provider Select -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-400">AI 제공자</label>
-                        <select
-                            v-model="editedAutoReviewProvider"
-                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                        >
-                            <option :value="null">선택 안 함</option>
-                            <option
-                                v-for="provider in availableProviders"
-                                :key="provider.id"
-                                :value="provider.id"
-                            >
-                                {{ provider.name }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- AI Model Select -->
-                    <div v-if="editedAutoReviewProvider" class="space-y-1">
-                        <label class="text-xs text-gray-400">AI 모델</label>
-                        <select
-                            v-model="editedAutoReviewModel"
-                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                        >
-                            <option :value="null">기본 모델 사용</option>
-                            <option
-                                v-for="model in availableAutoReviewModels"
-                                :key="model"
-                                :value="model"
-                            >
-                                {{ model }}
-                            </option>
-                        </select>
-                    </div>
+                    <!-- Unified AI Selector -->
+                    <UnifiedAISelector
+                        v-model:mode="editedAutoReviewMode"
+                        v-model:provider="editedAutoReviewProvider"
+                        v-model:model="editedAutoReviewModel"
+                        v-model:localAgent="editedAutoReviewLocalAgent"
+                        :isDevProject="!!project.baseDevFolder"
+                        label="자동 리뷰 AI 설정"
+                    />
 
                     <!-- Action Buttons -->
                     <div class="flex justify-end space-x-2">

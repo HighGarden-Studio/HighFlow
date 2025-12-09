@@ -347,6 +347,8 @@ export class AdvancedTaskExecutor {
             streaming?: boolean;
             onToken?: (token: string) => void;
             timeout?: number;
+            aiProvider?: string | null;
+            aiModel?: string | null;
         } = {}
     ): Promise<{
         success: boolean;
@@ -376,13 +378,15 @@ export class AdvancedTaskExecutor {
             };
 
             // 리뷰용 가상 태스크 생성
-            const reviewProvider = task.reviewAiProvider ?? task.aiProvider ?? null;
-            const reviewModel = task.reviewAiModel ?? task.aiModel ?? null;
+            // Use provided overrides, or fall back to task settings
+            const reviewProvider =
+                options.aiProvider ?? task.reviewAiProvider ?? task.aiProvider ?? null;
+            const reviewModel = options.aiModel ?? task.reviewAiModel ?? task.aiModel ?? null;
 
             const reviewTask: Task = {
                 ...task,
                 description: reviewPrompt,
-                aiProvider: reviewProvider,
+                aiProvider: reviewProvider as any,
                 aiModel: reviewModel,
             };
 

@@ -5,7 +5,7 @@
  * These types are shared between frontend and backend.
  */
 
-import type { AiResult, AIProvider } from './ai';
+import type { AiResult } from './ai';
 
 // ========================================
 // Enum Types
@@ -87,7 +87,32 @@ export type AIProvider =
     | 'openai'
     | 'anthropic'
     | 'google'
+    | 'azure-openai'
+    | 'mistral'
+    | 'cohere'
     | 'groq'
+    | 'perplexity'
+    | 'together'
+    | 'fireworks'
+    | 'deepseek'
+    | 'ollama'
+    | 'lmstudio'
+    | 'openrouter'
+    | 'huggingface'
+    | 'replicate'
+    | 'stability'
+    | 'runway'
+    | 'pika'
+    | 'figma-ai'
+    | 'galileo'
+    | 'uizard'
+    | 'google-tts'
+    | 'elevenlabs'
+    | 'suno'
+    | 'zhipu'
+    | 'moonshot'
+    | 'qwen'
+    | 'baidu'
     | 'claude-code'
     | 'antigravity'
     | 'codex'
@@ -143,6 +168,7 @@ export interface TaskHistoryEventData {
     tokens?: number;
     duration?: number;
     aiResult?: AiResult | null;
+    executionResult?: any; // Full execution result including transcript
 
     // execution_failed
     error?: string;
@@ -444,6 +470,11 @@ export interface Project extends BaseEntity {
     ownerId: number;
     teamId: number | null;
     gitRepository: string | null;
+    aiGuidelines?: string | null;
+    outputType?: string | null;
+    outputPath?: string | null;
+    totalTokens: number;
+    metadata?: any;
 }
 
 export interface ImageGenerationConfig {

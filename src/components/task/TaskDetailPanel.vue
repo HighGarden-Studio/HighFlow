@@ -6,11 +6,33 @@ import PromptEnhancerPanel from '../prompt/PromptEnhancerPanel.vue';
 import PromptTemplatePicker from '../prompt/PromptTemplatePicker.vue';
 import TaskExecutionProgress from './TaskExecutionProgress.vue';
 import MacroInsertButton from '../common/MacroInsertButton.vue';
+import AIProviderSelector from '../common/AIProviderSelector.vue';
+import MCPToolSelector from '../common/MCPToolSelector.vue';
+import IconRenderer from '../common/IconRenderer.vue';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
-import type { MCPServerConfig } from '../../renderer/stores/settingsStore';
 import { useTaskStore } from '../../renderer/stores/taskStore';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
+
+// Helper to check if a provider is a local agent
+function isLocalAgentProvider(provider: string | null): {
+    isLocal: boolean;
+    agentType: LocalAgentType | null;
+} {
+    if (!provider) return { isLocal: false, agentType: null };
+
+    const localAgentMap: Record<string, LocalAgentType> = {
+        'claude-code': 'claude',
+        codex: 'codex',
+        antigravity: 'antigravity',
+    };
+
+    const agentType = localAgentMap[provider];
+    return {
+        isLocal: !!agentType,
+        agentType: agentType || null,
+    };
+}
 
 // Local Agent types
 type LocalAgentType = 'claude' | 'codex' | 'antigravity';
@@ -99,7 +121,7 @@ function getDefaultModelForProvider(providerId: string | null): string | null {
         return provider.defaultModel;
     }
     if (provider.models && provider.models.length > 0) {
-        return provider.models[0];
+        return provider.models[0] ?? null;
     }
     const fallbackDefaults: Record<string, string> = {
         anthropic: 'claude-3-5-sonnet-20250219',
@@ -109,20 +131,28 @@ function getDefaultModelForProvider(providerId: string | null): string | null {
         mistral: 'mistral-large-latest',
         lmstudio: 'local-model',
     };
-    return fallbackDefaults[providerId] || null;
+    return fallbackDefaults[providerId] ?? null;
 }
 const temperature = ref(0.7);
 const maxTokens = ref(2000);
 const isExecuting = ref(false);
 const executionProgress = ref(0);
 const streamingResult = ref('');
-const feedback = ref('');
 const comments = ref<Array<{ id: number; author: string; text: string; timestamp: Date }>>([]);
 const newComment = ref('');
 
 // Task history state
 const taskHistoryEntries = ref<TaskHistoryEntry[]>([]);
 const isLoadingHistory = ref(false);
+const expandedHistoryItems = ref<Set<number>>(new Set());
+
+function toggleHistoryExpansion(id: number) {
+    if (expandedHistoryItems.value.has(id)) {
+        expandedHistoryItems.value.delete(id);
+    } else {
+        expandedHistoryItems.value.add(id);
+    }
+}
 
 // Output format options
 const outputFormatOptions = [
@@ -224,12 +254,23 @@ watch(
         if (newTask) {
             localTask.value = { ...newTask };
             promptText.value = newTask.description || '';
-            aiProvider.value = newTask.aiProvider;
-            aiModel.value = newTask.aiModel || null;
-            reviewAiProvider.value = newTask.reviewAiProvider || newTask.aiProvider || null;
+
+            // Inherit from project if task doesn't have explicit settings
+            const project = projectStore.currentProject;
+            const effectiveProvider = (newTask.aiProvider ||
+                project?.aiProvider ||
+                null) as AIProvider | null;
+            const effectiveModel = newTask.aiModel || project?.aiModel || null;
+
+            aiProvider.value = effectiveProvider;
+            aiModel.value = effectiveModel;
+
+            // For review settings, also inherit from project if not set
+            reviewAiProvider.value = (newTask.reviewAiProvider ||
+                effectiveProvider) as AIProvider | null;
             reviewAiModel.value =
                 newTask.reviewAiModel ||
-                newTask.aiModel ||
+                effectiveModel ||
                 getDefaultModelForProvider(reviewAiProvider.value);
             autoReview.value = newTask.autoReview || false;
             selectedMCPTools.value = Array.isArray(newTask.requiredMCPs)
@@ -239,6 +280,16 @@ watch(
             selectedMCPTools.value.forEach((id) => ensureMCPConfigEntry(id));
             if (!localAgentWorkingDir.value && baseDevFolder.value) {
                 localAgentWorkingDir.value = baseDevFolder.value;
+            }
+
+            // Check if aiProvider is a local agent and set execution mode accordingly
+            const aiProviderInfo = isLocalAgentProvider(effectiveProvider);
+            if (aiProviderInfo.isLocal) {
+                executionMode.value = 'local';
+                selectedLocalAgent.value = aiProviderInfo.agentType;
+            } else {
+                executionMode.value = 'api';
+                selectedLocalAgent.value = null;
             }
 
             // 트리거 설정 로드
@@ -445,14 +496,16 @@ const allAIProviders = computed(() => {
  * Check if selected provider is connected
  */
 const isSelectedProviderConnected = computed(() => {
+    // For local agent mode, check if the agent is installed
+    if (executionMode.value === 'local') {
+        if (!selectedLocalAgent.value) return false;
+        const agentStatus = localAgentExecution.installedAgents.value.get(selectedLocalAgent.value);
+        return agentStatus?.installed ?? false;
+    }
+
+    // For API mode, check provider connection
     if (!aiProvider.value) return false;
     const provider = allAIProviders.value.find((p) => p.id === aiProvider.value);
-    return provider?.isConnected ?? false;
-});
-
-const isReviewProviderConnected = computed(() => {
-    if (!reviewAiProvider.value) return false;
-    const provider = allAIProviders.value.find((p) => p.id === reviewAiProvider.value);
     return provider?.isConnected ?? false;
 });
 
@@ -542,25 +595,6 @@ function persistExecutionSettings() {
     } as Task);
 }
 
-/**
- * Get connected MCP servers (enabled and connected)
- */
-const connectedMCPServers = computed(() => {
-    return settingsStore.mcpServers.filter((server) => server.enabled && server.isConnected);
-});
-
-const mcpServerMap = computed<Record<string, MCPServerConfig>>(() => {
-    const map: Record<string, MCPServerConfig> = {};
-    settingsStore.mcpServers.forEach((server) => {
-        map[server.id] = server;
-    });
-    return map;
-});
-
-function getMCPServerById(serverId: string): MCPServerConfig | undefined {
-    return mcpServerMap.value[serverId];
-}
-
 function createKeyValuePair(): KeyValuePair {
     return {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -623,49 +657,6 @@ function loadTaskMCPConfig(task: Task | null): void {
     selectedMCPTools.value.forEach((serverId) => ensureMCPConfigEntry(serverId));
 }
 
-/**
- * Toggle MCP tool selection
- */
-function toggleMCPTool(serverId: string) {
-    const index = selectedMCPTools.value.indexOf(serverId);
-    if (index === -1) {
-        selectedMCPTools.value.push(serverId);
-        ensureMCPConfigEntry(serverId);
-    } else {
-        selectedMCPTools.value.splice(index, 1);
-    }
-
-    if (localTask.value) {
-        localTask.value = {
-            ...localTask.value,
-            requiredMCPs: [...selectedMCPTools.value],
-        };
-    }
-}
-
-function addEnvRow(serverId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.env.push(createKeyValuePair());
-}
-
-function removeEnvRow(serverId: string, rowId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.env = entry.env.filter((row) => row.id !== rowId);
-    if (entry.env.length === 0) {
-        entry.env.push(createKeyValuePair());
-    }
-}
-
-function addParamRow(serverId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.params.push(createKeyValuePair());
-}
-
-function removeParamRow(serverId: string, rowId: string): void {
-    const entry = ensureMCPConfigEntry(serverId);
-    entry.params = entry.params.filter((row) => row.id !== rowId);
-}
-
 function buildMCPConfigPayload(): MCPConfig | null {
     const payload: MCPConfig = {};
     for (const serverId of selectedMCPTools.value) {
@@ -698,36 +689,6 @@ function syncLocalMCPConfig(): void {
         ...localTask.value,
         mcpConfig: payload,
     } as Task;
-}
-
-/**
- * Get MCP server icon
- */
-function getMCPIcon(serverId: string): string {
-    const icons: Record<string, string> = {
-        filesystem: '📁',
-        shell: '💻',
-        git: '🔀',
-        fetch: '🌐',
-        jira: '📋',
-        confluence: '📝',
-        aws: '☁️',
-        kubernetes: '🚢',
-        sqlite: '🗄️',
-        postgres: '🐘',
-        'brave-search': '🔍',
-        memory: '🧠',
-        puppeteer: '🎭',
-        playwright: '🎬',
-        'github-mcp': '🐙',
-        'gitlab-mcp': '🦊',
-        'slack-mcp': '💬',
-        'notion-mcp': '📓',
-        'google-drive': '📂',
-        'sequential-thinking': '🧩',
-        sentry: '🐛',
-    };
-    return icons[serverId] || '🔧';
 }
 
 /**
@@ -904,10 +865,6 @@ async function selectWorkingDirectory() {
 /**
  * Handle approve (move to done)
  */
-function handleApprove() {
-    if (!localTask.value) return;
-    emit('approve', localTask.value);
-}
 
 /**
  * Handle execution completed from TaskExecutionProgress
@@ -946,39 +903,10 @@ function handleApprovalRequired(data: { question: string; options?: string[] }) 
 /**
  * Handle request changes (for in_review status)
  */
-async function handleRequestChanges() {
-    if (!localTask.value || !feedback.value.trim()) return;
-
-    try {
-        const result = await window.electron.taskExecution.requestChanges(
-            localTask.value.id,
-            feedback.value
-        );
-        if (result.success) {
-            localTask.value.status = 'in_progress';
-            feedback.value = '';
-        }
-    } catch (error) {
-        console.error('Failed to request changes:', error);
-    }
-}
 
 /**
  * Handle unblock task
  */
-async function handleUnblock() {
-    if (!localTask.value) return;
-
-    try {
-        const result = await window.electron.taskExecution.unblock(localTask.value.id);
-        if (result.success) {
-            localTask.value.status = 'todo';
-            localTask.value.blockedReason = null;
-        }
-    } catch (error) {
-        console.error('Failed to unblock task:', error);
-    }
-}
 
 /**
  * Handle close
@@ -1043,7 +971,7 @@ async function loadTaskHistory() {
     isLoadingHistory.value = true;
     try {
         const history = await window.electron.taskHistory.getByTaskId(localTask.value.id);
-        taskHistoryEntries.value = history;
+        taskHistoryEntries.value = history as TaskHistoryEntry[];
     } catch (error) {
         console.error('Failed to load task history:', error);
         taskHistoryEntries.value = [];
@@ -1125,29 +1053,36 @@ function formatHistoryEventData(entry: TaskHistoryEntry): string {
     const data = entry.eventData;
     const parts: string[] = [];
 
+    // Helper to check if content is base64 image
+    const isBase64Image = (content: string): boolean => {
+        if (!content || content.length < 100) return false;
+        const base64Regex = /^[A-Za-z0-9+/=]+$/;
+        return base64Regex.test(content.trim());
+    };
+
     // Common fields
     if (data.content && typeof data.content === 'string') {
-        const preview =
-            data.content.length > 200 ? data.content.substring(0, 200) + '...' : data.content;
-        parts.push(`결과: ${preview}`);
+        // Check if it's an image (base64)
+        if (isBase64Image(data.content)) {
+            parts.push(`결과: [이미지 생성됨]`);
+        } else if (data.content.length > 200) {
+            // Truncate long text
+            parts.push(`결과: ${data.content.substring(0, 200)}...`);
+        } else {
+            parts.push(`결과: ${data.content}`);
+        }
     }
     if (data.error) {
         parts.push(`오류: ${data.error}`);
     }
     if (data.prompt) {
-        const preview =
-            data.prompt.length > 100 ? data.prompt.substring(0, 100) + '...' : data.prompt;
-        parts.push(`프롬프트: ${preview}`);
+        parts.push(`프롬프트: ${data.prompt}`);
     }
     if (data.reviewPrompt) {
         parts.push(`검토 요청: ${data.reviewPrompt}`);
     }
     if (data.reviewResult) {
-        const preview =
-            data.reviewResult.length > 200
-                ? data.reviewResult.substring(0, 200) + '...'
-                : data.reviewResult;
-        parts.push(`검토 결과: ${preview}`);
+        parts.push(`검토 결과: ${data.reviewResult}`);
     }
     if (data.reviewFeedback) {
         parts.push(`피드백: ${data.reviewFeedback}`);
@@ -1165,6 +1100,28 @@ function formatHistoryEventData(entry: TaskHistoryEntry): string {
     return parts.join('\n');
 }
 
+// Helper to check if entry contains image data
+function isHistoryImageEntry(entry: TaskHistoryEntry): boolean {
+    if (!entry.eventData || !entry.eventData.content) return false;
+    const content = entry.eventData.content;
+    if (typeof content !== 'string' || content.length < 100) return false;
+    const base64Regex = /^[A-Za-z0-9+/=]+$/;
+    return base64Regex.test(content.trim());
+}
+
+// Get image data URL from history entry
+function getHistoryImageUrl(entry: TaskHistoryEntry): string {
+    if (!isHistoryImageEntry(entry) || !entry.eventData) return '';
+    const content = entry.eventData.content || '';
+    const metadata = (entry.eventData as any).metadata || entry.metadata;
+    const mime = metadata?.mime || metadata?.mimeType || 'image/png';
+
+    if (content.startsWith('data:')) {
+        return content;
+    }
+    return `data:${mime};base64,${content}`;
+}
+
 // Format history metadata
 function formatHistoryMetadata(entry: TaskHistoryEntry): string {
     if (!entry.metadata) return '';
@@ -1174,9 +1131,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
 
     if (meta.provider) parts.push(`Provider: ${meta.provider}`);
     if (meta.model) parts.push(`Model: ${meta.model}`);
-    if (meta.cost !== undefined) parts.push(`Cost: $${meta.cost.toFixed(4)}`);
-    if (meta.tokens !== undefined) parts.push(`Tokens: ${meta.tokens.toLocaleString()}`);
-    if (meta.duration !== undefined) parts.push(`Duration: ${(meta.duration / 1000).toFixed(1)}s`);
+    if (meta.cost != null) parts.push(`Cost: $${meta.cost.toFixed(4)}`);
+    if (meta.tokens != null) parts.push(`Tokens: ${meta.tokens.toLocaleString()}`);
+    if (meta.duration != null) parts.push(`Duration: ${(meta.duration / 1000).toFixed(1)}s`);
 
     return parts.join(' | ');
 }
@@ -1296,6 +1253,23 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 }}
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Execution Progress -->
+                    <div
+                        v-if="
+                            localTask &&
+                            (localTask.status === 'in_progress' || isExecuting || streamingResult)
+                        "
+                        class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
+                    >
+                        <TaskExecutionProgress
+                            :task="localTask"
+                            @completed="handleExecutionCompleted"
+                            @failed="handleExecutionFailed"
+                            @stopped="handleExecutionStopped"
+                            @approval-required="handleApprovalRequired"
+                        />
                     </div>
 
                     <!-- Content -->
@@ -1926,7 +1900,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 :disabled="!agent.installed"
                                                 class="sr-only"
                                             />
-                                            <span class="text-xl">{{ agent.icon }}</span>
+                                            <IconRenderer :emoji="agent.icon" class="w-5 h-5" />
                                             <div class="flex-1">
                                                 <span
                                                     class="text-sm font-medium text-gray-900 dark:text-white"
@@ -2007,81 +1981,13 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                             </div>
 
                             <!-- AI Provider Selection (when API mode selected) -->
+                            <!-- AI Provider Selection (when API mode selected) -->
                             <div v-if="executionMode === 'api'">
-                                <label
-                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                >
-                                    AI 제공자
-                                </label>
-                                <select
-                                    v-model="aiProvider"
-                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option :value="null">선택하세요</option>
-                                    <option
-                                        v-for="provider in allAIProviders"
-                                        :key="provider.id"
-                                        :value="provider.id"
-                                    >
-                                        {{ provider.name }}
-                                        {{ provider.isConnected ? '' : ' (연동 안됨)' }}
-                                    </option>
-                                </select>
-
-                                <div v-if="providerModelOptions.length > 0" class="mt-4">
-                                    <label
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                    >
-                                        AI 모델
-                                    </label>
-                                    <select
-                                        v-model="aiModel"
-                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option
-                                            v-for="model in providerModelOptions"
-                                            :key="model.id"
-                                            :value="model.id"
-                                        >
-                                            {{ model.label }}
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <!-- Connection status warning -->
-                                <div
-                                    v-if="aiProvider && !isSelectedProviderConnected"
-                                    class="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800"
-                                >
-                                    <div class="flex items-start gap-2">
-                                        <svg
-                                            class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                            />
-                                        </svg>
-                                        <div class="flex-1">
-                                            <p
-                                                class="text-sm font-medium text-yellow-800 dark:text-yellow-200"
-                                            >
-                                                Provider 연동 필요
-                                            </p>
-                                            <p
-                                                class="text-xs text-yellow-700 dark:text-yellow-300 mt-1"
-                                            >
-                                                이 AI 제공자를 사용하려면 설정에서 API 키를 등록해야
-                                                합니다.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                <AIProviderSelector
+                                    v-model:provider="aiProvider"
+                                    v-model:model="aiModel"
+                                    label="AI 제공자"
+                                />
 
                                 <!-- Review AI Settings -->
                                 <div
@@ -2112,81 +2018,12 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             {{ autoReview ? '자동 리뷰 활성화' : '자동 리뷰 꺼짐' }}
                                         </span>
                                     </div>
-                                    <div class="grid gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label
-                                                class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1"
-                                            >
-                                                리뷰 AI 제공자
-                                            </label>
-                                            <select
-                                                v-model="reviewAiProvider"
-                                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option :value="null">선택하세요</option>
-                                                <option
-                                                    v-for="provider in allAIProviders"
-                                                    :key="provider.id + '-review'"
-                                                    :value="provider.id"
-                                                >
-                                                    {{ provider.name }}
-                                                    {{ provider.isConnected ? '' : ' (연동 안됨)' }}
-                                                </option>
-                                            </select>
-                                        </div>
-                                        <div v-if="reviewProviderModelOptions.length > 0">
-                                            <label
-                                                class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1"
-                                            >
-                                                리뷰 AI 모델
-                                            </label>
-                                            <select
-                                                v-model="reviewAiModel"
-                                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option
-                                                    v-for="model in reviewProviderModelOptions"
-                                                    :key="model.id + '-review'"
-                                                    :value="model.id"
-                                                >
-                                                    {{ model.label }}
-                                                </option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div
-                                        v-if="reviewAiProvider && !isReviewProviderConnected"
-                                        class="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800"
-                                    >
-                                        <div class="flex items-start gap-2">
-                                            <svg
-                                                class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                                />
-                                            </svg>
-                                            <div class="flex-1">
-                                                <p
-                                                    class="text-sm font-medium text-yellow-800 dark:text-yellow-200"
-                                                >
-                                                    리뷰 Provider 연동 필요
-                                                </p>
-                                                <p
-                                                    class="text-xs text-yellow-700 dark:text-yellow-300 mt-1"
-                                                >
-                                                    리뷰 Provider가 연동되지 않았습니다. 설정 &gt;
-                                                    AI Providers에서 API 키를 등록하거나 연결 상태를
-                                                    확인하세요.
-                                                </p>
-                                            </div>
-                                        </div>
+                                    <div class="mt-3">
+                                        <AIProviderSelector
+                                            v-model:provider="reviewAiProvider"
+                                            v-model:model="reviewAiModel"
+                                            label="리뷰 AI (제공자/모델)"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -2247,229 +2084,10 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
 
                             <!-- MCP Tools -->
                             <div>
-                                <label
-                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                >
-                                    MCP 도구
-                                </label>
-
-                                <!-- Connected MCP Servers -->
-                                <div v-if="connectedMCPServers.length > 0" class="space-y-2">
-                                    <label
-                                        v-for="server in connectedMCPServers"
-                                        :key="server.id"
-                                        class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            :checked="selectedMCPTools.includes(server.id)"
-                                            @change="toggleMCPTool(server.id)"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span class="text-lg">{{ getMCPIcon(server.id) }}</span>
-                                        <div class="flex-1 min-w-0">
-                                            <span
-                                                class="text-sm text-gray-700 dark:text-gray-300 font-medium"
-                                                >{{ server.name }}</span
-                                            >
-                                            <p
-                                                v-if="server.description"
-                                                class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                                            >
-                                                {{ server.description }}
-                                            </p>
-                                        </div>
-                                    </label>
-                                </div>
-
-                                <!-- No connected MCPs -->
-                                <div
-                                    v-else
-                                    class="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
-                                >
-                                    <div class="flex items-start gap-3">
-                                        <svg
-                                            class="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            />
-                                        </svg>
-                                        <div class="flex-1">
-                                            <p
-                                                class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                                            >
-                                                연동된 MCP 서버가 없습니다
-                                            </p>
-                                            <p
-                                                class="text-xs text-gray-500 dark:text-gray-400 mt-1"
-                                            >
-                                                설정 > MCP Servers에서 MCP 서버를 연동하세요.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Selected count -->
-                                <div
-                                    v-if="selectedMCPTools.length > 0"
-                                    class="mt-2 text-xs text-blue-600 dark:text-blue-400"
-                                >
-                                    {{ selectedMCPTools.length }}개 도구 선택됨
-                                </div>
-
-                                <!-- MCP Configuration -->
-                                <div v-if="selectedMCPTools.length > 0" class="mt-4 space-y-4">
-                                    <div
-                                        v-for="serverId in selectedMCPTools"
-                                        :key="`mcp-config-${serverId}`"
-                                        class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50"
-                                    >
-                                        <div class="flex items-start justify-between mb-3">
-                                            <div>
-                                                <p
-                                                    class="text-sm font-semibold text-gray-800 dark:text-gray-200"
-                                                >
-                                                    {{
-                                                        getMCPServerById(serverId)?.name || serverId
-                                                    }}
-                                                </p>
-                                                <p
-                                                    class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                                                >
-                                                    {{
-                                                        getMCPServerById(serverId)?.description ||
-                                                        'MCP 실행에 필요한 세부 정보를 입력하세요.'
-                                                    }}
-                                                </p>
-                                            </div>
-                                            <span class="text-xs text-gray-400">
-                                                {{ serverId }}
-                                            </span>
-                                        </div>
-
-                                        <!-- Environment Variables -->
-                                        <div class="space-y-2">
-                                            <div class="flex items-center justify-between">
-                                                <span
-                                                    class="text-xs font-medium text-gray-600 dark:text-gray-300"
-                                                >
-                                                    환경변수
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    class="text-xs text-blue-500 hover:text-blue-400"
-                                                    @click="addEnvRow(serverId)"
-                                                >
-                                                    + 추가
-                                                </button>
-                                            </div>
-                                            <div
-                                                v-for="row in taskMCPConfig[serverId]?.env"
-                                                :key="row.id"
-                                                class="flex items-center gap-2"
-                                            >
-                                                <input
-                                                    v-model="row.key"
-                                                    type="text"
-                                                    placeholder="KEY"
-                                                    class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                />
-                                                <input
-                                                    v-model="row.value"
-                                                    type="text"
-                                                    placeholder="VALUE"
-                                                    class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    class="text-gray-400 hover:text-red-400"
-                                                    @click="removeEnvRow(serverId, row.id)"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                            <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                                MCP 서버가 요구하는 토큰, 채널 등 환경변수를
-                                                설정하세요.
-                                            </p>
-                                        </div>
-
-                                        <!-- Default Parameters -->
-                                        <div class="space-y-2 mt-4">
-                                            <div class="flex items-center justify-between">
-                                                <span
-                                                    class="text-xs font-medium text-gray-600 dark:text-gray-300"
-                                                >
-                                                    기본 파라미터
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    class="text-xs text-blue-500 hover:text-blue-400"
-                                                    @click="addParamRow(serverId)"
-                                                >
-                                                    + 추가
-                                                </button>
-                                            </div>
-                                            <div
-                                                v-if="taskMCPConfig[serverId]?.params.length"
-                                                class="space-y-2"
-                                            >
-                                                <div
-                                                    v-for="row in taskMCPConfig[serverId]?.params"
-                                                    :key="row.id"
-                                                    class="flex items-center gap-2"
-                                                >
-                                                    <input
-                                                        v-model="row.key"
-                                                        type="text"
-                                                        placeholder="필드명"
-                                                        class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    />
-                                                    <input
-                                                        v-model="row.value"
-                                                        type="text"
-                                                        placeholder="기본값"
-                                                        class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        class="text-gray-400 hover:text-red-400"
-                                                        @click="removeParamRow(serverId, row.id)"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                                Slack 채널 ID, 기본 검색어 등 MCP 호출 시 전달할
-                                                값을 지정합니다. 제공된 값은 AI가 호출하는 MCP
-                                                도구의 기본 파라미터로 병합됩니다.
-                                            </p>
-                                        </div>
-
-                                        <!-- Notes / Context -->
-                                        <div class="mt-4">
-                                            <label
-                                                class="text-xs font-medium text-gray-600 dark:text-gray-300"
-                                            >
-                                                추가 메모 / 컨텍스트
-                                            </label>
-                                            <textarea
-                                                v-model="taskMCPConfig[serverId].notes"
-                                                rows="2"
-                                                placeholder="예: Slack 채널 C03CJT0KZPT의 최근 일주일 히스토리를 요약"
-                                                class="w-full mt-1 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                                            ></textarea>
-                                        </div>
-                                    </div>
-                                </div>
+                                <MCPToolSelector
+                                    v-model:selectedIds="selectedMCPTools"
+                                    v-model:config="taskMCPConfig as any"
+                                />
                             </div>
 
                             <!-- 자동 REVIEW 옵션 -->
@@ -2931,10 +2549,127 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
 
                                                 <!-- Event data (if any) -->
                                                 <div
-                                                    v-if="formatHistoryEventData(entry)"
-                                                    class="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words bg-gray-100 dark:bg-gray-800 p-2 rounded"
+                                                    v-if="
+                                                        formatHistoryEventData(entry) ||
+                                                        isHistoryImageEntry(entry)
+                                                    "
+                                                    class="mt-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-2 rounded relative group"
                                                 >
-                                                    {{ formatHistoryEventData(entry) }}
+                                                    <!-- Image Display -->
+                                                    <template v-if="isHistoryImageEntry(entry)">
+                                                        <div class="space-y-2">
+                                                            <p
+                                                                class="text-sm text-gray-600 dark:text-gray-400"
+                                                            >
+                                                                결과: [이미지 생성됨]
+                                                            </p>
+                                                            <div
+                                                                class="flex items-center justify-center bg-gray-900 rounded p-2"
+                                                                :class="{
+                                                                    'max-h-48':
+                                                                        !expandedHistoryItems.has(
+                                                                            entry.id
+                                                                        ),
+                                                                    'max-h-none':
+                                                                        expandedHistoryItems.has(
+                                                                            entry.id
+                                                                        ),
+                                                                }"
+                                                            >
+                                                                <img
+                                                                    :src="getHistoryImageUrl(entry)"
+                                                                    alt="Generated Image"
+                                                                    class="max-w-full object-contain rounded"
+                                                                    :class="{
+                                                                        'max-h-44':
+                                                                            !expandedHistoryItems.has(
+                                                                                entry.id
+                                                                            ),
+                                                                        'cursor-pointer':
+                                                                            !expandedHistoryItems.has(
+                                                                                entry.id
+                                                                            ),
+                                                                    }"
+                                                                    @click="
+                                                                        !expandedHistoryItems.has(
+                                                                            entry.id
+                                                                        )
+                                                                            ? toggleHistoryExpansion(
+                                                                                  entry.id
+                                                                              )
+                                                                            : null
+                                                                    "
+                                                                />
+                                                            </div>
+                                                            <div class="flex justify-end">
+                                                                <button
+                                                                    @click.stop="
+                                                                        toggleHistoryExpansion(
+                                                                            entry.id
+                                                                        )
+                                                                    "
+                                                                    class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
+                                                                >
+                                                                    {{
+                                                                        expandedHistoryItems.has(
+                                                                            entry.id
+                                                                        )
+                                                                            ? '이미지 접기'
+                                                                            : '이미지 확대'
+                                                                    }}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- Text Display -->
+                                                    <template v-else>
+                                                        <div
+                                                            class="whitespace-pre-wrap break-words transition-all duration-200"
+                                                            :class="{
+                                                                'line-clamp-2':
+                                                                    !expandedHistoryItems.has(
+                                                                        entry.id
+                                                                    ),
+                                                                'max-h-24 overflow-hidden':
+                                                                    !expandedHistoryItems.has(
+                                                                        entry.id
+                                                                    ) &&
+                                                                    !formatHistoryEventData(
+                                                                        entry
+                                                                    ).includes('\n'),
+                                                            }"
+                                                        >
+                                                            {{ formatHistoryEventData(entry) }}
+                                                        </div>
+
+                                                        <!-- Expand toggle if content is long -->
+                                                        <div
+                                                            v-if="
+                                                                formatHistoryEventData(entry)
+                                                                    .length > 100 ||
+                                                                formatHistoryEventData(
+                                                                    entry
+                                                                ).includes('\n')
+                                                            "
+                                                            class="mt-1 flex justify-end"
+                                                        >
+                                                            <button
+                                                                @click.stop="
+                                                                    toggleHistoryExpansion(entry.id)
+                                                                "
+                                                                class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
+                                                            >
+                                                                {{
+                                                                    expandedHistoryItems.has(
+                                                                        entry.id
+                                                                    )
+                                                                        ? '접기'
+                                                                        : '더 보기'
+                                                                }}
+                                                            </button>
+                                                        </div>
+                                                    </template>
                                                 </div>
 
                                                 <!-- Metadata (if any) -->

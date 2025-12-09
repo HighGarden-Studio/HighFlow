@@ -192,7 +192,8 @@ export const useActivityLogStore = defineStore('activityLog', () => {
             case 'ai.mcp_response': {
                 const tool = payload.toolName || 'unknown tool';
                 const status = payload.success ? 'succeeded' : 'failed';
-                const duration = typeof payload.duration === 'number' ? `${payload.duration}ms` : '';
+                const duration =
+                    typeof payload.duration === 'number' ? `${payload.duration}ms` : '';
                 const preview = payload.dataPreview ? ` ${truncateText(payload.dataPreview)}` : '';
                 return `MCP response "${tool}" ${status} ${duration}${preview}`;
             }
@@ -206,6 +207,8 @@ export const useActivityLogStore = defineStore('activityLog', () => {
             // System events
             case 'system.error':
                 return `System error: ${payload.error}`;
+            case 'system.test':
+                return `System test: ${payload.message || 'Test event received'}`;
             case 'webhook.received':
                 return `Webhook received: ${payload.webhookId}`;
             case 'cost.exceeded':
@@ -288,7 +291,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'debug',
                     category: 'ipc',
                     type: 'taskExecution.progress',
-                    message: `Task #${data.taskId} progress: ${data.progress ?? data.percentage ?? 0}%`,
+                    message: `Task #${data.taskId} progress: ${(data as any).progress ?? (data as any).percentage ?? 0}%`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -380,6 +383,82 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     details: eventData as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: eventData.id,
+                });
+            });
+
+            // Listen for project events
+            api.events.on('project:updated', (data: unknown) => {
+                const project = data as { id: number; title: string };
+                addLog({
+                    level: 'info',
+                    category: 'ipc',
+                    type: 'project.updated',
+                    message: `Project "${project.title}" (ID: ${project.id}) settings updated`,
+                    details: project as unknown as Record<string, unknown>,
+                    source: 'ipc',
+                    projectId: project.id,
+                });
+            });
+
+            // Listen for generic activity logs from backend
+            api.events.on('activity:log', (data: unknown) => {
+                const log = data as {
+                    level: LogLevel;
+                    message: string;
+                    details?: Record<string, unknown>;
+                    timestamp: string;
+                };
+                addLog({
+                    level: log.level,
+                    category: 'ipc',
+                    type: 'backend.log',
+                    message: log.message,
+                    details: log.details,
+                    source: 'backend',
+                    taskId: (log.details?.taskId as number) || undefined,
+                });
+            });
+
+            // Listen for new task history entries
+            api.events.on('task-history:created', (data: unknown) => {
+                const history = data as {
+                    taskId: number;
+                    eventType: string;
+                    eventData?: any;
+                    metadata?: any;
+                };
+
+                // We map specific history events to readable log messages
+                let message = `Task #${history.taskId} event: ${history.eventType}`;
+                let level: LogLevel = 'info';
+
+                if (history.eventType === 'execution_started') {
+                    // Already covered by taskExecution.started, but good to have history confirmation
+                    return;
+                } else if (history.eventType === 'execution_completed') {
+                    // Already covered
+                    return;
+                } else if (history.eventType === 'execution_failed') {
+                    // Already covered
+                    return;
+                } else if (history.eventType === 'ai_review_requested') {
+                    message = `AI Review requested for Task #${history.taskId}`;
+                } else if (history.eventType === 'ai_review_completed') {
+                    const approved = history.eventData?.approved;
+                    message = `AI Review completed for Task #${history.taskId}: ${approved ? 'Approved' : 'Changes Requested'}`;
+                    level = approved ? 'success' : 'warning';
+                } else if (history.eventType === 'prompt_refined') {
+                    message = `Prompt refined for Task #${history.taskId}`;
+                }
+
+                addLog({
+                    level,
+                    category: 'ipc',
+                    type: `history.${history.eventType}`,
+                    message,
+                    details: history as unknown as Record<string, unknown>,
+                    source: 'ipc',
+                    taskId: history.taskId,
                 });
             });
         }

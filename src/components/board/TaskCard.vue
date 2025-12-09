@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue';
 import type { Task } from '@core/types/database';
 import { useTaskStore } from '../../renderer/stores/taskStore';
+import { getProviderIcon } from '../../utils/iconMapping';
+import IconRenderer from '../common/IconRenderer.vue';
 
 // 미연동 Provider 정보 타입
 interface MissingProviderInfo {
@@ -208,7 +210,9 @@ const requiredMCPs = computed<string[]>(() => {
         try {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+                return parsed.filter(
+                    (item): item is string => typeof item === 'string' && item.trim().length > 0
+                );
             }
         } catch {
             // JSON 파싱 실패 시 콤마 분리 처리
@@ -220,7 +224,9 @@ const requiredMCPs = computed<string[]>(() => {
     }
 
     if (Array.isArray(raw)) {
-        return raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+        return raw.filter(
+            (item): item is string => typeof item === 'string' && item.trim().length > 0
+        );
     }
 
     return [];
@@ -250,9 +256,7 @@ const dependencies = computed<number[]>(() => {
     }
 
     if (Array.isArray(raw)) {
-        return raw
-            .map((item) => Number(item))
-            .filter((num) => Number.isFinite(num) && num > 0);
+        return raw.map((item) => Number(item)).filter((num) => Number.isFinite(num) && num > 0);
     }
 
     return [];
@@ -267,7 +271,9 @@ const tags = computed<string[]>(() => {
         try {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0);
+                return parsed.filter(
+                    (tag): tag is string => typeof tag === 'string' && tag.trim().length > 0
+                );
             }
         } catch {
             // 콤마 분리 처리
@@ -480,79 +486,79 @@ const aiProviderInfo = computed(() => {
     > = {
         anthropic: {
             name: 'Claude',
-            icon: '🤖',
+            icon: 'anthropic', // Use provider ID for getProviderIcon
             color: 'text-orange-700 dark:text-orange-300',
             bgColor: 'bg-orange-100 dark:bg-orange-900/50',
         },
         openai: {
             name: 'OpenAI',
-            icon: '🧠',
+            icon: 'openai', // Use provider ID
             color: 'text-emerald-700 dark:text-emerald-300',
             bgColor: 'bg-emerald-100 dark:bg-emerald-900/50',
         },
         google: {
             name: 'Gemini',
-            icon: '✨',
+            icon: 'google', // Use provider ID
             color: 'text-blue-700 dark:text-blue-300',
             bgColor: 'bg-blue-100 dark:bg-blue-900/50',
         },
         groq: {
             name: 'Groq',
-            icon: '⚡',
+            icon: 'groq', // Use provider ID
             color: 'text-purple-700 dark:text-purple-300',
             bgColor: 'bg-purple-100 dark:bg-purple-900/50',
         },
         'claude-code': {
             name: 'Claude Code',
-            icon: '💻',
+            icon: 'claude-code', // Use provider ID
             color: 'text-amber-700 dark:text-amber-300',
             bgColor: 'bg-amber-100 dark:bg-amber-900/50',
         },
         antigravity: {
             name: 'Antigravity',
-            icon: '🚀',
+            icon: 'antigravity', // Use provider ID
             color: 'text-indigo-700 dark:text-indigo-300',
             bgColor: 'bg-indigo-100 dark:bg-indigo-900/50',
         },
         codex: {
             name: 'Codex',
-            icon: '📝',
+            icon: 'codex', // Use provider ID
             color: 'text-cyan-700 dark:text-cyan-300',
             bgColor: 'bg-cyan-100 dark:bg-cyan-900/50',
         },
         local: {
             name: 'Local',
-            icon: '🏠',
+            icon: 'local', // Use provider ID (will fallback to ph:cube)
             color: 'text-gray-700 dark:text-gray-300',
             bgColor: 'bg-gray-100 dark:bg-gray-700',
         },
         'azure-openai': {
             name: 'Azure',
-            icon: '☁️',
+            icon: 'azure-openai', // Use provider ID
             color: 'text-sky-700 dark:text-sky-300',
             bgColor: 'bg-sky-100 dark:bg-sky-900/50',
         },
         mistral: {
             name: 'Mistral',
-            icon: '🌪️',
+            icon: 'mistral', // Use provider ID
             color: 'text-rose-700 dark:text-rose-300',
             bgColor: 'bg-rose-100 dark:bg-rose-900/50',
         },
         cohere: {
             name: 'Cohere',
-            icon: '🔗',
+            icon: 'cohere', // Use provider ID
             color: 'text-teal-700 dark:text-teal-300',
             bgColor: 'bg-teal-100 dark:bg-teal-900/50',
         },
         perplexity: {
             name: 'Perplexity',
-            icon: '🔍',
+            icon: 'perplexity', // Use provider ID
             color: 'text-violet-700 dark:text-violet-300',
             bgColor: 'bg-violet-100 dark:bg-violet-900/50',
         },
         deepseek: {
             name: 'DeepSeek',
-            icon: '🌊',
+            icon: 'deepseek', // Use provider ID
             color: 'text-blue-700 dark:text-blue-300',
             bgColor: 'bg-blue-100 dark:bg-blue-900/50',
         },
@@ -561,7 +567,7 @@ const aiProviderInfo = computed(() => {
     return (
         providerMap[provider] || {
             name: provider,
-            icon: '🤖',
+            icon: provider, // Use provider as fallback for getProviderIcon
             color: 'text-gray-700 dark:text-gray-300',
             bgColor: 'bg-gray-100 dark:bg-gray-700',
         }
@@ -579,10 +585,7 @@ const outputFormatInfo = computed(() => {
     };
 
     const rawFormat =
-        taskData.expectedOutputFormat ||
-        taskData.outputFormat ||
-        taskData.codeLanguage ||
-        null;
+        taskData.expectedOutputFormat || taskData.outputFormat || taskData.codeLanguage || null;
 
     if (!rawFormat || typeof rawFormat !== 'string') return null;
 
@@ -617,113 +620,111 @@ const outputFormatInfo = computed(() => {
         'r',
     ];
 
-    const map: Record<
-        string,
-        { label: string; icon: string; bgColor: string; textColor: string }
-    > = {
-        text: {
-            label: 'Text',
-            icon: '📝',
-            bgColor: 'bg-gray-100 dark:bg-gray-800',
-            textColor: 'text-gray-700 dark:text-gray-200',
-        },
-        markdown: {
-            label: 'Markdown',
-            icon: '📄',
-            bgColor: 'bg-emerald-100 dark:bg-emerald-900/40',
-            textColor: 'text-emerald-700 dark:text-emerald-200',
-        },
-        html: {
-            label: 'HTML',
-            icon: '🌐',
-            bgColor: 'bg-blue-100 dark:bg-blue-900/40',
-            textColor: 'text-blue-700 dark:text-blue-200',
-        },
-        pdf: {
-            label: 'PDF',
-            icon: '📕',
-            bgColor: 'bg-rose-100 dark:bg-rose-900/40',
-            textColor: 'text-rose-700 dark:text-rose-200',
-        },
-        json: {
-            label: 'JSON',
-            icon: '🧩',
-            bgColor: 'bg-amber-100 dark:bg-amber-900/40',
-            textColor: 'text-amber-700 dark:text-amber-200',
-        },
-        yaml: {
-            label: 'YAML',
-            icon: '🗂️',
-            bgColor: 'bg-amber-100 dark:bg-amber-900/40',
-            textColor: 'text-amber-700 dark:text-amber-200',
-        },
-        csv: {
-            label: 'CSV',
-            icon: '📊',
-            bgColor: 'bg-indigo-100 dark:bg-indigo-900/40',
-            textColor: 'text-indigo-700 dark:text-indigo-200',
-        },
-        sql: {
-            label: 'SQL',
-            icon: '🗄️',
-            bgColor: 'bg-purple-100 dark:bg-purple-900/40',
-            textColor: 'text-purple-700 dark:text-purple-200',
-        },
-        shell: {
-            label: 'Shell',
-            icon: '💻',
-            bgColor: 'bg-slate-100 dark:bg-slate-800',
-            textColor: 'text-slate-700 dark:text-slate-200',
-        },
-        mermaid: {
-            label: 'Mermaid',
-            icon: '📈',
-            bgColor: 'bg-teal-100 dark:bg-teal-900/40',
-            textColor: 'text-teal-700 dark:text-teal-200',
-        },
-        svg: {
-            label: 'SVG',
-            icon: '🖼️',
-            bgColor: 'bg-pink-100 dark:bg-pink-900/40',
-            textColor: 'text-pink-700 dark:text-pink-200',
-        },
-        png: {
-            label: 'PNG',
-            icon: '🖼️',
-            bgColor: 'bg-pink-100 dark:bg-pink-900/40',
-            textColor: 'text-pink-700 dark:text-pink-200',
-        },
-        mp4: {
-            label: 'Video',
-            icon: '🎬',
-            bgColor: 'bg-orange-100 dark:bg-orange-900/40',
-            textColor: 'text-orange-700 dark:text-orange-200',
-        },
-        mp3: {
-            label: 'Audio',
-            icon: '🎵',
-            bgColor: 'bg-cyan-100 dark:bg-cyan-900/40',
-            textColor: 'text-cyan-700 dark:text-cyan-200',
-        },
-        diff: {
-            label: 'Diff',
-            icon: '🔀',
-            bgColor: 'bg-lime-100 dark:bg-lime-900/40',
-            textColor: 'text-lime-700 dark:text-lime-200',
-        },
-        log: {
-            label: 'Log',
-            icon: '📜',
-            bgColor: 'bg-gray-100 dark:bg-gray-800',
-            textColor: 'text-gray-700 dark:text-gray-200',
-        },
-        code: {
-            label: 'Code',
-            icon: '💻',
-            bgColor: 'bg-slate-100 dark:bg-slate-800',
-            textColor: 'text-slate-700 dark:text-slate-200',
-        },
-    };
+    const map: Record<string, { label: string; icon: string; bgColor: string; textColor: string }> =
+        {
+            text: {
+                label: 'Text',
+                icon: '📝',
+                bgColor: 'bg-gray-100 dark:bg-gray-800',
+                textColor: 'text-gray-700 dark:text-gray-200',
+            },
+            markdown: {
+                label: 'Markdown',
+                icon: '📄',
+                bgColor: 'bg-emerald-100 dark:bg-emerald-900/40',
+                textColor: 'text-emerald-700 dark:text-emerald-200',
+            },
+            html: {
+                label: 'HTML',
+                icon: '🌐',
+                bgColor: 'bg-blue-100 dark:bg-blue-900/40',
+                textColor: 'text-blue-700 dark:text-blue-200',
+            },
+            pdf: {
+                label: 'PDF',
+                icon: '📕',
+                bgColor: 'bg-rose-100 dark:bg-rose-900/40',
+                textColor: 'text-rose-700 dark:text-rose-200',
+            },
+            json: {
+                label: 'JSON',
+                icon: '🧩',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/40',
+                textColor: 'text-amber-700 dark:text-amber-200',
+            },
+            yaml: {
+                label: 'YAML',
+                icon: '🗂️',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/40',
+                textColor: 'text-amber-700 dark:text-amber-200',
+            },
+            csv: {
+                label: 'CSV',
+                icon: '📊',
+                bgColor: 'bg-indigo-100 dark:bg-indigo-900/40',
+                textColor: 'text-indigo-700 dark:text-indigo-200',
+            },
+            sql: {
+                label: 'SQL',
+                icon: '🗄️',
+                bgColor: 'bg-purple-100 dark:bg-purple-900/40',
+                textColor: 'text-purple-700 dark:text-purple-200',
+            },
+            shell: {
+                label: 'Shell',
+                icon: '💻',
+                bgColor: 'bg-slate-100 dark:bg-slate-800',
+                textColor: 'text-slate-700 dark:text-slate-200',
+            },
+            mermaid: {
+                label: 'Mermaid',
+                icon: '📈',
+                bgColor: 'bg-teal-100 dark:bg-teal-900/40',
+                textColor: 'text-teal-700 dark:text-teal-200',
+            },
+            svg: {
+                label: 'SVG',
+                icon: '🖼️',
+                bgColor: 'bg-pink-100 dark:bg-pink-900/40',
+                textColor: 'text-pink-700 dark:text-pink-200',
+            },
+            png: {
+                label: 'PNG',
+                icon: '🖼️',
+                bgColor: 'bg-pink-100 dark:bg-pink-900/40',
+                textColor: 'text-pink-700 dark:text-pink-200',
+            },
+            mp4: {
+                label: 'Video',
+                icon: '🎬',
+                bgColor: 'bg-orange-100 dark:bg-orange-900/40',
+                textColor: 'text-orange-700 dark:text-orange-200',
+            },
+            mp3: {
+                label: 'Audio',
+                icon: '🎵',
+                bgColor: 'bg-cyan-100 dark:bg-cyan-900/40',
+                textColor: 'text-cyan-700 dark:text-cyan-200',
+            },
+            diff: {
+                label: 'Diff',
+                icon: '🔀',
+                bgColor: 'bg-lime-100 dark:bg-lime-900/40',
+                textColor: 'text-lime-700 dark:text-lime-200',
+            },
+            log: {
+                label: 'Log',
+                icon: '📜',
+                bgColor: 'bg-gray-100 dark:bg-gray-800',
+                textColor: 'text-gray-700 dark:text-gray-200',
+            },
+            code: {
+                label: 'Code',
+                icon: '💻',
+                bgColor: 'bg-slate-100 dark:bg-slate-800',
+                textColor: 'text-slate-700 dark:text-slate-200',
+            },
+        };
 
     if (map[format]) return map[format];
     if (codeFormats.includes(format)) return { ...map.code, label: rawFormat };
@@ -876,7 +877,7 @@ const subtaskProgress = computed(() => {
                     ]"
                     :title="`AI Provider: ${aiProviderInfo.name}`"
                 >
-                    <span class="text-lg">{{ aiProviderInfo.icon }}</span>
+                    <IconRenderer :icon="getProviderIcon(aiProviderInfo.icon)" class="w-5 h-5" />
                     <span class="text-sm font-semibold">{{ aiProviderInfo.name }}</span>
                 </div>
                 <!-- No Provider Badge -->
@@ -900,7 +901,7 @@ const subtaskProgress = computed(() => {
                         ]"
                         :title="`예상 결과물: ${outputFormatInfo.label}`"
                     >
-                        <span class="text-sm leading-none">{{ outputFormatInfo.icon }}</span>
+                        <IconRenderer :emoji="outputFormatInfo.icon" class="w-4 h-4" />
                         <span class="font-semibold">{{ outputFormatInfo.label }}</span>
                     </span>
 
@@ -1065,22 +1066,7 @@ const subtaskProgress = computed(() => {
 
             <!-- AI Execution Metadata Badges -->
             <div class="flex flex-wrap gap-1 mt-1">
-                <!-- Expected Output Format -->
-                <span
-                    v-if="task.expectedOutputFormat"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center gap-1"
-                    :title="`결과물: ${task.expectedOutputFormat}`"
-                >
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                    </svg>
-                    {{ task.expectedOutputFormat }}
-                </span>
+                <!-- Expected Output Format badge removed - already shown in header -->
 
                 <!-- Required MCPs -->
                 <span
@@ -1650,7 +1636,12 @@ const subtaskProgress = computed(() => {
                         @click="handleRetry"
                         title="수정사항 반영하여 재실행"
                     >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
                             <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
@@ -1665,8 +1656,18 @@ const subtaskProgress = computed(() => {
                         @click="emit('approve', task)"
                         title="검토 승인"
                     >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M5 13l4 4L19 7"
+                            />
                         </svg>
                         승인
                     </button>

@@ -342,13 +342,31 @@ export interface ExecutionProgress {
     cost?: number;
 }
 
+export interface TranscriptItem {
+    role: 'user' | 'assistant' | 'system';
+    content?: string;
+    type: 'message' | 'tool_use' | 'tool_result' | 'termination';
+    timestamp: Date;
+    metadata?: Record<string, unknown>;
+}
+
 export interface ExecutionResult {
     content?: unknown;
     cost?: number;
     tokens?: number;
+    tokenUsage?: { input: number; output: number };
     duration?: number;
     provider?: string;
     model?: string;
+    files?: Array<{
+        path: string;
+        absolutePath: string;
+        type: 'file' | 'directory';
+        content?: string;
+        size?: number;
+        extension?: string;
+    }>;
+    transcript?: TranscriptItem[];
 }
 
 export interface ApprovalRequest {

@@ -10,6 +10,8 @@ import { PromptMacroService } from '../../../src/services/workflow/PromptMacroSe
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai';
 import { taskRepository } from '../database/repositories/task-repository';
 import { taskHistoryRepository } from '../database/repositories/task-history-repository';
+import { projectRepository } from '../database/repositories/project-repository';
+import { resolveAutoReviewProvider } from '../../../src/core/logic/ai-configuration';
 import type { Task } from '../../../src/core/types/database';
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
@@ -128,6 +130,7 @@ async function buildDependencyContext(
                     metadata: {
                         provider: execResult.provider,
                         model: execResult.model,
+                        files: execResult.files, // Preserve created files
                     },
                 });
 
@@ -338,6 +341,233 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskId} not found`);
                 }
 
+                // Route execution based on provider type using Provider Registry
+                const { isLocalAgent, getLocalAgentType } =
+                    await import('../config/provider-registry');
+
+                if (task.aiProvider && isLocalAgent(task.aiProvider)) {
+                    // This is a Local Agent execution - use Local Agent Session
+                    const agentType = getLocalAgentType(task.aiProvider);
+                    if (!agentType) {
+                        throw new Error(`Invalid local agent provider: ${task.aiProvider}`);
+                    }
+
+                    console.log(
+                        `[TaskExecution] Routing task ${taskId} to Local Agent: ${agentType}`
+                    );
+
+                    // Get project for working directory
+                    const project = await projectRepository.findById(task.projectId);
+                    const workingDir = project?.baseDevFolder;
+                    if (!workingDir) {
+                        throw new Error(
+                            `Task ${taskId} requires a working directory (baseDevFolder) for local agent execution`
+                        );
+                    }
+
+                    // Execute using Local Agent Session with file monitoring
+                    const { sessionManager } = await import('../services/local-agent-session');
+                    const { FileSystemMonitor } = await import('../services/file-system-monitor');
+                    // Initialize file system monitor
+                    const fsMonitor = new FileSystemMonitor(workingDir);
+                    fsMonitor.takeSnapshot();
+
+                    // Fetch dependent task results for context
+                    const { previousResults } = await buildDependencyContext(task as Task);
+
+                    // Build task prompt inline
+                    const buildTaskPrompt = (task: any, contextResults: any[]) => {
+                        let prompt = '';
+                        if (task.title) prompt += `# Task: ${task.title}\n\n`;
+                        if (task.description) prompt += `${task.description}\n\n`;
+
+                        // Add context from previous tasks
+                        if (contextResults && contextResults.length > 0) {
+                            prompt += `## Context from Previous Tasks:\n`;
+                            contextResults.forEach((res) => {
+                                prompt += `### Task: ${res.taskTitle}\n`;
+                                prompt += `Output:\n${res.output}\n`;
+
+                                // Include file contents if available
+                                if (res.metadata?.files && Array.isArray(res.metadata.files)) {
+                                    prompt += `\nFiles created in this task:\n`;
+                                    res.metadata.files.forEach((f: any) => {
+                                        prompt += `- ${f.path} (${f.type}, ${f.size} bytes)\n`;
+                                        // Include content for text files to aid the agent
+                                        if (f.content && f.size < 50000) {
+                                            // Safety limit 50KB
+                                            prompt += `\nContent of ${f.path}:\n\`\`\`${f.extension || ''}\n${f.content}\n\`\`\`\n`;
+                                        }
+                                    });
+                                }
+                                prompt += `\n---\n\n`;
+                            });
+                        }
+
+                        if (task.generatedPrompt)
+                            prompt += `## Instructions:\n${task.generatedPrompt}\n\n`;
+
+                        if (task.expectedOutputFormat) {
+                            const format = task.expectedOutputFormat;
+                            prompt += `## Expected Output Format: ${format}\n\n`;
+                            const fileFormats = [
+                                'html',
+                                'css',
+                                'javascript',
+                                'js',
+                                'code',
+                                'json',
+                                'ts',
+                                'typescript',
+                                'vue',
+                                'py',
+                                'python',
+                            ];
+                            if (
+                                fileFormats.includes(format.toLowerCase()) ||
+                                format.includes('/')
+                            ) {
+                                prompt += `## ⚠️ CRITICAL - CREATE ACTUAL FILES ⚠️\n`;
+                                prompt += `You MUST create actual file(s) in the current directory matching the requirement.\n`;
+                                prompt += `DO NOT just provide examples. USE your file system tools (Write/Create) to CREATE the files on disk.\n\n`;
+                            }
+                        }
+                        return prompt;
+                    };
+
+                    // Create session
+                    const sessionInfo = await sessionManager.createSession(agentType, workingDir);
+
+                    // Initialize execution state
+                    const executionState: ExecutionState = {
+                        taskId,
+                        status: 'running',
+                        startedAt: new Date(),
+                        progress: 0,
+                        currentPhase: 'initializing',
+                        streamContent: '',
+                    };
+                    activeExecutions.set(taskId, executionState);
+
+                    // Update task status
+                    await taskRepository.update(taskId, { status: 'in_progress' });
+                    getMainWindow()?.webContents.send('task:status-changed', {
+                        id: taskId,
+                        status: 'in_progress',
+                    });
+                    getMainWindow()?.webContents.send('taskExecution:started', {
+                        taskId,
+                        startedAt: executionState.startedAt,
+                    });
+
+                    try {
+                        // Build prompt from task with context
+                        const prompt = buildTaskPrompt(task, previousResults);
+
+                        // Send message and get response
+                        const response = await sessionManager.sendMessage(sessionInfo.id, prompt, {
+                            timeout: options?.timeout || 300000,
+                            onChunk: (chunk) => {
+                                getMainWindow()?.webContents.send('taskExecution:progress', {
+                                    taskId,
+                                    delta: chunk,
+                                    phase: 'executing',
+                                });
+                            },
+                        });
+
+                        // Close session
+                        await sessionManager.closeSession(sessionInfo.id);
+
+                        // Detect file changes
+                        const fileChanges = fsMonitor.getChanges({ includeContent: true });
+                        console.log(`[TaskExecution] Detected ${fileChanges.length} file changes`);
+
+                        if (response.success) {
+                            // Log execution started to history
+                            await taskHistoryRepository.logExecutionStarted(
+                                taskId,
+                                task.description || task.generatedPrompt || '',
+                                task.aiProvider || 'local',
+                                'local-model'
+                            );
+
+                            executionState.status = 'completed';
+                            executionState.streamContent = response.content;
+
+                            const executionResult = {
+                                content: response.content,
+                                duration: response.duration,
+                                provider: task.aiProvider,
+                                tokenUsage: response.tokenUsage,
+                                files: fileChanges.map((f) => ({
+                                    path: f.relativePath,
+                                    absolutePath: f.path,
+                                    type: f.type,
+                                    content: f.content,
+                                    size: f.size,
+                                    extension: f.extension,
+                                })),
+                                transcript: response.transcript,
+                            };
+
+                            await taskRepository.update(taskId, {
+                                status: 'in_review',
+                                executionResult,
+                            });
+
+                            getMainWindow()?.webContents.send('task:status-changed', {
+                                id: taskId,
+                                status: 'in_review',
+                            });
+                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                                taskId,
+                                result: executionResult,
+                            });
+
+                            // Log execution completed
+                            await taskHistoryRepository.logExecutionCompleted(
+                                taskId,
+                                response.content,
+                                {
+                                    provider: task.aiProvider || 'local',
+                                    model: 'local-model',
+                                    cost: 0,
+                                    tokens: response.tokenUsage
+                                        ? response.tokenUsage.input + response.tokenUsage.output
+                                        : 0,
+                                    duration: response.duration,
+                                },
+                                undefined,
+                                executionResult
+                            );
+
+                            activeExecutions.delete(taskId);
+                            return { success: true, result: response };
+                        } else {
+                            throw new Error(response.error || 'Local agent execution failed');
+                        }
+                    } catch (error) {
+                        executionState.status = 'failed';
+                        executionState.error =
+                            error instanceof Error ? error.message : String(error);
+
+                        await taskRepository.update(taskId, { status: 'todo' });
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: 'todo',
+                        });
+                        getMainWindow()?.webContents.send('taskExecution:failed', {
+                            taskId,
+                            error: executionState.error,
+                        });
+
+                        activeExecutions.delete(taskId);
+                        throw error;
+                    }
+                }
+
+                // API Provider execution (existing logic continues below)
                 // Check if already executing
                 if (activeExecutions.has(taskId)) {
                     const existingState = activeExecutions.get(taskId)!;
@@ -391,12 +621,10 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // Send streaming content to frontend
                     const win = getMainWindow();
                     if (win) {
-                        console.log(
-                            '[Main IPC] Sending progress (onToken):',
-                            taskId,
-                            'streaming',
-                            token.slice(0, 20)
-                        );
+                        // Reduced logging - only log first token
+                        if (state && state.streamContent.length < 10) {
+                            console.log('[Main IPC] Streaming started for task:', taskId);
+                        }
                         win.webContents.send('taskExecution:progress', {
                             taskId,
                             progress: state?.progress ?? 50,
@@ -424,11 +652,12 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     const win = getMainWindow();
                     if (win) {
                         // Only send phase updates, not content (content is sent via onToken)
-                        console.log(
-                            '[Main IPC] Sending progress (onProgress):',
-                            taskId,
-                            progress.phase
-                        );
+                        // Reduced logging - only log phase changes
+                        if (state && state.currentPhase !== progress.phase) {
+                            console.log(
+                                `[Main IPC] Phase change for task ${taskId}: ${progress.phase}`
+                            );
+                        }
                         win.webContents.send('taskExecution:progress', {
                             taskId,
                             progress: state?.progress ?? 50,
@@ -1301,10 +1530,17 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     resolvedPromptForReview || undefined
                 );
 
+                // Fetch project to resolve inheritance
+                const project = await projectRepository.findById(task.projectId);
+
+                // Resolve AI provider/model for review (Task > Project Metadata > Project Default > Global)
+                const effectiveConfig = resolveAutoReviewProvider(task, project as any);
+
                 console.log('[TaskExecution] Starting auto-review with settings:', {
                     taskId,
-                    provider: task.reviewAiProvider ?? task.aiProvider,
-                    model: task.reviewAiModel ?? task.aiModel,
+                    provider: effectiveConfig.provider,
+                    model: effectiveConfig.model,
+                    source: effectiveConfig.source,
                     streaming: options?.streaming,
                 });
 
@@ -1340,6 +1576,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     {
                         streaming: options?.streaming ?? true,
                         onToken: onReviewToken,
+                        aiProvider: effectiveConfig.provider,
+                        aiModel: effectiveConfig.model,
                     }
                 );
 
