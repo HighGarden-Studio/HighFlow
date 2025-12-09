@@ -73,9 +73,11 @@ export class LmStudioProvider extends BaseAIProvider {
     }
 
     private normalizeBaseUrl(baseUrl?: string): string {
-        const fallback = process.env.LM_STUDIO_BASE_URL || 'http://localhost:1234/v1';
-        const target = baseUrl && baseUrl.trim().length > 0 ? baseUrl.trim() : fallback;
-        return target.replace(/\/+$/, '');
+        // Check if process exists (Node.js environment vs browser)
+        const envBaseUrl =
+            typeof process !== 'undefined' ? process.env.LM_STUDIO_BASE_URL : undefined;
+        const url = baseUrl || envBaseUrl || this.DEFAULT_BASE_URL;
+        return url.endsWith('/') ? url.slice(0, -1) : url;
     }
 
     private normalizeModel(model?: string | null): AIModel {
