@@ -152,14 +152,16 @@
                                     >AI Provider & Model</label
                                 >
                                 <UnifiedAISelector
-                                    :model-value="{
-                                        provider: form.aiProvider,
-                                        model: form.aiModel,
-                                        mode: 'api',
-                                        localAgent: null,
-                                    }"
-                                    @update:model-value="handleAIChange"
-                                    compact
+                                    :mode="aiMode"
+                                    :provider="form.aiProvider"
+                                    :model="form.aiModel"
+                                    :local-agent="localAgent"
+                                    :is-dev-project="false"
+                                    label="AI Configuration"
+                                    @update:mode="handleModeChange"
+                                    @update:provider="handleProviderChange"
+                                    @update:model="handleModelChange"
+                                    @update:local-agent="handleLocalAgentChange"
                                 />
                             </div>
 
@@ -242,6 +244,8 @@ const emit = defineEmits<{
 
 const rolePresetOptions = getRolePresetOptions();
 const selectedPreset = ref<string>('custom');
+const aiMode = ref<'api' | 'local'>('api');
+const localAgent = ref<string | null>(null);
 
 const form = ref({
     name: '',
@@ -263,18 +267,32 @@ const selectedPresetData = computed(() => {
     return getRolePreset(selectedPreset.value);
 });
 
-// Handle AI provider/model change from UnifiedAISelector
-function handleAIChange(config: {
-    provider: string | null;
-    model: string | null;
-    mode: string;
-    localAgent: string | null;
-}) {
-    if (config.provider) {
-        form.value.aiProvider = config.provider as any;
+// Handle AI configuration changes
+function handleModeChange(mode: 'api' | 'local') {
+    aiMode.value = mode;
+}
+
+function handleProviderChange(provider: string | null) {
+    if (provider) {
+        form.value.aiProvider = provider as any;
     }
-    if (config.model) {
-        form.value.aiModel = config.model;
+}
+
+function handleModelChange(model: string | null) {
+    if (model) {
+        form.value.aiModel = model;
+    }
+}
+
+function handleLocalAgentChange(agent: string | null) {
+    localAgent.value = agent;
+    // Map local agent to provider
+    if (agent === 'claude') {
+        form.value.aiProvider = 'claude-code' as any;
+    } else if (agent === 'codex') {
+        form.value.aiProvider = 'codex' as any;
+    } else if (agent === 'antigravity') {
+        form.value.aiProvider = 'antigravity' as any;
     }
 }
 
