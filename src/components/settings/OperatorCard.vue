@@ -9,15 +9,17 @@
                 <span class="operator-role">{{ operator.role }}</span>
             </div>
             <div class="operator-actions">
-                <button @click="$emit('edit', operator)" class="btn-icon btn-edit" title="Edit">
+                <button @click="$emit('edit', operator)" class="btn-action btn-edit" title="Edit">
                     <i class="ph ph-pencil"></i>
+                    <span>Edit</span>
                 </button>
                 <button
                     @click="$emit('delete', operator)"
-                    class="btn-icon btn-danger"
+                    class="btn-action btn-delete"
                     title="Delete"
                 >
                     <i class="ph ph-trash"></i>
+                    <span>Delete</span>
                 </button>
             </div>
         </div>
@@ -107,37 +109,52 @@ defineEmits<{
     gap: 0.5rem;
 }
 
-.btn-icon {
-    width: 2rem;
-    height: 2rem;
+.btn-action {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
     background: var(--color-bg-tertiary);
-    border: none;
+    border: 1px solid transparent;
     border-radius: 0.375rem;
     color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
 }
 
-.btn-icon:hover {
+.btn-action i {
+    font-size: 1rem;
+}
+
+.btn-action:hover {
     background: var(--color-bg-hover);
-    color: var(--color-text-primary);
+    border-color: var(--color-border);
 }
 
 .btn-edit {
     color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.2);
 }
 
 .btn-edit:hover {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.3);
     color: #2563eb;
 }
 
-.btn-danger:hover {
-    background: rgba(239, 68, 68, 0.1);
+.btn-delete {
     color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.btn-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #dc2626;
 }
 
 .operator-config {
