@@ -534,11 +534,12 @@ function toggleExpand(event: Event) {
 }
 
 /**
- * AI Provider 정보
+ * AI Provider 정보 - Operator 할당 시 Operator의 설정 우선 표시
  */
 const aiProviderInfo = computed(() => {
-    const provider = props.task.aiProvider;
-    if (!provider) return null;
+    // Operator가 할당된 경우 Operator의 AI Provider 사용
+    const effectiveProvider = assignedOperator.value?.aiProvider || props.task.aiProvider;
+    if (!effectiveProvider) return null;
 
     const providerMap: Record<
         string,
@@ -546,43 +547,43 @@ const aiProviderInfo = computed(() => {
     > = {
         anthropic: {
             name: 'Claude',
-            icon: 'anthropic', // Use provider ID for getProviderIcon
+            icon: 'anthropic',
             color: 'text-orange-700 dark:text-orange-300',
             bgColor: 'bg-orange-100 dark:bg-orange-900/50',
         },
         openai: {
             name: 'OpenAI',
-            icon: 'openai', // Use provider ID
+            icon: 'openai',
             color: 'text-emerald-700 dark:text-emerald-300',
             bgColor: 'bg-emerald-100 dark:bg-emerald-900/50',
         },
         google: {
             name: 'Gemini',
-            icon: 'google', // Use provider ID
+            icon: 'google',
             color: 'text-blue-700 dark:text-blue-300',
             bgColor: 'bg-blue-100 dark:bg-blue-900/50',
         },
         groq: {
             name: 'Groq',
-            icon: 'groq', // Use provider ID
+            icon: 'groq',
             color: 'text-purple-700 dark:text-purple-300',
             bgColor: 'bg-purple-100 dark:bg-purple-900/50',
         },
         'claude-code': {
             name: 'Claude Code',
-            icon: 'claude-code', // Use provider ID
+            icon: 'claude-code',
             color: 'text-amber-700 dark:text-amber-300',
             bgColor: 'bg-amber-100 dark:bg-amber-900/50',
         },
         antigravity: {
             name: 'Antigravity',
-            icon: 'antigravity', // Use provider ID
+            icon: 'antigravity',
             color: 'text-indigo-700 dark:text-indigo-300',
             bgColor: 'bg-indigo-100 dark:bg-indigo-900/50',
         },
         codex: {
             name: 'Codex',
-            icon: 'codex', // Use provider ID
+            icon: 'codex',
             color: 'text-cyan-700 dark:text-cyan-300',
             bgColor: 'bg-cyan-100 dark:bg-cyan-900/50',
         },
@@ -962,17 +963,51 @@ const subtaskProgress = computed(() => {
             <!-- Provider & ID Row -->
             <div class="flex items-center justify-between w-full">
                 <!-- AI Provider Badge (Large, Prominent) -->
-                <div
-                    v-if="aiProviderInfo"
-                    :class="[
-                        'flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium',
-                        aiProviderInfo.bgColor,
-                        aiProviderInfo.color,
-                    ]"
-                    :title="`AI Provider: ${aiProviderInfo.name}`"
-                >
-                    <IconRenderer :icon="getProviderIcon(aiProviderInfo.icon)" class="w-5 h-5" />
-                    <span class="text-sm font-semibold">{{ aiProviderInfo.name }}</span>
+                <div v-if="aiProviderInfo" class="flex flex-col gap-1">
+                    <div
+                        :class="[
+                            'flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium',
+                            aiProviderInfo.bgColor,
+                            aiProviderInfo.color,
+                        ]"
+                        :title="
+                            assignedOperator
+                                ? `AI Provider from Operator: ${aiProviderInfo.name}`
+                                : `AI Provider: ${aiProviderInfo.name}`
+                        "
+                    >
+                        <IconRenderer
+                            :icon="getProviderIcon(aiProviderInfo.icon)"
+                            class="w-5 h-5"
+                        />
+                        <span class="text-sm font-semibold">{{ aiProviderInfo.name }}</span>
+                        <!-- Operator Override Indicator -->
+                        <svg
+                            v-if="assignedOperator"
+                            class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                            title="Using operator's AI settings"
+                        >
+                            <path
+                                fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd"
+                            />
+                        </svg>
+                    </div>
+                    <!-- AI Model Display -->
+                    <div
+                        v-if="effectiveAIModel"
+                        class="text-xs text-gray-600 dark:text-gray-400 px-2.5"
+                        :title="
+                            assignedOperator
+                                ? `Model from Operator: ${effectiveAIModel}`
+                                : `Model: ${effectiveAIModel}`
+                        "
+                    >
+                        {{ effectiveAIModel }}
+                    </div>
                 </div>
                 <!-- No Provider Badge -->
                 <div
