@@ -9,6 +9,8 @@ import MacroInsertButton from '../common/MacroInsertButton.vue';
 import AIProviderSelector from '../common/AIProviderSelector.vue';
 import MCPToolSelector from '../common/MCPToolSelector.vue';
 import IconRenderer from '../common/IconRenderer.vue';
+import TagInput from '../common/TagInput.vue';
+import OperatorSelector from '../common/OperatorSelector.vue';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 import { useTaskStore } from '../../renderer/stores/taskStore';
 import { useProjectStore } from '../../renderer/stores/projectStore';
@@ -77,7 +79,7 @@ onUnmounted(() => {
 
 // Local state
 const localTask = ref<Task | null>(null);
-const activeTab = ref<'prompt' | 'settings' | 'comments' | 'history'>('prompt');
+const activeTab = ref<'prompt' | 'settings' | 'details' | 'comments' | 'history'>('prompt');
 const promptText = ref('');
 const aiProvider = ref<AIProvider | null>(null);
 const aiModel = ref<string | null>(null);
@@ -140,6 +142,13 @@ const executionProgress = ref(0);
 const streamingResult = ref('');
 const comments = ref<Array<{ id: number; author: string; text: string; timestamp: Date }>>([]);
 const newComment = ref('');
+
+// Details tab state
+const priority = ref<'low' | 'medium' | 'high' | 'urgent' | 'critical'>('medium');
+const tags = ref<string[]>([]);
+const assignedOperatorId = ref<number | null>(null);
+const estimatedMinutes = ref<number>(0);
+const dueDate = ref<string>(''); // ISO format date-time string
 
 // Task history state
 const taskHistoryEntries = ref<TaskHistoryEntry[]>([]);
@@ -310,6 +319,19 @@ watch(
             } else {
                 triggerType.value = 'none';
             }
+
+            // Details tab 필드 초기화
+            priority.value = newTask.priority || 'medium';
+            tags.value = newTask.tags
+                ? typeof newTask.tags === 'string'
+                    ? JSON.parse(newTask.tags)
+                    : newTask.tags
+                : [];
+            assignedOperatorId.value = newTask.assignedOperatorId || null;
+            estimatedMinutes.value = newTask.estimatedMinutes || 0;
+            dueDate.value = newTask.dueDate
+                ? new Date(newTask.dueDate).toISOString().slice(0, 16)
+                : '';
 
             // 히스토리 탭이 열려있으면 히스토리 새로고침
             if (activeTab.value === 'history') {
@@ -749,6 +771,29 @@ function handleSave() {
 
     emit('save', updatedTask as Task);
 }
+
+// Handle details tab update
+async function handleDetailsUpdate() {
+    if (!localTask.value) return;
+
+    const updatedTask = {
+        ...localTask.value,
+        priority: priority.value,
+        tags: JSON.stringify(tags.value),
+        assignedOperatorId: assignedOperatorId.value,
+        estimatedMinutes: estimatedMinutes.value,
+        dueDate: dueDate.value ? new Date(dueDate.value).toISOString() : null,
+    };
+
+    try {
+        await window.electron.tasks.update(updatedTask.id, updatedTask);
+        localTask.value = updatedTask;
+        // Refresh task data
+        emit('save', updatedTask as Task);
+    } catch (error) {
+        console.error('Failed to update task details:', error);
+    }
+}}
 
 /**
  * Handle execute
@@ -1230,6 +1275,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 v-for="tab in [
                                     'prompt',
                                     'settings',
+                                    'details',
                                     'comments',
                                     'history',
                                 ] as const"
@@ -1247,9 +1293,11 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         ? '프롬프트'
                                         : tab === 'settings'
                                           ? 'AI 설정'
-                                          : tab === 'comments'
-                                            ? '댓글'
-                                            : '히스토리'
+                                          : tab === 'details'
+                                            ? '상세 정보'
+                                            : tab === 'comments'
+                                              ? '댓글'
+                                              : '히스토리'
                                 }}
                             </button>
                         </div>
@@ -2427,6 +2475,95 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Details Tab -->
+                        <div v-if="activeTab === 'details'" class="space-y-6">
+                            <!-- Priority -->
+                            <div>
+                                <label
+                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                >
+                                    Priority
+                                </label>
+                                <select
+                                    v-model="priority"
+                                    class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="urgent">Urgent</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+
+                            <!-- Tags -->
+                            <div>
+                                <label
+                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                >
+                                    Tags
+                                </label>
+                                <TagInput v-model="tags" placeholder="Add tags..." />
+                            </div>
+
+                            <!-- Assigned Operator -->
+                            <div>
+                                <OperatorSelector
+                                    v-model="assignedOperatorId"
+                                    :project-id="localTask?.projectId || null"
+                                />
+                            </div>
+
+                            <!-- Estimated Duration -->
+                            <div>
+                                <label
+                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                >
+                                    Estimated Duration (minutes)
+                                </label>
+                                <input
+                                    v-model.number="estimatedMinutes"
+                                    type="number"
+                                    min="0"
+                                    class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Enter estimated minutes"
+                                />
+                                <p
+                                    v-if="estimatedMinutes > 0"
+                                    class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+                                >
+                                    Approximately {{ Math.floor(estimatedMinutes / 60) }}h
+                                    {{ estimatedMinutes % 60 }}m
+                                </p>
+                            </div>
+
+                            <!-- Due Date -->
+                            <div>
+                                <label
+                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                >
+                                    Due Date
+                                </label>
+                                <input
+                                    v-model="dueDate"
+                                    type="datetime-local"
+                                    class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <!-- Save Button -->
+                            <div
+                                class="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700"
+                            >
+                                <button
+                                    @click="handleDetailsUpdate"
+                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                >
+                                    Update Details
+                                </button>
                             </div>
                         </div>
 
