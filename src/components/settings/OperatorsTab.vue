@@ -64,7 +64,7 @@ async function loadOperators() {
     loading.value = true;
     try {
         // Get global operators (projectId = null)
-        operators.value = await window.electron.invoke('operators:list', null);
+        operators.value = await window.electron.operators.list(null);
     } catch (error) {
         console.error('Failed to load operators:', error);
     } finally {
@@ -72,42 +72,47 @@ async function loadOperators() {
     }
 }
 
+function openCreateModal() {
+    selectedOperator.value = null;
+    showCreateModal.value = true;
+}
+
 function editOperator(operator: Operator) {
     selectedOperator.value = operator;
 }
 
-async function deleteOperator(operator: Operator) {
-    if (!confirm(`Are you sure you want to delete "${operator.name}"?`)) {
-        return;
-    }
-
-    try {
-        await window.electron.invoke('operators:delete', operator.id);
-        await loadOperators();
-    } catch (error) {
-        console.error('Failed to delete operator:', error);
-        alert('Failed to delete operator');
-    }
+function closeModal() {
+    showCreateModal.value = false;
+    selectedOperator.value = null;
 }
 
 async function saveOperator(data: any) {
     try {
         if (selectedOperator.value) {
-            await window.electron.invoke('operators:update', selectedOperator.value.id, data);
+            // Update existing
+            await window.electron.operators.update(selectedOperator.value.id, data);
         } else {
-            await window.electron.invoke('operators:create', data);
+            // Create new
+            await window.electron.operators.create(data);
         }
-        await loadOperators();
         closeModal();
+        await loadOperators();
     } catch (error) {
         console.error('Failed to save operator:', error);
         alert('Failed to save operator');
     }
 }
 
-function closeModal() {
-    showCreateModal.value = false;
-    selectedOperator.value = null;
+async function deleteOperator(operator: Operator) {
+    if (!confirm(`Delete operator "${operator.name}"?`)) return;
+
+    try {
+        await window.electron.operators.delete(operator.id);
+        await loadOperators();
+    } catch (error) {
+        console.error('Failed to delete operator:', error);
+        alert('Failed to delete operator');
+    }
 }
 </script>
 
