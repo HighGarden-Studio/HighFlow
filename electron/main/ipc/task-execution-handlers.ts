@@ -1632,8 +1632,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     }
                 };
 
-                // Execute review with the AI
-                const reviewResult = await executor.executeReview(
+                // Extract image data if execution result contains base64 image
+                let imageDataForReview: string | undefined;
+                if (isBase64Image(executionResult.content)) {
+                    imageDataForReview = executionResult.content;
+                    console.log('[TaskExecution] Extracted base64 image for vision review');
+                }
+
+                // Execute review with the AI\n                const reviewResult = await executor.executeReview(
                     task as Task,
                     reviewPrompt,
                     executionResult.content,
@@ -1642,6 +1648,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         onToken: onReviewToken,
                         aiProvider: effectiveConfig.provider,
                         aiModel: effectiveConfig.model,
+                        imageData: imageDataForReview, // Pass image for vision models
                     }
                 );
 

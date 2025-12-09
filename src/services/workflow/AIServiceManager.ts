@@ -305,7 +305,30 @@ export class AIServiceManager {
             if (aiConfig.systemPrompt) {
                 baseMessages.push({ role: 'system', content: aiConfig.systemPrompt });
             }
-            baseMessages.push({ role: 'user', content: userPrompt });
+
+            // Check if task has imageData for vision models (e.g., for auto-review of images)
+            const imageData = (task as any).imageData || context.metadata?.imageData;
+            if (imageData) {
+                // Vision message with multimodal content
+                console.log('[AIServiceManager] Vision task detected, creating multimodal message');
+                baseMessages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: userPrompt },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: imageData.startsWith('data:')
+                                    ? imageData
+                                    : `data:image/png;base64,${imageData}`,
+                            },
+                        },
+                    ] as any,
+                });
+            } else {
+                // Standard text message
+                baseMessages.push({ role: 'user', content: userPrompt });
+            }
 
             options.onLog?.('info', `[AIServiceManager] Generated prompt for task ${task.id}`, {
                 taskId: task.id,

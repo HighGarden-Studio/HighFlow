@@ -349,6 +349,7 @@ export class AdvancedTaskExecutor {
             timeout?: number;
             aiProvider?: string | null;
             aiModel?: string | null;
+            imageData?: string; // Base64 image data for vision models
         } = {}
     ): Promise<{
         success: boolean;
@@ -391,7 +392,9 @@ export class AdvancedTaskExecutor {
                 // Force text output for reviews, regardless of original task format
                 expectedOutputFormat: 'text',
                 outputFormat: 'text' as any,
-            };
+                // Attach image data for vision models
+                ...(options.imageData ? { imageData: options.imageData } : {}),
+            } as Task;
 
             const result = await this.aiServiceManager.executeTask(reviewTask, context, {
                 streaming: options.streaming ?? true,
