@@ -295,4 +295,28 @@ function handleDragEnd(event: DragEvent) {
 .operators-grid::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
 }
+
+.task-card {
+    @apply rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative;
+}
+
+.task-card.dragging {
+    @apply opacity-50 rotate-2;
+}
+
+.task-card.connection-dragging {
+    @apply opacity-75;
+}
+
+.task-card.connection-target {
+    @apply border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-105;
+}
+
+.task-card.hovered:not(.operator-drag-over) {
+    @apply shadow-md;
+}
+
+.task-card.operator-drag-over {
+    @apply border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg scale-105;
+}
 </style>
