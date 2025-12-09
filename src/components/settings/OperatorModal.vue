@@ -1,116 +1,248 @@
 <template>
-    <div class="modal-overlay" @click.self="$emit('close')">
-        <div class="modal-content operator-modal">
-            <div class="modal-header">
-                <h2>{{ operator ? 'Edit Operator' : 'Create Operator' }}</h2>
-                <button @click="$emit('close')" class="btn-close">
-                    <i class="ph ph-x"></i>
-                </button>
-            </div>
+    <Teleport to="body">
+        <Transition
+            enter-active-class="transition-opacity duration-200"
+            enter-from-class="opacity-0"
+            enter-to-class="opacity-100"
+            leave-active-class="transition-opacity duration-200"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+        >
+            <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <!-- Backdrop -->
+                <div
+                    class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    @click="$emit('close')"
+                />
 
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input v-model="form.name" type="text" placeholder="Alex" />
-                </div>
-
-                <div class="form-group">
-                    <label>Role Preset</label>
-                    <select
-                        v-model="selectedPreset"
-                        @change="onPresetChange"
-                        class="preset-selector"
+                <!-- Modal Container -->
+                <Transition
+                    enter-active-class="transition-all duration-200"
+                    enter-from-class="opacity-0 scale-95"
+                    enter-to-class="opacity-100 scale-100"
+                    leave-active-class="transition-all duration-200"
+                    leave-from-class="opacity-100 scale-100"
+                    leave-to-class="opacity-0 scale-95"
+                >
+                    <div
+                        v-if="open"
+                        class="relative w-full max-w-2xl max-h-[85vh] bg-gray-900 rounded-xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
                     >
-                        <option
-                            v-for="option in rolePresetOptions"
-                            :key="option.value"
-                            :value="option.value"
+                        <!-- Modal Header -->
+                        <div
+                            class="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800/50"
                         >
-                            {{ option.emoji }} {{ option.label }}
-                        </option>
-                    </select>
-                    <div v-if="selectedPresetData" class="preset-description">
-                        {{ selectedPresetData.description }}
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-2xl"
+                                >
+                                    {{ operator ? operator.avatar : '🤖' }}
+                                </div>
+                                <div>
+                                    <h2 class="text-lg font-semibold text-white">
+                                        {{ operator ? 'Edit Operator' : 'Create Operator' }}
+                                    </h2>
+                                    <p class="text-sm text-gray-400">
+                                        AI agent preset configuration
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                @click="$emit('close')"
+                                class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Modal Body -->
+                        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                            <!-- Name -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >Name</label
+                                >
+                                <input
+                                    v-model="form.name"
+                                    type="text"
+                                    placeholder="Alex"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                />
+                            </div>
+
+                            <!-- Role Preset -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >Role Preset</label
+                                >
+                                <select
+                                    v-model="selectedPreset"
+                                    @change="onPresetChange"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                >
+                                    <option
+                                        v-for="option in rolePresetOptions"
+                                        :key="option.value"
+                                        :value="option.value"
+                                    >
+                                        {{ option.emoji }} {{ option.label }}
+                                    </option>
+                                </select>
+                                <div
+                                    v-if="selectedPresetData"
+                                    class="mt-2 p-3 bg-gray-800/50 border border-gray-700 rounded-lg text-sm text-gray-400"
+                                >
+                                    {{ selectedPresetData.description }}
+                                </div>
+                            </div>
+
+                            <!-- Custom Role Name -->
+                            <div v-if="selectedPreset === 'custom'">
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >Custom Role Name</label
+                                >
+                                <input
+                                    v-model="form.role"
+                                    type="text"
+                                    placeholder="Enter custom role..."
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                />
+                            </div>
+
+                            <!-- Avatar and Color Row -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2"
+                                        >Avatar (Emoji)</label
+                                    >
+                                    <input
+                                        v-model="form.avatar"
+                                        type="text"
+                                        placeholder="🧑‍💻"
+                                        class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-center text-2xl"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2"
+                                        >Color</label
+                                    >
+                                    <input
+                                        v-model="form.color"
+                                        type="color"
+                                        class="w-full h-[42px] px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- AI Provider -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >AI Provider</label
+                                >
+                                <select
+                                    v-model="form.aiProvider"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                >
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                    <option value="openai">OpenAI (GPT)</option>
+                                    <option value="google">Google (Gemini)</option>
+                                </select>
+                            </div>
+
+                            <!-- AI Model -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >AI Model</label
+                                >
+                                <input
+                                    v-model="form.aiModel"
+                                    type="text"
+                                    placeholder="claude-3-5-sonnet-20241022"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm"
+                                />
+                            </div>
+
+                            <!-- System Prompt -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >System Prompt</label
+                                >
+                                <textarea
+                                    v-model="form.systemPrompt"
+                                    placeholder="You are a senior developer..."
+                                    rows="8"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm resize-vertical min-h-[200px]"
+                                ></textarea>
+                                <p class="mt-2 text-xs text-gray-500 italic">
+                                    {{
+                                        selectedPreset === 'custom'
+                                            ? 'Enter your custom system prompt'
+                                            : 'Pre-filled from role preset. You can edit it.'
+                                    }}
+                                </p>
+                            </div>
+
+                            <!-- QA Reviewer Checkbox -->
+                            <div class="flex items-center gap-2">
+                                <input
+                                    v-model="form.isReviewer"
+                                    type="checkbox"
+                                    id="is-reviewer"
+                                    class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer"
+                                />
+                                <label
+                                    for="is-reviewer"
+                                    class="text-sm text-gray-300 cursor-pointer select-none"
+                                >
+                                    Use as QA Reviewer
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Modal Footer -->
+                        <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
+                            <div class="flex items-center justify-end gap-3">
+                                <button
+                                    @click="$emit('close')"
+                                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    @click="save"
+                                    class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg transition-all shadow-lg shadow-purple-900/30"
+                                >
+                                    {{ operator ? 'Update' : 'Create' }}
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div v-if="selectedPreset === 'custom'" class="form-group">
-                    <label>Custom Role Name</label>
-                    <input v-model="form.role" type="text" placeholder="Enter custom role..." />
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Avatar (Emoji)</label>
-                        <input v-model="form.avatar" type="text" placeholder="🧑‍💻" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Color</label>
-                        <input v-model="form.color" type="color" />
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>AI Provider</label>
-                    <select v-model="form.aiProvider">
-                        <option value="anthropic">Anthropic (Claude)</option>
-                        <option value="openai">OpenAI (GPT)</option>
-                        <option value="google">Google (Gemini)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>AI Model</label>
-                    <input v-model="form.aiModel" type="text" placeholder="claude-3-5-sonnet" />
-                </div>
-
-                <div class="form-group">
-                    <label>System Prompt</label>
-                    <textarea
-                        v-model="form.systemPrompt"
-                        placeholder="You are a senior developer..."
-                        rows="8"
-                        class="system-prompt-textarea"
-                    ></textarea>
-                    <div class="hint-text">
-                        {{
-                            selectedPreset === 'custom'
-                                ? 'Enter your custom system prompt'
-                                : 'Pre-filled from role preset. You can edit it.'
-                        }}
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input v-model="form.isReviewer" type="checkbox" />
-                        <span>Use as QA Reviewer</span>
-                    </label>
-                </div>
+                </Transition>
             </div>
-
-            <div class="modal-footer">
-                <button @click="$emit('close')" class="btn-secondary">Cancel</button>
-                <button @click="save" class="btn-primary">
-                    {{ operator ? 'Update' : 'Create' }}
-                </button>
-            </div>
-        </div>
-    </div>
+        </Transition>
+    </Teleport>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import type { Operator } from '@core/types/database';
-import {
-    getRolePresetOptions,
-    getRolePreset,
-    type RolePreset,
-} from '../../utils/operatorRolePresets';
+import { getRolePresetOptions, getRolePreset } from '../../utils/operatorRolePresets';
 
 const props = defineProps<{
     operator?: Operator | null;
+    open: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -195,162 +327,23 @@ function save() {
 </script>
 
 <style scoped>
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
+/* Custom scrollbar for modal content */
+.overflow-y-auto::-webkit-scrollbar {
+    width: 6px;
 }
 
-.modal-content {
-    background: var(--color-bg-primary);
-    border-radius: 1rem;
-    max-width: 600px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+.overflow-y-auto::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
 }
 
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--color-border);
+.overflow-y-auto::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
 }
 
-.modal-header h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--color-text-primary);
-}
-
-.btn-close {
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    border-radius: 0.375rem;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-}
-
-.btn-close:hover {
-    background: var(--color-bg-hover);
-}
-
-.modal-body {
-    padding: 1.5rem;
-}
-
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    padding: 0.625rem;
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 0.5rem;
-    color: var(--color-text-primary);
-    font-size: 0.875rem;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: #667eea;
-}
-
-.checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-}
-
-.checkbox-label input[type='checkbox'] {
-    width: auto;
-}
-
-.preset-selector {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-}
-
-.preset-description {
-    margin-top: 0.5rem;
-    padding: 0.75rem;
-    background: var(--color-bg-tertiary);
-    border-radius: 0.375rem;
-    font-size: 0.8125rem;
-    color: var(--color-text-secondary);
-    line-height: 1.5;
-}
-
-.system-prompt-textarea {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 0.8125rem;
-    line-height: 1.6;
-    resize: vertical;
-    min-height: 200px;
-}
-
-.hint-text {
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    color: var(--color-text-tertiary);
-    font-style: italic;
-}
-
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1.5rem;
-    border-top: 1px solid var(--color-border);
-}
-
-.btn-secondary {
-    padding: 0.625rem 1rem;
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 0.5rem;
-    color: var(--color-text-primary);
-    cursor: pointer;
-}
-
-.btn-primary {
-    padding: 0.625rem 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    border-radius: 0.5rem;
-    color: white;
-    cursor: pointer;
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 </style>
+```

@@ -38,6 +38,7 @@
         <OperatorModal
             v-if="showCreateModal || selectedOperator"
             :operator="selectedOperator"
+            :open="showCreateModal || selectedOperator !== null"
             @close="closeModal"
             @save="saveOperator"
         />
