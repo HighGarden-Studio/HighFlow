@@ -824,13 +824,16 @@ const subtaskProgress = computed(() => {
 
 <template>
     <div
-        class="task-card"
         :class="[
-            { dragging: isDragging },
-            { 'connection-dragging': isConnectionDragging },
-            { 'connection-target': isConnectionTarget },
-            { hovered: isHovered },
-            { 'operator-drag-over': isOperatorDragOver },
+            'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
+            isDragging && 'opacity-50 rotate-2',
+            isConnectionTarget
+                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-[1.02]'
+                : isOperatorDragOver
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg scale-[1.02]'
+                  : hasMissingProvider
+                    ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600 hover:shadow-md'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md',
         ]"
         @click="emit('click', task)"
         @mouseenter="isHovered = true"
