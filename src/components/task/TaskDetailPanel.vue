@@ -256,6 +256,37 @@ const scheduledDatetime = ref('');
 const cronExpression = ref('');
 const timezone = ref('Asia/Seoul');
 
+// Helper: Convert task IDs to project sequences for display
+const taskIdsToSequences = (taskIds: number[]): string => {
+    const projectId = props.task?.projectId;
+    if (!projectId) return taskIds.join(', ');
+
+    const projectTasks = taskStore.tasks.filter((t) => t.projectId === projectId);
+    return taskIds
+        .map((id) => {
+            const task = projectTasks.find((t) => t.id === id);
+            return task?.projectSequence?.toString() || id.toString();
+        })
+        .join(', ');
+};
+
+// Helper: Convert project sequences to task IDs for saving
+const sequencesToTaskIds = (sequences: string): number[] => {
+    const projectId = props.task?.projectId;
+    if (!projectId) return [];
+
+    const projectTasks = taskStore.tasks.filter((t) => t.projectId === projectId);
+    return sequences
+        .split(',')
+        .map((seq) => parseInt(seq.trim()))
+        .filter((seq) => !isNaN(seq))
+        .map((seq) => {
+            const task = projectTasks.find((t) => t.projectSequence === seq);
+            return task?.id;
+        })
+        .filter((id): id is number => id !== undefined);
+};
+
 // Watch for task changes
 watch(
     () => props.task,
@@ -305,7 +336,10 @@ watch(
             if (newTask.triggerConfig) {
                 if (newTask.triggerConfig.dependsOn) {
                     triggerType.value = 'dependency';
-                    dependencyTaskIds.value = newTask.triggerConfig.dependsOn.taskIds.join(', ');
+                    // Convert task IDs to project sequences for display
+                    dependencyTaskIds.value = taskIdsToSequences(
+                        newTask.triggerConfig.dependsOn.taskIds
+                    );
                     dependencyOperator.value = newTask.triggerConfig.dependsOn.operator;
                     dependencyExecutionPolicy.value =
                         newTask.triggerConfig.dependsOn.executionPolicy || 'once';
@@ -722,10 +756,8 @@ function handleSave() {
     // 트리거 설정 구성
     let triggerConfig = null;
     if (triggerType.value === 'dependency' && dependencyTaskIds.value.trim()) {
-        const taskIds = dependencyTaskIds.value
-            .split(',')
-            .map((id) => parseInt(id.trim()))
-            .filter((id) => !isNaN(id));
+        // Convert project sequences to task IDs
+        const taskIds = sequencesToTaskIds(dependencyTaskIds.value);
         if (taskIds.length > 0) {
             triggerConfig = {
                 dependsOn: {
