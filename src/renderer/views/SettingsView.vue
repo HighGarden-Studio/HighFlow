@@ -22,7 +22,15 @@ const settingsStore = useSettingsStore();
 
 // Local state
 const activeTab = ref<
-    'general' | 'ai' | 'mcp' | 'agents' | 'integrations' | 'shortcuts' | 'profile' | 'data'
+    | 'general'
+    | 'ai'
+    | 'mcp'
+    | 'agents'
+    | 'operators'
+    | 'integrations'
+    | 'shortcuts'
+    | 'profile'
+    | 'data'
 >('general');
 const appInfo = ref<{ name: string; version: string; platform: string; isDev: boolean } | null>(
     null
