@@ -53,6 +53,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void; // 연결 시작
     (e: 'connectionEnd', task: Task): void; // 연결 대상
     (e: 'connectProvider', providerId: string): void; // Provider 연동
+    (e: 'operatorDrop', taskId: number, operatorId: number): void; // Operator 할당
 }>();
 
 // Task store for global execution state
@@ -458,10 +459,42 @@ function handleOpenApproval(event: Event) {
     emit('openApproval', props.task);
 }
 
-function handleConnectProvider(event: Event) {
-    event.stopPropagation();
+// 미연동 Provider 연동 핸들러
+function handleConnectProviderClick() {
     if (props.missingProvider) {
         emit('connectProvider', props.missingProvider.id);
+    }
+}
+
+// Operator drop handlers
+const isOperatorDragOver = ref(false);
+
+function handleOperatorDragOver(event: DragEvent) {
+    event.preventDefault();
+    const operatorData = event.dataTransfer?.getData('application/x-operator');
+    if (operatorData) {
+        isOperatorDragOver.value = true;
+        event.dataTransfer!.dropEffect = 'copy';
+    }
+}
+
+function handleOperatorDragLeave() {
+    isOperatorDragOver.value = false;
+}
+
+function handleOperatorDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    isOperatorDragOver.value = false;
+
+    const operatorData = event.dataTransfer?.getData('application/x-operator');
+    if (operatorData) {
+        try {
+            const operator = JSON.parse(operatorData);
+            emit('operatorDrop', props.task.id, operator.id);
+        } catch (error) {
+            console.error('Failed to parse operator data:', error);
+        }
     }
 }
 
@@ -764,21 +797,20 @@ const subtaskProgress = computed(() => {
 
 <template>
     <div
+        class="task-card"
         :class="[
-            'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
-            isDragging && 'opacity-50 rotate-2',
-            isConnectionTarget
-                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-[1.02]'
-                : hasMissingProvider
-                  ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600 hover:shadow-md'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md',
+            { dragging: isDragging },
+            { 'connection-dragging': isConnectionDragging },
+            { 'connection-target': isConnectionTarget },
+            { hovered: isHovered },
+            { 'operator-drag-over': isOperatorDragOver },
         ]"
         @click="emit('click', task)"
         @mouseenter="isHovered = true"
         @mouseleave="isHovered = false"
-        @dragover="handleDragOver"
-        @dragleave="handleDragLeave"
-        @drop="handleDrop"
+        @dragover="handleOperatorDragOver"
+        @dragleave="handleOperatorDragLeave"
+        @drop="handleOperatorDrop"
     >
         <!-- Connection Points - 마우스 호버시 또는 드래그 중 표시 -->
         <div

@@ -18,6 +18,7 @@ import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import { tagService } from '../../services/task/TagService';
 import { estimationService } from '../../services/task/EstimationService';
 import { aiInterviewService } from '../../services/ai/AIInterviewService';
@@ -693,6 +694,23 @@ async function handleRejectTask() {
     }
 }
 
+// Operator assignment handler
+async function handleOperatorDrop(taskId: number, operatorId: number) {
+    try {
+        await taskStore.updateTask(taskId, { assignedOperatorId: operatorId });
+        uiStore.showToast({
+            type: 'success',
+            message: 'Operator assigned successfully',
+        });
+    } catch (error) {
+        console.error('Failed to assign operator:', error);
+        uiStore.showToast({
+            type: 'error',
+            message: 'Failed to assign operator',
+        });
+    }
+}
+
 // Lifecycle
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
@@ -892,6 +910,9 @@ onMounted(async () => {
             </div>
         </header>
 
+        <!-- Operator Panel -->
+        <OperatorPanel :project-id="projectId" />
+
         <!-- Board -->
         <main class="flex-1 overflow-x-auto p-6">
             <div class="flex gap-4 h-full min-w-max">
@@ -984,6 +1005,7 @@ onMounted(async () => {
                                 @connection-start="handleConnectionStart"
                                 @connection-end="handleConnectionEnd"
                                 @connect-provider="handleConnectProvider"
+                                @operator-drop="handleOperatorDrop"
                             />
                         </div>
 
