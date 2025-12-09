@@ -644,6 +644,8 @@ async function handleConnectionEnd(targetTask: Task) {
     }
 
     console.log('Connection created:', sourceTask.title, '→', targetTask.title);
+    console.log('Source task ID:', sourceTask.id, 'Target task ID:', targetTask.id);
+    console.log('Existing taskIds:', existingTaskIds);
 
     const existingPassResultsFrom = existingDependsOn?.passResultsFrom || [];
 
@@ -656,10 +658,13 @@ async function handleConnectionEnd(targetTask: Task) {
         },
     };
 
+    console.log('New trigger config:', JSON.stringify(newTriggerConfig, null, 2));
+
     await taskStore.updateTask(sourceTask.id, {
         triggerConfig: newTriggerConfig,
     });
 
+    console.log('✅ Dependency saved successfully');
     connectionProcessing = false;
     handleConnectionDragEnd();
 }
