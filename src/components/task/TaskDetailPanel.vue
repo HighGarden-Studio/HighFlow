@@ -786,14 +786,14 @@ async function handleDetailsUpdate() {
     };
 
     try {
-        await window.electron.tasks.update(updatedTask.id, updatedTask);
+        await window.electron.tasks.update(updatedTask.id, updatedTask as any);
         localTask.value = updatedTask;
         // Refresh task data
         emit('save', updatedTask as Task);
     } catch (error) {
         console.error('Failed to update task details:', error);
     }
-}}
+}
 
 /**
  * Handle execute
