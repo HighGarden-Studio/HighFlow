@@ -1513,7 +1513,7 @@ const subtaskProgress = computed(() => {
                 >
                     {{ task.assigneeId }}
                 </div>
-
+            </div>
 
             <!-- Estimated Duration -->
             <div
