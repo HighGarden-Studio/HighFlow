@@ -38,7 +38,12 @@ export class LmStudioProvider extends BaseAIProvider {
     constructor(config: LmStudioProviderConfig = {}) {
         super();
         this.baseUrl = this.normalizeBaseUrl(config.baseUrl);
-        this.apiKey = config.apiKey || process.env.LM_STUDIO_API_KEY || undefined;
+        // Check if process exists (browser vs Node.js)
+        const envApiKey =
+            typeof process !== 'undefined' && process.env
+                ? process.env.LM_STUDIO_API_KEY
+                : undefined;
+        this.apiKey = config.apiKey || envApiKey || undefined;
         this.defaultModel = this.normalizeModel(config.defaultModel);
         this.models = [
             {
@@ -75,8 +80,10 @@ export class LmStudioProvider extends BaseAIProvider {
     private normalizeBaseUrl(baseUrl?: string): string {
         // Check if process exists (Node.js environment vs browser)
         const envBaseUrl =
-            typeof process !== 'undefined' ? process.env.LM_STUDIO_BASE_URL : undefined;
-        const url = baseUrl || envBaseUrl || this.DEFAULT_BASE_URL;
+            typeof process !== 'undefined' && process.env
+                ? process.env.LM_STUDIO_BASE_URL
+                : undefined;
+        const url = baseUrl || envBaseUrl || 'http://localhost:1234/v1';
         return url.endsWith('/') ? url.slice(0, -1) : url;
     }
 
