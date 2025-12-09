@@ -68,6 +68,14 @@
                         <div class="operator-info">
                             <div class="operator-name">{{ operator.name }}</div>
                             <div class="operator-role">{{ operator.role }}</div>
+                            <div v-if="operator.aiProvider" class="operator-ai-info">
+                                <span class="ai-provider">{{
+                                    getProviderLabel(operator.aiProvider)
+                                }}</span>
+                                <span v-if="operator.aiModel" class="ai-model">{{
+                                    operator.aiModel
+                                }}</span>
+                            </div>
                         </div>
                         <div class="drag-indicator">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -154,6 +162,19 @@ function handleDragStart(event: DragEvent, operator: Operator) {
 function handleDragEnd(event: DragEvent) {
     const target = event.target as HTMLElement;
     target.classList.remove('dragging');
+}
+
+function getProviderLabel(providerId: string): string {
+    const providerMap: Record<string, string> = {
+        anthropic: 'Claude',
+        openai: 'OpenAI',
+        google: 'Gemini',
+        groq: 'Groq',
+        'claude-code': 'Claude Code',
+        antigravity: 'Antigravity',
+        codex: 'Codex',
+    };
+    return providerMap[providerId] || providerId;
 }
 </script>
 
@@ -268,6 +289,26 @@ function handleDragEnd(event: DragEvent) {
 .operator-role {
     font-size: 0.75rem;
     color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.operator-ai-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-top: 0.25rem;
+    font-size: 0.625rem;
+}
+
+.ai-provider {
+    color: #aaa;
+    font-weight: 600;
+}
+
+.ai-model {
+    color: #999;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
