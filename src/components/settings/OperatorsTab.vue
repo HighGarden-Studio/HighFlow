@@ -22,7 +22,6 @@
             <i class="ph ph-robot"></i>
             <h3>No Operators Yet</h3>
             <p>Create your first AI operator to get started</p>
-            <button class="btn-primary" @click="showCreateModal = true">Create Operator</button>
         </div>
 
         <div v-else class="operators-grid">
