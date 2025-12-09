@@ -2155,26 +2155,6 @@ const subtaskProgress = computed(() => {
         <div
             class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1"
         >
-            <!-- Edit Button -->
-            <button
-                class="w-7 h-7 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-colors"
-                @click.stop="emit('edit', task)"
-                title="Edit Task"
-            >
-                <svg
-                    class="w-4 h-4 text-blue-600 dark:text-blue-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                </svg>
-            </button>
             <!-- Delete Button -->
             <button
                 class="w-7 h-7 rounded hover:bg-red-100 dark:hover:bg-red-900/50 flex items-center justify-center transition-colors"
