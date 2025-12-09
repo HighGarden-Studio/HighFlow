@@ -603,6 +603,13 @@ function handleConnectionDragEnd() {
     document.removeEventListener('dragover', handleGlobalDragOver);
 }
 
+function handleConnectionCancel() {
+    isConnectionMode.value = false;
+    connectionLineStart.value = null;
+    connectionLineEnd.value = null;
+    connectionSourceTask.value = null;
+}
+
 async function handleConnectionEnd(targetTask: Task) {
     if (!connectionSourceTask.value) {
         handleConnectionDragEnd();
