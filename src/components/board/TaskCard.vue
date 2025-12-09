@@ -626,9 +626,9 @@ const aiProviderInfo = computed(() => {
     };
 
     return (
-        providerMap[provider] || {
-            name: provider,
-            icon: provider, // Use provider as fallback for getProviderIcon
+        providerMap[effectiveProvider] || {
+            name: effectiveProvider,
+            icon: effectiveProvider, // Use provider as fallback for getProviderIcon
             color: 'text-gray-700 dark:text-gray-300',
             bgColor: 'bg-gray-100 dark:bg-gray-700',
         }
