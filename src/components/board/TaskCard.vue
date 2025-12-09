@@ -485,25 +485,32 @@ function handleConnectProviderClick() {
 const isOperatorDragOver = ref(false);
 
 function handleOperatorDragOver(event: DragEvent) {
-    event.preventDefault();
-    const operatorData = event.dataTransfer?.getData('application/x-operator');
-    if (operatorData) {
+    // Check if this is an operator drag
+    const types = event.dataTransfer?.types || [];
+    if (types.includes('application/x-operator')) {
+        event.preventDefault();
         isOperatorDragOver.value = true;
         event.dataTransfer!.dropEffect = 'copy';
     }
+    // Otherwise, allow default drag behavior (task movement)
 }
 
-function handleOperatorDragLeave() {
-    isOperatorDragOver.value = false;
+function handleOperatorDragLeave(event: DragEvent) {
+    // Only clear operator drag state if we're leaving the card entirely
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    if (!relatedTarget || !event.currentTarget?.contains(relatedTarget)) {
+        isOperatorDragOver.value = false;
+    }
 }
 
 function handleOperatorDrop(event: DragEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    isOperatorDragOver.value = false;
-
     const operatorData = event.dataTransfer?.getData('application/x-operator');
     if (operatorData) {
+        // This is an operator drop
+        event.preventDefault();
+        event.stopPropagation();
+        isOperatorDragOver.value = false;
+
         try {
             const operator = JSON.parse(operatorData);
             emit('operatorDrop', props.task.id, operator.id);
@@ -511,6 +518,7 @@ function handleOperatorDrop(event: DragEvent) {
             console.error('Failed to parse operator data:', error);
         }
     }
+    // Otherwise, allow default drop behavior (task movement)
 }
 
 function handleDelete() {
