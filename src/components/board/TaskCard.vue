@@ -855,9 +855,24 @@ const subtaskProgress = computed(() => {
         @click="emit('click', task)"
         @mouseenter="isHovered = true"
         @mouseleave="isHovered = false"
-        @dragover="handleOperatorDragOver"
-        @dragleave="handleOperatorDragLeave"
-        @drop="handleOperatorDrop"
+        @dragover.prevent="
+            (e) => {
+                handleOperatorDragOver(e);
+                handleDragOver(e);
+            }
+        "
+        @dragleave="
+            (e) => {
+                handleOperatorDragLeave(e);
+                handleDragLeave();
+            }
+        "
+        @drop="
+            (e) => {
+                handleOperatorDrop(e);
+                handleDrop(e);
+            }
+        "
     >
         <!-- Connection Points - 마우스 호버시 또는 드래그 중 표시 -->
         <div
