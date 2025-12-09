@@ -837,6 +837,22 @@ const subtaskProgress = computed(() => {
     if (subtaskStats.value.total === 0) return 0;
     return Math.round((subtaskStats.value.done / subtaskStats.value.total) * 100);
 });
+
+// Convert dependency task IDs to project sequences for display
+const dependencySequences = computed(() => {
+    const taskIds = props.task.triggerConfig?.dependsOn?.taskIds;
+    if (!taskIds || taskIds.length === 0) return '';
+
+    const projectId = props.task.projectId;
+    const projectTasks = taskStore.tasks.filter((t) => t.projectId === projectId);
+
+    return taskIds
+        .map((id) => {
+            const task = projectTasks.find((t) => t.id === id);
+            return task?.projectSequence?.toString() || id.toString();
+        })
+        .join(', #');
+});
 </script>
 
 <template>
@@ -1487,7 +1503,7 @@ const subtaskProgress = computed(() => {
                         자동 실행 조건
                     </p>
                     <p class="text-indigo-600 dark:text-indigo-400">
-                        Task #{{ task.triggerConfig.dependsOn.taskIds.join(', #') }}
+                        Task #{{ dependencySequences }}
                         {{ task.triggerConfig.dependsOn.operator === 'all' ? '모두' : '하나라도' }}
                         완료 시
                     </p>
