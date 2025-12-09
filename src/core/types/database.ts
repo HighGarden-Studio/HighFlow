@@ -505,6 +505,7 @@ export interface Task extends BaseEntity {
     reviewAiProvider: AIProvider | null;
     reviewAiModel: string | null;
     mcpConfig: MCPConfig | null;
+    assignedOperatorId: number | null; // Operator assigned to this task
     order: number;
     parentTaskId: number | null;
     assigneeId: number | null;
@@ -683,6 +684,38 @@ export interface AIProviderConfig extends BaseEntity {
     currentSpend: number;
     lastTestedAt: Date | null;
     lastError: string | null;
+}
+
+export interface Operator extends BaseEntity {
+    projectId: number | null; // NULL for global operators
+    name: string;
+    role: string;
+    avatar: string | null; // emoji or image URL
+    color: string | null; // hex color
+    description: string | null;
+
+    // AI Configuration
+    aiProvider: AIProvider;
+    aiModel: string;
+    systemPrompt: string | null;
+
+    // Review Configuration
+    isReviewer: boolean;
+    reviewAiProvider: AIProvider | null;
+    reviewAiModel: string | null;
+
+    // Metadata
+    specialty: string[]; // Array of specialties
+    isActive: boolean;
+    usageCount: number;
+    successRate: number | null;
+}
+
+export interface OperatorMCP extends BaseEntity {
+    operatorId: number;
+    mcpServerSlug: string;
+    config: Record<string, unknown> | null; // MCP-specific config override
+    isRequired: boolean;
 }
 
 export interface MCPIntegration extends BaseEntity {

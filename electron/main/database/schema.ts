@@ -190,6 +190,9 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         reviewAiProvider: text('review_ai_provider'),
         reviewAiModel: text('review_ai_model'),
         mcpConfig: text('mcp_config', { mode: 'json' }),
+        assignedOperatorId: integer('assigned_operator_id').references((): any => operators.id, {
+            onDelete: 'set null',
+        }),
         order: integer('order').notNull().default(0),
         parentTaskId: integer('parent_task_id').references((): any => tasks.id),
         assigneeId: integer('assignee_id').references(() => users.id, { onDelete: 'set null' }),
@@ -575,6 +578,73 @@ export const aiProviderConfigs = sqliteTable(
     (table) => ({
         userIdx: index('ai_provider_config_user_idx').on(table.userId),
         teamIdx: index('ai_provider_config_team_idx').on(table.teamId),
+    })
+);
+
+// ========================================
+// AI Operators
+// ========================================
+
+export const operators = sqliteTable(
+    'operators',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }), // NULL for global
+
+        // Basic Info
+        name: text('name').notNull(),
+        role: text('role').notNull(),
+        avatar: text('avatar'), // emoji or image URL
+        color: text('color'), // hex color
+        description: text('description'),
+
+        // AI Configuration
+        aiProvider: text('ai_provider').notNull(),
+        aiModel: text('ai_model').notNull(),
+        systemPrompt: text('system_prompt'),
+
+        // Review Configuration (for QA operators)
+        isReviewer: integer('is_reviewer', { mode: 'boolean' }).notNull().default(false),
+        reviewAiProvider: text('review_ai_provider'),
+        reviewAiModel: text('review_ai_model'),
+
+        // Metadata
+        specialty: text('specialty', { mode: 'json' }).notNull().default('[]'), // Array of specialties
+        isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+        usageCount: integer('usage_count').notNull().default(0),
+        successRate: real('success_rate'),
+
+        createdAt: integer('created_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+        updatedAt: integer('updated_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => ({
+        projectIdx: index('operator_project_idx').on(table.projectId),
+        activeIdx: index('operator_active_idx').on(table.isActive),
+    })
+);
+
+export const operatorMCPs = sqliteTable(
+    'operator_mcps',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        operatorId: integer('operator_id')
+            .notNull()
+            .references(() => operators.id, { onDelete: 'cascade' }),
+        mcpServerSlug: text('mcp_server_slug').notNull(),
+        config: text('config', { mode: 'json' }), // MCP-specific config override
+        isRequired: integer('is_required', { mode: 'boolean' }).notNull().default(true),
+
+        createdAt: integer('created_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => ({
+        operatorIdx: index('operator_mcp_operator_idx').on(table.operatorId),
+        // Note: Unique constraint for (operatorId, mcpServerSlug) is defined in migration SQL
     })
 );
 
