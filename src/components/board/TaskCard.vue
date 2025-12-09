@@ -636,6 +636,13 @@ const aiProviderInfo = computed(() => {
 });
 
 /**
+ * 유효 AI Model - Operator 할당 시 Operator의 모델 우선 사용
+ */
+const effectiveAIModel = computed(() => {
+    return assignedOperator.value?.aiModel || props.task.aiModel;
+});
+
+/**
  * 예상 결과물 형식 아이콘/라벨 매핑
  */
 const outputFormatInfo = computed(() => {
