@@ -9,7 +9,7 @@
                 <span class="operator-role">{{ operator.role }}</span>
             </div>
             <div class="operator-actions">
-                <button @click="$emit('edit', operator)" class="btn-icon" title="Edit">
+                <button @click="$emit('edit', operator)" class="btn-icon btn-edit" title="Edit">
                     <i class="ph ph-pencil"></i>
                 </button>
                 <button
@@ -124,6 +124,15 @@ defineEmits<{
 .btn-icon:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+}
+
+.btn-edit {
+    color: #3b82f6;
+}
+
+.btn-edit:hover {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
 }
 
 .btn-danger:hover {
