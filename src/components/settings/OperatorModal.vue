@@ -156,6 +156,7 @@
                                     :provider="form.aiProvider"
                                     :model="form.aiModel"
                                     :local-agent="localAgent"
+                                    :show-local-agents="true"
                                     :is-dev-project="false"
                                     label="AI Configuration"
                                     @update:mode="handleModeChange"
