@@ -253,7 +253,7 @@ export class PromptMacroService {
         if (field === 'summary') {
             return context.previousResults
                 .map((r) => {
-                    const content = this.extractContent(r.output, r.taskId);
+                    const content = this.extractContentForMacro(r.output, r.taskId);
                     const summary =
                         content.length > 200 ? content.substring(0, 200) + '...' : content;
                     return `[Task #${r.taskId}${r.taskTitle ? ` - ${r.taskTitle}` : ''}]\n${summary}`;
@@ -305,7 +305,7 @@ export class PromptMacroService {
     private static extractField(result: TaskResult, field: string): string {
         switch (field) {
             case 'content':
-                return this.extractContent(result.output, result.taskId);
+                return this.extractContentForMacro(result.output, result.taskId);
 
             case 'output':
                 return typeof result.output === 'object'
@@ -313,7 +313,7 @@ export class PromptMacroService {
                     : String(result.output);
 
             case 'summary':
-                const content = this.extractContent(result.output, result.taskId);
+                const content = this.extractContentForMacro(result.output, result.taskId);
                 return content.length > 500 ? content.substring(0, 500) + '...' : content;
 
             case 'status':
@@ -353,42 +353,29 @@ export class PromptMacroService {
     }
 
     /**
-     * output에서 content 추출
+     * output에서 content 추출 (원본 데이터 반환 - UI 표시용)
      */
-    private static extractContent(output: unknown, taskId?: number): string {
+    private static extractContent(output: unknown): string {
         if (typeof output === 'string') {
-            // Base64 이미지인 경우 파일로 저장하고 경로 반환
-            if (this.isBase64Image(output)) {
-                return this.saveBase64ImageToTempFile(output, taskId);
-            }
             return output;
         }
 
         if (output && typeof output === 'object') {
             const obj = output as Record<string, unknown>;
 
-            // imageUrl 필드가 있는 경우 (이미지 생성 결과)
+            // 이미지 생성 결과
             if ('imageUrl' in obj && typeof obj.imageUrl === 'string') {
-                if (this.isBase64Image(obj.imageUrl)) {
-                    return this.saveBase64ImageToTempFile(obj.imageUrl, taskId);
-                }
-                return obj.imageUrl; // 이미 URL이면 그대로 반환
+                return obj.imageUrl;
             }
 
             // 일반적인 content 필드들
             if ('content' in obj && typeof obj.content === 'string') {
-                if (this.isBase64Image(obj.content)) {
-                    return this.saveBase64ImageToTempFile(obj.content, taskId);
-                }
                 return obj.content;
             }
             if ('text' in obj && typeof obj.text === 'string') {
                 return obj.text;
             }
             if ('result' in obj && typeof obj.result === 'string') {
-                if (this.isBase64Image(obj.result)) {
-                    return this.saveBase64ImageToTempFile(obj.result, taskId);
-                }
                 return obj.result;
             }
             if ('message' in obj && typeof obj.message === 'string') {
@@ -399,6 +386,20 @@ export class PromptMacroService {
         }
 
         return String(output);
+    }
+
+    /**
+     * 매크로 치환용 - content 추출 후 이미지면 파일로 변환
+     */
+    private static extractContentForMacro(output: unknown, taskId?: number): string {
+        const content = this.extractContent(output);
+
+        // Base64 이미지인 경우에만 파일로 저장
+        if (this.isBase64Image(content)) {
+            return this.saveBase64ImageToTempFile(content, taskId);
+        }
+
+        return content;
     }
 
     /**
