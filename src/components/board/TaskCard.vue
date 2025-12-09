@@ -86,6 +86,21 @@ const isConnectionDragging = ref(false);
 const isConnectionTarget = ref(false);
 const isHovered = ref(false);
 
+// Operator state
+const assignedOperator = ref<any>(null);
+
+// Load assigned operator if exists
+if (props.task.assignedOperatorId) {
+    window.electron.operators
+        .get(props.task.assignedOperatorId)
+        .then((operator) => {
+            assignedOperator.value = operator;
+        })
+        .catch((error) => {
+            console.error('Failed to load operator:', error);
+        });
+}
+
 // 연결점 핸들러
 function handleConnectionDragStart(event: DragEvent) {
     event.stopPropagation();
@@ -920,6 +935,16 @@ const subtaskProgress = computed(() => {
                 >
                     <span class="text-lg">❓</span>
                     <span class="text-sm">미설정</span>
+                </div>
+
+                <!-- Operator Badge -->
+                <div
+                    v-if="assignedOperator"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-700"
+                    :title="`Operator: ${assignedOperator.name} (${assignedOperator.role})`"
+                >
+                    <span class="text-base">{{ assignedOperator.avatar || '🤖' }}</span>
+                    <span class="text-sm font-semibold">{{ assignedOperator.name }}</span>
                 </div>
 
                 <div class="flex items-center gap-2">
