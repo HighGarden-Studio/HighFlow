@@ -7,7 +7,7 @@
 import { db } from '../client';
 import { operators, operatorMCPs } from '../schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
-import type { Operator, OperatorMCP } from '../../../src/core/types/database';
+import type { Operator, OperatorMCP } from '@core/types/database';
 
 export type NewOperator = Omit<
     Operator,
@@ -20,7 +20,7 @@ export class OperatorRepository {
      * Find all operators for a project (including global)
      */
     async findByProject(projectId: number | null): Promise<Operator[]> {
-        return await db
+        return (await db
             .select()
             .from(operators)
             .where(
@@ -32,7 +32,7 @@ export class OperatorRepository {
                       )
                     : and(eq(operators.isActive, true), isNull(operators.projectId))
             )
-            .orderBy(desc(operators.usageCount), desc(operators.createdAt));
+            .orderBy(desc(operators.usageCount), desc(operators.createdAt))) as any;
     }
 
     /**
@@ -51,7 +51,10 @@ export class OperatorRepository {
         const operator = await this.findById(id);
         if (!operator) return undefined;
 
-        const mcps = await db.select().from(operatorMCPs).where(eq(operatorMCPs.operatorId, id));
+        const mcps = (await db
+            .select()
+            .from(operatorMCPs)
+            .where(eq(operatorMCPs.operatorId, id))) as any;
 
         return { ...operator, mcps };
     }
