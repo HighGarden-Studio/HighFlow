@@ -644,7 +644,11 @@ async function handleConnectionEnd(targetTask: Task) {
     }
 
     console.log('Connection created:', sourceTask.title, '→', targetTask.title);
-    console.log('Source task ID:', sourceTask.id, 'Target task ID:', targetTask.id);
+    console.log(
+        'Source task #' + sourceTask.projectSequence + ' (ID:',
+        sourceTask.id + '), Target task #' + targetTask.projectSequence + ' (ID:',
+        targetTask.id + ')'
+    );
     console.log('Existing taskIds:', existingTaskIds);
 
     const existingPassResultsFrom = existingDependsOn?.passResultsFrom || [];
