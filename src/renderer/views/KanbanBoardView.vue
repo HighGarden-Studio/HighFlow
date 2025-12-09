@@ -604,10 +604,13 @@ function handleConnectionDragEnd() {
 }
 
 function handleConnectionCancel() {
-    isConnectionMode.value = false;
-    connectionLineStart.value = null;
-    connectionLineEnd.value = null;
-    connectionSourceTask.value = null;
+    // Delay cleanup to allow connectionEnd to process first if drop succeeded
+    setTimeout(() => {
+        isConnectionMode.value = false;
+        connectionLineStart.value = null;
+        connectionLineEnd.value = null;
+        connectionSourceTask.value = null;
+    }, 50); // 50ms delay
 }
 
 async function handleConnectionEnd(targetTask: Task) {
