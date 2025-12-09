@@ -2087,43 +2087,6 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 />
 
                                 <!-- Review AI Settings -->
-                                <div
-                                    class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4"
-                                >
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div>
-                                            <p
-                                                class="text-sm font-semibold text-gray-900 dark:text-white"
-                                            >
-                                                리뷰용 AI 설정
-                                            </p>
-                                            <p
-                                                class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
-                                            >
-                                                자동/수동 리뷰 실행 시 사용할 Provider와 모델을
-                                                지정하세요
-                                            </p>
-                                        </div>
-                                        <span
-                                            class="text-xs px-2 py-0.5 rounded-full"
-                                            :class="
-                                                autoReview
-                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                                            "
-                                        >
-                                            {{ autoReview ? '자동 리뷰 활성화' : '자동 리뷰 꺼짐' }}
-                                        </span>
-                                    </div>
-                                    <div class="mt-3">
-                                        <AIProviderSelector
-                                            v-model:provider="reviewAiProvider"
-                                            v-model:model="reviewAiModel"
-                                            label="리뷰 AI (제공자/모델)"
-                                            :disabled="!!assignedOperatorId"
-                                        />
-                                    </div>
-                                </div>
                             </div>
 
                             <!-- Temperature Slider -->
@@ -2208,6 +2171,30 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         </p>
                                     </div>
                                 </label>
+
+                                <!-- 리뷰용 AI 설정 - 자동 REVIEW 활성화 시에만 표시 -->
+                                <div
+                                    v-if="autoReview"
+                                    class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                                >
+                                    <div class="mb-3">
+                                        <p
+                                            class="text-sm font-semibold text-blue-900 dark:text-blue-100"
+                                        >
+                                            리뷰용 AI 설정
+                                        </p>
+                                        <p class="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                                            자동 리뷰 실행 시 사용할 Provider와 모델을 지정하세요
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <AIProviderSelector
+                                            v-model:provider="reviewAiProvider"
+                                            v-model:model="reviewAiModel"
+                                            label="리뷰 AI (제공자/모델)"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 테스크 세분화 옵션 (1뎀스 테스크만) -->
