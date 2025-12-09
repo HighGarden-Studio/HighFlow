@@ -345,7 +345,22 @@ watch(
 );
 
 function save() {
-    emit('save', form.value);
+    // Create a clean, serializable object for IPC transmission
+    const operatorData = {
+        name: form.value.name,
+        role: form.value.role,
+        avatar: form.value.avatar,
+        color: form.value.color,
+        aiProvider: form.value.aiProvider,
+        aiModel: form.value.aiModel,
+        systemPrompt: form.value.systemPrompt,
+        isReviewer: form.value.isReviewer ? 1 : 0,
+        specialty: JSON.stringify(form.value.specialty || []),
+        isActive: form.value.isActive ? 1 : 0,
+        projectId: form.value.projectId,
+    };
+
+    emit('save', operatorData);
 }
 </script>
 
