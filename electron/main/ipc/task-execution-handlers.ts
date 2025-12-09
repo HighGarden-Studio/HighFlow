@@ -425,7 +425,25 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             prompt += `## Context from Previous Tasks:\n`;
                             contextResults.forEach((res) => {
                                 prompt += `### Task: ${res.taskTitle}\n`;
-                                prompt += `Output:\n${res.output}\n`;
+
+                                // Check if output contains base64 image
+                                let outputContent = res.output;
+                                if (
+                                    typeof outputContent === 'string' &&
+                                    isBase64Image(outputContent)
+                                ) {
+                                    // Save to temp file and replace with path
+                                    const imagePath = saveBase64ImageToTempFile(
+                                        outputContent,
+                                        res.taskId
+                                    );
+                                    outputContent = `[Image saved to: ${imagePath}]\n\nNote: The image file is available at the path above. You can reference it in your work.`;
+                                    console.log(
+                                        `[LocalAgent] Converted base64 image to file for context: ${imagePath}`
+                                    );
+                                }
+
+                                prompt += `Output:\n${outputContent}\n`;
 
                                 // Include file contents if available
                                 if (res.metadata?.files && Array.isArray(res.metadata.files)) {
