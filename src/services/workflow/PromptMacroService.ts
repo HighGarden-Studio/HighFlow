@@ -253,7 +253,7 @@ export class PromptMacroService {
         if (field === 'summary') {
             return context.previousResults
                 .map((r) => {
-                    const content = this.extractContent(r.output);
+                    const content = this.extractContent(r.output, r.taskId);
                     const summary =
                         content.length > 200 ? content.substring(0, 200) + '...' : content;
                     return `[Task #${r.taskId}${r.taskTitle ? ` - ${r.taskTitle}` : ''}]\n${summary}`;
@@ -305,7 +305,7 @@ export class PromptMacroService {
     private static extractField(result: TaskResult, field: string): string {
         switch (field) {
             case 'content':
-                return this.extractContent(result.output);
+                return this.extractContent(result.output, result.taskId);
 
             case 'output':
                 return typeof result.output === 'object'
@@ -313,7 +313,7 @@ export class PromptMacroService {
                     : String(result.output);
 
             case 'summary':
-                const content = this.extractContent(result.output);
+                const content = this.extractContent(result.output, result.taskId);
                 return content.length > 500 ? content.substring(0, 500) + '...' : content;
 
             case 'status':
