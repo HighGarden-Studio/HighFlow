@@ -1004,6 +1004,7 @@ onMounted(async () => {
                                 @open-approval="openApprovalModal"
                                 @connection-start="handleConnectionStart"
                                 @connection-end="handleConnectionEnd"
+                                @connection-cancel="handleConnectionCancel"
                                 @connect-provider="handleConnectProvider"
                                 @operator-drop="handleOperatorDrop"
                             />

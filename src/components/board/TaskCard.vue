@@ -52,6 +52,7 @@ const emit = defineEmits<{
     (e: 'openApproval', task: Task): void; // 승인 모달 열기
     (e: 'connectionStart', task: Task, event: DragEvent): void; // 연결 시작
     (e: 'connectionEnd', task: Task): void; // 연결 대상
+    (e: 'connectionCancel'): void; // 연결 취소
     (e: 'connectProvider', providerId: string): void; // Provider 연동
     (e: 'operatorDrop', taskId: number, operatorId: number): void; // Operator 할당
 }>();
