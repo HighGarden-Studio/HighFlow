@@ -126,6 +126,32 @@ const databaseAPI = {
 };
 
 // ========================================
+// Operators API
+// ========================================
+
+const operatorsAPI = {
+    list: (projectId: number | null) => ipcRenderer.invoke('operators:list', projectId),
+
+    get: (id: number) => ipcRenderer.invoke('operators:get', id),
+
+    getWithMCPs: (id: number) => ipcRenderer.invoke('operators:getWithMCPs', id),
+
+    create: (data: unknown) => ipcRenderer.invoke('operators:create', data),
+
+    update: (id: number, data: unknown) => ipcRenderer.invoke('operators:update', id, data),
+
+    delete: (id: number) => ipcRenderer.invoke('operators:delete', id),
+
+    getMCPs: (operatorId: number) => ipcRenderer.invoke('operators:getMCPs', operatorId),
+
+    updateMCPs: (operatorId: number, mcps: unknown[]) =>
+        ipcRenderer.invoke('operators:updateMCPs', operatorId, mcps),
+
+    getReviewers: (projectId: number | null) =>
+        ipcRenderer.invoke('operators:getReviewers', projectId),
+};
+
+// ========================================
 // Event System
 // ========================================
 
@@ -981,6 +1007,7 @@ const taskHistoryAPI = {
 // ========================================
 
 const electronAPI = {
+    // Main APIs
     projects: projectsAPI,
     tasks: tasksAPI,
     app: appAPI,
@@ -997,6 +1024,7 @@ const electronAPI = {
     localProviders: localProvidersAPI,
     taskExecution: taskExecutionAPI,
     taskHistory: taskHistoryAPI,
+    operators: operatorsAPI,
 };
 
 // Expose to renderer
