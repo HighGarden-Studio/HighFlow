@@ -1639,7 +1639,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     console.log('[TaskExecution] Extracted base64 image for vision review');
                 }
 
-                // Execute review with the AI\n                const reviewResult = await executor.executeReview(
+                // Execute review with the AI
+                const reviewResult = await executor.executeReview(
                     task as Task,
                     reviewPrompt,
                     executionResult.content,
