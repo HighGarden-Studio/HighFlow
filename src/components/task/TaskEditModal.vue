@@ -7,6 +7,7 @@
 import { ref, computed, watch } from 'vue';
 import type { Task, AIProvider } from '@core/types/database';
 import TagInput from '../common/TagInput.vue';
+import OperatorSelector from '../common/OperatorSelector.vue';
 import MacroInsertButton from '../common/MacroInsertButton.vue';
 import IconRenderer from '../common/IconRenderer.vue';
 import { estimationService, type EstimationResult } from '../../services/task/EstimationService';
@@ -67,6 +68,7 @@ const form = ref({
     assigneeId: null as number | null,
     aiProvider: null as AIProvider | null,
     aiModel: null as string | null,
+    assignedOperatorId: null as number | null,
 });
 
 const errors = ref<Record<string, string>>({});
@@ -99,6 +101,7 @@ watch(
                 assigneeId: newTask.assigneeId || null,
                 aiProvider: newTask.aiProvider || null,
                 aiModel: newTask.aiModel || null,
+                assignedOperatorId: newTask.assignedOperatorId || null,
             };
             errors.value = {};
         } else if (props.open && !newTask) {
@@ -770,6 +773,14 @@ async function estimateTimeWithAI() {
                                         </option>
                                     </select>
                                 </div>
+                            </div>
+
+                            <!-- Operator Assignment -->
+                            <div>
+                                <OperatorSelector
+                                    v-model="form.assignedOperatorId"
+                                    :project-id="task?.projectId || null"
+                                />
                             </div>
 
                             <!-- AI Estimated Time -->
