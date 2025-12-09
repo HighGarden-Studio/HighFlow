@@ -85,6 +85,7 @@ const isTaskCurrentlyReviewing = computed(() => {
 // Connection point state
 const isConnectionDragging = ref(false);
 const isConnectionTarget = ref(false);
+let connectionDropSuccessful = false; // Track if drop was successful
 const isHovered = ref(false);
 
 // Operator state
@@ -119,13 +120,17 @@ function handleConnectionDragStart(event: DragEvent) {
         );
     }
 
+    connectionDropSuccessful = false; // Reset flag
     emit('connectionStart', props.task, event);
 }
 
 function handleConnectionDragEnd() {
     isConnectionDragging.value = false;
-    // Emit cancel event to clean up connection line if not dropped on target
-    emit('connectionCancel');
+    // Only emit cancel if drop didn't succeed
+    if (!connectionDropSuccessful) {
+        emit('connectionCancel');
+    }
+    connectionDropSuccessful = false; // Reset for next drag
 }
 
 function handleDragOver(event: DragEvent) {
@@ -168,6 +173,7 @@ function handleDrop(event: DragEvent) {
     if (data) {
         try {
             JSON.parse(data); // Validate JSON format
+            connectionDropSuccessful = true; // Mark as successful
             // 자기 자신이든 아니든 connectionEnd 이벤트 발생 (연결선 정리를 위해)
             // KanbanBoardView에서 자기 자신 여부를 체크하여 처리
             emit('connectionEnd', props.task);
