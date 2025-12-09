@@ -1799,6 +1799,21 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Assigned Operator -->
+                            <div>
+                                <OperatorSelector
+                                    v-model="assignedOperatorId"
+                                    :project-id="localTask?.projectId || null"
+                                />
+                                <p
+                                    v-if="assignedOperatorId"
+                                    class="mt-2 text-xs text-amber-600 dark:text-amber-400"
+                                >
+                                    ⚠️ Operator가 할당되어 있어 하단 AI 설정이 비활성화되었습니다.
+                                </p>
+                            </div>
+
                             <!-- Execution Mode Selection -->
                             <div>
                                 <label
@@ -1820,6 +1835,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             v-model="executionMode"
                                             type="radio"
                                             value="api"
+                                            :disabled="!!assignedOperatorId"
                                             class="sr-only"
                                         />
                                         <div
@@ -2035,6 +2051,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     v-model:provider="aiProvider"
                                     v-model:model="aiModel"
                                     label="AI 제공자"
+                                    :disabled="!!assignedOperatorId"
                                 />
 
                                 <!-- Review AI Settings -->
@@ -2071,6 +2088,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             v-model:provider="reviewAiProvider"
                                             v-model:model="reviewAiModel"
                                             label="리뷰 AI (제공자/모델)"
+                                            :disabled="!!assignedOperatorId"
                                         />
                                     </div>
                                 </div>
@@ -2507,14 +2525,6 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     Tags
                                 </label>
                                 <TagInput v-model="tags" placeholder="Add tags..." />
-                            </div>
-
-                            <!-- Assigned Operator -->
-                            <div>
-                                <OperatorSelector
-                                    v-model="assignedOperatorId"
-                                    :project-id="localTask?.projectId || null"
-                                />
                             </div>
 
                             <!-- Estimated Duration -->
