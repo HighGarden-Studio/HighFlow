@@ -11,6 +11,7 @@ import { getProviderIcon } from '../../utils/iconMapping';
 import AIProviderModal from '../../components/settings/AIProviderModal.vue';
 import UserProfileSettings from '../../components/settings/UserProfileSettings.vue';
 import IntegrationsSettings from '../../components/settings/IntegrationsSettings.vue';
+import OperatorsTab from '../../components/settings/OperatorsTab.vue';
 import MCPServersTab from '../../components/settings/MCPServersTab.vue';
 import LocalAgentsTab from '../../components/settings/LocalAgentsTab.vue';
 import IconRenderer from '../../components/common/IconRenderer.vue';
@@ -262,6 +263,12 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
         id: 'profile',
         label: 'Profile',
         icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+    },
+    {
+        id: 'operators',
+        label: 'AI Operators',
+        icon: '🤖',
+        description: 'Manage AI agent presets',
     },
     {
         id: 'data',
@@ -704,6 +711,19 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
                     <!-- Integrations -->
                     <div v-if="activeTab === 'integrations'">
                         <IntegrationsSettings />
+                    </div>
+
+                    <!-- AI Operators -->
+                    <div v-if="activeTab === 'operators'">
+                        <OperatorsTab />
+                    </div>
+
+                    <!-- Data -->
+                    <div v-if="activeTab === 'data'">
+                        <h2 class="text-2xl font-bold mb-4 text-text-primary">Data Management</h2>
+                        <div class="text-text-secondary">
+                            Data settings will be implemented here.
+                        </div>
                     </div>
 
                     <!-- Keyboard Shortcuts -->
