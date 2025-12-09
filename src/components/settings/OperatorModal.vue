@@ -146,31 +146,20 @@
                                 </div>
                             </div>
 
-                            <!-- AI Provider -->
+                            <!-- AI Provider & Model -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
-                                    >AI Provider</label
+                                    >AI Provider & Model</label
                                 >
-                                <select
-                                    v-model="form.aiProvider"
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                                >
-                                    <option value="anthropic">Anthropic (Claude)</option>
-                                    <option value="openai">OpenAI (GPT)</option>
-                                    <option value="google">Google (Gemini)</option>
-                                </select>
-                            </div>
-
-                            <!-- AI Model -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2"
-                                    >AI Model</label
-                                >
-                                <input
-                                    v-model="form.aiModel"
-                                    type="text"
-                                    placeholder="claude-3-5-sonnet-20241022"
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm"
+                                <UnifiedAISelector
+                                    :model-value="{
+                                        provider: form.aiProvider,
+                                        model: form.aiModel,
+                                        mode: 'api',
+                                        localAgent: null,
+                                    }"
+                                    @update:model-value="handleAIChange"
+                                    compact
                                 />
                             </div>
 
@@ -239,6 +228,7 @@
 import { ref, watch, computed } from 'vue';
 import type { Operator } from '@core/types/database';
 import { getRolePresetOptions, getRolePreset } from '../../utils/operatorRolePresets';
+import UnifiedAISelector from '../common/UnifiedAISelector.vue';
 
 const props = defineProps<{
     operator?: Operator | null;
@@ -272,6 +262,21 @@ const selectedPresetData = computed(() => {
     if (selectedPreset.value === 'custom') return null;
     return getRolePreset(selectedPreset.value);
 });
+
+// Handle AI provider/model change from UnifiedAISelector
+function handleAIChange(config: {
+    provider: string | null;
+    model: string | null;
+    mode: string;
+    localAgent: string | null;
+}) {
+    if (config.provider) {
+        form.value.aiProvider = config.provider as any;
+    }
+    if (config.model) {
+        form.value.aiModel = config.model;
+    }
+}
 
 // Handle preset change
 function onPresetChange() {
