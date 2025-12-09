@@ -1798,6 +1798,67 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 }
 
 /**
+ * Check if a string is a base64-encoded image
+ */
+function isBase64Image(str: string): boolean {
+    // Data URL 형식
+    if (str.startsWith('data:image/')) {
+        return true;
+    }
+
+    // 순수 base64: 길이가 충분히 길고 (50KB 이상), base64 문자만 포함
+    if (str.length > 50000 && /^[A-Za-z0-9+/=\s]+$/.test(str)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Save base64 image to temp file and return file path
+ */
+function saveBase64ImageToTempFile(base64Data: string, taskId?: number): string {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    try {
+        // Base64 데이터 형식 감지
+        let imageData = base64Data;
+        let extension = 'png';
+
+        const dataUrlMatch = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+        if (dataUrlMatch) {
+            extension = dataUrlMatch[1] ?? 'png';
+            imageData = dataUrlMatch[2] ?? base64Data;
+        }
+
+        // 임시 디렉토리 생성
+        const tempDir = path.join(os.tmpdir(), 'workflow-manager-images');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        // 파일명 생성
+        const timestamp = Date.now();
+        const filename = taskId
+            ? `task-${taskId}-review-${timestamp}.${extension}`
+            : `review-${timestamp}.${extension}`;
+        const filePath = path.join(tempDir, filename);
+
+        // Base64 디코딩 후 파일로 저장
+        const buffer = Buffer.from(imageData, 'base64');
+        fs.writeFileSync(filePath, buffer);
+
+        console.log(`✨ Saved review image to temp file: ${filePath}`);
+        return filePath;
+    } catch (error) {
+        console.error('Failed to save base64 image for review:', error);
+        return '[Image save failed]';
+    }
+}
+
+/**
  * Build a review prompt for AI review
  * Focuses on whether the USER'S ORIGINAL INTENT was fulfilled, not just whether AI responded appropriately
  */
@@ -1811,6 +1872,14 @@ function buildReviewPrompt(
     // 실제 실행된 프롬프트 (템플릿 치환 후)
     const executedPrompt = executedPromptOverride ?? (task.generatedPrompt || userOriginalPrompt);
 
+    // 이미지 결과일 경우 base64를 파일로 저장하고 경로로 대체
+    let processedContent = executionContent;
+    if (isBase64Image(executionContent)) {
+        const imagePath = saveBase64ImageToTempFile(executionContent, task.id);
+        processedContent = `[이미지 결과물: ${imagePath}]`;
+        console.log(`[buildReviewPrompt] Converted base64 image to file: ${imagePath}`);
+    }
+
     return `작업 결과를 검토하세요. **간결하게** 답변하세요.
 
 ## 원래 요청
@@ -1820,7 +1889,7 @@ ${userOriginalPrompt}
 ${executedPrompt}
 
 ## 실행 결과
-${executionContent}
+${processedContent}
 
 ---
 
