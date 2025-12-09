@@ -119,10 +119,19 @@ export class TaskRepository {
 
         const maxOrder = maxOrderResult?.maxOrder ?? -1;
 
+        // Get next project sequence number
+        const [maxSeqResult] = await db
+            .select({ maxSequence: sql<number>`MAX(${tasks.projectSequence})` })
+            .from(tasks)
+            .where(eq(tasks.projectId, data.projectId));
+
+        const nextSequence = (maxSeqResult?.maxSequence ?? 0) + 1;
+
         const inserted = await db
             .insert(tasks)
             .values({
                 ...data,
+                projectSequence: nextSequence, // Auto-assign project-scoped sequence
                 // Ensure date fields are Date objects
                 dueDate: typeof data.dueDate === 'string' ? new Date(data.dueDate) : data.dueDate,
                 order: maxOrder + 1,

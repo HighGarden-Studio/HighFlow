@@ -178,6 +178,7 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         projectId: integer('project_id')
             .notNull()
             .references(() => projects.id, { onDelete: 'cascade' }),
+        projectSequence: integer('project_sequence').notNull(), // Project-scoped task number (1, 2, 3...)
         title: text('title').notNull(),
         description: text('description'),
         generatedPrompt: text('generated_prompt'),
@@ -242,6 +243,11 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         dueDateIdx: index('task_due_date_idx').on(table.dueDate),
         deletedIdx: index('task_deleted_idx').on(table.deletedAt),
         parentIdx: index('task_parent_idx').on(table.parentTaskId),
+        // Note: Unique constraint for (projectId, projectSequence) is defined in migration SQL
+        projectSequenceIdx: index('task_project_sequence_idx').on(
+            table.projectId,
+            table.projectSequence
+        ),
     })
 );
 

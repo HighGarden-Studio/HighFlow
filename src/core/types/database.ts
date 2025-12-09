@@ -493,6 +493,7 @@ export interface ImageGenerationConfig {
 
 export interface Task extends BaseEntity {
     projectId: number;
+    projectSequence: number; // Project-scoped task number (1, 2, 3...)
     title: string;
     description: string | null;
     generatedPrompt: string | null;

@@ -909,7 +909,7 @@ const subtaskProgress = computed(() => {
                     <span
                         class="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded"
                     >
-                        #{{ task.id }}
+                        #{{ task.projectSequence }}
                     </span>
                     <!-- Execution Order -->
                     <span

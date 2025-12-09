@@ -39,9 +39,10 @@
         "db:generate": "drizzle-kit generate:sqlite",
         "db:push": "drizzle-kit push:sqlite",
         "db:studio": "drizzle-kit studio",
+        "db:drop": "drizzle-kit drop",
         "db:migrate": "tsx scripts/migrate.ts",
         "db:seed": "tsx scripts/seed.ts",
-        "postinstall": "electron-builder install-app-deps",
+        "postinstall": "cd node_modules/.pnpm/better-sqlite3@9.6.0/node_modules/better-sqlite3 && npx node-gyp rebuild --target=29.0.1 --arch=arm64 --dist-url=https://electronjs.org/headers || true",
         "release": "pnpm build && electron-builder --publish always"
     },
     "dependencies": {
