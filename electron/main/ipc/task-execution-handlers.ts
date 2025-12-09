@@ -1572,8 +1572,33 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 // Fetch project to resolve inheritance
                 const project = await projectRepository.findById(task.projectId);
 
-                // Resolve AI provider/model for review (Task > Project Metadata > Project Default > Global)
-                const effectiveConfig = resolveAutoReviewProvider(task, project as any);
+                // Priority 1: Check for reviewer operator
+                let effectiveConfig: {
+                    provider: string | null;
+                    model: string | null;
+                    source: string;
+                };
+                let reviewerOperator: any = null;
+
+                if (task.projectId) {
+                    const operators = await operatorRepository.findAllByProject(task.projectId);
+                    reviewerOperator = operators.find(
+                        (op: any) => op.isReviewer === 1 || op.isReviewer === true
+                    );
+
+                    if (reviewerOperator) {
+                        effectiveConfig = {
+                            provider: reviewerOperator.aiProvider,
+                            model: reviewerOperator.aiModel,
+                            source: 'reviewer-operator',
+                        };
+                    } else {
+                        // Priority 2-4: Use standard resolution (Task > Project > Global)
+                        effectiveConfig = resolveAutoReviewProvider(task, project as any);
+                    }
+                } else {
+                    effectiveConfig = resolveAutoReviewProvider(task, project as any);
+                }
 
                 console.log('[TaskExecution] Starting auto-review with settings:', {
                     taskId,
