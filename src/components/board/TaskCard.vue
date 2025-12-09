@@ -123,6 +123,8 @@ function handleConnectionDragStart(event: DragEvent) {
 
 function handleConnectionDragEnd() {
     isConnectionDragging.value = false;
+    // Emit cancel event to clean up connection line if not dropped on target
+    emit('connectionCancel');
 }
 
 function handleDragOver(event: DragEvent) {
