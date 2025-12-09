@@ -388,6 +388,9 @@ export class AdvancedTaskExecutor {
                 description: reviewPrompt,
                 aiProvider: reviewProvider as any,
                 aiModel: reviewModel,
+                // Force text output for reviews, regardless of original task format
+                expectedOutputFormat: 'text',
+                outputFormat: 'text' as any,
             };
 
             const result = await this.aiServiceManager.executeTask(reviewTask, context, {
