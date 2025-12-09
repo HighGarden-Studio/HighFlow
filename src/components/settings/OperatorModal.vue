@@ -130,9 +130,9 @@ const form = ref({
     aiModel: 'claude-3-5-sonnet-20241022',
     systemPrompt: '',
     isReviewer: false,
-    specialty: [],
+    specialty: [] as string[],
     isActive: true,
-    projectId: null,
+    projectId: null as number | null,
 });
 
 // Get selected preset data
@@ -183,7 +183,7 @@ watch(
 
             // Try to match with preset
             const matchedPreset = rolePresetOptions.find((p) => p.label === operator.role);
-            selectedPreset.value = matchedPreset ? matchedPreset.value : 'custom';
+            selectedPreset.value = matchedPreset?.value || 'custom';
         }
     },
     { immediate: true }
