@@ -560,6 +560,7 @@ function handleConnectProvider(providerId: string) {
 
 // Connection handlers for task dependency
 const connectionSourceTask = ref<Task | null>(null);
+let connectionProcessing = false; // Flag to prevent cancel during save
 
 function handleConnectionStart(task: Task, event: DragEvent) {
     connectionSourceTask.value = task;
@@ -600,21 +601,26 @@ function handleConnectionDragEnd() {
     connectionLineStart.value = null;
     connectionLineEnd.value = null;
     connectionSourceTask.value = null;
+    connectionProcessing = false; // Reset processing flag
     document.removeEventListener('dragover', handleGlobalDragOver);
 }
 
 function handleConnectionCancel() {
-    // Delay cleanup to allow connectionEnd to process first if drop succeeded
-    setTimeout(() => {
-        isConnectionMode.value = false;
-        connectionLineStart.value = null;
-        connectionLineEnd.value = null;
-        connectionSourceTask.value = null;
-    }, 50); // 50ms delay
+    // Don't cancel if we're in the middle of processing a connection
+    if (connectionProcessing) {
+        return;
+    }
+    isConnectionMode.value = false;
+    connectionLineStart.value = null;
+    connectionLineEnd.value = null;
+    connectionSourceTask.value = null;
 }
 
 async function handleConnectionEnd(targetTask: Task) {
+    connectionProcessing = true; // Mark as processing
+
     if (!connectionSourceTask.value) {
+        connectionProcessing = false;
         handleConnectionDragEnd();
         return;
     }
@@ -623,6 +629,7 @@ async function handleConnectionEnd(targetTask: Task) {
 
     // 자기 자신에게 연결 불가
     if (sourceTask.id === targetTask.id) {
+        connectionProcessing = false;
         handleConnectionDragEnd();
         return;
     }
@@ -631,6 +638,7 @@ async function handleConnectionEnd(targetTask: Task) {
     const existingDependsOn = sourceTask.triggerConfig?.dependsOn;
     const existingTaskIds = existingDependsOn?.taskIds || [];
     if (existingTaskIds.includes(targetTask.id)) {
+        connectionProcessing = false;
         handleConnectionDragEnd();
         return;
     }
@@ -652,6 +660,7 @@ async function handleConnectionEnd(targetTask: Task) {
         triggerConfig: newTriggerConfig,
     });
 
+    connectionProcessing = false;
     handleConnectionDragEnd();
 }
 
