@@ -12,6 +12,7 @@ import { TaskRepository } from './database/repositories/task-repository';
 import { registerWorkflowHandlers } from './ipc/workflow-handlers';
 import { registerFsHandlers } from './ipc/fs-handlers';
 import { registerLocalAgentsHandlers } from './ipc/local-agents-handlers';
+import { registerOperatorHandlers } from './ipc/operator-handlers';
 import {
     registerTaskExecutionHandlers,
     resetStuckTasks,
@@ -416,6 +417,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register task history handlers
     registerTaskHistoryHandlers();
+
+    // Register operator handlers
+    registerOperatorHandlers();
 
     console.log('IPC handlers registered');
 }
