@@ -11,6 +11,7 @@ import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai
 import { taskRepository } from '../database/repositories/task-repository';
 import { taskHistoryRepository } from '../database/repositories/task-history-repository';
 import { projectRepository } from '../database/repositories/project-repository';
+import { operatorRepository } from '../database/repositories/operator-repository';
 import { resolveAutoReviewProvider } from '../../../src/core/logic/ai-configuration';
 import type { Task } from '../../../src/core/types/database';
 import type { TaskResult } from '../../../src/services/workflow/types';
@@ -339,6 +340,44 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 const task = await taskRepository.findById(taskId);
                 if (!task) {
                     throw new Error(`Task ${taskId} not found`);
+                }
+
+                // Load operator configuration if assigned
+                let operatorConfig: any = null;
+                if (task.assignedOperatorId) {
+                    try {
+                        const operator = await operatorRepository.findById(task.assignedOperatorId);
+                        if (operator) {
+                            console.log(
+                                `[TaskExecution] Using operator ${operator.name} for task ${taskId}`
+                            );
+                            operatorConfig = {
+                                id: operator.id,
+                                name: operator.name,
+                                role: operator.role,
+                                aiProvider: operator.aiProvider,
+                                aiModel: operator.aiModel,
+                                systemPrompt: operator.systemPrompt,
+                                mcps: await operatorRepository.getMCPs(operator.id),
+                            };
+
+                            // Override task's AI provider and model with operator's settings
+                            task.aiProvider = operator.aiProvider;
+                            task.aiModel = operator.aiModel;
+
+                            // Prepend operator's system prompt to task description
+                            if (operator.systemPrompt) {
+                                const originalPrompt =
+                                    task.description || task.generatedPrompt || '';
+                                task.description = `${operator.systemPrompt}\n\n${originalPrompt}`;
+                                console.log(
+                                    `[TaskExecution] Prepended operator system prompt to task`
+                                );
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`[TaskExecution] Failed to load operator:`, error);
+                    }
                 }
 
                 // Route execution based on provider type using Provider Registry
