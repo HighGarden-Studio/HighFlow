@@ -925,6 +925,38 @@ const subtaskProgress = computed(() => {
             :class="['absolute top-0 left-0 w-1 h-full rounded-l-lg', priorityColor]"
         />
 
+        <!-- Operator Badge (Top Priority) -->
+        <div
+            v-if="assignedOperator"
+            class="mb-3 pb-3 border-b border-purple-200 dark:border-purple-800"
+        >
+            <div
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-100 to-purple-50 dark:from-purple-900/50 dark:to-purple-800/30 border border-purple-300 dark:border-purple-700"
+                :title="`Assigned to Operator: ${assignedOperator.name} (${assignedOperator.role})`"
+            >
+                <span class="text-xl">{{ assignedOperator.avatar || '🤖' }}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                        {{ assignedOperator.name }}
+                    </div>
+                    <div class="text-xs text-purple-700 dark:text-purple-300">
+                        {{ assignedOperator.role }}
+                    </div>
+                </div>
+                <svg
+                    class="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                >
+                    <path
+                        fill-rule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+            </div>
+        </div>
+
         <!-- Header - Full Width -->
         <div class="flex flex-col gap-2 mb-2">
             <!-- Provider & ID Row -->
@@ -950,16 +982,6 @@ const subtaskProgress = computed(() => {
                 >
                     <span class="text-lg">❓</span>
                     <span class="text-sm">미설정</span>
-                </div>
-
-                <!-- Operator Badge -->
-                <div
-                    v-if="assignedOperator"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-2 border-purple-300 dark:border-purple-700"
-                    :title="`Operator: ${assignedOperator.name} (${assignedOperator.role})`"
-                >
-                    <span class="text-base">{{ assignedOperator.avatar || '🤖' }}</span>
-                    <span class="text-sm font-semibold">{{ assignedOperator.name }}</span>
                 </div>
 
                 <div class="flex items-center gap-2">
