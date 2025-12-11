@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { Task } from '@core/types/database';
 import { useTaskStore } from '../../renderer/stores/taskStore';
-import { getProviderIcon } from '../../utils/iconMapping';
+import { getProviderIcon, getScriptLanguageIcon } from '../../utils/iconMapping';
 import IconRenderer from '../common/IconRenderer.vue';
 
 // 미연동 Provider 정보 타입
@@ -91,17 +91,40 @@ const isHovered = ref(false);
 // Operator state
 const assignedOperator = ref<any>(null);
 
-// Load assigned operator if exists
-if (props.task.assignedOperatorId) {
-    window.electron.operators
-        .get(props.task.assignedOperatorId)
-        .then((operator) => {
-            assignedOperator.value = operator;
-        })
-        .catch((error) => {
-            console.error('Failed to load operator:', error);
-        });
+// Load assigned operator
+function loadAssignedOperator() {
+    if (props.task.assignedOperatorId) {
+        window.electron.operators
+            .get(props.task.assignedOperatorId)
+            .then((operator) => {
+                assignedOperator.value = operator;
+            })
+            .catch((error) => {
+                console.error('Failed to load operator:', error);
+            });
+    } else {
+        assignedOperator.value = null;
+    }
 }
+
+// Script language icon
+const scriptIcon = computed(() => {
+    if (props.task.taskType === 'script' && props.task.scriptLanguage) {
+        return getScriptLanguageIcon(props.task.scriptLanguage);
+    }
+    return null;
+});
+
+// Initial load
+loadAssignedOperator();
+
+// Watch for changes
+watch(
+    () => props.task.assignedOperatorId,
+    () => {
+        loadAssignedOperator();
+    }
+);
 
 // 연결점 핸들러
 function handleConnectionDragStart(event: DragEvent) {
@@ -340,8 +363,9 @@ const missingSettings = computed(() => {
     const missing: string[] = [];
     const hasPrompt = props.task.generatedPrompt || props.task.description;
     const hasProvider = props.task.aiProvider;
-    if (!hasPrompt) missing.push('프롬프트');
-    if (!hasProvider) missing.push('AI Provider');
+    const isScriptTask = props.task.taskType === 'script';
+    if (!hasPrompt) missing.push(isScriptTask ? '스크립트' : '프롬프트');
+    if (!hasProvider && !isScriptTask) missing.push('AI Provider');
     return missing;
 });
 
@@ -856,6 +880,7 @@ const dependencySequences = computed(() => {
 </script>
 
 <template>
+    <!-- Task Card Component -->
     <div
         :class="[
             'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
@@ -1007,22 +1032,34 @@ const dependencySequences = computed(() => {
 
         <!-- Header - Full Width -->
         <div class="flex flex-col gap-2 mb-2">
-            <!-- Provider & ID Row -->
-            <div class="flex items-center justify-between w-full">
-                <!-- AI Provider Badge (Large, Prominent) -->
-                <div v-if="aiProviderInfo" class="flex flex-col gap-1">
-                    <div
-                        :class="[
-                            'flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium',
-                            aiProviderInfo.bgColor,
-                            aiProviderInfo.color,
-                        ]"
-                        :title="
-                            assignedOperator
-                                ? `AI Provider from Operator: ${aiProviderInfo.name}`
-                                : `AI Provider: ${aiProviderInfo.name}`
-                        "
-                    >
+            <!-- First Row: AI Provider or Script Language -->
+            <div class="flex items-start justify-between gap-2">
+                <!-- Provider Info or Script Language -->
+                <!-- Script Language Badge (for script tasks) -->
+                <div
+                    v-if="task.taskType === 'script' && scriptIcon"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300"
+                    :title="`Script Language: ${task.scriptLanguage}`"
+                >
+                    <IconRenderer :emoji="scriptIcon" class="w-5 h-5" />
+                    <span class="text-sm font-semibold">{{ task.scriptLanguage }}</span>
+                </div>
+                <!-- AI Provider Badge (for AI tasks) -->
+                <div
+                    v-else-if="aiProviderInfo"
+                    class="flex flex-col items-start gap-1 px-2.5 py-1 rounded-md font-medium"
+                    :class="
+                        assignedOperator
+                            ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
+                            : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                    "
+                    :title="
+                        assignedOperator
+                            ? `Using operator's provider: ${aiProviderInfo.name}`
+                            : `AI Provider: ${aiProviderInfo.name}`
+                    "
+                >
+                    <div class="flex items-center gap-1.5">
                         <IconRenderer
                             :icon="getProviderIcon(aiProviderInfo.icon)"
                             class="w-5 h-5"
@@ -1065,7 +1102,10 @@ const dependencySequences = computed(() => {
                     <span class="text-lg">❓</span>
                     <span class="text-sm">미설정</span>
                 </div>
+            </div>
 
+            <!-- Second Row: Output Format & Task ID -->
+            <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
                     <!-- Expected Output Icon -->
                     <span
@@ -1097,193 +1137,193 @@ const dependencySequences = computed(() => {
                     </span>
                 </div>
             </div>
+        </div>
 
-            <!-- Title -->
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">
-                {{ task.title }}
-            </h3>
+        <!-- Title -->
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">
+            {{ task.title }}
+        </h3>
 
-            <!-- Badges Row -->
-            <div class="flex flex-wrap gap-1">
-                <!-- AI 자동 검토 완료 배지 (DONE 상태) -->
-                <span
-                    v-if="task.status === 'done' && task.autoReviewed"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center gap-1"
-                    title="AI 자동 검토 완료"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    AI 검토완료
-                </span>
+        <!-- Badges Row -->
+        <div class="flex flex-wrap gap-1">
+            <!-- AI 자동 검토 완료 배지 (DONE 상태) -->
+            <span
+                v-if="task.status === 'done' && task.autoReviewed"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center gap-1"
+                title="AI 자동 검토 완료"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                AI 검토완료
+            </span>
 
-                <!-- 실행중 스피너 배지 (IN_PROGRESS 실행중) -->
-                <span
-                    v-if="task.status === 'in_progress' && !task.isPaused"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center gap-1"
-                    title="실행중"
-                >
-                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle
-                            class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"
-                        />
-                        <path
-                            class="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                    </svg>
-                    실행중
-                </span>
+            <!-- 실행중 스피너 배지 (IN_PROGRESS 실행중) -->
+            <span
+                v-if="task.status === 'in_progress' && !task.isPaused"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center gap-1"
+                title="실행중"
+            >
+                <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                    />
+                    <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                </svg>
+                실행중
+            </span>
 
-                <!-- 일시정지 배지 (IN_PROGRESS 일시정지) -->
-                <span
-                    v-if="task.status === 'in_progress' && task.isPaused"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 flex items-center gap-1"
-                    title="일시정지됨"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    일시정지
-                </span>
+            <!-- 일시정지 배지 (IN_PROGRESS 일시정지) -->
+            <span
+                v-if="task.status === 'in_progress' && task.isPaused"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 flex items-center gap-1"
+                title="일시정지됨"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                일시정지
+            </span>
 
-                <!-- 자동 실행 예정 배지 (triggerConfig 있음) -->
-                <span
-                    v-if="task.status === 'todo' && task.triggerConfig"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 flex items-center gap-1"
-                    title="자동 실행 트리거 설정됨"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    자동실행
-                </span>
+            <!-- 자동 실행 예정 배지 (triggerConfig 있음) -->
+            <span
+                v-if="task.status === 'todo' && task.triggerConfig"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 flex items-center gap-1"
+                title="자동 실행 트리거 설정됨"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                자동실행
+            </span>
 
-                <!-- 세분화된 그룹 테스크 배지 -->
-                <span
-                    v-if="task.isSubdivided"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center gap-1"
-                    title="세분화된 그룹 테스크 (실행 불가)"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"
-                        />
-                    </svg>
-                    그룹 ({{ task.subtaskCount }}개)
-                </span>
+            <!-- 세분화된 그룹 테스크 배지 -->
+            <span
+                v-if="task.isSubdivided"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center gap-1"
+                title="세분화된 그룹 테스크 (실행 불가)"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"
+                    />
+                </svg>
+                그룹 ({{ task.subtaskCount }}개)
+            </span>
 
-                <!-- 승인 대기 배지 (IN_CONFIRM 상태) -->
-                <span
-                    v-if="isNeedsApprovalStatus"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 flex items-center gap-1 animate-pulse"
-                    title="사용자 승인 대기중"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    승인 대기
-                </span>
+            <!-- 승인 대기 배지 (IN_CONFIRM 상태) -->
+            <span
+                v-if="isNeedsApprovalStatus"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 flex items-center gap-1 animate-pulse"
+                title="사용자 승인 대기중"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                승인 대기
+            </span>
 
-                <!-- 미연동 Provider 배지 -->
-                <span
-                    v-if="hasMissingProvider"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 flex items-center gap-1"
-                    :title="`${missingProvider?.name} Provider 연동 필요`"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    연동 필요
-                </span>
+            <!-- 미연동 Provider 배지 -->
+            <span
+                v-if="hasMissingProvider"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 flex items-center gap-1"
+                :title="`${missingProvider?.name} Provider 연동 필요`"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                연동 필요
+            </span>
 
-                <!-- AI 검토 실패 배지 (IN_REVIEW 상태에서 reviewFailed가 true인 경우) -->
-                <span
-                    v-if="task.status === 'in_review' && task.reviewFailed"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 flex items-center gap-1"
-                    title="AI 검토 실패 (7점 이하)"
-                >
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                            fill-rule="evenodd"
-                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                    검토 실패
-                </span>
-            </div>
+            <!-- AI 검토 실패 배지 (IN_REVIEW 상태에서 reviewFailed가 true인 경우) -->
+            <span
+                v-if="task.status === 'in_review' && task.reviewFailed"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 flex items-center gap-1"
+                title="AI 검토 실패 (7점 이하)"
+            >
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                검토 실패
+            </span>
+        </div>
 
-            <!-- AI Execution Metadata Badges -->
-            <div class="flex flex-wrap gap-1 mt-1">
-                <!-- Expected Output Format badge removed - already shown in header -->
+        <!-- AI Execution Metadata Badges -->
+        <div class="flex flex-wrap gap-1 mt-1">
+            <!-- Expected Output Format badge removed - already shown in header -->
 
-                <!-- Required MCPs -->
-                <span
-                    v-if="requiredMCPs.length > 0"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center gap-1"
-                    :title="`필요 도구: ${requiredMCPs.join(', ')}`"
-                >
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                        />
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                    </svg>
-                    {{ requiredMCPs.length }}
-                </span>
+            <!-- Required MCPs -->
+            <span
+                v-if="requiredMCPs.length > 0"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center gap-1"
+                :title="`필요 도구: ${requiredMCPs.join(', ')}`"
+            >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                </svg>
+                {{ requiredMCPs.length }}
+            </span>
 
-                <!-- Dependencies -->
-                <span
-                    v-if="dependencies.length > 0"
-                    class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 flex items-center gap-1"
-                    :title="`의존성: #${dependencies.join(', #')}`"
-                >
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                        />
-                    </svg>
-                    {{ dependencies.length }}
-                </span>
-            </div>
+            <!-- Dependencies -->
+            <span
+                v-if="dependencies.length > 0"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 flex items-center gap-1"
+                :title="`의존성: #${dependencies.join(', #')}`"
+            >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                    />
+                </svg>
+                {{ dependencies.length }}
+            </span>
         </div>
 
         <!-- IN_CONFIRM Status: Approval Request Banner -->
@@ -1650,13 +1690,17 @@ const dependencySequences = computed(() => {
                     />
                 </svg>
                 {{
-                    task.status === 'todo' && isMissingExecutionSettings ? '설정 필요' : '프롬프트'
+                    task.status === 'todo' && isMissingExecutionSettings
+                        ? '설정 필요'
+                        : task.taskType === 'script'
+                          ? '스크립트'
+                          : '프롬프트'
                 }}
             </button>
 
-            <!-- Subdivide Button - Available for 1st level tasks only -->
+            <!-- Subdivide Button - Available for 1st level tasks only (not for script tasks) -->
             <button
-                v-if="showSubdivideButton"
+                v-if="showSubdivideButton && task.taskType !== 'script'"
                 class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-teal-500 text-white hover:bg-teal-600 transition-colors flex items-center justify-center gap-1"
                 @click="handleSubdivide"
                 title="테스크를 서브테스크로 세분화"
@@ -1716,7 +1760,8 @@ const dependencySequences = computed(() => {
                 </button>
             </template>
 
-            <template v-if="showEnhancePromptButton">
+            <!-- Enhance Prompt Button - Only for AI tasks (not for script tasks) -->
+            <template v-if="showEnhancePromptButton && task.taskType !== 'script'">
                 <button
                     class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-purple-500 text-white hover:bg-purple-600 transition-colors flex items-center justify-center gap-1"
                     @click="handleEnhancePrompt"
