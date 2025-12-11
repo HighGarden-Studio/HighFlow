@@ -378,10 +378,12 @@ watch(
  * Handle operator assignment
  */
 async function handleOperatorDrop(taskId: number, operatorId: number) {
+    console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
         await taskStore.updateTask(taskId, {
             operatorId: operatorId,
         });
+        console.log('🟢 Task updated successfully');
         // Refresh tasks to show updated operator
         await taskStore.fetchTasks(projectId.value);
         buildGraph();

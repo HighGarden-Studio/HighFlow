@@ -42,7 +42,9 @@ function handleApprove() {
 }
 
 function handleOperatorDrop(taskId: number, operatorId: number) {
+    console.log('🔵 TaskFlowNode handleOperatorDrop:', taskId, operatorId);
     emit('operatorDrop', taskId, operatorId);
+    console.log('🔵 TaskFlowNode emitted operatorDrop');
 }
 </script>
 
