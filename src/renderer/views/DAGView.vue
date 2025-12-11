@@ -9,7 +9,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTaskStore } from '../stores/taskStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useUIStore } from '../stores/uiStore';
-import { useOperatorStore } from '../stores/operatorStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import * as d3 from 'd3-selection';
@@ -19,10 +18,9 @@ import { drag } from 'd3-drag';
 
 const route = useRoute();
 const router = useRouter();
-const taskStore = useTaskStore();
+const task Store = useTaskStore();
 const projectStore = useProjectStore();
 const uiStore = useUIStore();
-const operatorStore = useOperatorStore();
 
 // Refs
 const svgRef = ref<SVGSVGElement | null>(null);
@@ -637,10 +635,14 @@ function renderTaskNode(parent: any, node: DAGNode) {
         blocked: '#EF4444',
     };
 
-    // Load operator data if assigned
+    // Load operator data if assigned (like Kanban board does)
     let operatorData: any = null;
     if (task.assignedOperatorId) {
-        operatorData = operatorStore.operators.find((op: any) => op.id === task.assignedOperatorId);
+        try {
+            operatorData = await window.electron.operators.get(task.assignedOperatorId);
+        } catch (error) {
+            console.error('Failed to load operator:', error);
+        }
     }
 
     // Determine badge colors (Kanban style)
