@@ -5,7 +5,9 @@
  */
 
 import { BaseCommand } from './Command';
-import type { Task } from '../../types/database';
+
+// Import Task from the database schema
+import type { Task } from '../../../electron/main/database/schema';
 
 // API access
 const getAPI = () => (window as any).electron;
