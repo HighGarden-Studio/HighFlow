@@ -268,7 +268,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="dag-view-container">
+    <div class="flex-1 flex flex-col h-full bg-gray-900">
         <!-- Header -->
         <ProjectHeader :project-id="projectId" :project-title="project?.title" current-view="dag" />
 
@@ -318,89 +318,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.dag-view-container {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    background: #111827;
-}
-
-.dag-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #374151;
-    background: #1f2937;
-    z-index: 10;
-}
-
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.back-btn {
-    padding: 0.5rem;
-    color: #9ca3af;
-    background: transparent;
-    border: none;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.back-btn:hover {
-    color: white;
-    background: #374151;
-}
-
-.title {
-    font-size: 1.25rem;
-    font-weight: bold;
-    color: white;
-}
-
-.subtitle {
-    font-size: 0.875rem;
-    color: #9ca3af;
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.view-switcher {
-    display: flex;
-    background: #374151;
-    border-radius: 0.5rem;
-    padding: 0.25rem;
-}
-
-.view-btn {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #9ca3af;
-    background: transparent;
-    border: none;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.view-btn:hover {
-    color: white;
-}
-
-.view-btn.active {
-    color: white;
-    background: #1f2937;
-}
-
 .flow-container {
     flex: 1;
     position: relative;
