@@ -72,6 +72,7 @@ export const useTaskStore = defineStore('tasks', () => {
     const error = ref<string | null>(null);
     const filters = ref<TaskFilters>({});
     const settingsStore = useSettingsStore();
+    const historyStore = useHistoryStore();
 
     function upsertTask(task: Task): void {
         if (!task) return;
@@ -86,6 +87,16 @@ export const useTaskStore = defineStore('tasks', () => {
 
         if (currentTask.value?.id === task.id && currentTask.value) {
             currentTask.value = { ...currentTask.value, ...task };
+        }
+    }
+
+    /**
+     * Remove task from local state (used by delete command)
+     */
+    function removeTaskFromStore(taskId: number): void {
+        const index = tasks.value.findIndex((t) => t.id === taskId);
+        if (index >= 0) {
+            tasks.value.splice(index, 1);
         }
     }
 
@@ -319,6 +330,40 @@ export const useTaskStore = defineStore('tasks', () => {
             console.error('Failed to update task:', e);
             return null;
         }
+    }
+
+    /**
+     * Update task with history support (for user actions)
+     * For simple field updates like operator assignment, status changes, etc.
+     */
+    async function updateTaskWithHistory(
+        id: number,
+        data: Partial<Task>,
+        description?: string
+    ): Promise<Task | null> {
+        const previousTask = tasks.value.find((t) => t.id === id);
+        if (!previousTask) {
+            return updateTask(id, data); // Fallback to regular update
+        }
+
+        // Extract only the fields being changed for undo
+        const previousData: Partial<Task> = {};
+        for (const key of Object.keys(data)) {
+            if (key in previousTask) {
+                previousData[key as keyof Task] = previousTask[key as keyof Task];
+            }
+        }
+
+        const command = new UpdateTaskCommand(
+            id,
+            data,
+            previousData,
+            (task: Task) => upsertTask(task),
+            description
+        );
+
+        await historyStore.executeCommand(command);
+        return tasks.value.find((t) => t.id === id) || null;
     }
 
     /**
@@ -1937,6 +1982,14 @@ export const useTaskStore = defineStore('tasks', () => {
         completionRate,
 
         // Actions
+        regenerateSubtaskSettings,
+        continueTaskWithPrompt,
+        continueSubdividedTask,
+        getSubtasksCountForTask,
+        regenerateTaskSettings,
+        // History support
+        updateTaskWithHistory,
+        removeTaskFromStore,
         fetchTasks,
         fetchTask,
         createTask,
