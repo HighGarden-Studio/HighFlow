@@ -344,7 +344,7 @@ function openCreateModal(status: TaskStatus = 'todo') {
 /**
  * Handle task created
  */
-async function handleTaskCreated(task: Task) {
+async function handleTaskCreated(task: Partial<Task>) {
     showCreateModal.value = false;
     await taskStore.fetchTasks(projectId.value);
     buildGraph();
@@ -457,6 +457,8 @@ onMounted(async () => {
         <ProjectInfoModal
             v-if="showProjectInfoModal"
             :project-id="projectId"
+            :project="project"
+            :open="showProjectInfoModal"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
         />
