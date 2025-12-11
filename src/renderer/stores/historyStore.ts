@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Command } from '@/core/commands/Command';
+import type { Command } from '../../core/commands/Command';
 
 const MAX_HISTORY_SIZE = 50;
 
@@ -139,8 +139,8 @@ export const useHistoryStore = defineStore('history', () => {
      */
     function getHistorySnapshot() {
         return {
-            undoStack: undoStack.value.map((c) => c.description),
-            redoStack: redoStack.value.map((c) => c.description),
+            undoStack: undoStack.value.map((c: Command) => c.description),
+            redoStack: redoStack.value.map((c: Command) => c.description),
             canUndo: canUndo.value,
             canRedo: canRedo.value,
         };

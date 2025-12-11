@@ -14,6 +14,15 @@ import { useSettingsStore } from './settingsStore';
 import { buildEnabledProvidersPayload, buildRuntimeMCPServers } from '../utils/runtimeConfig';
 import { aiInterviewService } from '../../services/ai/AIInterviewService';
 import { normalizeAiResult } from '../utils/aiResultHelpers';
+import { useHistoryStore } from './historyStore';
+import {
+    CreateTaskCommand,
+    UpdateTaskCommand,
+    DeleteTaskCommand,
+    MoveTaskCommand,
+    ReorderTasksCommand,
+    AssignOperatorCommand,
+} from '../../core/commands/TaskCommands';
 
 // Re-export Task type for convenience
 export type { Task };
