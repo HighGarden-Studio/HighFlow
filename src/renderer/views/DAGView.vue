@@ -48,7 +48,122 @@ const draggedNodeId = ref<number | null>(null);
 const NODE_WIDTH = 300;
 const NODE_HEIGHT = 200;
 const LEVEL_HEIGHT = 280;
-const HORIZONTAL_SPACING = 50;
+const HORIZONTAL_SPACING = 100;
+
+// SVG Icon paths for badges
+function createSVGIcon(
+    parent: any,
+    iconType: string,
+    x: number,
+    y: number,
+    size: number,
+    color: string
+) {
+    const iconGroup = parent.append('g').attr('transform', `translate(${x}, ${y})`);
+
+    switch (iconType) {
+        case 'openai': // Sparkle icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size * 0.55} ${size * 0.45} L${size} ${size / 2} L${size * 0.55} ${size * 0.55} L${size / 2} ${size} L${size * 0.45} ${size * 0.55} L0 ${size / 2} L${size * 0.45} ${size * 0.45} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'anthropic': // Brain icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size * 0.3} ${size * 0.2} Q${size * 0.2} ${size * 0.3} ${size * 0.25} ${size * 0.5} T${size * 0.3} ${size * 0.8} M${size * 0.7} ${size * 0.2} Q${size * 0.8} ${size * 0.3} ${size * 0.75} ${size * 0.5} T${size * 0.7} ${size * 0.8} M${size * 0.3} ${size * 0.4} Q${size * 0.5} ${size * 0.35} ${size * 0.7} ${size * 0.4}`
+                )
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            break;
+        case 'google': // Diamond/crystal icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size} ${size * 0.4} L${size / 2} ${size} L0 ${size * 0.4} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'gemini': // Gem icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size} ${size * 0.3} L${size * 0.85} ${size} L${size * 0.15} ${size} L0 ${size * 0.3} Z M${size * 0.25} ${size * 0.3} L${size * 0.5} ${size * 0.7} L${size * 0.75} ${size * 0.3} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'script': // Scroll/document icon
+            iconGroup
+                .append('rect')
+                .attr('x', size * 0.15)
+                .attr('y', 0)
+                .attr('width', size * 0.7)
+                .attr('height', size)
+                .attr('rx', size * 0.1)
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            iconGroup
+                .append('line')
+                .attr('x1', size * 0.3)
+                .attr('y1', size * 0.25)
+                .attr('x2', size * 0.7)
+                .attr('y2', size * 0.25)
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.08);
+            iconGroup
+                .append('line')
+                .attr('x1', size * 0.3)
+                .attr('y1', size * 0.5)
+                .attr('x2', size * 0.7)
+                .attr('y2', size * 0.5)
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.08);
+            break;
+        case 'file': // File icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size * 0.2} 0 L${size * 0.6} 0 L${size * 0.8} ${size * 0.2} L${size * 0.8} ${size} L${size * 0.2} ${size} Z`
+                )
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            break;
+        case 'robot': // Robot icon (default)
+        default:
+            iconGroup
+                .append('rect')
+                .attr('x', size * 0.2)
+                .attr('y', size * 0.3)
+                .attr('width', size * 0.6)
+                .attr('height', size * 0.5)
+                .attr('rx', size * 0.1)
+                .attr('fill', color);
+            iconGroup
+                .append('circle')
+                .attr('cx', size * 0.35)
+                .attr('cy', size * 0.5)
+                .attr('r', size * 0.08)
+                .attr('fill', 'white');
+            iconGroup
+                .append('circle')
+                .attr('cx', size * 0.65)
+                .attr('cy', size * 0.5)
+                .attr('r', size * 0.08)
+                .attr('fill', 'white');
+            break;
+    }
+}
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
@@ -128,14 +243,10 @@ function getConnectionPoints(source: DAGNode, target: DAGNode) {
         // Exit left
         sourceX = source.x - NODE_WIDTH / 2;
         sourceY = source.y;
-    } else if (angle > 0) {
+    } else {
         // Exit bottom
         sourceX = source.x;
         sourceY = source.y + NODE_HEIGHT / 2;
-    } else {
-        // Exit top
-        sourceX = source.x;
-        sourceY = source.y - NODE_HEIGHT / 2;
     }
 
     // Determine target entry point (with offset for arrow visibility)
@@ -568,25 +679,21 @@ function renderTaskNode(parent: any, node: DAGNode) {
             .attr('fill', 'none')
             .attr('stroke', '#10B981')
             .attr('stroke-width', 1.5);
+        // SVG icon
+        createSVGIcon(badge, 'script', 14, 15, 14, '#10B981');
         badge
             .append('text')
-            .attr('x', 20)
+            .attr('x', 32)
             .attr('y', 26)
             .attr('fill', '#10B981')
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
-            .text(`📜 ${task.scriptLanguage}`);
+            .text(task.scriptLanguage);
     } else if (task.aiProvider) {
         // AI Provider badge
         const isOperator = !!task.assignedOperatorId;
         const color = isOperator ? '#7C3AED' : '#3B82F6';
-        const icons: Record<string, string> = {
-            openai: '✨',
-            anthropic: '🧠',
-            google: '🔮',
-            gemini: '💎',
-        };
-        const icon = icons[task.aiProvider.toLowerCase()] || '🤖';
+        const iconType = task.aiProvider.toLowerCase();
 
         const badge = nodeGroup.append('g');
         badge
@@ -608,14 +715,16 @@ function renderTaskNode(parent: any, node: DAGNode) {
             .attr('fill', 'none')
             .attr('stroke', color)
             .attr('stroke-width', 1.5);
+        // SVG icon
+        createSVGIcon(badge, iconType, 14, 15, 14, color);
         badge
             .append('text')
-            .attr('x', 20)
+            .attr('x', 32)
             .attr('y', 26)
             .attr('fill', color)
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
-            .text(`${icon} ${task.aiProvider}`);
+            .text(task.aiProvider);
         if (task.aiModel) {
             badge
                 .append('text')
@@ -638,13 +747,14 @@ function renderTaskNode(parent: any, node: DAGNode) {
             .attr('rx', 6)
             .attr('fill', '#6B7280')
             .attr('opacity', 0.2);
+        createSVGIcon(badge, 'robot', 14, 15, 14, '#9CA3AF');
         badge
             .append('text')
-            .attr('x', 20)
+            .attr('x', 32)
             .attr('y', 26)
             .attr('fill', '#9CA3AF')
             .attr('font-size', 12)
-            .text('❓ 미설정');
+            .text('미설정');
     }
 
     currentY = 50;
@@ -663,13 +773,15 @@ function renderTaskNode(parent: any, node: DAGNode) {
 
     // Operator info (if assigned)
     if (task.assignedOperatorId) {
-        nodeGroup
+        const operatorGroup = nodeGroup.append('g');
+        createSVGIcon(operatorGroup, 'robot', 10, currentY - 10, 12, '#A78BFA');
+        operatorGroup
             .append('text')
-            .attr('x', 10)
+            .attr('x', 26)
             .attr('y', currentY)
             .attr('fill', '#A78BFA')
             .attr('font-size', 11)
-            .text(`🤖 Operator: ${task.assignedOperatorId}`);
+            .text(`Operator: ${task.assignedOperatorId}`);
         currentY += 18;
     }
 
@@ -688,13 +800,15 @@ function renderTaskNode(parent: any, node: DAGNode) {
 
     // Output format
     if (task.outputFormat) {
-        nodeGroup
+        const outputGroup = nodeGroup.append('g');
+        createSVGIcon(outputGroup, 'file', 10, currentY - 10, 12, '#9CA3AF');
+        outputGroup
             .append('text')
-            .attr('x', 10)
+            .attr('x', 26)
             .attr('y', currentY)
             .attr('fill', '#9CA3AF')
             .attr('font-size', 11)
-            .text(`📄 ${task.outputFormat}`);
+            .text(task.outputFormat);
         currentY += 20;
     }
 
