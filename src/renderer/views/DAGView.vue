@@ -266,6 +266,35 @@ onConnect(async (params) => {
  * Handle edge deletion (remove dependency)
  */
 const { onEdgesDelete } = useVueFlow();
+onEdgesDelete(async (edgesToDelete) => {
+    for (const edge of edgesToDelete) {
+        const sourceId = Number(edge.source);
+        const targetId = Number(edge.target);
+
+        const targetTask = tasks.value.find((t) => t.id === targetId);
+        if (!targetTask) continue;
+
+        const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
+        const updatedDeps = existingDeps.filter((depId: number) => depId !== sourceId);
+
+        const updatedTriggerConfig = {
+            ...targetTask.triggerConfig,
+            dependsOn: {
+                ...targetTask.triggerConfig?.dependsOn,
+                taskIds: updatedDeps,
+            },
+        };
+
+        await taskStore.updateTask(targetId, {
+            triggerConfig: updatedTriggerConfig,
+        });
+    }
+
+    // Rebuild graph after deletion
+    buildGraph();
+});
+
+/**
  * Check for circular dependencies
  */
 function wouldCreateCircularDependency(sourceId: number, targetId: number): boolean {
