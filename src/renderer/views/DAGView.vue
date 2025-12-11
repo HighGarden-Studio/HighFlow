@@ -6,7 +6,7 @@
  */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { VueFlow, useVueFlow, Position } from '@vue-flow/core';
+import { VueFlow, useVueFlow, Position, MarkerType } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
@@ -119,14 +119,36 @@ function buildGraph() {
     tasks.value.forEach((task) => {
         const dependencies = task.triggerConfig?.dependsOn?.taskIds || [];
         dependencies.forEach((depId: number) => {
-            taskEdges.push({
-                id: `e${depId}-${task.id}`,
-                source: String(depId),
-                target: String(task.id),
-                type: 'smoothstep',
-                animated: false,
-                style: { stroke: '#3b82f6', strokeWidth: 2 },
-            });
+            // Only create edge if dependency task exists
+            if (tasks.value.find((t) => t.id === depId)) {
+                taskEdges.push({
+                    id: `e${depId}-${task.id}`,
+                    source: String(depId),
+                    target: String(task.id),
+                    type: 'smoothstep', // Use smoothstep for better routing
+                    animated: task.status === 'in_progress', // Animate edges for in-progress tasks
+                    style: {
+                        stroke: getEdgeColor(task),
+                        strokeWidth: 2,
+                    },
+                    markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                        width: 20,
+                        height: 20,
+                        color: getEdgeColor(task),
+                    },
+                    label: task.executionOrder ? `#${task.executionOrder}` : undefined,
+                    labelStyle: {
+                        fill: '#6B7280',
+                        fontWeight: 600,
+                        fontSize: 12,
+                    },
+                    labelBgStyle: {
+                        fill: '#1F2937',
+                        fillOpacity: 0.9,
+                    },
+                });
+            }
         });
     });
 
@@ -141,8 +163,26 @@ function buildGraph() {
 
     // Fit view after layout
     nextTick(() => {
-        fitView({ padding: 0.2, duration: 400 });
+        fitView({ padding: 0.2, duration: 200 });
     });
+}
+
+/**
+ * Get edge color based on task status
+ */
+function getEdgeColor(task: Task): string {
+    switch (task.status) {
+        case 'done':
+            return '#10B981'; // Green
+        case 'in_progress':
+            return '#3B82F6'; // Blue
+        case 'needs_approval':
+            return '#F59E0B'; // Orange
+        case 'blocked':
+            return '#EF4444'; // Red
+        default:
+            return '#6B7280'; // Gray
+    }
 }
 
 /**
@@ -347,8 +387,21 @@ onMounted(async () => {
 
 /* Vue Flow overrides */
 :deep(.vue-flow__edge-path) {
-    stroke: #3b82f6;
     stroke-width: 2px;
+}
+
+:deep(.vue-flow__edge.animated) {
+    animation: dashdraw 0.5s linear infinite;
+}
+
+:deep(.vue-flow__edge-textwrapper) {
+    pointer-events: none;
+}
+
+@keyframes dashdraw {
+    to {
+        stroke-dashoffset: -10;
+    }
 }
 
 :deep(.vue-flow__edge.selected .vue-flow__edge-path) {
