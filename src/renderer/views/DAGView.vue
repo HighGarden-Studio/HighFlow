@@ -265,9 +265,8 @@ onConnect(async (params) => {
 /**
  * Handle edge deletion (remove dependency)
  */
-const { onEdgesDelete } = useVueFlow();
-onEdgesDelete(async (edgesToDelete) => {
-    for (const edge of edgesToDelete) {
+async function handleEdgeRemove(edgesToRemove: Edge[]) {
+    for (const edge of edgesToRemove) {
         const sourceId = Number(edge.source);
         const targetId = Number(edge.target);
 
@@ -292,7 +291,7 @@ onEdgesDelete(async (edgesToDelete) => {
 
     // Rebuild graph after deletion
     buildGraph();
-});
+}
 
 /**
  * Check for circular dependencies
@@ -383,6 +382,7 @@ onMounted(async () => {
                 :edges-updatable="false"
                 fit-view-on-init
                 class="vue-flow"
+                @edges-delete="handleEdgeRemove"
             >
                 <Background pattern-color="#374151" :gap="16" />
                 <Controls />
