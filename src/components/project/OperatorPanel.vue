@@ -142,7 +142,8 @@ function togglePanel() {
 function handleDragStart(event: DragEvent, operator: Operator) {
     if (!event.dataTransfer) return;
 
-    event.dataTransfer.effectAllowed = 'move';
+    // Changed from 'move' to 'copy' to match dropEffect
+    event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData(
         'application/x-operator',
         JSON.stringify({
@@ -151,8 +152,11 @@ function handleDragStart(event: DragEvent, operator: Operator) {
             avatar: operator.avatar,
             role: operator.role,
             color: operator.color,
+            aiProvider: operator.aiProvider,
+            aiModel: operator.aiModel,
         })
     );
+    console.log('🟠 Operator drag started:', operator.id);
 
     // Add visual feedback
     const target = event.target as HTMLElement;
@@ -160,6 +164,7 @@ function handleDragStart(event: DragEvent, operator: Operator) {
 }
 
 function handleDragEnd(event: DragEvent) {
+    console.log('🟠 Operator drag ended');
     const target = event.target as HTMLElement;
     target.classList.remove('dragging');
 }
