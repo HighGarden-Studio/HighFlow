@@ -914,8 +914,9 @@ const dependencySequences = computed(() => {
                 handleDragLeave();
             }
         "
-        @drop="
+        @drop.prevent="
             (e) => {
+                console.log('💥 TaskCard @drop event fired!');
                 handleOperatorDrop(e);
                 handleDrop(e);
             }
