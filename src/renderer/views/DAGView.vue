@@ -441,7 +441,7 @@ function computeForceLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
 }
 
 // Render DAG
-function renderDAG() {
+async function renderDAG() {
     if (!svgRef.value || !containerRef.value) return;
 
     const svg = d3.select(svgRef.value);
@@ -554,8 +554,28 @@ function renderDAG() {
 
     // Draw nodes
     const nodeGroup = g.append('g').attr('class', 'nodes');
-    nodes.forEach((node) => {
-        renderTaskNode(nodeGroup, node);
+
+    // Load all operators first for all tasks
+    const operatorMap = new Map<number, any>();
+    const tasksWithOperators = nodes.filter((n: DAGNode) => n.task.assignedOperatorId);
+
+    for (const node of tasksWithOperators) {
+        if (node.task.assignedOperatorId && !operatorMap.has(node.task.assignedOperatorId)) {
+            try {
+                const operator = await window.electron.operators.get(node.task.assignedOperatorId);
+                operatorMap.set(node.task.assignedOperatorId, operator);
+            } catch (error) {
+                console.error(`Failed to load operator ${node.task.assignedOperatorId}:`, error);
+            }
+        }
+    }
+
+    // Render each node with operator data
+    nodes.forEach((node: DAGNode) => {
+        const operatorData = node.task.assignedOperatorId
+            ? operatorMap.get(node.task.assignedOperatorId)
+            : null;
+        renderTaskNode(nodeGroup, node, operatorData);
     });
 
     // Add zoom behavior
@@ -568,10 +588,12 @@ function renderDAG() {
     svg.call(zoomBehavior as any);
 
     // Fit to view
-    fitToView();
 }
 
-function renderTaskNode(parent: any, node: DAGNode) {
+/**
+ * Render a single task node
+ */
+function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
     const task = node.task;
 
     const nodeGroup = parent
