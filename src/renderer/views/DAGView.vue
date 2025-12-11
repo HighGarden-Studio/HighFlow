@@ -917,7 +917,7 @@ function renderTaskNode(parent: any, node: DAGNode) {
 
         approveBtn.on('click', function (event: any) {
             event.stopPropagation();
-            handleApprovalOpen(task);
+            handleTaskApprove(task);
         });
 
         actionButtonX -= 35;
