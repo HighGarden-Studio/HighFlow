@@ -148,21 +148,6 @@ onUnmounted(() => {
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
         <!-- TaskCard component with max-width -->
-        <div class="task-card-wrapper">
-            <TaskCard
-                :task="data.task"
-                :subtasks="[]"
-                :is-dragging="false"
-                :hide-metadata="true"
-                :hide-prompt="true"
-                :hide-extra-actions="true"
-                @click="handleClick"
-                @execute="handleExecute"
-                @previewResult="handlePreviewResult"
-                @retry="handleRetry"
-                @approve="handleApprove"
-                @operatorDrop="handleOperatorDrop"
-            />
         </div>
 
         <Handle type="source" :position="Position.Right" class="handle-right" />
