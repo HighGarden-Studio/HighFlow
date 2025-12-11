@@ -518,7 +518,12 @@ onMounted(async () => {
         <TaskDetailPanel
             :open="!!selectedTask"
             :task="selectedTask"
-            @close="selectedTask = null"
+            @close="
+                () => {
+                    selectedTaskId = null;
+                    showDetailPanel = false;
+                }
+            "
             @execute="handleTaskExecute"
             @approve="handleTaskApprove"
             @save="handleTaskSave"
