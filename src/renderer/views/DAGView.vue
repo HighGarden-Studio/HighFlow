@@ -1032,6 +1032,11 @@ async function handleTaskSubdivide(task: Task) {
     console.log('Subdivide task:', task.id);
 }
 
+function handleNewTask() {
+    selectedTaskId.value = null;
+    showDetailPanel.value = true;
+}
+
 function drawTempConnectionLine() {
     if (!svgRef.value || !tempConnectionLine.value) return;
 
@@ -1302,6 +1307,12 @@ watch([tasks, layoutMode], () => {
                         DAG
                     </button>
                 </div>
+                <button
+                    class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+                    @click="handleNewTask"
+                >
+                    + New Task
+                </button>
             </div>
         </header>
 
