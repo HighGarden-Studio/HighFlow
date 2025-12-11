@@ -18,7 +18,7 @@ import { drag } from 'd3-drag';
 
 const route = useRoute();
 const router = useRouter();
-const task Store = useTaskStore();
+const taskStore = useTaskStore();
 const projectStore = useProjectStore();
 const uiStore = useUIStore();
 
