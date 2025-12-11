@@ -356,6 +356,71 @@ onUnmounted(() => {
                     class="flex items-center justify-end gap-2"
                     style="-webkit-app-region: no-drag"
                 >
+                    <!-- Undo/Redo Buttons -->
+                    <div class="flex items-center gap-1 mr-2">
+                        <!-- Undo Button -->
+                        <button
+                            @click="historyStore.undo()"
+                            :disabled="!historyStore.canUndo"
+                            :title="
+                                historyStore.canUndo
+                                    ? `실행 취소: ${historyStore.undoDescription}`
+                                    : '실행 취소'
+                            "
+                            :class="[
+                                'p-1.5 rounded-lg transition-colors',
+                                historyStore.canUndo
+                                    ? 'hover:bg-gray-800 text-gray-400 hover:text-white'
+                                    : 'text-gray-600 cursor-not-allowed',
+                            ]"
+                        >
+                            <svg
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                />
+                            </svg>
+                        </button>
+
+                        <!-- Redo Button -->
+                        <button
+                            @click="historyStore.redo()"
+                            :disabled="!historyStore.canRedo"
+                            :title="
+                                historyStore.canRedo
+                                    ? `다시 실행: ${historyStore.redoDescription}`
+                                    : '다시 실행'
+                            "
+                            :class="[
+                                'p-1.5 rounded-lg transition-colors',
+                                historyStore.canRedo
+                                    ? 'hover:bg-gray-800 text-gray-400 hover:text-white'
+                                    : 'text-gray-600 cursor-not-allowed',
+                            ]"
+                        >
+                            <svg
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+
                     <!-- Search Bar (clickable) -->
                     <button
                         @click="showSearch = true"
