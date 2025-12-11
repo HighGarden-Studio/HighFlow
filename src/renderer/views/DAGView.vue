@@ -11,6 +11,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useUIStore } from '../stores/uiStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
+import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import * as d3 from 'd3-selection';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 import { zoom, zoomIdentity } from 'd3-zoom';
@@ -167,8 +168,8 @@ function createSVGIcon(
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
-const tasks = computed(() => taskStore.tasks);
 const project = computed(() => projectStore.currentProject);
+const tasks = computed(() => taskStore.tasks);
 
 interface DAGNode {
     id: number;
@@ -1488,7 +1489,9 @@ watch([tasks, layoutMode], () => {
 </script>
 
 <template>
-    <div class="flex-1 flex flex-col h-full bg-gray-900">
+    <div class="dag-view h-screen flex flex-col overflow-hidden">
+        <!-- Operator Panel (Collapsible at Top) -->
+        <OperatorPanel :project-id="projectId" />
         <!-- Header (same as Kanban) -->
         <header
             class="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0"
