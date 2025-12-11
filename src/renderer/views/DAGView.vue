@@ -657,9 +657,7 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         blocked: '#EF4444',
     };
 
-    // Note: Operator data loading removed (async not supported in D3 render)
-    // Will render operator ID only for now
-    const operatorData = null;
+    // operatorData is now passed as parameter from renderDAG
 
     // Determine header section colors
     let headerColor = '#7C3AED'; // Purple for header background
