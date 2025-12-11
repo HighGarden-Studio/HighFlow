@@ -830,27 +830,27 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .attr('stroke', headerBorder)
         .attr('stroke-width', 1);
 
-    const headerY = currentY + 12; // Icon positioning within header
+    let headerY = currentY + 12; // Icon positioning within header
 
     // Task type icon and name
     if (task.taskType === 'script' && task.scriptLanguage) {
-        createSVGIcon(nodeGroup, 'script', 10, headerY - 7, 14, headerTextColor);
+        createSVGIcon(nodeGroup, 'script', 20, headerY, 16, headerText);
         nodeGroup
             .append('text')
             .attr('x', 30)
             .attr('y', headerY + 3)
-            .attr('fill', headerTextColor)
+            .attr('fill', headerText)
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
             .text(task.scriptLanguage);
     } else if (task.aiProvider) {
         const iconType = task.aiProvider.toLowerCase();
-        createSVGIcon(nodeGroup, iconType, 10, headerY - 7, 14, headerTextColor);
+        createSVGIcon(nodeGroup, iconType, 20, headerY, 16, headerText);
         nodeGroup
             .append('text')
             .attr('x', 30)
             .attr('y', headerY + 3)
-            .attr('fill', headerTextColor)
+            .attr('fill', headerText)
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
             .text(task.aiProvider);
@@ -862,13 +862,13 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
                 .attr('x', NODE_WIDTH - 10)
                 .attr('y', headerY + 3)
                 .attr('text-anchor', 'end')
-                .attr('fill', headerTextColor)
+                .attr('fill', headerText)
                 .attr('font-size', 11)
                 .attr('opacity', 0.9)
                 .text(task.aiModel);
         }
     } else {
-        createSVGIcon(nodeGroup, 'robot', 10, headerY - 7, 14, headerTextColor);
+        createSVGIcon(nodeGroup, 'robot', 20, headerY, 16, headerText);
         nodeGroup
             .append('text')
             .attr('x', 30)
