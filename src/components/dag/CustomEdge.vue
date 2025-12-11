@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { EdgeProps, Position, getBezierPath } from '@vue-flow/core';
+import { getBezierPath } from '@vue-flow/core';
 
-interface Props extends EdgeProps {
+interface Props {
     id: string;
     sourceX: number;
     sourceY: number;
     targetX: number;
     targetY: number;
-    sourcePosition: Position;
-    targetPosition: Position;
+    sourcePosition: string;
+    targetPosition: string;
     label?: string;
-    markerEnd?: string;
+    markerEnd?: any; // Allow optional for compatibility
     style?: any;
+    data?: any;
 }
 
 const props = defineProps<Props>();
