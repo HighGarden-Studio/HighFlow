@@ -380,7 +380,8 @@ watch(
 async function handleTaskSave(task: Task) {
     await taskStore.fetchTasks(projectId.value);
     buildGraph();
-    selectedTask.value = null;
+    selectedTaskId.value = null;
+    showDetailPanel.value = false;
 }
 
 /**
