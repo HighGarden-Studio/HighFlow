@@ -129,10 +129,12 @@ function handleWrapperDrop(event: DragEvent) {
     position: relative;
     min-width: 280px;
     max-width: 280px;
+    pointer-events: auto !important; /* Force pointer events */
 }
 
 .task-card-wrapper {
     max-width: 280px;
+    pointer-events: auto !important; /* Force pointer events */
 }
 
 /* Connection handles */

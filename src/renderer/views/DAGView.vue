@@ -392,6 +392,45 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
     }
 }
 
+/**
+ * Handle drop on VueFlow canvas
+ */
+function handleVueFlowDrop(event: DragEvent) {
+    console.log('🔴 VueFlow drop event!', event);
+    const operatorData = event.dataTransfer?.getData('application/x-operator');
+    console.log('🔴 Operator data:', operatorData);
+
+    if (operatorData) {
+        // Find which node is under the cursor
+        const target = event.target as HTMLElement;
+        const nodeElement = target.closest('.vue-flow__node');
+        if (nodeElement) {
+            const nodeId = nodeElement.getAttribute('data-id');
+            console.log('🔴 Node ID:', nodeId);
+
+            if (nodeId) {
+                try {
+                    const operator = JSON.parse(operatorData);
+                    console.log('🔴 Calling handleOperatorDrop:', nodeId, operator.id);
+                    handleOperatorDrop(Number(nodeId), operator.id);
+                } catch (error) {
+                    console.error('Failed to parse operator:', error);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Handle dragover on VueFlow canvas
+ */
+function handleVueFlowDragOver(event: DragEvent) {
+    const types = event.dataTransfer?.types || [];
+    if (types.includes('application/x-operator')) {
+        event.dataTransfer!.dropEffect = 'copy';
+    }
+}
+
 // Initial load
 onMounted(async () => {
     if (projectId.value) {
@@ -425,26 +464,26 @@ onMounted(async () => {
         <!-- Operator Panel -->
         <OperatorPanel :project-id="projectId" />
 
-        <!-- Vue Flow Container -->
-        <div class="flow-container">
+        <!-- Vue Flow Canvas -->
+        <div class="flex-1 bg-gray-900">
             <VueFlow
-                :nodes="nodes"
-                :edges="edges"
+                v-model:nodes="nodes"
+                v-model:edges="edges"
                 :node-types="nodeTypes"
                 :edge-types="edgeTypes"
                 :default-viewport="{ zoom: 0.8 }"
                 :min-zoom="0.2"
-                :max-zoom="4"
-                :edges-focusable="true"
+                :max-zoom="2"
+                :fit-view-on-init="true"
+                :edges-focusable="false"
                 :edges-updatable="false"
-                fit-view-on-init
-                class="vue-flow"
-                @edges-delete="handleEdgeRemove"
+                :nodes-draggable="false"
+                @nodes-change="onNodesChange"
+                @edges-change="onEdgesChange"
+                @connect="onConnect"
+                @drop.prevent="handleVueFlowDrop"
+                @dragover.prevent="handleVueFlowDragOver"
             >
-                <Background pattern-color="#374151" :gap="16" />
-                <Controls />
-                <MiniMap />
-
                 <!-- Custom node template -->
                 <template #node-taskCard="{ data }">
                     <TaskFlowNode
