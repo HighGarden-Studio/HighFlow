@@ -258,16 +258,14 @@ onConnect(async (params) => {
         triggerConfig: updatedTriggerConfig,
     });
 
-    // Add edge
-    addEdges([
-
-        await taskStore.updateTask(targetId, {
-            triggerConfig: updatedTriggerConfig,
-        });
-    }
+    // Rebuild graph to show new edge
+    buildGraph();
 });
 
 /**
+ * Handle edge deletion (remove dependency)
+ */
+const { onEdgesDelete } = useVueFlow();
  * Check for circular dependencies
  */
 function wouldCreateCircularDependency(sourceId: number, targetId: number): boolean {
