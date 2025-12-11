@@ -14,6 +14,7 @@ import type { Node, Edge } from '@vue-flow/core';
 import dagre from 'dagre';
 import { useTaskStore, type TaskStatus } from '../stores/taskStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useOperatorStore } from '../stores/operatorStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import OperatorPanel from '../../components/project/OperatorPanel.vue';
@@ -33,6 +34,7 @@ const route = useRoute();
 const router = useRouter();
 const taskStore = useTaskStore();
 const projectStore = useProjectStore();
+const operatorStore = useOperatorStore();
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
@@ -390,7 +392,8 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
         const task = taskStore.tasks.find((t) => t.id === taskId);
-        const operatorName = operators.value?.find((o) => o.id === operatorId)?.name || 'Unknown';
+        const operator = operatorStore.operators.find((o) => o.id === operatorId);
+        const operatorName = operator?.name || 'Unknown';
         const taskTitle = task?.title || `Task ${taskId}`;
 
         // Use updateTaskWithHistory for undo/redo support
