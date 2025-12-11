@@ -12,7 +12,7 @@ import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
 import type { Node, Edge } from '@vue-flow/core';
 import dagre from 'dagre';
-import { useTaskStore } from '../stores/taskStore';
+import { useTaskStore, type TaskStatus } from '../stores/taskStore';
 import { useProjectStore } from '../stores/projectStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
@@ -21,6 +21,7 @@ import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
+import TaskEditModal from '../../components/task/TaskEditModal.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -38,16 +39,16 @@ const projectId = computed(() => Number(route.params.id));
 const project = computed(() => projectStore.currentProject);
 const tasks = computed(() => taskStore.tasks);
 
-// Task detail panel state
+// UI State
+const showDetailPanel = ref(false);
 const selectedTaskId = ref<number | null>(null);
 const selectedTask = computed(() => {
     if (!selectedTaskId.value) return null;
     return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
 });
-const showDetailPanel = ref(false);
-
-// Project info modal
 const showProjectInfoModal = ref(false);
+const showCreateModal = ref(false);
+const createInColumn = ref<TaskStatus>('todo');
 
 // Vue Flow setup
 const { onConnect, addEdges, fitView } = useVueFlow();
@@ -333,6 +334,23 @@ function closeDetailPanel() {
 }
 
 /**
+ * Open create task modal
+ */
+function openCreateModal(status: TaskStatus = 'todo') {
+    createInColumn.value = status;
+    showCreateModal.value = true;
+}
+
+/**
+ * Handle task created
+ */
+async function handleTaskCreated(task: Task) {
+    showCreateModal.value = false;
+    await taskStore.fetchTasks(projectId.value);
+    buildGraph();
+}
+
+/**
  * Handle task events
  */
 async function handleTaskExecute(task: Task) {
@@ -374,7 +392,9 @@ onMounted(async () => {
             :project-title="project?.title"
             current-view="dag"
             :show-project-info="true"
+            :show-new-task="true"
             @project-info="showProjectInfoModal = true"
+            @new-task="openCreateModal('todo')"
         />
         <!-- Operator Panel -->
         <OperatorPanel :project-id="projectId" />
@@ -423,10 +443,20 @@ onMounted(async () => {
             @reject="closeDetailPanel"
         />
 
+        <!-- Task Edit Modal (for creating new tasks) -->
+        <TaskEditModal
+            v-if="showCreateModal"
+            :open="showCreateModal"
+            :task="null"
+            :defaults="{ status: createInColumn }"
+            @close="showCreateModal = false"
+            @save="handleTaskCreated"
+        />
+
         <!-- Project Info Modal -->
         <ProjectInfoModal
-            :project="project"
-            :open="showProjectInfoModal"
+            v-if="showProjectInfoModal"
+            :project-id="projectId"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
         />
