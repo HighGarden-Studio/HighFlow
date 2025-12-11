@@ -690,7 +690,93 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
-    // Add pulsing animation for running tasks
+    let currentY = 12;
+
+    // === OPERATOR SECTION (TOP PRIORITY) ===
+    if (operatorData) {
+        const operatorHeight = 50;
+
+        // Purple gradient background
+        const opGradient = nodeGroup
+            .append('defs')
+            .append('linearGradient')
+            .attr('id', `opGrad-${task.id}`)
+            .attr('x1', '0%')
+            .attr('y1', '0%')
+            .attr('x2', '100%')
+            .attr('y2', '0%');
+        opGradient
+            .append('stop')
+            .attr('offset', '0%')
+            .attr('stop-color', '#F3E8FF')
+            .attr('stop-opacity', 0.9);
+        opGradient
+            .append('stop')
+            .attr('offset', '100%')
+            .attr('stop-color', '#FAF5FF')
+            .attr('stop-opacity', 0.7);
+
+        nodeGroup
+            .append('rect')
+            .attr('x', 12)
+            .attr('y', currentY)
+            .attr('width', NODE_WIDTH - 24)
+            .attr('height', operatorHeight)
+            .attr('rx', 8) // Kanban border radius
+            .attr('fill', `url(#opGrad-${task.id})`)
+            .attr('stroke', '#E9D5FF')
+            .attr('stroke-width', 1);
+
+        // Operator avatar/emoji
+        nodeGroup
+            .append('text')
+            .attr('x', 22)
+            .attr('y', currentY + 28)
+            .attr('font-size', 20)
+            .text(operatorData.avatar || '🤖');
+
+        // Operator name
+        nodeGroup
+            .append('text')
+            .attr('x', 50)
+            .attr('y', currentY + 23)
+            .attr('fill', '#581C87')
+            .attr('font-size', 11)
+            .attr('font-weight', 'bold')
+            .text(operatorData.name);
+
+        // Operator role
+        nodeGroup
+            .append('text')
+            .attr('x', 50)
+            .attr('y', currentY + 38)
+            .attr('fill', '#7E22CE')
+            .attr('font-size', 9)
+            .text(operatorData.role);
+
+        // Checkmark
+        nodeGroup
+            .append('path')
+            .attr('d', `M${NODE_WIDTH - 25},${currentY + 20} l3,3 l6,-6`)
+            .attr('stroke', '#7C3AED')
+            .attr('stroke-width', 2)
+            .attr('fill', 'none')
+            .attr('stroke-linecap', 'round');
+
+        currentY += operatorHeight + 8;
+
+        // Divider
+        nodeGroup
+            .append('line')
+            .attr('x1', 12)
+            .attr('x2', NODE_WIDTH - 12)
+            .attr('y1', currentY)
+            .attr('y2', currentY)
+            .attr('stroke', '#E9D5FF')
+            .attr('stroke-width', 1);
+
+        currentY += 8;
+    }
     if (task.status === 'in_progress') {
         cardBg
             .append('animate')
@@ -707,25 +793,44 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
             .attr('repeatCount', 'indefinite');
     }
 
-    // Header section (colored)
-    const headerHeight = 50;
+    // === PROVIDER/SCRIPT HEADER ===
+    const headerHeight = 40;
+
+    // Determine colors based on type
+    let headerBg, headerText, headerBorder;
+    if (task.taskType === 'script') {
+        headerBg = '#DCFCE7';
+        headerText = '#047857';
+        headerBorder = '#86EFAC';
+    } else if (task.aiProvider) {
+        if (operatorData) {
+            headerBg = '#F3E8FF';
+            headerText = '#7E22CE';
+            headerBorder = '#E9D5FF';
+        } else {
+            headerBg = '#DBEAFE';
+            headerText = '#1E40AF';
+            headerBorder = '#93C5FD';
+        }
+    } else {
+        headerBg = '#F3F4F6';
+        headerText = '#6B7280';
+        headerBorder = '#E5E7EB';
+    }
+
     nodeGroup
         .append('rect')
-        .attr('width', NODE_WIDTH)
+        .attr('x', 12)
+        .attr('y', currentY)
+        .attr('width', NODE_WIDTH - 24)
         .attr('height', headerHeight)
-        .attr('rx', 8)
-        .attr('fill', headerColor);
+        .attr('rx', 6) // Kanban border radius
+        .attr('fill', headerBg)
+        .attr('fill-opacity', 0.8)
+        .attr('stroke', headerBorder)
+        .attr('stroke-width', 1);
 
-    // Cover bottom corners of header
-    nodeGroup
-        .append('rect')
-        .attr('y', headerHeight - 8)
-        .attr('width', NODE_WIDTH)
-        .attr('height', 8)
-        .attr('fill', headerColor);
-
-    // Header content
-    let headerY = 20;
+    const headerY = currentY + 12; // Icon positioning within header
 
     // Task type icon and name
     if (task.taskType === 'script' && task.scriptLanguage) {
