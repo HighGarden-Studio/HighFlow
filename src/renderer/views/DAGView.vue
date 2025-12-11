@@ -459,8 +459,6 @@ onMounted(async () => {
 
         <!-- Project Info Modal -->
         <ProjectInfoModal
-            v-if="showProjectInfoModal"
-            :project-id="projectId"
             :project="project"
             :open="showProjectInfoModal"
             @close="showProjectInfoModal = false"
