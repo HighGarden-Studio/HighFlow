@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTaskStore } from '../stores/taskStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useUIStore } from '../stores/uiStore';
+import { useOperatorStore } from '../stores/operatorStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import * as d3 from 'd3-selection';
@@ -21,6 +22,7 @@ const router = useRouter();
 const taskStore = useTaskStore();
 const projectStore = useProjectStore();
 const uiStore = useUIStore();
+const operatorStore = useOperatorStore();
 
 // Refs
 const svgRef = ref<SVGSVGElement | null>(null);
@@ -635,22 +637,27 @@ function renderTaskNode(parent: any, node: DAGNode) {
         blocked: '#EF4444',
     };
 
-    // Determine header color based on task type and provider
-    let headerColor = '#1F2937'; // Default dark
-    let headerTextColor = '#FFFFFF';
-
+    // Load operator data if assigned
+    let operatorData: any = null;
     if (task.assignedOperatorId) {
-        headerColor = '#7C3AED'; // Purple for operator
-    } else if (task.taskType === 'script') {
-        headerColor = '#059669'; // Green for scripts
+        operatorData = operatorStore.operators.find((op: any) => op.id === task.assignedOperatorId);
+    }
+
+    // Determine badge colors (Kanban style)
+    let badgeBgClass = 'bg-gray-100'; // default
+    let badgeTextClass = 'text-gray-500';
+
+    if (task.taskType === 'script') {
+        badgeBgClass = 'bg-green-100 dark:bg-green-900/50';
+        badgeTextClass = 'text-green-700 dark:text-green-300';
     } else if (task.aiProvider) {
-        const providerColors: Record<string, string> = {
-            openai: '#10A37F',
-            anthropic: '#D97757',
-            google: '#4285F4',
-            gemini: '#8E44AD',
-        };
-        headerColor = providerColors[task.aiProvider.toLowerCase()] || '#3B82F6';
+        if (operatorData) {
+            badgeBgClass = 'bg-purple-100 dark:bg-purple-900/50';
+            badgeTextClass = 'text-purple-700 dark:text-purple-300';
+        } else {
+            badgeBgClass = 'bg-blue-100 dark:bg-blue-900/50';
+            badgeTextClass = 'text-blue-700 dark:text-blue-300';
+        }
     }
 
     // Card background with border
@@ -659,7 +666,7 @@ function renderTaskNode(parent: any, node: DAGNode) {
         .attr('width', NODE_WIDTH)
         .attr('height', NODE_HEIGHT)
         .attr('rx', 8)
-        .attr('fill', '#FFFFFF')
+        .attr('fill', '#1F2937') // bg-gray-800 (dark theme like Kanban)
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
