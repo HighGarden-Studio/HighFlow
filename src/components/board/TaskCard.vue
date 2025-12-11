@@ -540,7 +540,9 @@ function handleOperatorDragLeave(event: DragEvent) {
 }
 
 function handleOperatorDrop(event: DragEvent) {
+    console.log('🎯 TaskCard handleOperatorDrop called');
     const operatorData = event.dataTransfer?.getData('application/x-operator');
+    console.log('🎯 Operator data:', operatorData);
     if (operatorData) {
         // This is an operator drop
         event.preventDefault();
@@ -549,6 +551,7 @@ function handleOperatorDrop(event: DragEvent) {
 
         try {
             const operator = JSON.parse(operatorData);
+            console.log('🎯 Emitting operatorDrop:', props.task.id, operator.id);
             emit('operatorDrop', props.task.id, operator.id);
         } catch (error) {
             console.error('Failed to parse operator data:', error);
