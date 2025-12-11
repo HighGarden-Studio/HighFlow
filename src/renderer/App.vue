@@ -8,6 +8,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUIStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { useHistoryStore } from './stores/historyStore';
 import GlobalSearch from '../components/search/GlobalSearch.vue';
 import AssistantChat from '../components/assistant/AssistantChat.vue';
 import InitialSetupWizard from '../components/setup/InitialSetupWizard.vue';
@@ -19,6 +20,7 @@ const router = useRouter();
 const route = useRoute();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
+const historyStore = useHistoryStore();
 const activityLogStore = useActivityLogStore();
 
 // State
@@ -90,17 +92,43 @@ function closeWindow() {
     window.electron?.window.close();
 }
 
-// Global keyboard shortcuts
+/**
+ * Global keyboard shortcuts
+ */
 function handleGlobalKeyDown(event: KeyboardEvent) {
-    // Cmd+K or Ctrl+K to open search
-    if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-        event.preventDefault();
-        showSearch.value = !showSearch.value;
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifier = isMac ? event.metaKey : event.ctrlKey;
+
+    // Skip if typing in input elements
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
     }
-    // Cmd+J or Ctrl+J to toggle assistant
-    if ((event.metaKey || event.ctrlKey) && event.key === 'j') {
+
+    // Undo: Cmd+Z (Mac) or Ctrl+Z (Windows/Linux)
+    if (modifier && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
-        showAssistant.value = !showAssistant.value;
+        if (historyStore.canUndo) {
+            historyStore.undo();
+            console.log('⌨️ Undo triggered');
+        }
+        return;
+    }
+
+    // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Windows/Linux)
+    if (modifier && event.key === 'z' && event.shiftKey) {
+        event.preventDefault();
+        if (historyStore.canRedo) {
+            historyStore.redo();
+            console.log('⌨️ Redo triggered');
+        }
+        return;
+    }
+
+    // Assistant Panel: Cmd+K or Ctrl+K
+    if (modifier && event.key === 'k') {
+        event.preventDefault();
+        toggleAssistant();
     }
     // Cmd+` or Ctrl+` to toggle activity console
     if ((event.metaKey || event.ctrlKey) && event.key === '`') {
