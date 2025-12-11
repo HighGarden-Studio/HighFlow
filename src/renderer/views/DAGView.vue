@@ -488,12 +488,7 @@ function renderDAG() {
             }
         }
 
-        // Calculate arrow rotation angle
-        const dx = targetX - sourceX;
-        const dy = targetY - sourceY;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-        // Create unique marker for this edge with proper rotation
+        // Create unique marker for this edge with AUTO orientation
         const markerId = `arrowhead-${edgeIndex}`;
         defs.append('marker')
             .attr('id', markerId)
@@ -501,13 +496,16 @@ function renderDAG() {
             .attr('markerHeight', 10)
             .attr('refX', 9)
             .attr('refY', 3)
-            .attr('orient', angle)
+            .attr('orient', 'auto') // AUTO orientation - follows path direction
             .attr('markerUnits', 'strokeWidth')
             .append('polygon')
             .attr('points', '0 0, 10 3, 0 6')
             .attr('fill', '#9CA3AF');
+
         edgeGroup
             .append('path')
+            .attr('class', 'edge-path')
+            .attr('data-edge-index', edgeIndex)
             .attr('d', path)
             .attr('stroke', '#9CA3AF')
             .attr('stroke-width', 2)
@@ -523,6 +521,8 @@ function renderDAG() {
             // Background for label
             edgeGroup
                 .append('rect')
+                .attr('class', 'edge-label-bg')
+                .attr('data-edge-index', edgeIndex)
                 .attr('x', midX - 35)
                 .attr('y', midY - 12)
                 .attr('width', 70)
@@ -535,6 +535,8 @@ function renderDAG() {
             // Label text
             edgeGroup
                 .append('text')
+                .attr('class', 'edge-label-text')
+                .attr('data-edge-index', edgeIndex)
                 .attr('x', midX)
                 .attr('y', midY + 4)
                 .attr('text-anchor', 'middle')
@@ -1276,18 +1278,18 @@ function redrawEdgesForNode(node: DAGNode) {
     if (!svgRef.value) return;
 
     const svg = d3.select(svgRef.value);
-    const edgeGroup = svg.select('.edges');
+    const edges = graphData.value.edges;
 
     // Find all edges connected to this node
-    const { edges } = graphData.value;
     const connectedEdges = edges.filter(
-        (e) => (e.source as DAGNode).id === node.id || (e.target as DAGNode).id === node.id
+        (edge) => (edge.source as DAGNode).id === node.id || (edge.target as DAGNode).id === node.id
     );
 
-    // Redraw each connected edge
     connectedEdges.forEach((edge) => {
         const source = edge.source as DAGNode;
         const target = edge.target as DAGNode;
+        const edgeIndex = edges.indexOf(edge);
+
         const { sourceX, sourceY, targetX, targetY } = getConnectionPoints(source, target);
 
         let path: string;
@@ -1311,13 +1313,20 @@ function redrawEdgesForNode(node: DAGNode) {
             }
         }
 
-        // Update the path
-        edgeGroup.selectAll('path').each(function (this: any, _d: any, i: number) {
-            const edgeIndex = edges.indexOf(edge);
-            if (i === edgeIndex) {
-                d3.select(this).attr('d', path);
-            }
-        });
+        // Update path
+        svg.select(`.edge-path[data-edge-index="${edgeIndex}"]`).attr('d', path);
+
+        // Update label position if exists
+        const midX = (sourceX + targetX) / 2;
+        const midY = (sourceY + targetY) / 2;
+
+        svg.select(`.edge-label-bg[data-edge-index="${edgeIndex}"]`)
+            .attr('x', midX - 35)
+            .attr('y', midY - 12);
+
+        svg.select(`.edge-label-text[data-edge-index="${edgeIndex}"]`)
+            .attr('x', midX)
+            .attr('y', midY + 4);
     });
 }
 
