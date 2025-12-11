@@ -660,18 +660,19 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
 
     // operatorData is now passed as parameter from renderDAG
 
-    // Card background with border (calculate height dynamically)
-    let totalHeight = 0;
+    // Calculate node height dynamically
+    let nodeHeight = 0;
     const headerHeight = operatorData ? 65 : 48;
-    const bodyMinHeight = 80; // Minimum for ID + title
-    totalHeight = headerHeight + bodyMinHeight;
+    const bodyContentHeight = 100; // ID + title + some space
+    nodeHeight = headerHeight + bodyContentHeight;
 
+    // Card background with border (no fill, just border)
     const cardBg = nodeGroup
         .append('rect')
         .attr('width', NODE_WIDTH)
-        .attr('height', totalHeight)
+        .attr('height', nodeHeight)
         .attr('rx', 8)
-        .attr('fill', 'white')
+        .attr('fill', 'none')
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
@@ -825,7 +826,7 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .attr('x', 0)
         .attr('y', headerHeight)
         .attr('width', NODE_WIDTH)
-        .attr('height', totalHeight - headerHeight)
+        .attr('height', nodeHeight - headerHeight)
         .attr('fill', 'rgba(31, 41, 55, 0.3)');
 
     // Task ID with styled background
