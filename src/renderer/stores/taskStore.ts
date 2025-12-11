@@ -349,9 +349,7 @@ export const useTaskStore = defineStore('tasks', () => {
         // Extract only the fields being changed for undo
         const previousData: Partial<Task> = {};
         for (const key of Object.keys(data)) {
-            if (key in previousTask) {
-                previousData[key as keyof Task] = previousTask[key as keyof Task];
-            }
+            previousData[key] = (previousTask as any)[key];
         }
 
         const command = new UpdateTaskCommand(
