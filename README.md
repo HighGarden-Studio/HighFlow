@@ -10,6 +10,7 @@
 ## 🌟 Features
 
 ### Core Functionality
+
 - 🤖 **AI-Powered Project Generation**: Automatically create structured projects from natural language prompts
 - 📊 **Kanban & Timeline Views**: Visual task management with drag-and-drop
 - 🧠 **Multi-AI Agent Support**: Integrate GPT-4, Claude, Gemini simultaneously
@@ -22,6 +23,7 @@
 - 🔗 **Integrations**: Git, Slack, Discord, webhooks
 
 ### Technical Highlights
+
 - ⚡ **Offline-First**: Local SQLite database with background sync
 - 🔒 **Secure**: API keys stored in OS keychain
 - 🎨 **Modern UI**: Accessible, customizable interface
@@ -31,11 +33,12 @@
 
 ## 📸 Screenshots
 
-*Coming soon*
+_Coming soon_
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - pnpm 8+ (recommended)
 
@@ -118,24 +121,26 @@ pnpm build:linux
 - [Project Structure](./PROJECT_STRUCTURE.md)
 - [Development Roadmap](./DEVELOPMENT_ROADMAP.md)
 - [Technology Stack Rationale](./TECH_STACK_RATIONALE.md)
-- [API Documentation](./docs/API.md) *(coming soon)*
-- [Plugin Development Guide](./docs/PLUGIN_GUIDE.md) *(coming soon)*
+- [Recent Changes](./docs/RECENT_CHANGES.md) - **Latest updates and context**
+- [AI Quick Reference](./docs/AI_QUICK_REF.md) - **For AI assistants (Claude, Gemini)**
+- [API Documentation](./docs/API.md) _(coming soon)_
+- [Plugin Development Guide](./docs/PLUGIN_GUIDE.md) _(coming soon)_
 
 ## 🛠️ Technology Stack
 
-| Category | Technology | Purpose |
-|----------|-----------|---------|
-| Desktop Framework | Electron 29 | Cross-platform desktop app |
-| Frontend Framework | Vue 3.4 (Composition API) | Reactive UI |
-| Language | TypeScript 5.3 (strict) | Type safety |
-| State Management | Pinia | Centralized state |
-| UI Library | Shadcn-vue + TailwindCSS | Component library |
-| Local Database | SQLite + Drizzle ORM | Offline-first storage |
-| Real-time Sync | Liveblocks / Supabase | Collaboration |
-| CRDT | Yjs | Conflict-free editing |
-| AI Integration | Vercel AI SDK | Multi-model support |
-| Build Tool | Vite 5 | Lightning-fast HMR |
-| Testing | Vitest + Playwright | Unit & E2E tests |
+| Category           | Technology                | Purpose                    |
+| ------------------ | ------------------------- | -------------------------- |
+| Desktop Framework  | Electron 29               | Cross-platform desktop app |
+| Frontend Framework | Vue 3.4 (Composition API) | Reactive UI                |
+| Language           | TypeScript 5.3 (strict)   | Type safety                |
+| State Management   | Pinia                     | Centralized state          |
+| UI Library         | Shadcn-vue + TailwindCSS  | Component library          |
+| Local Database     | SQLite + Drizzle ORM      | Offline-first storage      |
+| Real-time Sync     | Liveblocks / Supabase     | Collaboration              |
+| CRDT               | Yjs                       | Conflict-free editing      |
+| AI Integration     | Vercel AI SDK             | Multi-model support        |
+| Build Tool         | Vite 5                    | Lightning-fast HMR         |
+| Testing            | Vitest + Playwright       | Unit & E2E tests           |
 
 See [TECH_STACK_RATIONALE.md](./TECH_STACK_RATIONALE.md) for detailed explanations.
 
@@ -213,27 +218,32 @@ pnpm format
 See [DEVELOPMENT_ROADMAP.md](./DEVELOPMENT_ROADMAP.md) for detailed milestones.
 
 **Phase 1: Foundation & MVP** (Weeks 1-8)
+
 - [x] Project setup
 - [ ] Basic CRUD operations
 - [ ] AI project generation
 - [ ] Kanban board
 
 **Phase 2: Collaboration** (Weeks 9-14)
+
 - [ ] User authentication
 - [ ] Real-time sync
 - [ ] Comments & mentions
 
 **Phase 3: Advanced Features** (Weeks 15-20)
+
 - [ ] Timeline view
 - [ ] AI assistant chat
 - [ ] Automation workflows
 
 **Phase 4: Integrations** (Weeks 21-24)
+
 - [ ] Git integration
 - [ ] Slack/Discord bots
 - [ ] Template marketplace
 
 **Phase 5: Release** (Weeks 25-28)
+
 - [ ] Testing & polish
 - [ ] Documentation
 - [ ] v1.0 launch
