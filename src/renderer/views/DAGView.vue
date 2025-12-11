@@ -379,16 +379,13 @@ onMounted(async () => {
     if (projectId.value) {
         console.log('🔵 DAGView mounting, projectId:', projectId.value);
 
-        // Load project first, then tasks
-        await projectStore.setCurrentProject(projectId.value);
+        // Load projects list and tasks in parallel
+        await Promise.all([projectStore.fetchProjects(), taskStore.fetchTasks(projectId.value)]);
 
         // Debug: check if project loaded
-        console.log('🔵 After setCurrentProject, currentProject:', projectStore.currentProject);
-        console.log('🔵 project computed value:', project.value);
+        console.log('🔵 After loading, project:', project.value);
 
-        await taskStore.fetchTasks(projectId.value);
-
-        // Wait a tick to ensure project is set, then build graph
+        // Wait a tick to ensure data is set, then build graph
         await nextTick();
         buildGraph();
     }
