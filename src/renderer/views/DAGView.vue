@@ -873,37 +873,15 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
             .append('text')
             .attr('x', 30)
             .attr('y', headerY + 3)
-            .attr('fill', headerTextColor)
+            .attr('fill', headerText)
             .attr('font-size', 12)
             .text('미설정');
     }
 
-    headerY = 37;
+    currentY += headerHeight + 12;
 
-    // Operator badge in header (if assigned)
-    if (task.assignedOperatorId) {
-        const operatorBadge = nodeGroup.append('g');
-        operatorBadge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', headerY - 10)
-            .attr('width', 120)
-            .attr('height', 18)
-            .attr('rx', 3)
-            .attr('fill', 'rgba(255, 255, 255, 0.2)');
-        createSVGIcon(operatorBadge, 'robot', 14, headerY - 8, 10, headerTextColor);
-        operatorBadge
-            .append('text')
-            .attr('x', 28)
-            .attr('y', headerY + 2)
-            .attr('fill', headerTextColor)
-            .attr('font-size', 10)
-            .attr('font-weight', '600')
-            .text(`Operator: ${task.assignedOperatorId}`);
-    }
-
-    // Body section starts
-    let bodyY = headerHeight + 20;
+    // === BODY SECTION ===
+    let bodyY = currentY;
 
     // Task ID
     nodeGroup
