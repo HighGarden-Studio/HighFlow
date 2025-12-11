@@ -2,6 +2,7 @@
 import { Handle, Position } from '@vue-flow/core';
 import TaskCard from '../board/TaskCard.vue';
 import type { Task } from '@core/types/database';
+import { ref } from 'vue';
 
 interface Props {
     data: {
@@ -20,6 +21,9 @@ const emit = defineEmits<{
     (e: 'approve', task: Task): void;
     (e: 'operatorDrop', taskId: number, operatorId: number): void;
 }>();
+
+// Operator drag state
+const isOperatorDragOver = ref(false);
 
 function handleClick() {
     emit('click', props.data.task);
@@ -46,10 +50,55 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
     emit('operatorDrop', taskId, operatorId);
     console.log('🔵 TaskFlowNode emitted operatorDrop');
 }
+
+// Direct drag/drop handlers for wrapper
+function handleWrapperDragOver(event: DragEvent) {
+    const types = event.dataTransfer?.types || [];
+    if (types.includes('application/x-operator')) {
+        event.preventDefault();
+        event.stopPropagation();
+        isOperatorDragOver.value = true;
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'copy';
+        }
+        console.log('🟡 TaskFlowNode wrapper dragover');
+    }
+}
+
+function handleWrapperDragLeave(event: DragEvent) {
+    isOperatorDragOver.value = false;
+    console.log('🟡 TaskFlowNode wrapper dragleave');
+}
+
+function handleWrapperDrop(event: DragEvent) {
+    console.log('🟡 TaskFlowNode wrapper drop fired!');
+    const operatorData = event.dataTransfer?.getData('application/x-operator');
+    console.log('🟡 Operator data:', operatorData);
+
+    if (operatorData) {
+        event.preventDefault();
+        event.stopPropagation();
+        isOperatorDragOver.value = false;
+
+        try {
+            const operator = JSON.parse(operatorData);
+            console.log('🟡 Emitting from wrapper:', props.data.task.id, operator.id);
+            emit('operatorDrop', props.data.task.id, operator.id);
+        } catch (error) {
+            console.error('Failed to parse operator data:', error);
+        }
+    }
+}
 </script>
 
 <template>
-    <div class="task-flow-node">
+    <div
+        class="task-flow-node"
+        @dragover="handleWrapperDragOver"
+        @dragleave="handleWrapperDragLeave"
+        @drop="handleWrapperDrop"
+        :class="{ 'operator-drag-over': isOperatorDragOver }"
+    >
         <!-- Connection handles -->
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
@@ -109,5 +158,10 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
 
 :deep(.handle-right) {
     right: -6px;
+}
+
+.operator-drag-over {
+    transform: scale(1.02);
+    transition: transform 0.2s;
 }
 </style>
