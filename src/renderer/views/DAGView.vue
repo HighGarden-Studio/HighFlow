@@ -19,6 +19,7 @@ import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
+import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -43,6 +44,9 @@ const selectedTask = computed(() => {
     return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
 });
 const showDetailPanel = ref(false);
+
+// Project info modal
+const showProjectInfoModal = ref(false);
 
 // Vue Flow setup
 const { onConnect, addEdges, fitView } = useVueFlow();
@@ -261,7 +265,7 @@ watch(
 onMounted(async () => {
     if (projectId.value) {
         await projectStore.setCurrentProject(projectId.value);
-        await taskStore.loadTasks(projectId.value);
+        await taskStore.fetchTasks(projectId.value);
         buildGraph();
     }
 });
@@ -270,8 +274,13 @@ onMounted(async () => {
 <template>
     <div class="flex-1 flex flex-col h-full bg-gray-900">
         <!-- Header -->
-        <ProjectHeader :project-id="projectId" :project-title="project?.title" current-view="dag" />
-
+        <ProjectHeader
+            :project-id="projectId"
+            :project-title="project?.title"
+            current-view="dag"
+            :show-project-info="true"
+            @project-info="showProjectInfoModal = true"
+        />
         <!-- Operator Panel -->
         <OperatorPanel :project-id="projectId" />
 
@@ -313,6 +322,14 @@ onMounted(async () => {
             @execute="handleTaskExecute"
             @approve="handleTaskApprove"
             @reject="closeDetailPanel"
+        />
+
+        <!-- Project Info Modal -->
+        <ProjectInfoModal
+            :project="project"
+            :open="showProjectInfoModal"
+            @close="showProjectInfoModal = false"
+            @edit="showProjectInfoModal = false"
         />
     </div>
 </template>
