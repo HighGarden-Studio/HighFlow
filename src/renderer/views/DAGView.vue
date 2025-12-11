@@ -389,12 +389,18 @@ async function handleTaskSave(task: Task) {
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
-        await taskStore.updateTask(taskId, {
-            operatorId: operatorId,
-        });
+        await taskStore.updateTask(taskId, { operatorId });
         console.log('🟢 Task updated successfully');
-        // Refresh tasks to show updated operator
+
+        // Fetch fresh data to ensure UI updates
         await taskStore.fetchTasks(projectId.value);
+
+        // Log the updated task
+        const updatedTask = taskStore.tasks.find((t) => t.id === taskId);
+        console.log('🟢 Updated task from store:', updatedTask);
+        console.log('🟢 Operator ID in task:', updatedTask?.operatorId);
+
+        // Rebuild graph to reflect changes
         buildGraph();
     } catch (error) {
         console.error('Failed to assign operator:', error);
