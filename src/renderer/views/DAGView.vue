@@ -389,7 +389,7 @@ async function handleTaskSave(task: Task) {
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
-        await taskStore.updateTask(taskId, { operatorId });
+        await taskStore.updateTask(taskId, { assignedOperatorId: operatorId });
         console.log('🟢 Task updated successfully');
 
         // Fetch fresh data to ensure UI updates
@@ -398,7 +398,7 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
         // Log the updated task
         const updatedTask = taskStore.tasks.find((t) => t.id === taskId);
         console.log('🟢 Updated task from store:', updatedTask);
-        console.log('🟢 Operator ID in task:', updatedTask?.operatorId);
+        console.log('🟢 Assigned Operator ID in task:', updatedTask?.assignedOperatorId);
 
         // Rebuild graph to reflect changes
         buildGraph();
