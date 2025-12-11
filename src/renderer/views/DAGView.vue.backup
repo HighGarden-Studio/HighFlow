@@ -11,6 +11,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useUIStore } from '../stores/uiStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
+import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import * as d3 from 'd3-selection';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 import { zoom, zoomIdentity } from 'd3-zoom';
@@ -48,12 +49,127 @@ const draggedNodeId = ref<number | null>(null);
 const NODE_WIDTH = 300;
 const NODE_HEIGHT = 200;
 const LEVEL_HEIGHT = 280;
-const HORIZONTAL_SPACING = 50;
+const HORIZONTAL_SPACING = 100;
+
+// SVG Icon paths for badges
+function createSVGIcon(
+    parent: any,
+    iconType: string,
+    x: number,
+    y: number,
+    size: number,
+    color: string
+) {
+    const iconGroup = parent.append('g').attr('transform', `translate(${x}, ${y})`);
+
+    switch (iconType) {
+        case 'openai': // Sparkle icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size * 0.55} ${size * 0.45} L${size} ${size / 2} L${size * 0.55} ${size * 0.55} L${size / 2} ${size} L${size * 0.45} ${size * 0.55} L0 ${size / 2} L${size * 0.45} ${size * 0.45} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'anthropic': // Brain icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size * 0.3} ${size * 0.2} Q${size * 0.2} ${size * 0.3} ${size * 0.25} ${size * 0.5} T${size * 0.3} ${size * 0.8} M${size * 0.7} ${size * 0.2} Q${size * 0.8} ${size * 0.3} ${size * 0.75} ${size * 0.5} T${size * 0.7} ${size * 0.8} M${size * 0.3} ${size * 0.4} Q${size * 0.5} ${size * 0.35} ${size * 0.7} ${size * 0.4}`
+                )
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            break;
+        case 'google': // Diamond/crystal icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size} ${size * 0.4} L${size / 2} ${size} L0 ${size * 0.4} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'gemini': // Gem icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size / 2} 0 L${size} ${size * 0.3} L${size * 0.85} ${size} L${size * 0.15} ${size} L0 ${size * 0.3} Z M${size * 0.25} ${size * 0.3} L${size * 0.5} ${size * 0.7} L${size * 0.75} ${size * 0.3} Z`
+                )
+                .attr('fill', color);
+            break;
+        case 'script': // Scroll/document icon
+            iconGroup
+                .append('rect')
+                .attr('x', size * 0.15)
+                .attr('y', 0)
+                .attr('width', size * 0.7)
+                .attr('height', size)
+                .attr('rx', size * 0.1)
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            iconGroup
+                .append('line')
+                .attr('x1', size * 0.3)
+                .attr('y1', size * 0.25)
+                .attr('x2', size * 0.7)
+                .attr('y2', size * 0.25)
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.08);
+            iconGroup
+                .append('line')
+                .attr('x1', size * 0.3)
+                .attr('y1', size * 0.5)
+                .attr('x2', size * 0.7)
+                .attr('y2', size * 0.5)
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.08);
+            break;
+        case 'file': // File icon
+            iconGroup
+                .append('path')
+                .attr(
+                    'd',
+                    `M${size * 0.2} 0 L${size * 0.6} 0 L${size * 0.8} ${size * 0.2} L${size * 0.8} ${size} L${size * 0.2} ${size} Z`
+                )
+                .attr('fill', 'none')
+                .attr('stroke', color)
+                .attr('stroke-width', size * 0.1);
+            break;
+        case 'robot': // Robot icon (default)
+        default:
+            iconGroup
+                .append('rect')
+                .attr('x', size * 0.2)
+                .attr('y', size * 0.3)
+                .attr('width', size * 0.6)
+                .attr('height', size * 0.5)
+                .attr('rx', size * 0.1)
+                .attr('fill', color);
+            iconGroup
+                .append('circle')
+                .attr('cx', size * 0.35)
+                .attr('cy', size * 0.5)
+                .attr('r', size * 0.08)
+                .attr('fill', 'white');
+            iconGroup
+                .append('circle')
+                .attr('cx', size * 0.65)
+                .attr('cy', size * 0.5)
+                .attr('r', size * 0.08)
+                .attr('fill', 'white');
+            break;
+    }
+}
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
-const tasks = computed(() => taskStore.tasks);
 const project = computed(() => projectStore.currentProject);
+const tasks = computed(() => taskStore.tasks);
 
 interface DAGNode {
     id: number;
@@ -128,14 +244,10 @@ function getConnectionPoints(source: DAGNode, target: DAGNode) {
         // Exit left
         sourceX = source.x - NODE_WIDTH / 2;
         sourceY = source.y;
-    } else if (angle > 0) {
+    } else {
         // Exit bottom
         sourceX = source.x;
         sourceY = source.y + NODE_HEIGHT / 2;
-    } else {
-        // Exit top
-        sourceX = source.x;
-        sourceY = source.y - NODE_HEIGHT / 2;
     }
 
     // Determine target entry point (with offset for arrow visibility)
@@ -191,69 +303,96 @@ function computeHierarchicalLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
     const { nodes, edges } = graphData.value;
     if (nodes.length === 0) return { nodes, edges };
 
-    // Group by dependency level
-    const levels = new Map<number, DAGNode[]>();
-    const levelMap = new Map<number, number>();
-
-    function getLevel(node: DAGNode): number {
-        if (levelMap.has(node.id)) return levelMap.get(node.id)!;
-
-        const deps = getTaskDependencies(node.task);
-        if (deps.length === 0) {
-            levelMap.set(node.id, 0);
-            return 0;
-        }
-
-        let maxLevel = -1;
-        deps.forEach((depId) => {
-            const depNode = nodes.find((n) => n.id === depId);
-            if (depNode) {
-                const depLevel = getLevel(depNode);
-                maxLevel = Math.max(maxLevel, depLevel);
-            }
-        });
-
-        const nodeLevel = maxLevel + 1;
-        levelMap.set(node.id, nodeLevel);
-        return nodeLevel;
-    }
-
-    // Calculate levels for all nodes
+    // Build dependency map
+    const dependencyMap = new Map<number, number[]>();
     nodes.forEach((node) => {
-        const lvl = getLevel(node);
-        if (!levels.has(lvl)) levels.set(lvl, []);
-        levels.get(lvl)!.push(node);
+        dependencyMap.set(node.id, getTaskDependencies(node.task));
     });
 
-    // Position nodes with topological ordering within levels
-    const sortedLevels = Array.from(levels.entries()).sort((a, b) => a[0] - b[0]);
-    sortedLevels.forEach(([level, levelNodes]) => {
-        const y = level * LEVEL_HEIGHT + 100;
-
-        // Sort nodes within level by dependency count (left = fewer dependencies = executed first)
-        levelNodes.sort((a, b) => {
-            const aDeps = getTaskDependencies(a.task).length;
-            const bDeps = getTaskDependencies(b.task).length;
-            if (aDeps !== bDeps) return aDeps - bDeps;
-            // Secondary sort by ID for consistency
-            return a.id - b.id;
+    // Build reverse dependency map (who depends on this node)
+    const reverseDeps = new Map<number, number[]>();
+    nodes.forEach((node) => reverseDeps.set(node.id, []));
+    nodes.forEach((node) => {
+        const deps = dependencyMap.get(node.id) || [];
+        deps.forEach((depId) => {
+            if (reverseDeps.has(depId)) {
+                reverseDeps.get(depId)!.push(node.id);
+            }
         });
+    });
 
-        const totalWidth = levelNodes.length * (NODE_WIDTH + HORIZONTAL_SPACING);
-        const startX = -totalWidth / 2 + NODE_WIDTH / 2;
+    // Topological sorting with BFS
+    const levelMap = new Map<number, number>();
+    const inDegree = new Map<number, number>();
 
-        levelNodes.forEach((node, index) => {
-            // Check if there's a custom position
+    // Initialize in-degree
+    nodes.forEach((node) => {
+        const deps = dependencyMap.get(node.id) || [];
+        inDegree.set(node.id, deps.length);
+    });
+
+    // BFS queue - start with nodes that have no dependencies
+    const queue: number[] = [];
+    nodes.forEach((node) => {
+        if (inDegree.get(node.id) === 0) {
+            levelMap.set(node.id, 0);
+            queue.push(node.id);
+        }
+    });
+
+    // Process queue
+    while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        const currentLevel = levelMap.get(currentId) || 0;
+
+        // Update dependent nodes
+        const dependents = reverseDeps.get(currentId) || [];
+        dependents.forEach((depId) => {
+            const newDegree = (inDegree.get(depId) || 0) - 1;
+            inDegree.set(depId, newDegree);
+
+            if (newDegree === 0) {
+                // Set level to max(dependencies) + 1
+                const deps = dependencyMap.get(depId) || [];
+                const maxLevel = deps.reduce((max, id) => Math.max(max, levelMap.get(id) || 0), -1);
+                levelMap.set(depId, maxLevel + 1);
+                queue.push(depId);
+            }
+        });
+    }
+
+    // Group by level
+    const levels = new Map<number, DAGNode[]>();
+    nodes.forEach((node) => {
+        const level = levelMap.get(node.id) || 0;
+        if (!levels.has(level)) levels.set(level, []);
+        levels.get(level)!.push(node);
+    });
+
+    // Position nodes
+    const maxLevel = levels.size > 0 ? Math.max(...Array.from(levels.keys())) : 0;
+    const startX = 150;
+    const levelSpacing = 450;
+
+    for (let level = 0; level <= maxLevel; level++) {
+        const nodesInLevel = levels.get(level) || [];
+        nodesInLevel.sort((a, b) => a.id - b.id);
+
+        const x = startX + level * levelSpacing;
+        const totalHeight = nodesInLevel.length * LEVEL_HEIGHT;
+        const startY = -totalHeight / 2 + LEVEL_HEIGHT / 2;
+
+        nodesInLevel.forEach((node, idx) => {
             const customPos = customNodePositions.value.get(node.id);
             if (customPos) {
                 node.x = customPos.x;
                 node.y = customPos.y;
             } else {
-                node.x = startX + index * (NODE_WIDTH + HORIZONTAL_SPACING);
-                node.y = y;
+                node.x = x;
+                node.y = startY + idx * LEVEL_HEIGHT;
             }
         });
-    });
+    }
 
     return { nodes, edges };
 }
@@ -303,7 +442,7 @@ function computeForceLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
 }
 
 // Render DAG
-function renderDAG() {
+async function renderDAG() {
     if (!svgRef.value || !containerRef.value) return;
 
     const svg = d3.select(svgRef.value);
@@ -315,9 +454,6 @@ function renderDAG() {
     // Compute layout
     const { nodes, edges } =
         layoutMode.value === 'hierarchical' ? computeHierarchicalLayout() : computeForceLayout();
-
-    // Define defs for markers (created before edges)
-    const defs = svg.append('defs');
 
     // Draw edges
     const edgeGroup = g.append('g').attr('class', 'edges');
@@ -350,37 +486,97 @@ function renderDAG() {
             }
         }
 
-        // Calculate arrow rotation angle
-        const dx = targetX - sourceX;
-        const dy = targetY - sourceY;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-        // Create unique marker for this edge with proper rotation
-        const markerId = `arrowhead-${edgeIndex}`;
-        defs.append('marker')
-            .attr('id', markerId)
-            .attr('markerWidth', 10)
-            .attr('markerHeight', 10)
-            .attr('refX', 9)
-            .attr('refY', 3)
-            .attr('orient', angle)
-            .attr('markerUnits', 'strokeWidth')
-            .append('polygon')
-            .attr('points', '0 0, 10 3, 0 6')
-            .attr('fill', '#9CA3AF');
+        // Draw edge path without marker
         edgeGroup
             .append('path')
+            .attr('class', 'edge-path')
+            .attr('data-edge-index', edgeIndex)
             .attr('d', path)
             .attr('stroke', '#9CA3AF')
             .attr('stroke-width', 2)
-            .attr('fill', 'none')
-            .attr('marker-end', `url(#${markerId})`);
+            .attr('fill', 'none');
+
+        // Draw arrow manually at target point
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        const arrowSize = 8;
+        const arrowPoints = [
+            [targetX, targetY],
+            [
+                targetX - arrowSize * Math.cos(angle - Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle - Math.PI / 6),
+            ],
+            [
+                targetX - arrowSize * Math.cos(angle + Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle + Math.PI / 6),
+            ],
+        ];
+
+        edgeGroup
+            .append('polygon')
+            .attr('class', 'edge-arrow')
+            .attr('data-edge-index', edgeIndex)
+            .attr('points', arrowPoints.map((p) => p.join(',')).join(' '))
+            .attr('fill', '#9CA3AF');
+
+        // Add output format label on edge
+        const sourceNode = edge.source as DAGNode;
+        if (sourceNode.task.outputFormat) {
+            const midX = (sourceX + targetX) / 2;
+            const midY = (sourceY + targetY) / 2;
+
+            // Background for label
+            edgeGroup
+                .append('rect')
+                .attr('class', 'edge-label-bg')
+                .attr('data-edge-index', edgeIndex)
+                .attr('x', midX - 35)
+                .attr('y', midY - 12)
+                .attr('width', 70)
+                .attr('height', 24)
+                .attr('rx', 4)
+                .attr('fill', '#1F2937')
+                .attr('stroke', '#9CA3AF')
+                .attr('stroke-width', 1);
+
+            // Label text
+            edgeGroup
+                .append('text')
+                .attr('class', 'edge-label-text')
+                .attr('data-edge-index', edgeIndex)
+                .attr('x', midX)
+                .attr('y', midY + 4)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#9CA3AF')
+                .attr('font-size', 10)
+                .attr('font-weight', '500')
+                .text(sourceNode.task.outputFormat);
+        }
     });
 
     // Draw nodes
     const nodeGroup = g.append('g').attr('class', 'nodes');
-    nodes.forEach((node) => {
-        renderTaskNode(nodeGroup, node);
+
+    // Load all operators first for all tasks
+    const operatorMap = new Map<number, any>();
+    const tasksWithOperators = nodes.filter((n: DAGNode) => n.task.assignedOperatorId);
+
+    for (const node of tasksWithOperators) {
+        if (node.task.assignedOperatorId && !operatorMap.has(node.task.assignedOperatorId)) {
+            try {
+                const operator = await window.electron.operators.get(node.task.assignedOperatorId);
+                operatorMap.set(node.task.assignedOperatorId, operator);
+            } catch (error) {
+                console.error(`Failed to load operator ${node.task.assignedOperatorId}:`, error);
+            }
+        }
+    }
+
+    // Render each node with operator data
+    nodes.forEach((node: DAGNode) => {
+        const operatorData = node.task.assignedOperatorId
+            ? operatorMap.get(node.task.assignedOperatorId)
+            : null;
+        renderTaskNode(nodeGroup, node, operatorData);
     });
 
     // Add zoom behavior
@@ -393,10 +589,12 @@ function renderDAG() {
     svg.call(zoomBehavior as any);
 
     // Fit to view
-    fitToView();
 }
 
-function renderTaskNode(parent: any, node: DAGNode) {
+/**
+ * Render a single task node
+ */
+function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
     const task = node.task;
 
     const nodeGroup = parent
@@ -451,6 +649,7 @@ function renderTaskNode(parent: any, node: DAGNode) {
     });
 
     // Background
+    // Status colors for border
     const statusColors: Record<string, string> = {
         todo: '#6B7280',
         in_progress: '#3B82F6',
@@ -459,131 +658,241 @@ function renderTaskNode(parent: any, node: DAGNode) {
         blocked: '#EF4444',
     };
 
-    // Node background with animated border for running tasks
-    const nodeRect = nodeGroup
+    // operatorData is now passed as parameter from renderDAG
+
+    // Calculate node height dynamically
+    let nodeHeight = 0;
+    const headerHeight = operatorData ? 65 : 48;
+    const bodyContentHeight = 100; // ID + title + some space
+    nodeHeight = headerHeight + bodyContentHeight;
+
+    // Card background with border (no fill, just border)
+    const cardBg = nodeGroup
         .append('rect')
         .attr('width', NODE_WIDTH)
-        .attr('height', NODE_HEIGHT)
+        .attr('height', nodeHeight)
         .attr('rx', 8)
-        .attr('fill', '#1F2937')
+        .attr('fill', 'none')
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
-    // Add pulsing animation for running tasks
-    if (task.status === 'in_progress') {
-        nodeRect
-            .append('animate')
-            .attr('attributeName', 'stroke-width')
-            .attr('values', '4;6;4')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
+    // === HEADER SECTION (STATUS COLOR + OPACITY 0.5) ===
+    const headerColor = statusColors[task.status] || '#6B7280';
 
-        nodeRect
-            .append('animate')
-            .attr('attributeName', 'stroke-opacity')
-            .attr('values', '1;0.6;1')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
-    }
-
-    // First line: Provider/Operator/Script icon + model | Task ID
-    let firstLineText = '';
-    let firstLineIcon = '';
-
-    if (task.assignedOperatorId) {
-        firstLineIcon = '🤖';
-        firstLineText = 'Operator';
-    } else if (task.taskType === 'script') {
-        firstLineIcon = '📜';
-        firstLineText = 'Script';
-    } else if (task.aiProvider) {
-        const providerIcons: Record<string, string> = {
-            openai: '✨',
-            anthropic: '🧠',
-            google: '🔮',
-            gemini: '💎',
-        };
-        firstLineIcon = providerIcons[task.aiProvider.toLowerCase()] || '🤖';
-        firstLineText = task.aiProvider;
-        if (task.aiModel) {
-            firstLineText += ` (${task.aiModel})`;
-        }
-    } else {
-        firstLineIcon = '🤖';
-        firstLineText = 'AI';
-    }
-
+    // Header background (status color + opacity 0.5)
     nodeGroup
-        .append('text')
-        .attr('x', 10)
-        .attr('y', 20)
-        .attr('fill', '#9CA3AF')
-        .attr('font-size', 12)
-        .text(`${firstLineIcon} ${firstLineText}`);
+        .append('rect')
+        .attr('width', NODE_WIDTH)
+        .attr('height', headerHeight)
+        .attr('rx', 8)
+        .attr('fill', headerColor)
+        .attr('fill-opacity', 0.5);
 
-    // Task ID (right side of first line)
+    // Cover bottom corners
     nodeGroup
-        .append('text')
-        .attr('x', NODE_WIDTH - 10)
-        .attr('y', 20)
-        .attr('text-anchor', 'end')
-        .attr('fill', '#60A5FA')
-        .attr('font-weight', 'bold')
-        .attr('font-size', 14)
-        .text(`#${task.projectSequence}`);
+        .append('rect')
+        .attr('y', headerHeight - 8)
+        .attr('width', NODE_WIDTH)
+        .attr('height', 8)
+        .attr('fill', headerColor);
 
-    let currentY = 40;
+    let headerY = 5; // Reduced padding
 
-    // Second line: Operator details (if assigned)
-    if (task.assignedOperatorId) {
+    if (operatorData) {
+        const opHeight = 26; // Reduced height
+
+        nodeGroup
+            .append('rect')
+            .attr('x', 5)
+            .attr('y', headerY)
+            .attr('width', NODE_WIDTH - 10)
+            .attr('height', opHeight)
+            .attr('rx', 4)
+            .attr('fill', 'black')
+            .attr('fill-opacity', 0.3);
+
+        // Operator content - centered alignment
+        const opCenterY = headerY + opHeight / 2;
+
+        // Avatar
         nodeGroup
             .append('text')
             .attr('x', 10)
-            .attr('y', currentY)
-            .attr('fill', '#9CA3AF')
-            .attr('font-size', 11)
-            .text(`Operator: ${task.assignedOperatorId}`);
-        currentY += 20;
+            .attr('y', opCenterY + 4)
+            .attr('font-size', 14)
+            .attr('text-anchor', 'start')
+            .text(operatorData.avatar || '🤖');
+
+        // Name
+        nodeGroup
+            .append('text')
+            .attr('x', 28)
+            .attr('y', opCenterY - 2)
+            .attr('fill', 'white')
+            .attr('font-size', 10)
+            .attr('font-weight', 'bold')
+            .text(operatorData.name);
+
+        // Role
+        nodeGroup
+            .append('text')
+            .attr('x', 28)
+            .attr('y', opCenterY + 8)
+            .attr('fill', 'white')
+            .attr('font-size', 8)
+            .attr('opacity', 0.9)
+            .text(operatorData.role);
+
+        // Checkmark
+        nodeGroup
+            .append('path')
+            .attr('d', `M${NODE_WIDTH - 25},${opCenterY - 4} l2,2 l4,-4`)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 1.5)
+            .attr('fill', 'none')
+            .attr('stroke-linecap', 'round');
+
+        headerY += opHeight + 4; // Reduced gap
     }
 
+    // 2. Provider/Script section - black opacity 0.3 background
+    const providerHeight = 28; // Reduced height
+
+    nodeGroup
+        .append('rect')
+        .attr('x', 5)
+        .attr('y', headerY)
+        .attr('width', NODE_WIDTH - 10)
+        .attr('height', providerHeight)
+        .attr('rx', 4)
+        .attr('fill', 'black')
+        .attr('fill-opacity', 0.3);
+
+    // Provider content - centered alignment
+    const providerCenterY = headerY + providerHeight / 2;
+
+    // Icon and text
+    if (task.taskType === 'script' && task.scriptLanguage) {
+        createSVGIcon(nodeGroup, 'script', 10, providerCenterY - 6, 12, 'white');
+        nodeGroup
+            .append('text')
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
+            .attr('fill', 'white')
+            .attr('font-size', 10)
+            .attr('font-weight', 'bold')
+            .text(task.scriptLanguage);
+    } else if (task.aiProvider) {
+        const iconType = task.aiProvider.toLowerCase();
+        createSVGIcon(nodeGroup, iconType, 10, providerCenterY - 6, 12, 'white');
+        nodeGroup
+            .append('text')
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
+            .attr('fill', 'white')
+            .attr('font-size', 10)
+            .attr('font-weight', 'bold')
+            .text(task.aiProvider);
+
+        // AI Model on right
+        if (task.aiModel) {
+            nodeGroup
+                .append('text')
+                .attr('x', NODE_WIDTH - 16)
+                .attr('y', providerCenterY + 4)
+                .attr('text-anchor', 'end')
+                .attr('fill', 'white')
+                .attr('font-size', 10)
+                .attr('opacity', 0.9)
+                .text(task.aiModel);
+        }
+    } else {
+        createSVGIcon(nodeGroup, 'robot', 10, providerCenterY - 6, 12, 'white');
+        nodeGroup
+            .append('text')
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
+            .attr('fill', 'white')
+            .attr('font-size', 9)
+            .text('미설정');
+    }
+
+    // === BODY SECTION (DARK BACKGROUND) ===
+    let bodyY = headerHeight + 5; // Reduced padding
+
+    // Body background
+    nodeGroup
+        .append('rect')
+        .attr('x', 0)
+        .attr('y', headerHeight)
+        .attr('width', NODE_WIDTH)
+        .attr('height', nodeHeight - headerHeight)
+        .attr('fill', 'rgba(31, 41, 55, 0.3)');
+
+    // Task ID with styled background
+    const idColor = '#60A5FA';
+    const idText = `#${task.projectSequence}`;
+    const idWidth = idText.length * 8 + 12;
+
+    // ID background (color + opacity 0.3)
+    nodeGroup
+        .append('rect')
+        .attr('x', 12)
+        .attr('y', bodyY - 2)
+        .attr('width', idWidth)
+        .attr('height', 20)
+        .attr('rx', 4)
+        .attr('fill', idColor)
+        .attr('fill-opacity', 0.3)
+        .attr('stroke', idColor)
+        .attr('stroke-width', 1);
+
+    // ID text
+    nodeGroup
+        .append('text')
+        .attr('x', 12 + idWidth / 2)
+        .attr('y', bodyY + 12)
+        .attr('text-anchor', 'middle')
+        .attr('fill', idColor)
+        .attr('font-weight', 'bold')
+        .attr('font-size', 12)
+        .text(idText);
+
+    bodyY += 28;
+
     // Title
-    const title = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+    const title = task.title.length > 28 ? task.title.substring(0, 25) + '...' : task.title;
     nodeGroup
         .append('text')
         .attr('x', 10)
-        .attr('y', currentY + 10)
-        .attr('fill', '#F3F4F6')
+        .attr('y', bodyY)
+        .attr('fill', 'rgb(156, 163, 175)')
         .attr('font-size', 14)
         .attr('font-weight', 'bold')
         .text(title);
 
-    currentY += 30;
+    bodyY += 25;
 
-    // Output format
-    if (task.outputFormat) {
-        nodeGroup
-            .append('text')
+    // Auto-run indicator
+    if (task.autoExecuteOnDependencyComplete) {
+        const autoGroup = nodeGroup.append('g');
+        autoGroup
+            .append('rect')
             .attr('x', 10)
-            .attr('y', currentY)
-            .attr('fill', '#9CA3AF')
-            .attr('font-size', 11)
-            .text(`📄 ${task.outputFormat}`);
-        currentY += 20;
-    }
-
-    // Auto-execution conditions (like Kanban)
-    const deps = getTaskDependencies(task);
-
-    if (deps.length > 0) {
-        const depText = deps.length === 1 ? `Task #${deps[0]}` : `${deps.length} tasks`;
-
-        nodeGroup
+            .attr('y', bodyY - 12)
+            .attr('width', 90)
+            .attr('height', 18)
+            .attr('rx', 3)
+            .attr('fill', '#DBEAFE');
+        autoGroup
             .append('text')
-            .attr('x', 10)
-            .attr('y', currentY)
-            .attr('fill', '#10B981')
+            .attr('x', 15)
+            .attr('y', bodyY)
+            .attr('fill', '#1E40AF')
             .attr('font-size', 10)
-            .text(`🔗 Auto-execute after ${depText}`);
+            .attr('font-weight', '600')
+            .text('⚡ Auto-run');
+        bodyY += 20;
     }
 
     // Status badge
@@ -623,142 +932,133 @@ function renderTaskNode(parent: any, node: DAGNode) {
         .attr('font-weight', 'bold')
         .text(statusText);
 
-    // Action buttons (right side)
-    let buttonX = NODE_WIDTH - 40;
+    // Action Buttons - at bottom
+    const buttonY = NODE_HEIGHT - 25;
+    let actionButtonX = NODE_WIDTH - 15;
 
     // Execute button (for TODO tasks)
     if (task.status === 'todo') {
-        const execButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskExecute(task);
-            });
+        const execBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        execButton
+        execBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
             .attr('fill', '#10B981')
-            .attr('stroke', '#FFFFFF')
+            .attr('stroke', '#34D399')
             .attr('stroke-width', 1.5);
 
-        execButton
+        execBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
             .text('▶');
 
-        buttonX -= 30;
+        execBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleTaskExecute(task);
+        });
+
+        actionButtonX -= 35;
     }
 
-    // Retry button (for failed IN_PROGRESS tasks)
-    if (task.status === 'in_progress' && task.lastExecutionResult?.success === false) {
-        const retryButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskExecute(task); // Retry uses execute
-            });
+    // Approve button (for NEEDS_APPROVAL)
+    if (task.status === 'needs_approval') {
+        const approveBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        retryButton
+        approveBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
             .attr('fill', '#F59E0B')
-            .attr('stroke', '#FFFFFF')
+            .attr('stroke', '#FBBF24')
             .attr('stroke-width', 1.5);
 
-        retryButton
+        approveBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 10)
-            .text('↻');
-
-        buttonX -= 30;
-    }
-
-    // Approve button (for NEEDS_APPROVAL or IN_REVIEW tasks)
-    if (task.status === 'needs_approval' || task.status === 'in_review') {
-        const approveButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskApprove(task);
-            });
-
-        approveButton
-            .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
-            .attr('fill', '#3B82F6')
-            .attr('stroke', '#FFFFFF')
-            .attr('stroke-width', 1.5);
-
-        approveButton
-            .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
-            .attr('font-weight', 'bold')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
             .text('✓');
 
-        buttonX -= 30;
+        approveBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleTaskApprove(task);
+        });
+
+        actionButtonX -= 35;
     }
 
-    // View Results button (for DONE tasks)
-    if (task.status === 'done') {
-        const viewButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleNodeClick(task); // Open detail panel
-            });
+    // Retry button (for failed REVIEW tasks)
+    if (task.status === 'in_review' && task.executionResult?.success === false) {
+        const retryBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        viewButton
+        retryBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
-            .attr('fill', '#8B5CF6')
-            .attr('stroke', '#FFFFFF')
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
+            .attr('fill', '#F59E0B')
+            .attr('stroke', '#FBBF24')
             .attr('stroke-width', 1.5);
 
-        viewButton
+        retryBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
-            .text('👁');
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
+            .text('↻');
 
-        buttonX -= 30;
+        retryBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleTaskExecute(task);
+        });
+
+        actionButtonX -= 35;
     }
 
+    // View Results button (for completed)
+    if (task.status === 'done' || task.status === 'in_review') {
+        const viewBtn = nodeGroup.append('g').style('cursor', 'pointer');
+
+        viewBtn
+            .append('circle')
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
+            .attr('fill', '#8B5CF6')
+            .attr('stroke', '#A78BFA')
+            .attr('stroke-width', 1.5);
+
+        viewBtn
+            .append('text')
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
+            .text('👁');
+
+        viewBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleNodeClick(task);
+        });
+
+        actionButtonX -= 35;
+    }
     // Connection handle (right side, centered vertically)
     const handleGroup = nodeGroup
         .append('g')
@@ -905,6 +1205,11 @@ async function handleTaskSubdivide(task: Task) {
     console.log('Subdivide task:', task.id);
 }
 
+function handleNewTask() {
+    selectedTaskId.value = null;
+    showDetailPanel.value = true;
+}
+
 function drawTempConnectionLine() {
     if (!svgRef.value || !tempConnectionLine.value) return;
 
@@ -1030,18 +1335,18 @@ function redrawEdgesForNode(node: DAGNode) {
     if (!svgRef.value) return;
 
     const svg = d3.select(svgRef.value);
-    const edgeGroup = svg.select('.edges');
+    const edges = graphData.value.edges;
 
     // Find all edges connected to this node
-    const { edges } = graphData.value;
     const connectedEdges = edges.filter(
-        (e) => (e.source as DAGNode).id === node.id || (e.target as DAGNode).id === node.id
+        (edge) => (edge.source as DAGNode).id === node.id || (edge.target as DAGNode).id === node.id
     );
 
-    // Redraw each connected edge
     connectedEdges.forEach((edge) => {
         const source = edge.source as DAGNode;
         const target = edge.target as DAGNode;
+        const edgeIndex = edges.indexOf(edge);
+
         const { sourceX, sourceY, targetX, targetY } = getConnectionPoints(source, target);
 
         let path: string;
@@ -1065,13 +1370,40 @@ function redrawEdgesForNode(node: DAGNode) {
             }
         }
 
-        // Update the path
-        edgeGroup.selectAll('path').each(function (this: any, _d: any, i: number) {
-            const edgeIndex = edges.indexOf(edge);
-            if (i === edgeIndex) {
-                d3.select(this).attr('d', path);
-            }
-        });
+        // Update path
+        svg.select(`.edge-path[data-edge-index="${edgeIndex}"]`).attr('d', path);
+
+        // Update arrow position and angle
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        const arrowSize = 8;
+        const arrowPoints = [
+            [targetX, targetY],
+            [
+                targetX - arrowSize * Math.cos(angle - Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle - Math.PI / 6),
+            ],
+            [
+                targetX - arrowSize * Math.cos(angle + Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle + Math.PI / 6),
+            ],
+        ];
+
+        svg.select(`.edge-arrow[data-edge-index="${edgeIndex}"]`).attr(
+            'points',
+            arrowPoints.map((p) => p.join(',')).join(' ')
+        );
+
+        // Update label position if exists
+        const midX = (sourceX + targetX) / 2;
+        const midY = (sourceY + targetY) / 2;
+
+        svg.select(`.edge-label-bg[data-edge-index="${edgeIndex}"]`)
+            .attr('x', midX - 35)
+            .attr('y', midY - 12);
+
+        svg.select(`.edge-label-text[data-edge-index="${edgeIndex}"]`)
+            .attr('x', midX)
+            .attr('y', midY + 4);
     });
 }
 
@@ -1121,7 +1453,9 @@ watch([tasks, layoutMode], () => {
 </script>
 
 <template>
-    <div class="flex-1 flex flex-col h-full bg-gray-900">
+    <div class="dag-view h-screen flex flex-col overflow-hidden">
+        <!-- Operator Panel (Collapsible at Top) -->
+        <OperatorPanel :project-id="projectId" />
         <!-- Header (same as Kanban) -->
         <header
             class="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0"
@@ -1175,6 +1509,12 @@ watch([tasks, layoutMode], () => {
                         DAG
                     </button>
                 </div>
+                <button
+                    class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+                    @click="handleNewTask"
+                >
+                    + New Task
+                </button>
             </div>
         </header>
 
