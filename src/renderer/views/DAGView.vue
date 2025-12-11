@@ -454,8 +454,19 @@ function renderDAG() {
     const { nodes, edges } =
         layoutMode.value === 'hierarchical' ? computeHierarchicalLayout() : computeForceLayout();
 
-    // Define defs for markers (created before edges)
+    // Define single shared arrow marker with auto orientation
     const defs = svg.append('defs');
+    defs.append('marker')
+        .attr('id', 'arrowhead')
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 10)
+        .attr('refX', 9)
+        .attr('refY', 3)
+        .attr('orient', 'auto')
+        .attr('markerUnits', 'strokeWidth')
+        .append('polygon')
+        .attr('points', '0 0, 10 3, 0 6')
+        .attr('fill', '#9CA3AF');
 
     // Draw edges
     const edgeGroup = g.append('g').attr('class', 'edges');
@@ -488,20 +499,7 @@ function renderDAG() {
             }
         }
 
-        // Create unique marker for this edge with AUTO orientation
-        const markerId = `arrowhead-${edgeIndex}`;
-        defs.append('marker')
-            .attr('id', markerId)
-            .attr('markerWidth', 10)
-            .attr('markerHeight', 10)
-            .attr('refX', 9)
-            .attr('refY', 3)
-            .attr('orient', 'auto') // AUTO orientation - follows path direction
-            .attr('markerUnits', 'strokeWidth')
-            .append('polygon')
-            .attr('points', '0 0, 10 3, 0 6')
-            .attr('fill', '#9CA3AF');
-
+        // Draw edge path with shared marker
         edgeGroup
             .append('path')
             .attr('class', 'edge-path')
@@ -510,7 +508,7 @@ function renderDAG() {
             .attr('stroke', '#9CA3AF')
             .attr('stroke-width', 2)
             .attr('fill', 'none')
-            .attr('marker-end', `url(#${markerId})`);
+            .attr('marker-end', 'url(#arrowhead)');
 
         // Add output format label on edge
         const sourceNode = edge.source as DAGNode;
