@@ -62,9 +62,9 @@ const nodeTypes = {
     taskCard: TaskFlowNode,
 };
 
-// Register edge types
+// Register edge types - use markRaw to prevent Vue reactivity warning
 const edgeTypes = {
-    custom: CustomEdge,
+    custom: markRaw(CustomEdge),
 };
 
 /**
