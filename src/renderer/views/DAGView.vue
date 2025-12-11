@@ -374,6 +374,23 @@ watch(
     { deep: true }
 );
 
+/**
+ * Handle operator assignment
+ */
+async function handleOperatorAssign(data: { task: Task; operatorId: number }) {
+    const { task, operatorId } = data;
+    try {
+        await taskStore.updateTask(task.id, {
+            operatorId: operatorId,
+        });
+        // Refresh tasks to show updated operator
+        await taskStore.fetchTasks(projectId.value);
+        buildGraph();
+    } catch (error) {
+        console.error('Failed to assign operator:', error);
+    }
+}
+
 // Initial load
 onMounted(async () => {
     if (projectId.value) {
@@ -435,6 +452,7 @@ onMounted(async () => {
                         @execute="handleTaskExecute(data.task)"
                         @approve="handleTaskApprove(data.task)"
                         @retry="handleTaskRetry(data.task)"
+                        @operatorAssign="handleOperatorAssign"
                     />
                 </template>
             </VueFlow>

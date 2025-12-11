@@ -18,6 +18,7 @@ const emit = defineEmits<{
     (e: 'previewResult', task: Task): void;
     (e: 'retry', task: Task): void;
     (e: 'approve', task: Task): void;
+    (e: 'operatorAssign', data: { task: Task; operatorId: number }): void;
 }>();
 
 function handleClick() {
@@ -39,6 +40,10 @@ function handleRetry() {
 function handleApprove() {
     emit('approve', props.data.task);
 }
+
+function handleOperatorAssign(operatorId: number) {
+    emit('operatorAssign', { task: props.data.task, operatorId });
+}
 </script>
 
 <template>
@@ -59,6 +64,7 @@ function handleApprove() {
                 @previewResult="handlePreviewResult"
                 @retry="handleRetry"
                 @approve="handleApprove"
+                @operatorAssign="handleOperatorAssign"
             />
         </div>
 
