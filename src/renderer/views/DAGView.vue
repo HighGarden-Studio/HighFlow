@@ -389,8 +389,17 @@ async function handleTaskSave(task: Task) {
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
-        await taskStore.updateTask(taskId, { assignedOperatorId: operatorId });
-        console.log('🟢 Task updated successfully');
+        const task = taskStore.tasks.find((t) => t.id === taskId);
+        const operatorName = operators.value?.find((o) => o.id === operatorId)?.name || 'Unknown';
+        const taskTitle = task?.title || `Task ${taskId}`;
+
+        // Use updateTaskWithHistory for undo/redo support
+        await taskStore.updateTaskWithHistory(
+            taskId,
+            { assignedOperatorId: operatorId },
+            `Assign "${operatorName}" to "${taskTitle}"`
+        );
+        console.log('🟢 Task updated successfully with history');
 
         // Fetch fresh data to ensure UI updates
         await taskStore.fetchTasks(projectId.value);
