@@ -28,10 +28,10 @@ const edgePath = computed(() => {
     const [path] = getBezierPath({
         sourceX: props.sourceX,
         sourceY: props.sourceY,
-        sourcePosition: props.sourcePosition,
+        sourcePosition: props.sourcePosition as any,
         targetX: props.targetX,
         targetY: props.targetY,
-        targetPosition: props.targetPosition,
+        targetPosition: props.targetPosition as any,
     });
     return path;
 });
