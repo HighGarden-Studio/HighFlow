@@ -44,28 +44,32 @@ export class CreateTaskCommand extends BaseCommand {
 
 /**
  * Update Task Command
- * Execute: Update task with new data
- * Undo: Restore previous task data
  */
 export class UpdateTaskCommand extends BaseCommand {
+    private taskId: number;
+    private newData: Partial<Task>;
+    private previousData: Partial<Task>;
+
     constructor(
-        private taskId: number,
-        private newData: Partial<Task>,
-        private previousData: Partial<Task>,
-        private onUpdate: (task: Task) => void,
+        taskId: number,
+        newData: Partial<Task>,
+        previousData: Partial<Task>,
         description?: string
     ) {
-        super(description || `Update task ${taskId}: ${Object.keys(newData).join(', ')}`);
+        super(description || `Update task ${taskId}`);
+        this.taskId = taskId;
+        this.newData = { ...newData };
+        this.previousData = { ...previousData };
     }
 
     async execute(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, this.newData);
-        this.onUpdate(task);
+        const api = getAPI();
+        await api.tasks.update(this.taskId, this.newData);
     }
 
     async undo(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, this.previousData);
-        this.onUpdate(task);
+        const api = getAPI();
+        await api.tasks.update(this.taskId, this.previousData);
     }
 }
 

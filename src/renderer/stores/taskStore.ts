@@ -352,15 +352,13 @@ export const useTaskStore = defineStore('tasks', () => {
             previousData[key] = (previousTask as any)[key];
         }
 
-        const command = new UpdateTaskCommand(
-            id,
-            data,
-            previousData,
-            (task: Task) => upsertTask(task),
-            description
-        );
+        const command = new UpdateTaskCommand(id, data, previousData, description);
 
         await historyStore.executeCommand(command);
+
+        // Refresh tasks from store to ensure UI updates
+        await fetchTasks(currentProjectId.value!);
+
         return tasks.value.find((t) => t.id === id) || null;
     }
 
