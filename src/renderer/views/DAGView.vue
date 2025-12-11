@@ -380,7 +380,7 @@ watch(
 async function handleTaskSave(task: Task) {
     await taskStore.fetchTasks(projectId.value);
     buildGraph();
-    selectedTaskId.value = null;
+    selectedTask.value = null;
 }
 
 /**
@@ -512,7 +512,7 @@ onMounted(async () => {
         <TaskDetailPanel
             :open="!!selectedTask"
             :task="selectedTask"
-            @close="selectedTaskId = null"
+            @close="selectedTask = null"
             @execute="handleTaskExecute"
             @approve="handleTaskApprove"
             @save="handleTaskSave"
