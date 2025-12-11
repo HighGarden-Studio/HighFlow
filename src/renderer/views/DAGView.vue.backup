@@ -1,0 +1,1294 @@
+<script setup lang="ts">
+/**
+ * DAG (Directed Acyclic Graph) View
+ *
+ * Visualizes task dependencies using D3.js with hierarchical and force-directed layouts
+ */
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useTaskStore } from '../stores/taskStore';
+import { useProjectStore } from '../stores/projectStore';
+import { useUIStore } from '../stores/uiStore';
+import type { Task } from '@core/types/database';
+import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
+import * as d3 from 'd3-selection';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { zoom, zoomIdentity } from 'd3-zoom';
+import { drag } from 'd3-drag';
+
+const route = useRoute();
+const router = useRouter();
+const taskStore = useTaskStore();
+const projectStore = useProjectStore();
+const uiStore = useUIStore();
+
+// Refs
+const svgRef = ref<SVGSVGElement | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
+const layoutMode = ref<'hierarchical' | 'force'>('hierarchical');
+
+// Task detail panel state
+const selectedTaskId = ref<number | null>(null);
+const selectedTask = computed(() => {
+    if (!selectedTaskId.value) return null;
+    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
+});
+const showDetailPanel = ref(false);
+
+// Connection mode state
+const isConnecting = ref(false);
+const connectionSource = ref<DAGNode | null>(null);
+const tempConnectionLine = ref<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+// Custom node positions (for manual positioning)
+const customNodePositions = ref<Map<number, { x: number; y: number }>>(new Map());
+const draggedNodeId = ref<number | null>(null);
+
+// Constants
+const NODE_WIDTH = 300;
+const NODE_HEIGHT = 200;
+const LEVEL_HEIGHT = 280;
+const HORIZONTAL_SPACING = 50;
+
+// Computed
+const projectId = computed(() => Number(route.params.id));
+const tasks = computed(() => taskStore.tasks);
+const project = computed(() => projectStore.currentProject);
+
+interface DAGNode {
+    id: number;
+    task: Task;
+    x: number;
+    y: number;
+    fx?: number;
+    fy?: number;
+}
+
+interface DAGEdge {
+    source: DAGNode;
+    target: DAGNode;
+}
+
+// Build graph data structure
+const graphData = computed(() => {
+    const nodes: DAGNode[] = [];
+    const edges: DAGEdge[] = [];
+    const nodeMap = new Map<number, DAGNode>();
+
+    // Create nodes
+    tasks.value.forEach((task) => {
+        const node: DAGNode = {
+            id: task.id,
+            task,
+            x: 0,
+            y: 0,
+        };
+        nodes.push(node);
+        nodeMap.set(task.id, node);
+    });
+
+    // Create edges from dependencies
+    tasks.value.forEach((task) => {
+        const dependencies = getTaskDependencies(task);
+        dependencies.forEach((depId) => {
+            const sourceNode = nodeMap.get(depId);
+            const targetNode = nodeMap.get(task.id);
+            if (sourceNode && targetNode) {
+                edges.push({
+                    source: sourceNode,
+                    target: targetNode,
+                });
+            }
+        });
+    });
+
+    return { nodes, edges };
+});
+
+// Calculate smart connection points based on relative node positions
+function getConnectionPoints(source: DAGNode, target: DAGNode) {
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+
+    // Determine which sides to connect based on angle
+    const angle = Math.atan2(dy, dx);
+    const absAngle = Math.abs(angle);
+
+    // Arrow offset to keep arrows visible outside nodes
+    const arrowOffset = 2; // Small offset for arrow visibility
+
+    let sourceX, sourceY, targetX, targetY;
+
+    // Determine source exit point
+    if (absAngle < Math.PI / 4) {
+        // Exit right
+        sourceX = source.x + NODE_WIDTH / 2;
+        sourceY = source.y;
+    } else if (absAngle > (3 * Math.PI) / 4) {
+        // Exit left
+        sourceX = source.x - NODE_WIDTH / 2;
+        sourceY = source.y;
+    } else if (angle > 0) {
+        // Exit bottom
+        sourceX = source.x;
+        sourceY = source.y + NODE_HEIGHT / 2;
+    } else {
+        // Exit top
+        sourceX = source.x;
+        sourceY = source.y - NODE_HEIGHT / 2;
+    }
+
+    // Determine target entry point (with offset for arrow visibility)
+    if (absAngle < Math.PI / 4) {
+        // Enter left
+        targetX = target.x - NODE_WIDTH / 2 - arrowOffset;
+        targetY = target.y;
+    } else if (absAngle > (3 * Math.PI) / 4) {
+        // Enter right
+        targetX = target.x + NODE_WIDTH / 2 + arrowOffset;
+        targetY = target.y;
+    } else if (angle > 0) {
+        // Enter top
+        targetX = target.x;
+        targetY = target.y - NODE_HEIGHT / 2 - arrowOffset;
+    } else {
+        // Enter bottom
+        targetX = target.x;
+        targetY = target.y + NODE_HEIGHT / 2 + arrowOffset;
+    }
+
+    return { sourceX, sourceY, targetX, targetY };
+}
+
+// Extract task dependencies from triggerConfig or legacy dependencies field
+function getTaskDependencies(task: Task): number[] {
+    // First try triggerConfig.dependsOn.taskIds (new format)
+    if (task.triggerConfig?.dependsOn?.taskIds) {
+        const taskIds = task.triggerConfig.dependsOn.taskIds;
+        return Array.isArray(taskIds) ? taskIds : [];
+    }
+
+    // Fallback to legacy dependencies field
+    if (task.dependencies) {
+        if (Array.isArray(task.dependencies)) {
+            return task.dependencies;
+        }
+        if (typeof task.dependencies === 'string') {
+            try {
+                const parsed = JSON.parse(task.dependencies);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        }
+    }
+
+    return [];
+}
+
+// Layout algorithms
+function computeHierarchicalLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
+    const { nodes, edges } = graphData.value;
+    if (nodes.length === 0) return { nodes, edges };
+
+    // Group by dependency level
+    const levels = new Map<number, DAGNode[]>();
+    const levelMap = new Map<number, number>();
+
+    function getLevel(node: DAGNode): number {
+        if (levelMap.has(node.id)) return levelMap.get(node.id)!;
+
+        const deps = getTaskDependencies(node.task);
+        if (deps.length === 0) {
+            levelMap.set(node.id, 0);
+            return 0;
+        }
+
+        let maxLevel = -1;
+        deps.forEach((depId) => {
+            const depNode = nodes.find((n) => n.id === depId);
+            if (depNode) {
+                const depLevel = getLevel(depNode);
+                maxLevel = Math.max(maxLevel, depLevel);
+            }
+        });
+
+        const nodeLevel = maxLevel + 1;
+        levelMap.set(node.id, nodeLevel);
+        return nodeLevel;
+    }
+
+    // Calculate levels for all nodes
+    nodes.forEach((node) => {
+        const lvl = getLevel(node);
+        if (!levels.has(lvl)) levels.set(lvl, []);
+        levels.get(lvl)!.push(node);
+    });
+
+    // Position nodes with topological ordering within levels
+    const sortedLevels = Array.from(levels.entries()).sort((a, b) => a[0] - b[0]);
+    sortedLevels.forEach(([level, levelNodes]) => {
+        const y = level * LEVEL_HEIGHT + 100;
+
+        // Sort nodes within level by dependency count (left = fewer dependencies = executed first)
+        levelNodes.sort((a, b) => {
+            const aDeps = getTaskDependencies(a.task).length;
+            const bDeps = getTaskDependencies(b.task).length;
+            if (aDeps !== bDeps) return aDeps - bDeps;
+            // Secondary sort by ID for consistency
+            return a.id - b.id;
+        });
+
+        const totalWidth = levelNodes.length * (NODE_WIDTH + HORIZONTAL_SPACING);
+        const startX = -totalWidth / 2 + NODE_WIDTH / 2;
+
+        levelNodes.forEach((node, index) => {
+            // Check if there's a custom position
+            const customPos = customNodePositions.value.get(node.id);
+            if (customPos) {
+                node.x = customPos.x;
+                node.y = customPos.y;
+            } else {
+                node.x = startX + index * (NODE_WIDTH + HORIZONTAL_SPACING);
+                node.y = y;
+            }
+        });
+    });
+
+    return { nodes, edges };
+}
+
+function computeForceLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
+    const { nodes, edges } = graphData.value;
+    if (nodes.length === 0) return { nodes, edges };
+
+    // Initialize positions - use custom if available, otherwise random
+    nodes.forEach((node) => {
+        const customPos = customNodePositions.value.get(node.id);
+        if (customPos) {
+            node.x = customPos.x;
+            node.y = customPos.y;
+            node.fx = customPos.x; // Fix position
+            node.fy = customPos.y;
+        } else {
+            node.x = Math.random() * 1000 - 500;
+            node.y = Math.random() * 1000 - 500;
+        }
+    });
+
+    const simulation = forceSimulation(nodes as any)
+        .force(
+            'link',
+            forceLink(edges as any)
+                .id((d: any) => d.id)
+                .distance(250)
+        )
+        .force('charge', forceManyBody().strength(-1000))
+        .force('center', forceCenter(0, 0))
+        .force('collision', forceCollide(NODE_WIDTH / 2 + 20));
+
+    // Run simulation synchronously
+    for (let i = 0; i < 300; i++) {
+        simulation.tick();
+    }
+    simulation.stop();
+
+    // Clear fixed positions
+    nodes.forEach((node) => {
+        delete node.fx;
+        delete node.fy;
+    });
+
+    return { nodes, edges };
+}
+
+// Render DAG
+function renderDAG() {
+    if (!svgRef.value || !containerRef.value) return;
+
+    const svg = d3.select(svgRef.value);
+    svg.selectAll('*').remove();
+
+    // Create groups
+    const g = svg.append('g').attr('class', 'dag-content');
+
+    // Compute layout
+    const { nodes, edges } =
+        layoutMode.value === 'hierarchical' ? computeHierarchicalLayout() : computeForceLayout();
+
+    // Define defs for markers (created before edges)
+    const defs = svg.append('defs');
+
+    // Draw edges
+    const edgeGroup = g.append('g').attr('class', 'edges');
+    edges.forEach((edge, edgeIndex) => {
+        const source = edge.source as DAGNode;
+        const target = edge.target as DAGNode;
+        const { sourceX, sourceY, targetX, targetY } = getConnectionPoints(source, target);
+
+        let path: string;
+
+        if (layoutMode.value === 'hierarchical') {
+            // For hierarchical layout, use vertical bezier curve
+            const midY = (sourceY + targetY) / 2;
+            path = `M ${sourceX},${sourceY} C ${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
+        } else {
+            // For force-directed layout, use quadratic curve
+            const midX = (sourceX + targetX) / 2;
+            const midY = (sourceY + targetY) / 2;
+            const offset = 30;
+            const dx = targetX - sourceX;
+            const dy = targetY - sourceY;
+            const len = Math.sqrt(dx * dx + dy * dy);
+
+            if (len > 0) {
+                const controlX = midX - (dy / len) * offset;
+                const controlY = midY + (dx / len) * offset;
+                path = `M ${sourceX},${sourceY} Q ${controlX},${controlY} ${targetX},${targetY}`;
+            } else {
+                path = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+            }
+        }
+
+        // Calculate arrow rotation angle
+        const dx = targetX - sourceX;
+        const dy = targetY - sourceY;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+        // Create unique marker for this edge with proper rotation
+        const markerId = `arrowhead-${edgeIndex}`;
+        defs.append('marker')
+            .attr('id', markerId)
+            .attr('markerWidth', 10)
+            .attr('markerHeight', 10)
+            .attr('refX', 9)
+            .attr('refY', 3)
+            .attr('orient', angle)
+            .attr('markerUnits', 'strokeWidth')
+            .append('polygon')
+            .attr('points', '0 0, 10 3, 0 6')
+            .attr('fill', '#9CA3AF');
+        edgeGroup
+            .append('path')
+            .attr('d', path)
+            .attr('stroke', '#9CA3AF')
+            .attr('stroke-width', 2)
+            .attr('fill', 'none')
+            .attr('marker-end', `url(#${markerId})`);
+    });
+
+    // Draw nodes
+    const nodeGroup = g.append('g').attr('class', 'nodes');
+    nodes.forEach((node) => {
+        renderTaskNode(nodeGroup, node);
+    });
+
+    // Add zoom behavior
+    const zoomBehavior = zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+        });
+
+    svg.call(zoomBehavior as any);
+
+    // Fit to view
+    fitToView();
+}
+
+function renderTaskNode(parent: any, node: DAGNode) {
+    const task = node.task;
+
+    const nodeGroup = parent
+        .append('g')
+        .attr('class', 'task-node')
+        .attr('transform', `translate(${node.x - NODE_WIDTH / 2}, ${node.y - NODE_HEIGHT / 2})`)
+        .style('cursor', 'pointer');
+
+    // Add drag behavior
+    const dragBehavior = drag<SVGGElement, unknown>()
+        .on('start', function (_event: any) {
+            draggedNodeId.value = node.id;
+            d3.select(this).raise().style('cursor', 'grabbing');
+        })
+        .on('drag', function (event: any) {
+            // Update node position
+            node.x = event.x;
+            node.y = event.y;
+
+            // Store custom position
+            customNodePositions.value.set(node.id, { x: event.x, y: event.y });
+
+            // Update visual position
+            d3.select(this).attr(
+                'transform',
+                `translate(${event.x - NODE_WIDTH / 2}, ${event.y - NODE_HEIGHT / 2})`
+            );
+
+            // Redraw edges connected to this node
+            redrawEdgesForNode(node);
+        })
+        .on('end', function (_event: any) {
+            draggedNodeId.value = null;
+            d3.select(this).style('cursor', 'pointer');
+        });
+
+    nodeGroup.call(dragBehavior as any);
+
+    // Click handler (prevent during drag)
+    let isDragging = false;
+    nodeGroup.on('mousedown', () => {
+        isDragging = false;
+    });
+    nodeGroup.on('mousemove', () => {
+        isDragging = true;
+    });
+    nodeGroup.on('mouseup', function () {
+        if (!isDragging) {
+            handleNodeClick(task);
+        }
+        isDragging = false;
+    });
+
+    // Background
+    const statusColors: Record<string, string> = {
+        todo: '#6B7280',
+        in_progress: '#3B82F6',
+        in_review: '#F59E0B',
+        done: '#10B981',
+        blocked: '#EF4444',
+    };
+
+    // Node background with animated border for running tasks
+    const nodeRect = nodeGroup
+        .append('rect')
+        .attr('width', NODE_WIDTH)
+        .attr('height', NODE_HEIGHT)
+        .attr('rx', 8)
+        .attr('fill', '#1F2937')
+        .attr('stroke', statusColors[task.status] || '#6B7280')
+        .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
+
+    // Add pulsing animation for running tasks
+    if (task.status === 'in_progress') {
+        nodeRect
+            .append('animate')
+            .attr('attributeName', 'stroke-width')
+            .attr('values', '4;6;4')
+            .attr('dur', '2s')
+            .attr('repeatCount', 'indefinite');
+
+        nodeRect
+            .append('animate')
+            .attr('attributeName', 'stroke-opacity')
+            .attr('values', '1;0.6;1')
+            .attr('dur', '2s')
+            .attr('repeatCount', 'indefinite');
+    }
+
+    // First line: Provider/Operator/Script icon + model | Task ID
+    let firstLineText = '';
+    let firstLineIcon = '';
+
+    if (task.assignedOperatorId) {
+        firstLineIcon = '🤖';
+        firstLineText = 'Operator';
+    } else if (task.taskType === 'script') {
+        firstLineIcon = '📜';
+        firstLineText = 'Script';
+    } else if (task.aiProvider) {
+        const providerIcons: Record<string, string> = {
+            openai: '✨',
+            anthropic: '🧠',
+            google: '🔮',
+            gemini: '💎',
+        };
+        firstLineIcon = providerIcons[task.aiProvider.toLowerCase()] || '🤖';
+        firstLineText = task.aiProvider;
+        if (task.aiModel) {
+            firstLineText += ` (${task.aiModel})`;
+        }
+    } else {
+        firstLineIcon = '🤖';
+        firstLineText = 'AI';
+    }
+
+    nodeGroup
+        .append('text')
+        .attr('x', 10)
+        .attr('y', 20)
+        .attr('fill', '#9CA3AF')
+        .attr('font-size', 12)
+        .text(`${firstLineIcon} ${firstLineText}`);
+
+    // Task ID (right side of first line)
+    nodeGroup
+        .append('text')
+        .attr('x', NODE_WIDTH - 10)
+        .attr('y', 20)
+        .attr('text-anchor', 'end')
+        .attr('fill', '#60A5FA')
+        .attr('font-weight', 'bold')
+        .attr('font-size', 14)
+        .text(`#${task.projectSequence}`);
+
+    let currentY = 40;
+
+    // Second line: Operator details (if assigned)
+    if (task.assignedOperatorId) {
+        nodeGroup
+            .append('text')
+            .attr('x', 10)
+            .attr('y', currentY)
+            .attr('fill', '#9CA3AF')
+            .attr('font-size', 11)
+            .text(`Operator: ${task.assignedOperatorId}`);
+        currentY += 20;
+    }
+
+    // Title
+    const title = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+    nodeGroup
+        .append('text')
+        .attr('x', 10)
+        .attr('y', currentY + 10)
+        .attr('fill', '#F3F4F6')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(title);
+
+    currentY += 30;
+
+    // Output format
+    if (task.outputFormat) {
+        nodeGroup
+            .append('text')
+            .attr('x', 10)
+            .attr('y', currentY)
+            .attr('fill', '#9CA3AF')
+            .attr('font-size', 11)
+            .text(`📄 ${task.outputFormat}`);
+        currentY += 20;
+    }
+
+    // Auto-execution conditions (like Kanban)
+    const deps = getTaskDependencies(task);
+
+    if (deps.length > 0) {
+        const depText = deps.length === 1 ? `Task #${deps[0]}` : `${deps.length} tasks`;
+
+        nodeGroup
+            .append('text')
+            .attr('x', 10)
+            .attr('y', currentY)
+            .attr('fill', '#10B981')
+            .attr('font-size', 10)
+            .text(`🔗 Auto-execute after ${depText}`);
+    }
+
+    // Status badge
+    const statusText =
+        task.status === 'todo'
+            ? 'To Do'
+            : task.status === 'in_progress'
+              ? 'In Progress'
+              : task.status === 'needs_approval'
+                ? 'Needs Approval'
+                : task.status === 'in_review'
+                  ? 'In Review'
+                  : task.status === 'done'
+                    ? 'Done'
+                    : task.status === 'blocked'
+                      ? 'Blocked'
+                      : 'To Do'; // Status badge and action buttons area
+    const bottomY = NODE_HEIGHT - 35;
+
+    // Status badge (left side)
+    nodeGroup
+        .append('rect')
+        .attr('x', 10)
+        .attr('y', bottomY)
+        .attr('width', 60)
+        .attr('height', 24)
+        .attr('rx', 12)
+        .attr('fill', statusColors[task.status] || '#6B7280');
+
+    nodeGroup
+        .append('text')
+        .attr('x', 40)
+        .attr('y', bottomY + 15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#FFFFFF')
+        .attr('font-size', 11)
+        .attr('font-weight', 'bold')
+        .text(statusText);
+
+    // Action buttons (right side)
+    let buttonX = NODE_WIDTH - 40;
+
+    // Execute button (for TODO tasks)
+    if (task.status === 'todo') {
+        const execButton = nodeGroup
+            .append('g')
+            .attr('class', 'action-button')
+            .style('cursor', 'pointer')
+            .on('click', (event: MouseEvent) => {
+                event.stopPropagation();
+                handleTaskExecute(task);
+            });
+
+        execButton
+            .append('circle')
+            .attr('cx', buttonX)
+            .attr('cy', bottomY + 12)
+            .attr('r', 10)
+            .attr('fill', '#10B981')
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 1.5);
+
+        execButton
+            .append('text')
+            .attr('x', buttonX)
+            .attr('y', bottomY + 12)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', '#FFFFFF')
+            .attr('font-size', 12)
+            .text('▶');
+
+        buttonX -= 30;
+    }
+
+    // Retry button (for failed IN_PROGRESS tasks)
+    if (task.status === 'in_progress' && task.lastExecutionResult?.success === false) {
+        const retryButton = nodeGroup
+            .append('g')
+            .attr('class', 'action-button')
+            .style('cursor', 'pointer')
+            .on('click', (event: MouseEvent) => {
+                event.stopPropagation();
+                handleTaskExecute(task); // Retry uses execute
+            });
+
+        retryButton
+            .append('circle')
+            .attr('cx', buttonX)
+            .attr('cy', bottomY + 12)
+            .attr('r', 10)
+            .attr('fill', '#F59E0B')
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 1.5);
+
+        retryButton
+            .append('text')
+            .attr('x', buttonX)
+            .attr('y', bottomY + 12)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', '#FFFFFF')
+            .attr('font-size', 10)
+            .text('↻');
+
+        buttonX -= 30;
+    }
+
+    // Approve button (for NEEDS_APPROVAL or IN_REVIEW tasks)
+    if (task.status === 'needs_approval' || task.status === 'in_review') {
+        const approveButton = nodeGroup
+            .append('g')
+            .attr('class', 'action-button')
+            .style('cursor', 'pointer')
+            .on('click', (event: MouseEvent) => {
+                event.stopPropagation();
+                handleTaskApprove(task);
+            });
+
+        approveButton
+            .append('circle')
+            .attr('cx', buttonX)
+            .attr('cy', bottomY + 12)
+            .attr('r', 10)
+            .attr('fill', '#3B82F6')
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 1.5);
+
+        approveButton
+            .append('text')
+            .attr('x', buttonX)
+            .attr('y', bottomY + 12)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', '#FFFFFF')
+            .attr('font-size', 12)
+            .attr('font-weight', 'bold')
+            .text('✓');
+
+        buttonX -= 30;
+    }
+
+    // View Results button (for DONE tasks)
+    if (task.status === 'done') {
+        const viewButton = nodeGroup
+            .append('g')
+            .attr('class', 'action-button')
+            .style('cursor', 'pointer')
+            .on('click', (event: MouseEvent) => {
+                event.stopPropagation();
+                handleNodeClick(task); // Open detail panel
+            });
+
+        viewButton
+            .append('circle')
+            .attr('cx', buttonX)
+            .attr('cy', bottomY + 12)
+            .attr('r', 10)
+            .attr('fill', '#8B5CF6')
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 1.5);
+
+        viewButton
+            .append('text')
+            .attr('x', buttonX)
+            .attr('y', bottomY + 12)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', '#FFFFFF')
+            .attr('font-size', 12)
+            .text('👁');
+
+        buttonX -= 30;
+    }
+
+    // Connection handle (right side, centered vertically)
+    const handleGroup = nodeGroup
+        .append('g')
+        .attr('class', 'connection-handle')
+        .style('cursor', 'crosshair')
+        .style('opacity', 0)
+        .attr('transform', `translate(${NODE_WIDTH}, ${NODE_HEIGHT / 2})`);
+
+    // Handle background circle
+    handleGroup
+        .append('circle')
+        .attr('cx', 8)
+        .attr('cy', 0)
+        .attr('r', 14)
+        .attr('fill', '#3B82F6')
+        .attr('stroke', '#FFFFFF')
+        .attr('stroke-width', 2.5);
+
+    // Handle icon (plus sign)
+    handleGroup
+        .append('text')
+        .attr('x', 8)
+        .attr('y', 0)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('fill', '#FFFFFF')
+        .attr('font-size', 18)
+        .attr('font-weight', 'bold')
+        .text('+');
+
+    nodeGroup
+        .on('mouseenter', function () {
+            if (!isConnecting.value) {
+                d3.select(this)
+                    .select('.connection-handle')
+                    .transition()
+                    .duration(200)
+                    .style('opacity', 1);
+            }
+        })
+        .on('mouseleave', function () {
+            if (!isConnecting.value) {
+                d3.select(this)
+                    .select('.connection-handle')
+                    .transition()
+                    .duration(200)
+                    .style('opacity', 0);
+            }
+        });
+
+    const handleDrag = drag<SVGGElement, unknown>()
+        .on('start', function (_event: any) {
+            isConnecting.value = true;
+            connectionSource.value = node;
+
+            // Get actual SVG coordinates of the handle
+            const handleWorldX = node.x + NODE_WIDTH / 2 + 8;
+            const handleWorldY = node.y;
+
+            tempConnectionLine.value = {
+                x1: handleWorldX,
+                y1: handleWorldY,
+                x2: handleWorldX,
+                y2: handleWorldY,
+            };
+
+            drawTempConnectionLine();
+        })
+        .on('drag', function (event: any) {
+            if (tempConnectionLine.value) {
+                // Update end point with current mouse position
+                tempConnectionLine.value.x2 = event.x;
+                tempConnectionLine.value.y2 = event.y;
+                updateTempConnectionLine();
+            }
+        })
+        .on('end', function (event: any) {
+            const targetNode = findNodeAtPosition(event.x, event.y);
+            if (targetNode && targetNode.id !== node.id && connectionSource.value) {
+                createDependency(connectionSource.value, targetNode);
+            }
+            isConnecting.value = false;
+            connectionSource.value = null;
+            tempConnectionLine.value = null;
+            removeTempConnectionLine();
+        });
+
+    handleGroup.call(handleDrag as any);
+}
+
+function handleNodeClick(task: Task) {
+    selectedTaskId.value = task.id;
+    showDetailPanel.value = true;
+}
+
+function closeDetailPanel() {
+    showDetailPanel.value = false;
+    selectedTaskId.value = null;
+}
+
+async function handleTaskSave(updatedTask: Task) {
+    await taskStore.updateTask(updatedTask.id, updatedTask);
+}
+
+async function handleTaskExecute(task: Task) {
+    const result = await taskStore.executeTask(task.id);
+    if (!result.success) {
+        console.error('Failed to execute task:', result.error);
+        uiStore.showToast({
+            type: result.validationError ? 'warning' : 'error',
+            message: result.error || '태스크 실행에 실패했습니다.',
+            duration: 5000,
+        });
+    }
+}
+
+async function handleTaskApprove(task: Task) {
+    const result = await taskStore.completeReview(task.id);
+    if (!result.success) {
+        console.error('Failed to approve task:', result.error);
+        uiStore.showToast({
+            type: 'error',
+            message: result.error || '승인 처리에 실패했습니다.',
+        });
+        return;
+    }
+    uiStore.showToast({
+        type: 'success',
+        message: '태스크가 승인되었습니다.',
+    });
+    closeDetailPanel();
+}
+
+async function handleTaskReject(task: Task, feedback: string) {
+    await taskStore.updateTask(task.id, {
+        status: 'todo',
+        description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
+    });
+    closeDetailPanel();
+}
+
+async function handleTaskSubdivide(task: Task) {
+    // Subdivision not implemented in DAG view yet
+    console.log('Subdivide task:', task.id);
+}
+
+function drawTempConnectionLine() {
+    if (!svgRef.value || !tempConnectionLine.value) return;
+
+    const svg = d3.select(svgRef.value);
+    const line = tempConnectionLine.value;
+
+    // Remove existing temp connection
+    svg.select('.temp-connection').remove();
+
+    // Draw in the main group (dag-content) for proper coordinate transformation
+    const dagGroup = svg.select('.dag-content');
+    dagGroup
+        .append('line')
+        .attr('class', 'temp-connection')
+        .attr('x1', line.x1)
+        .attr('y1', line.y1)
+        .attr('x2', line.x2)
+        .attr('y2', line.y2)
+        .attr('stroke', '#3B82F6')
+        .attr('stroke-width', 3)
+        .attr('stroke-dasharray', '8,4')
+        .attr('opacity', 0.8)
+        .style('pointer-events', 'none');
+}
+
+function updateTempConnectionLine() {
+    if (!svgRef.value || !tempConnectionLine.value) return;
+
+    const svg = d3.select(svgRef.value);
+    const line = tempConnectionLine.value;
+
+    svg.select('.temp-connection').attr('x2', line.x2).attr('y2', line.y2);
+}
+
+function removeTempConnectionLine() {
+    if (!svgRef.value) return;
+    const svg = d3.select(svgRef.value);
+    svg.selectAll('.temp-connection').remove();
+}
+
+function findNodeAtPosition(x: number, y: number): DAGNode | null {
+    const { nodes } = graphData.value;
+    return (
+        nodes.find((node) => {
+            const left = node.x - NODE_WIDTH / 2;
+            const right = node.x + NODE_WIDTH / 2;
+            const top = node.y - NODE_HEIGHT / 2;
+            const bottom = node.y + NODE_HEIGHT / 2;
+            return x >= left && x <= right && y >= top && y <= bottom;
+        }) || null
+    );
+}
+
+async function createDependency(source: DAGNode, target: DAGNode) {
+    try {
+        // Prevent self-dependency
+        if (source.id === target.id) {
+            console.warn('Cannot create dependency to self');
+            return;
+        }
+
+        // Check for circular dependency
+        if (wouldCreateCircularDependency(source.id, target.id)) {
+            console.warn('Would create circular dependency');
+            // TODO: Show toast notification
+            return;
+        }
+
+        // Get target task
+        const targetTask = taskStore.tasks.find((t) => t.id === target.id);
+        if (!targetTask) return;
+
+        // Check if dependency already exists
+        const existingDeps = getTaskDependencies(targetTask);
+        if (existingDeps.includes(source.id)) {
+            console.warn('Dependency already exists');
+            return;
+        }
+
+        // Update task dependencies
+        const updatedTriggerConfig = {
+            ...targetTask.triggerConfig,
+            dependsOn: {
+                ...targetTask.triggerConfig?.dependsOn,
+                taskIds: [...existingDeps, source.id],
+            },
+        };
+
+        await taskStore.updateTask(target.id, {
+            triggerConfig: updatedTriggerConfig,
+        });
+
+        // Redraw DAG
+        renderDAG();
+
+        console.log(`Created dependency: Task ${source.id} → Task ${target.id}`);
+    } catch (error) {
+        console.error('Failed to create dependency:', error);
+    }
+}
+
+function wouldCreateCircularDependency(sourceId: number, targetId: number): boolean {
+    // Check if adding sourceId as dependency of targetId would create a cycle
+    // This happens if targetId is already (directly or indirectly) a dependency of sourceId
+    const visited = new Set<number>();
+
+    function hasDependencyPath(from: number, to: number): boolean {
+        if (from === to) return true;
+        if (visited.has(from)) return false;
+        visited.add(from);
+
+        const fromTask = taskStore.tasks.find((t) => t.id === from);
+        if (!fromTask) return false;
+
+        const deps = getTaskDependencies(fromTask);
+        return deps.some((depId) => hasDependencyPath(depId, to));
+    }
+
+    return hasDependencyPath(sourceId, targetId);
+}
+
+function redrawEdgesForNode(node: DAGNode) {
+    if (!svgRef.value) return;
+
+    const svg = d3.select(svgRef.value);
+    const edgeGroup = svg.select('.edges');
+
+    // Find all edges connected to this node
+    const { edges } = graphData.value;
+    const connectedEdges = edges.filter(
+        (e) => (e.source as DAGNode).id === node.id || (e.target as DAGNode).id === node.id
+    );
+
+    // Redraw each connected edge
+    connectedEdges.forEach((edge) => {
+        const source = edge.source as DAGNode;
+        const target = edge.target as DAGNode;
+        const { sourceX, sourceY, targetX, targetY } = getConnectionPoints(source, target);
+
+        let path: string;
+        if (layoutMode.value === 'hierarchical') {
+            const midY = (sourceY + targetY) / 2;
+            path = `M ${sourceX},${sourceY} C ${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
+        } else {
+            const midX = (sourceX + targetX) / 2;
+            const midY = (sourceY + targetY) / 2;
+            const offset = 30;
+            const dx = targetX - sourceX;
+            const dy = targetY - sourceY;
+            const len = Math.sqrt(dx * dx + dy * dy);
+
+            if (len > 0) {
+                const controlX = midX - (dy / len) * offset;
+                const controlY = midY + (dx / len) * offset;
+                path = `M ${sourceX},${sourceY} Q ${controlX},${controlY} ${targetX},${targetY}`;
+            } else {
+                path = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+            }
+        }
+
+        // Update the path
+        edgeGroup.selectAll('path').each(function (this: any, _d: any, i: number) {
+            const edgeIndex = edges.indexOf(edge);
+            if (i === edgeIndex) {
+                d3.select(this).attr('d', path);
+            }
+        });
+    });
+}
+
+function resetLayout() {
+    customNodePositions.value.clear();
+    renderDAG();
+}
+
+function fitToView() {
+    if (!svgRef.value || !containerRef.value) return;
+
+    const svg = d3.select(svgRef.value);
+    const g = svg.select('.dag-content');
+    const bbox = (g.node() as any)?.getBBox();
+
+    if (!bbox) return;
+
+    const width = containerRef.value.clientWidth;
+    const height = containerRef.value.clientHeight;
+    const scale = Math.min(width / bbox.width, height / bbox.height, 1) * 0.9;
+    const translateX = width / 2 - (bbox.x + bbox.width / 2) * scale;
+    const translateY = height / 2 - (bbox.y + bbox.height / 2) * scale;
+
+    svg.transition()
+        .duration(750)
+        .call(
+            (zoom() as any).transform,
+            zoomIdentity.translate(translateX, translateY).scale(scale)
+        );
+}
+
+function handleResetZoom() {
+    fitToView();
+}
+
+// Lifecycle
+onMounted(async () => {
+    await projectStore.fetchProject(projectId.value);
+    await taskStore.fetchTasks(projectId.value);
+    await nextTick();
+    renderDAG();
+});
+
+watch([tasks, layoutMode], () => {
+    renderDAG();
+});
+</script>
+
+<template>
+    <div class="flex-1 flex flex-col h-full bg-gray-900">
+        <!-- Header (same as Kanban) -->
+        <header
+            class="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0"
+        >
+            <div class="flex items-center gap-4">
+                <button
+                    @click="router.push('/projects')"
+                    class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                        />
+                    </svg>
+                </button>
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold text-white">{{ project?.title }}</h1>
+                    </div>
+                    <p class="text-gray-400 text-sm">DAG View</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <!-- View Switcher -->
+                <div class="flex bg-gray-800 rounded-lg p-1">
+                    <button
+                        @click="router.push(`/projects/${projectId}`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Overview
+                    </button>
+                    <button
+                        @click="router.push(`/projects/${projectId}/board`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Board
+                    </button>
+                    <button
+                        @click="router.push(`/projects/${projectId}/timeline`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Timeline
+                    </button>
+                    <button
+                        class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
+                    >
+                        DAG
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- DAG Canvas Container -->
+        <div ref="containerRef" class="relative flex-1 bg-gray-950">
+            <!-- Controls -->
+            <div class="absolute top-4 right-4 z-10 flex gap-2">
+                <!-- Layout Toggle -->
+                <div class="flex bg-gray-800 rounded-lg p-1">
+                    <button
+                        @click="layoutMode = 'hierarchical'"
+                        class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+                        :class="
+                            layoutMode === 'hierarchical'
+                                ? 'bg-gray-700 text-white'
+                                : 'text-gray-400 hover:text-white'
+                        "
+                    >
+                        Hierarchical
+                    </button>
+                    <button
+                        @click="layoutMode = 'force'"
+                        class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+                        :class="
+                            layoutMode === 'force'
+                                ? 'bg-gray-700 text-white'
+                                : 'text-gray-400 hover:text-white'
+                        "
+                    >
+                        Force-Directed
+                    </button>
+                </div>
+
+                <!-- Zoom Controls -->
+                <button
+                    @click="handleResetZoom"
+                    class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors"
+                    title="Fit to view"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                        />
+                    </svg>
+                </button>
+
+                <!-- Reset Layout -->
+                <button
+                    @click="resetLayout"
+                    class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors flex items-center gap-2"
+                    title="Reset to original layout"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                    </svg>
+                    <span class="text-xs">Reset</span>
+                </button>
+            </div>
+
+            <!-- SVG Canvas -->
+            <svg ref="svgRef" class="w-full h-full" xmlns="http://www.w3.org/2000/svg"></svg>
+
+            <!-- Empty State -->
+            <div
+                v-if="tasks.length === 0"
+                class="absolute inset-0 flex items-center justify-center"
+            >
+                <div class="text-center">
+                    <svg
+                        class="w-16 h-16 mx-auto text-gray-600 mb-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                    </svg>
+                    <p class="text-gray-400 text-lg">No tasks to display</p>
+                    <p class="text-gray-500 text-sm mt-2">Create tasks to visualize dependencies</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Task Detail Panel -->
+        <Teleport to="body">
+            <div v-if="showDetailPanel && selectedTask" class="fixed inset-0 z-50 flex">
+                <div class="absolute inset-0 bg-black/60" @click="closeDetailPanel"></div>
+                <div
+                    class="relative ml-auto w-full max-w-2xl h-full bg-gray-800 border-l border-gray-700 shadow-2xl overflow-hidden"
+                >
+                    <TaskDetailPanel
+                        :task="selectedTask"
+                        :open="showDetailPanel"
+                        @close="closeDetailPanel"
+                        @save="handleTaskSave"
+                        @execute="handleTaskExecute"
+                        @approve="handleTaskApprove"
+                        @reject="handleTaskReject"
+                        @subdivide="handleTaskSubdivide"
+                    />
+                </div>
+            </div>
+        </Teleport>
+    </div>
+</template>

@@ -293,14 +293,10 @@ const fileTree = computed(() => {
 
     // If we have a project root, wrap the tree in a root node representing the base folder
     if (currentProject.value && rootPath) {
-        // Get directory name from rootPath or project title
-        let rootName = currentProject.value.title;
-        // Try to get actual folder name from path
-        const pathParts = rootPath.split(/[/\\]/);
-        if (pathParts.length > 0) {
-            const lastPart = pathParts[pathParts.length - 1];
-            if (lastPart) rootName = lastPart;
-        }
+        // Get actual folder name from rootPath
+        const pathParts = rootPath.split(/[/\\]/).filter((p) => p);
+        const rootName =
+            pathParts.length > 0 ? pathParts[pathParts.length - 1] : currentProject.value.title;
 
         return [
             {
@@ -695,6 +691,16 @@ const pngImageSrc = computed(() => {
         return value;
     }
     return `data:${imageMimeType.value};base64,${value}`;
+});
+
+// Script execution logs
+const scriptLogs = computed(() => {
+    const execResult = safeExecutionResult.value;
+    if (!execResult) return [];
+
+    // For script tasks, logs are stored in executionResult.logs
+    const logs = execResult.logs || [];
+    return Array.isArray(logs) ? logs : [];
 });
 
 // Format display name
@@ -1622,6 +1628,62 @@ onMounted(() => {
                                         >
                                             Split View
                                         </button>
+                                        <button
+                                            v-if="scriptLogs.length > 0"
+                                            @click="viewMode = 'log'"
+                                            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+                                            :class="[
+                                                viewMode === 'log'
+                                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                                            ]"
+                                            title="View script execution logs (console.log output)"
+                                        >
+                                            <div class="flex items-center gap-2">
+                                                <svg
+                                                    class="w-4 h-4"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 20 20"
+                                                >
+                                                    <path
+                                                        fill-rule="evenodd"
+                                                        d="M3 3a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm2 2v8h10V5H5z"
+                                                        clip-rule="evenodd"
+                                                    />
+                                                    <path d="M7 10h6M7 12h3" />
+                                                </svg>
+                                                <span>Logs ({{ scriptLogs.length }})</span>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <!-- Logs View -->
+                                    <div
+                                        v-if="viewMode === 'log'"
+                                        class="flex-1 overflow-auto bg-gray-900 p-4"
+                                    >
+                                        <div class="space-y-1 font-mono text-sm">
+                                            <div
+                                                v-for="(log, index) in scriptLogs"
+                                                :key="index"
+                                                class="py-1 px-2 border-l-2 hover:bg-gray-800"
+                                                :class="[
+                                                    log.startsWith('ERROR:')
+                                                        ? 'border-red-500 text-red-400'
+                                                        : log.startsWith('WARN:')
+                                                          ? 'border-yellow-500 text-yellow-400'
+                                                          : 'border-green-500 text-gray-300',
+                                                ]"
+                                            >
+                                                {{ log }}
+                                            </div>
+                                            <div
+                                                v-if="scriptLogs.length === 0"
+                                                class="text-gray-500 italic text-center py-8"
+                                            >
+                                                No logs generated during script execution
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <!-- Content Container -->

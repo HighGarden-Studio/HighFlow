@@ -202,6 +202,12 @@ onMounted(async () => {
                                 >
                                     Timeline
                                 </button>
+                                <button
+                                    @click="router.push(`/projects/${projectId}/dag`)"
+                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                >
+                                    DAG
+                                </button>
                             </div>
 
                             <button

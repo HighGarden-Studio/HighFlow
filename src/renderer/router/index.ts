@@ -51,6 +51,15 @@ const routes: RouteRecordRaw[] = [
         },
     },
     {
+        path: '/projects/:id/dag',
+        name: 'project-dag',
+        component: () => import('../views/DAGView.vue'),
+        props: true,
+        meta: {
+            title: 'DAG',
+        },
+    },
+    {
         path: '/settings',
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),

@@ -1047,7 +1047,7 @@ const dependencySequences = computed(() => {
                 <!-- AI Provider Badge (for AI tasks) -->
                 <div
                     v-else-if="aiProviderInfo"
-                    class="flex flex-col items-start gap-1 px-2.5 py-1 rounded-md font-medium"
+                    class="flex items-center justify-between gap-2 px-2.5 py-1 rounded-md font-medium w-full"
                     :class="
                         assignedOperator
                             ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
@@ -1080,10 +1080,10 @@ const dependencySequences = computed(() => {
                             />
                         </svg>
                     </div>
-                    <!-- AI Model Display -->
+                    <!-- AI Model Display (inline on the right) -->
                     <div
                         v-if="effectiveAIModel"
-                        class="text-xs text-gray-600 dark:text-gray-400 px-2.5"
+                        class="text-xs font-medium opacity-75"
                         :title="
                             assignedOperator
                                 ? `Model from Operator: ${effectiveAIModel}`
@@ -1104,7 +1104,7 @@ const dependencySequences = computed(() => {
                 </div>
             </div>
 
-            <!-- Second Row: Output Format & Task ID -->
+            <!-- Second Row: Output Format & Execution Order -->
             <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
                     <!-- Expected Output Icon -->
@@ -1121,12 +1121,6 @@ const dependencySequences = computed(() => {
                         <span class="font-semibold">{{ outputFormatInfo.label }}</span>
                     </span>
 
-                    <!-- Task ID -->
-                    <span
-                        class="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded"
-                    >
-                        #{{ task.projectSequence }}
-                    </span>
                     <!-- Execution Order -->
                     <span
                         v-if="task.executionOrder"
@@ -1139,10 +1133,20 @@ const dependencySequences = computed(() => {
             </div>
         </div>
 
-        <!-- Title -->
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">
-            {{ task.title }}
-        </h3>
+        <!-- Task ID & Title -->
+        <div class="flex items-baseline gap-2 mb-1">
+            <!-- Task ID - Enhanced Visibility -->
+            <span
+                class="flex-shrink-0 text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-800"
+                title="Task ID"
+            >
+                #{{ task.projectSequence }}
+            </span>
+            <!-- Title -->
+            <h3 class="flex-1 text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">
+                {{ task.title }}
+            </h3>
+        </div>
 
         <!-- Badges Row -->
         <div class="flex flex-wrap gap-1">

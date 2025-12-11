@@ -31,6 +31,9 @@ dependencies:
   '@supabase/supabase-js':
     specifier: ^2.39.8
     version: 2.86.0
+  '@types/d3-drag':
+    specifier: ^3.0.7
+    version: 3.0.7
   '@types/jsonwebtoken':
     specifier: ^9.0.10
     version: 9.0.10
@@ -64,6 +67,24 @@ dependencies:
   cors:
     specifier: ^2.8.5
     version: 2.8.5
+  d3-drag:
+    specifier: ^3.0.0
+    version: 3.0.0
+  d3-force:
+    specifier: ^3.0.0
+    version: 3.0.0
+  d3-hierarchy:
+    specifier: ^3.1.2
+    version: 3.1.2
+  d3-selection:
+    specifier: ^3.0.0
+    version: 3.0.0
+  d3-shape:
+    specifier: ^3.2.0
+    version: 3.2.0
+  d3-zoom:
+    specifier: ^3.0.0
+    version: 3.0.0
   date-fns:
     specifier: ^3.3.1
     version: 3.6.0
@@ -210,6 +231,21 @@ devDependencies:
   '@types/cors':
     specifier: ^2.8.17
     version: 2.8.19
+  '@types/d3-force':
+    specifier: ^3.0.10
+    version: 3.0.10
+  '@types/d3-hierarchy':
+    specifier: ^3.1.7
+    version: 3.1.7
+  '@types/d3-selection':
+    specifier: ^3.0.11
+    version: 3.0.11
+  '@types/d3-shape':
+    specifier: ^3.1.7
+    version: 3.1.7
+  '@types/d3-zoom':
+    specifier: ^3.0.8
+    version: 3.0.8
   '@types/express':
     specifier: ^4.17.21
     version: 4.17.25
@@ -2882,7 +2918,6 @@ packages:
 
   /@types/d3-color@3.1.3:
     resolution: {integrity: sha512-iO90scth9WAbmgv7ogoq57O9YpKmFBbmoEoCHDB2xMBY0+/KVrqAaCDyCE16dUspeOvIxFFRI+0sEtqDqy2b4A==}
-    dev: false
 
   /@types/d3-contour@3.0.6:
     resolution: {integrity: sha512-BjzLgXGnCWjUSYGfH1cpdo41/hgdWETu4YxpezoztawmqsvCeep+8QGfiY6YbDvfgHz/DkjeIkkZVJavB4a3rg==}
@@ -2921,7 +2956,6 @@ packages:
 
   /@types/d3-force@3.0.10:
     resolution: {integrity: sha512-ZYeSaCF3p73RdOKcjj+swRlZfnYpK1EbaDiYICEEp5Q6sUiqFaFQ9qgoshp5CzIyyb/yD09kD9o2zEltCexlgw==}
-    dev: false
 
   /@types/d3-format@3.0.4:
     resolution: {integrity: sha512-fALi2aI6shfg7vM5KiR1wNJnZ7r6UuggVqtDA+xiEdPZQwy/trcQaHnwShLuLdta2rTymCNpxYTiMZX/e09F4g==}
@@ -2935,17 +2969,14 @@ packages:
 
   /@types/d3-hierarchy@3.1.7:
     resolution: {integrity: sha512-tJFtNoYBtRtkNysX1Xq4sxtjK8YgoWUNpIiUee0/jHGRwqvzYxkq0hGVbbOGSz+JgFxxRu4K8nb3YpG3CMARtg==}
-    dev: false
 
   /@types/d3-interpolate@3.0.4:
     resolution: {integrity: sha512-mgLPETlrpVV1YRJIglr4Ez47g7Yxjl1lj7YKsiMCb27VJH9W8NVM6Bb9d8kkpG/uAQS5AmbA48q2IAolKKo1MA==}
     dependencies:
       '@types/d3-color': 3.1.3
-    dev: false
 
   /@types/d3-path@3.1.1:
     resolution: {integrity: sha512-VMZBYyQvbGmWyWVea0EHs/BwLgxc+MKi1zLDCONksozI4YJMcTt8ZEuIR4Sb1MMTE8MMW49v0IwI5+b7RmfWlg==}
-    dev: false
 
   /@types/d3-polygon@3.0.2:
     resolution: {integrity: sha512-ZuWOtMaHCkN9xoeEMr1ubW2nGWsp4nIql+OPQRstu4ypeZ+zk3YKqQT0CXVe/PYqrKpZAi+J9mTs05TKwjXSRA==}
@@ -2971,13 +3002,11 @@ packages:
 
   /@types/d3-selection@3.0.11:
     resolution: {integrity: sha512-bhAXu23DJWsrI45xafYpkQ4NtcKMwWnAC/vKrd2l+nxMFuvOT3XMYTIj2opv8vq8AO5Yh7Qac/nSeP/3zjTK0w==}
-    dev: false
 
   /@types/d3-shape@3.1.7:
     resolution: {integrity: sha512-VLvUQ33C+3J+8p+Daf+nYSOsjB4GXp19/S/aGo60m9h1v6XaxjiT82lKVWJCfzhtuZ3yD7i/TPeC/fuKLLOSmg==}
     dependencies:
       '@types/d3-path': 3.1.1
-    dev: false
 
   /@types/d3-time-format@4.0.3:
     resolution: {integrity: sha512-5xg9rC+wWL8kdDj153qZcsJ0FWiFt0J5RB6LYUNZjwSnesfblqrI/bJ1wBdJ8OQfncgbJG5+2F+qfqnqyzYxyg==}
@@ -3002,7 +3031,6 @@ packages:
     dependencies:
       '@types/d3-interpolate': 3.0.4
       '@types/d3-selection': 3.0.11
-    dev: false
 
   /@types/d3@7.4.3:
     resolution: {integrity: sha512-lZXZ9ckh5R8uiFVt8ogUNf+pIrK4EsWrx2Np75WvF/eTpJ0FMHNhjXk8CKEx/+gpHbNQyJWehbFaTvqmHWB3ww==}
