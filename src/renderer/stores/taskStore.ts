@@ -1980,10 +1980,6 @@ export const useTaskStore = defineStore('tasks', () => {
         completionRate,
 
         // Actions
-        regenerateSubtaskSettings,
-        continueTaskWithPrompt,
-        continueSubdividedTask,
-        getSubtasksCountForTask,
         regenerateTaskSettings,
         // History support
         updateTaskWithHistory,
