@@ -501,13 +501,12 @@ onMounted(async () => {
 
         <!-- Task Detail Panel -->
         <TaskDetailPanel
-            v-if="showDetailPanel && selectedTask"
+            :open="!!selectedTask"
             :task="selectedTask"
-            @close="closeDetailPanel"
-            @save="closeDetailPanel"
+            @close="selectedTaskId = null"
             @execute="handleTaskExecute"
             @approve="handleTaskApprove"
-            @reject="closeDetailPanel"
+            @save="handleTaskSave"
         />
 
         <!-- Task Edit Modal (for creating new tasks) -->
