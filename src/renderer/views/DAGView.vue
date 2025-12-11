@@ -36,7 +36,7 @@ const projectStore = useProjectStore();
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
-const project = computed(() => projectStore.currentProject);
+const project = computed(() => projectStore.projects.find((p) => p.id === projectId.value) || null);
 const tasks = computed(() => taskStore.tasks);
 
 // UI State
