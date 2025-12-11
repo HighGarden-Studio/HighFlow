@@ -120,7 +120,11 @@ function buildGraph() {
         const dependencies = task.triggerConfig?.dependsOn?.taskIds || [];
         dependencies.forEach((depId: number) => {
             // Only create edge if dependency task exists
-            if (tasks.value.find((t) => t.id === depId)) {
+            const sourceTask = tasks.value.find((t) => t.id === depId);
+            if (sourceTask) {
+                // Get output type label
+                const outputLabel = getOutputTypeLabel(sourceTask.outputType);
+
                 taskEdges.push({
                     id: `e${depId}-${task.id}`,
                     source: String(depId),
@@ -137,16 +141,18 @@ function buildGraph() {
                         height: 20,
                         color: getEdgeColor(task),
                     },
-                    label: task.executionOrder ? `#${task.executionOrder}` : undefined,
+                    label: outputLabel,
                     labelStyle: {
-                        fill: '#6B7280',
+                        fill: '#9CA3AF',
                         fontWeight: 600,
-                        fontSize: 12,
+                        fontSize: 11,
                     },
                     labelBgStyle: {
                         fill: '#1F2937',
-                        fillOpacity: 0.9,
+                        fillOpacity: 0.95,
+                        rx: 4,
                     },
+                    labelBgPadding: [4, 8] as [number, number],
                 });
             }
         });
@@ -183,6 +189,25 @@ function getEdgeColor(task: Task): string {
         default:
             return '#6B7280'; // Gray
     }
+}
+
+/**
+ * Get formatted output type label
+ */
+function getOutputTypeLabel(outputType: string | null): string {
+    if (!outputType) return '📄 Output';
+
+    const typeMap: Record<string, string> = {
+        text: '📄 Text',
+        code: '💻 Code',
+        image: '🖼️ Image',
+        file: '📁 File',
+        json: '📊 JSON',
+        html: '🌐 HTML',
+        markdown: '📝 MD',
+    };
+
+    return typeMap[outputType.toLowerCase()] || `📄 ${outputType}`;
 }
 
 /**
@@ -235,17 +260,11 @@ onConnect(async (params) => {
 
     // Add edge
     addEdges([
-        {
-            id: `e${sourceId}-${targetId}`,
-            source: params.source,
-            target: params.target,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#3b82f6', strokeWidth: 2 },
-        },
-    ]);
 
-    console.log(`Created dependency: Task ${sourceId} → Task ${targetId}`);
+        await taskStore.updateTask(targetId, {
+            triggerConfig: updatedTriggerConfig,
+        });
+    }
 });
 
 /**
@@ -333,6 +352,8 @@ onMounted(async () => {
                 :default-viewport="{ zoom: 0.8 }"
                 :min-zoom="0.2"
                 :max-zoom="4"
+                :edges-focusable="true"
+                :edges-updatable="false"
                 fit-view-on-init
                 class="vue-flow"
             >
@@ -388,6 +409,16 @@ onMounted(async () => {
 /* Vue Flow overrides */
 :deep(.vue-flow__edge-path) {
     stroke-width: 2px;
+    cursor: pointer;
+}
+
+:deep(.vue-flow__edge:hover .vue-flow__edge-path) {
+    stroke-width: 3px;
+}
+
+:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
+    stroke: #60a5fa;
+    stroke-width: 4px;
 }
 
 :deep(.vue-flow__edge.animated) {
@@ -395,18 +426,23 @@ onMounted(async () => {
 }
 
 :deep(.vue-flow__edge-textwrapper) {
-    pointer-events: none;
+    pointer-events: all;
+    cursor: pointer;
+}
+
+:deep(.vue-flow__edge-textwrapper):hover {
+    opacity: 0.9;
+}
+
+/* Edge selection ring */
+:deep(.vue-flow__edge.selected) {
+    z-index: 1001 !important;
 }
 
 @keyframes dashdraw {
     to {
         stroke-dashoffset: -10;
     }
-}
-
-:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
-    stroke: #60a5fa;
-    stroke-width: 3px;
 }
 
 :deep(.vue-flow__controls) {
