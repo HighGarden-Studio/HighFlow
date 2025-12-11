@@ -2,7 +2,7 @@
 import { Handle, Position } from '@vue-flow/core';
 import TaskCard from '../board/TaskCard.vue';
 import type { Task } from '@core/types/database';
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 interface Props {
     data: {
@@ -89,16 +89,39 @@ function handleWrapperDrop(event: DragEvent) {
         }
     }
 }
+
+// Use native event listeners to bypass Vue event system
+const nodeRef = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+    if (nodeRef.value) {
+        console.log('🟣 Setting up native drop listener for task:', props.data.task.id);
+
+        nodeRef.value.addEventListener('drop', (e: Event) => {
+            const event = e as DragEvent;
+            console.log('🟣 NATIVE drop event fired!');
+            handleWrapperDrop(event);
+        });
+
+        nodeRef.value.addEventListener('dragover', (e: Event) => {
+            const event = e as DragEvent;
+            handleWrapperDragOver(event);
+        });
+
+        nodeRef.value.addEventListener('dragleave', (e: Event) => {
+            const event = e as DragEvent;
+            handleWrapperDragLeave(event);
+        });
+    }
+});
+
+onUnmounted(() => {
+    // Cleanup is automatic when element is removed
+});
 </script>
 
 <template>
-    <div
-        class="task-flow-node"
-        @dragover="handleWrapperDragOver"
-        @dragleave="handleWrapperDragLeave"
-        @drop="handleWrapperDrop"
-        :class="{ 'operator-drag-over': isOperatorDragOver }"
-    >
+    <div ref="nodeRef" class="task-flow-node" :class="{ 'operator-drag-over': isOperatorDragOver }">
         <!-- Connection handles -->
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
