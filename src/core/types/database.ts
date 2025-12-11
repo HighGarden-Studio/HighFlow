@@ -83,6 +83,10 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type ExecutionType = 'serial' | 'parallel';
 
+export type TaskType = 'ai' | 'script';
+
+export type ScriptLanguage = 'javascript' | 'typescript' | 'python';
+
 export type AIProvider =
     | 'openai'
     | 'anthropic'
@@ -386,6 +390,7 @@ export interface TaskTriggerConfig {
         executionPolicy?: 'once' | 'repeat'; // 실행 정책 (기본값: 'once')
         // once: TODO 상태일 때만 1회 자동 실행 (기본 동작)
         // repeat: 조건 충족 시 매번 자동 실행 (상태 무관)
+        passResultsFrom?: number[]; // 결과를 컨텍스트로 전달할 태스크 ID 목록 (없으면 taskIds 사용)
     };
     // 시간 기반 트리거
     scheduledAt?: {
@@ -527,6 +532,7 @@ export interface Task extends BaseEntity {
     isPaused: boolean; // IN_PROGRESS 상태에서 일시정지 여부
     autoReview: boolean; // 자동 REVIEW 수행 여부
     autoReviewed: boolean; // AI 자동 검토 완료 여부 (DONE 상태에 배지 표시용)
+    autoApprove: boolean; // 자동 승인 (결과 생성 시 검토 없이 바로 DONE)
     reviewFailed: boolean; // 리뷰 실패 여부 (점수 7점 이하)
     triggerConfig: TaskTriggerConfig | null; // 트리거 설정 (의존성, 시간)
     pausedAt: Date | null; // 일시정지된 시간
@@ -544,6 +550,12 @@ export interface Task extends BaseEntity {
     outputFormat?: string | null;
     codeLanguage?: string | null;
     imageConfig?: ImageGenerationConfig | null;
+
+    // Script Task Type (added in 0013)
+    taskType?: TaskType | null; // 'ai' or 'script'
+    scriptCode?: string | null; // Script source code
+    scriptLanguage?: ScriptLanguage | null; // 'javascript', 'typescript', or 'python'
+    scriptRuntime?: string | null; // Runtime version (optional)
 }
 
 export interface TaskExecutionResult {
@@ -689,6 +701,19 @@ export interface AIProviderConfig extends BaseEntity {
 export interface Operator extends BaseEntity {
     projectId: number | null; // NULL for global operators
     name: string;
+    // Auto AI Review
+    autoReview?: boolean | null; // 자동 AI 검토 활성화
+    autoReviewProvider?: string | null; // Custom review provider
+    autoReviewModel?: string | null; // Custom review model
+    autoReviewed?: boolean | null; // Whether task has been auto-reviewed
+    reviewResult?: string | null; // AI review result/feedback
+    reviewScore?: number | null; // AI evaluation score (1-10)
+
+    // Script Task Type (added in 0013)
+    taskType?: TaskType | null; // 'ai' or 'script'
+    scriptCode?: string | null; // Script source code
+    scriptLanguage?: ScriptLanguage | null; // 'javascript', 'typescript', or 'python'
+    scriptRuntime?: string | null; // Runtime version (optional)
     role: string;
     avatar: string | null; // emoji or image URL
     color: string | null; // hex color

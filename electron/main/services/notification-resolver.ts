@@ -1,0 +1,108 @@
+/**
+ * Notification Resolver Service
+ *
+ * Resolves notification configuration using 3-tier priority:
+ * Task > Project > Global
+ */
+
+import { db } from '../database/client';
+import { tasks, projects } from '../database/schema';
+import { eq } from 'drizzle-orm';
+import type { NotificationConfig } from '@core/types/notifications';
+
+export class NotificationResolver {
+    /**
+     * Resolve notification config for a task with 3-tier priority
+     */
+    async resolveConfig(taskId: number): Promise<NotificationConfig | null> {
+        // 1. Get task config
+        const task = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+
+        if (!task[0]) {
+            console.error(`[NotificationResolver] Task ${taskId} not found`);
+            return null;
+        }
+
+        const taskData = task[0];
+
+        // Priority 1: Task-level config
+        if (taskData.notificationConfig) {
+            try {
+                const config = JSON.parse(taskData.notificationConfig as string);
+                if (this.isConfigValid(config)) {
+                    console.log(
+                        `[NotificationResolver] Using task-level config for task ${taskId}`
+                    );
+                    return config;
+                }
+            } catch (error) {
+                console.error(`[NotificationResolver] Invalid task config:`, error);
+            }
+        }
+
+        // Priority 2: Project-level config
+        if (taskData.projectId) {
+            const project = await db
+                .select()
+                .from(projects)
+                .where(eq(projects.id, taskData.projectId))
+                .limit(1);
+
+            if (project[0]?.notificationConfig) {
+                try {
+                    const config = JSON.parse(project[0].notificationConfig as string);
+                    if (this.isConfigValid(config)) {
+                        console.log(
+                            `[NotificationResolver] Using project-level config for task ${taskId}`
+                        );
+                        return config;
+                    }
+                } catch (error) {
+                    console.error(`[NotificationResolver] Invalid project config:`, error);
+                }
+            }
+        }
+
+        // Priority 3: Global config
+        // TODO: Implement global config from settings
+        // For now, return null (no config)
+        console.log(`[NotificationResolver] No notification config found for task ${taskId}`);
+        return null;
+    }
+
+    /**
+     * Check if config is valid and enabled
+     */
+    private isConfigValid(config: NotificationConfig): boolean {
+        if (!config) return false;
+
+        const hasSlack =
+            config.slack?.enabled &&
+            (config.slack?.channelId || config.slack?.webhookUrl) &&
+            config.slack?.events?.length > 0;
+
+        const hasWebhook =
+            config.webhook?.enabled && config.webhook?.url && config.webhook?.events?.length > 0;
+
+        return hasSlack || hasWebhook;
+    }
+
+    /**
+     * Get Slack config for task
+     */
+    async getSlackConfig(taskId: number) {
+        const config = await this.resolveConfig(taskId);
+        return config?.slack?.enabled ? config.slack : null;
+    }
+
+    /**
+     * Get Webhook config for task
+     */
+    async getWebhookConfig(taskId: number) {
+        const config = await this.resolveConfig(taskId);
+        return config?.webhook?.enabled ? config.webhook : null;
+    }
+}
+
+// Singleton instance
+export const notificationResolver = new NotificationResolver();

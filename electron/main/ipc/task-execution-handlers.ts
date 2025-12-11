@@ -13,7 +13,7 @@ import { taskHistoryRepository } from '../database/repositories/task-history-rep
 import { projectRepository } from '../database/repositories/project-repository';
 import { operatorRepository } from '../database/repositories/operator-repository';
 import { resolveAutoReviewProvider } from '../../../src/core/logic/ai-configuration';
-import type { Task } from '../../../src/core/types/database';
+import type { Task, TaskTriggerConfig } from '../../../src/core/types/database';
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
 
@@ -72,14 +72,6 @@ const activeExecutions: Map<number, ExecutionState> = new Map();
 // Active reviews map
 const activeReviews: Map<number, ReviewState> = new Map();
 const executor = new AdvancedTaskExecutor();
-
-type TaskTriggerConfig = {
-    dependsOn?: {
-        taskIds?: number[];
-        operator?: 'all' | 'any';
-        passResultsFrom?: number[];
-    };
-};
 
 /**
  * Extract dependency task IDs and their execution results for macro substitution/context passing
@@ -169,19 +161,29 @@ export async function checkAndExecuteDependentTasks(
 
         // Find tasks that depend on the completed task
         const dependentTasks = allTasks.filter((task) => {
-            if (task.status !== 'todo') return false;
-
-            const triggerConfig = task.triggerConfig as {
-                dependsOn?: {
-                    taskIds?: number[];
-                    operator?: 'all' | 'any';
-                    passResultsFrom?: number[];
-                };
-            } | null;
+            const triggerConfig = task.triggerConfig as TaskTriggerConfig | null;
 
             if (!triggerConfig?.dependsOn?.taskIds) return false;
 
-            return triggerConfig.dependsOn.taskIds.includes(completedTaskId);
+            if (!triggerConfig.dependsOn.taskIds.includes(completedTaskId)) return false;
+
+            // Check execution policy
+            const policy = triggerConfig.dependsOn.executionPolicy || 'once';
+
+            // If policy is 'once', only execute if task is in 'todo' status
+            if (policy === 'once' && task.status !== 'todo') {
+                return false;
+            }
+
+            // If policy is 'repeat', allowed to run again (unless currently running)
+            if (policy === 'repeat' && task.status === 'in_progress') {
+                return false;
+            }
+
+            // Also prevent blocked tasks from auto-running
+            if (task.status === 'blocked') return false;
+
+            return true;
         });
 
         if (dependentTasks.length === 0) {
@@ -195,13 +197,7 @@ export async function checkAndExecuteDependentTasks(
 
         // Check each dependent task
         for (const dependentTask of dependentTasks) {
-            const triggerConfig = dependentTask.triggerConfig as {
-                dependsOn?: {
-                    taskIds?: number[];
-                    operator?: 'all' | 'any';
-                    passResultsFrom?: number[];
-                };
-            } | null;
+            const triggerConfig = dependentTask.triggerConfig as TaskTriggerConfig | null;
 
             const dependsOn = triggerConfig?.dependsOn;
             if (!dependsOn?.taskIds) continue;
@@ -342,8 +338,123 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskId} not found`);
                 }
 
+                // Check if this is a script task - execute locally
+                if (task.taskType === 'script') {
+                    console.log(`[TaskExecution] Executing script task ${taskId}`);
+
+                    // Initialize execution state
+                    const executionState: ExecutionState = {
+                        taskId,
+                        status: 'running',
+                        startedAt: new Date(),
+                        progress: 0,
+                        currentPhase: 'initializing',
+                        streamContent: '',
+                    };
+                    activeExecutions.set(taskId, executionState);
+
+                    // Update task status to in_progress
+                    await taskRepository.update(taskId, { status: 'in_progress' });
+                    getMainWindow()?.webContents.send('task:status-changed', {
+                        id: taskId,
+                        status: 'in_progress',
+                    });
+                    getMainWindow()?.webContents.send('taskExecution:started', {
+                        taskId,
+                        startedAt: executionState.startedAt,
+                    });
+
+                    try {
+                        // Import script executor
+                        const { scriptExecutor } = await import('../services/script-executor');
+
+                        // Build dependency context for macro substitution
+                        const { previousResults } = await buildDependencyContext(task as Task);
+
+                        // Execute script
+                        const result = await scriptExecutor.execute(task as Task, task.projectId);
+
+                        if (result.success) {
+                            executionState.status = 'completed';
+                            executionState.streamContent = result.output || '';
+
+                            const executionResult = {
+                                content: result.output || '',
+                                duration: result.duration || 0,
+                                provider: 'script',
+                                model: task.scriptLanguage || 'javascript',
+                                logs: result.logs || [],
+                            };
+
+                            // Determine final status based on auto-approve setting
+                            const finalStatus = task.autoApprove ? 'done' : 'in_review';
+                            const updateData: any = {
+                                status: finalStatus,
+                                executionResult,
+                            };
+
+                            if (task.autoApprove) {
+                                updateData.completedAt = new Date().toISOString();
+                            }
+
+                            await taskRepository.update(taskId, updateData);
+
+                            getMainWindow()?.webContents.send('task:status-changed', {
+                                id: taskId,
+                                status: finalStatus,
+                            });
+                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                                taskId,
+                                result: executionResult,
+                            });
+
+                            // Log execution completed
+                            await taskHistoryRepository.logExecutionCompleted(
+                                taskId,
+                                result.output || '',
+                                {
+                                    provider: 'script',
+                                    model: task.scriptLanguage || 'javascript',
+                                    duration: result.duration || 0,
+                                }
+                            );
+
+                            // Check and execute dependent tasks if auto-approved
+                            if (finalStatus === 'done') {
+                                await checkAndExecuteDependentTasks(taskId, task as Task);
+                            }
+
+                            activeExecutions.delete(taskId);
+                            return { success: true, result };
+                        } else {
+                            throw new Error(result.error || 'Script execution failed');
+                        }
+                    } catch (error) {
+                        executionState.status = 'failed';
+                        executionState.error =
+                            error instanceof Error ? error.message : String(error);
+
+                        await taskRepository.update(taskId, { status: 'todo' });
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: 'todo',
+                        });
+                        getMainWindow()?.webContents.send('taskExecution:failed', {
+                            taskId,
+                            error: executionState.error,
+                        });
+
+                        await taskHistoryRepository.logExecutionFailed(
+                            taskId,
+                            executionState.error
+                        );
+
+                        activeExecutions.delete(taskId);
+                        throw error;
+                    }
+                }
+
                 // Load operator configuration if assigned
-                let operatorConfig: any = null;
                 if (task.assignedOperatorId) {
                     try {
                         const operator = await operatorRepository.findById(task.assignedOperatorId);
@@ -351,15 +462,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             console.log(
                                 `[TaskExecution] Using operator ${operator.name} for task ${taskId}`
                             );
-                            operatorConfig = {
-                                id: operator.id,
-                                name: operator.name,
-                                role: operator.role,
-                                aiProvider: operator.aiProvider,
-                                aiModel: operator.aiModel,
-                                systemPrompt: operator.systemPrompt,
-                                mcps: await operatorRepository.getMCPs(operator.id),
-                            };
+                            // operatorConfig removed - properties are applied directly to task
 
                             // Override task's AI provider and model with operator's settings
                             task.aiProvider = operator.aiProvider;
@@ -568,14 +671,23 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 transcript: response.transcript,
                             };
 
-                            await taskRepository.update(taskId, {
-                                status: 'in_review',
+                            // Determine final status based on auto-approve setting
+                            const finalStatus = task.autoApprove ? 'done' : 'in_review';
+                            const updateData: any = {
+                                status: finalStatus,
                                 executionResult,
-                            });
+                            };
+
+                            // Set completedAt if auto-approved
+                            if (task.autoApprove) {
+                                updateData.completedAt = new Date().toISOString();
+                            }
+
+                            await taskRepository.update(taskId, updateData);
 
                             getMainWindow()?.webContents.send('task:status-changed', {
                                 id: taskId,
-                                status: 'in_review',
+                                status: finalStatus,
                             });
                             getMainWindow()?.webContents.send('taskExecution:completed', {
                                 taskId,
@@ -598,6 +710,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 undefined,
                                 executionResult
                             );
+
+                            // Check and execute dependent tasks if this task completed successfully
+                            if (finalStatus === 'done') {
+                                await checkAndExecuteDependentTasks(taskId, task as Task);
+                            }
 
                             activeExecutions.delete(taskId);
                             return { success: true, result: response };
@@ -787,17 +904,28 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         attachments,
                     };
 
-                    // Update task with result and generated prompt
-                    await taskRepository.update(taskId, {
-                        status: 'in_review',
+                    // Determine final status based on auto-approve setting
+                    const finalStatus = task.autoApprove ? 'done' : 'in_review';
+                    const updateData: any = {
+                        status: finalStatus,
                         executionResult: executionResult,
-                    });
+                    };
 
-                    console.log('[Main IPC] Sending completed event:', taskId);
+                    // Set completedAt if auto-approved
+                    if (task.autoApprove) {
+                        updateData.completedAt = new Date().toISOString();
+                    }
+
+                    // Update task with result and status
+                    await taskRepository.update(taskId, updateData);
+
+                    console.log(
+                        `[Main IPC] Task ${taskId} completed - status: ${finalStatus} ${task.autoApprove ? '(auto-approved)' : ''}`
+                    );
                     const completedWin = getMainWindow();
                     completedWin?.webContents.send('task:status-changed', {
                         id: taskId,
-                        status: 'in_review',
+                        status: finalStatus,
                     });
                     completedWin?.webContents.send('taskExecution:completed', {
                         taskId,
@@ -826,6 +954,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         },
                         aiResult
                     );
+
+                    // Check and execute dependent tasks if this task completed successfully
+                    if (finalStatus === 'done') {
+                        await checkAndExecuteDependentTasks(taskId, task as Task);
+                    }
 
                     activeExecutions.delete(taskId);
                     return { success: true, result };
@@ -1902,7 +2035,8 @@ function buildReviewPrompt(
     let processedContent = executionContent;
     if (isBase64Image(executionContent)) {
         const imagePath = saveBase64ImageToTempFile(executionContent, task.id);
-        processedContent = `[이미지 결과물: ${imagePath}]`;
+        // 프롬프트에는 로컬 경로 대신 이미지가 첨부되었다는 사실만 명시 (AI가 로컬 경로를 읽으려 시도하는 것 방지)
+        processedContent = `[이미지가 결과물로 생성되었습니다. 첨부된 이미지를 확인하세요.]\n(참고: 내부 저장 경로 ${imagePath})`;
         console.log(`[buildReviewPrompt] Converted base64 image to file: ${imagePath}`);
     }
 
@@ -1916,6 +2050,8 @@ ${executedPrompt}
 
 ## 실행 결과
 ${processedContent}
+
+**중요: 만약 실행 결과가 이미지라면, 이 메시지에 첨부된 이미지를 직접 확인하여 평가하세요.**
 
 ---
 

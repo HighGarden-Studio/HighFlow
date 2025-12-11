@@ -43,11 +43,13 @@ export class AIServiceConfig {
         // Google Gemini
         'gemini-1.5-pro': { input: 3.5, output: 10.5 },
         'gemini-1.5-flash': { input: 0.075, output: 0.3 },
-        'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+
         'gemini-pro': { input: 0.5, output: 1.5 },
         'gemini-2.0-flash-exp': { input: 0.1, output: 0.4 }, // Est
         'gemini-2.5-flash-image': { input: 0.1, output: 0.4 }, // Nano Banana (stable)
         'gemini-3-pro-image-preview': { input: 5.0, output: 15.0 }, // Nano Banana Pro (preview)
+        'veo-3.1-generate-preview': { input: 0, output: 0 }, // Priced per second
+        'veo-2.0-generate-preview': { input: 0, output: 0 }, // Priced per second
         'gemini-3.0-pro-exp': { input: 5.0, output: 15.0 }, // Est
         'gemini-3.0-flash-exp': { input: 0.1, output: 0.4 }, // Est
         'gemini-2.0-flash-thinking-exp-1219': { input: 3.5, output: 10.5 }, // Same as Pro

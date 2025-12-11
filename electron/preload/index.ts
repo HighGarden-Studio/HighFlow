@@ -79,6 +79,8 @@ const tasksAPI = {
 
     reorder: (projectId: number, taskIds: number[]) =>
         ipcRenderer.invoke('tasks:reorder', projectId, taskIds),
+
+    executeScript: (taskId: number) => ipcRenderer.invoke('tasks:execute-script', taskId),
 };
 
 // ========================================

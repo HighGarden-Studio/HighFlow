@@ -4,7 +4,7 @@
  *
  * Main projects listing page with task summary
  */
-import { onMounted, computed, ref, reactive, watch } from 'vue';
+import { onMounted, onUnmounted, computed, ref, reactive, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
@@ -264,8 +264,12 @@ async function handleAIWizardCreated(projectData: any) {
 // Lifecycle
 onMounted(async () => {
     await projectStore.fetchProjects();
-    projectStore.initEventListeners();
+    const cleanup = projectStore.initEventListeners();
     await fetchTaskSummaries();
+
+    onUnmounted(() => {
+        cleanup();
+    });
 });
 </script>
 

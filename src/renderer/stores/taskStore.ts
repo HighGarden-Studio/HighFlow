@@ -525,7 +525,8 @@ export const useTaskStore = defineStore('tasks', () => {
      * Execute task - starts AI execution via IPC
      */
     async function executeTask(
-        taskId: number
+        taskId: number,
+        options?: { force?: boolean }
     ): Promise<{ success: boolean; error?: string; validationError?: boolean }> {
         const task = tasks.value.find((t) => t.id === taskId);
         if (!task) {
@@ -539,7 +540,7 @@ export const useTaskStore = defineStore('tasks', () => {
         }
 
         // TODO 상태가 아니면 실행 불가 (일시정지 상태는 resume으로 처리)
-        if (task.status !== 'todo') {
+        if (task.status !== 'todo' && !options?.force) {
             return { success: false, error: 'Task must be in TODO status to execute' };
         }
 
@@ -1562,13 +1563,23 @@ export const useTaskStore = defineStore('tasks', () => {
             cleanupFns.push(unsubscribeReviewCancelled);
         }
 
-        // Auto-execution trigger for dependent tasks
+        // Auto-execution trigger for dependent tasks and time-based triggers
         const unsubscribeTriggerAutoExecution = api.events.on(
             'task:triggerAutoExecution',
             async (data: unknown) => {
-                const { taskId, triggeredBy } = data as { taskId: number; triggeredBy: number };
+                // Handle both number (time-based) and object (dependency-based) formats
+                const taskId =
+                    typeof data === 'number'
+                        ? data
+                        : (data as { taskId: number; triggeredBy: number }).taskId;
+                const triggeredBy =
+                    typeof data === 'number'
+                        ? undefined
+                        : (data as { taskId: number; triggeredBy?: number }).triggeredBy;
+
                 console.log(
-                    `[TaskStore] Auto-execution triggered for task ${taskId} (triggered by ${triggeredBy})`
+                    `[TaskStore] Auto-execution triggered for task ${taskId}`,
+                    triggeredBy ? `(triggered by task ${triggeredBy})` : '(time-based trigger)'
                 );
 
                 // Find the task to execute
@@ -1580,7 +1591,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
                 // Execute the task
                 try {
-                    await executeTask(taskId);
+                    await executeTask(taskId, { force: true });
                     console.log(`[TaskStore] Auto-execution started for task ${taskId}`);
                 } catch (error) {
                     console.error(`[TaskStore] Failed to auto-execute task ${taskId}:`, error);

@@ -1021,8 +1021,42 @@ export class AIServiceManager {
         };
     }
 
+    private static readonly IMAGE_MODELS: Partial<Record<AIProvider, string[]>> = {
+        openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
+        google: [
+            'imagen-3.0',
+            'gemini-2.5-flash-image',
+            'gemini-3-pro-image-preview',
+            'veo-3.1-generate-preview',
+            'veo-2.0-generate-preview',
+        ],
+        anthropic: [],
+        ollama: [],
+        perplexity: [],
+        groq: [],
+        lmstudio: [],
+        mistral: [],
+        deepseek: [],
+        cohere: [],
+        together: [],
+        fireworks: [],
+        openrouter: [],
+    };
+
     private getTaskOutputFormat(task: Task): string | null {
-        // expectedOutputFormat을 우선 사용 (사용자가 UI에서 설정한 값)
+        // 1. 모델이 이미지 전용 모델인지 확인 (가장 높은 우선순위)
+        // 사용자가 명시적으로 이미지 모델을 선택했다면, expectedOutputFormat이 text여도 이미지를 의도한 것으로 간주
+        if (task.aiProvider && task.aiModel) {
+            const imageModels = AIServiceManager.IMAGE_MODELS[task.aiProvider as AIProvider] || [];
+            if (imageModels.includes(task.aiModel)) {
+                console.log(
+                    `[AIServiceManager] Model ${task.aiModel} is an image-only model. Forcing output format to 'png'.`
+                );
+                return 'png';
+            }
+        }
+
+        // 2. expectedOutputFormat을 우선 사용 (사용자가 UI에서 설정한 값)
         const raw =
             task.expectedOutputFormat || ((task as any).outputFormat as string | undefined) || null;
         const result = raw ? raw.toLowerCase() : null;
@@ -1068,26 +1102,8 @@ export class AIServiceManager {
         const preferredModel = (imageConfig.model || task.aiModel) as AIModel | undefined;
 
         // Valid image models for each provider
-        const validImageModels: Partial<Record<AIProvider, string[]>> = {
-            openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
-            google: [
-                'imagen-3.0',
-                'imagen-2.0',
-                'gemini-2.5-flash-image',
-                'gemini-3-pro-image-preview',
-            ],
-            anthropic: [],
-            groq: [],
-            lmstudio: [],
-            ollama: [],
-            mistral: [],
-            deepseek: [],
-            cohere: [],
-            together: [],
-            fireworks: [],
-            perplexity: [],
-            openrouter: [],
-        };
+        const validImageModels = AIServiceManager.IMAGE_MODELS;
+        const models = validImageModels[provider] || [];
 
         // Check if preferred model is actually a valid image model
         if (preferredModel && validImageModels[provider]?.includes(preferredModel)) {

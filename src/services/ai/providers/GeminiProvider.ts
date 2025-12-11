@@ -54,6 +54,28 @@ export class GeminiProvider extends BaseAIProvider {
             bestFor: ['Fast image generation', 'Cost-effective', '1024px resolution'],
         },
         {
+            name: 'veo-3.1-generate-preview',
+            provider: 'google',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0, // Priced per second of video
+            costPerOutputToken: 0,
+            averageLatency: 15000,
+            features: ['vision'],
+            bestFor: ['High-fidelity video generation', '1080p video', 'Text-to-video'],
+        },
+        {
+            name: 'veo-2.0-generate-preview',
+            provider: 'google',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0,
+            costPerOutputToken: 0,
+            averageLatency: 10000,
+            features: ['vision'],
+            bestFor: ['Fast video generation', '720p video'],
+        },
+        {
             name: 'gemini-1.5-pro',
             provider: 'google',
             contextWindow: 1000000,
@@ -317,13 +339,29 @@ export class GeminiProvider extends BaseAIProvider {
 
             console.log(`[GeminiProvider] Attempting image generation with model: ${modelName}`);
 
+            // Gemini 3 Pro Image specific config
+            let generationConfig: any = {
+                temperature: config.temperature ?? 0.4,
+            };
+
+            if (modelName === 'gemini-3-pro-image-preview') {
+                generationConfig.imageConfig = {
+                    aspectRatio: options.aspectRatio || '16:9',
+                    imageSize: options.imageSize || '1024x1024',
+                };
+                // Note: responseModalities might not be needed for 3-pro-image if imageConfig is present,
+                // but keeping it if it aids consistency, or removing if it conflicts.
+                // Documentation implies tooling/imageConfig trigger image generation.
+            } else {
+                // For older/Flash models, we rely on responseModalities
+                generationConfig.responseModalities = ['IMAGE'];
+            }
+
             // New SDK API: client.models.generateContent
             const response = await client.models.generateContent({
                 model: modelName,
                 contents: prompt,
-                config: {
-                    temperature: config.temperature ?? 0.4,
-                },
+                config: generationConfig,
             });
 
             console.log(`[GeminiProvider] API response received:`, {
@@ -434,6 +472,91 @@ export class GeminiProvider extends BaseAIProvider {
                 stack: error instanceof Error ? error.stack : undefined,
                 raw: error,
             });
+            throw error;
+        }
+    }
+
+    async generateVideo(
+        prompt: string,
+        config: AIConfig,
+        _context?: ExecutionContext,
+        options: Record<string, any> = {}
+    ): Promise<AiResult> {
+        try {
+            const client = this.getClient();
+            const modelName = config.model || 'veo-3.1-generate-preview';
+
+            console.log(`[GeminiProvider] Attempting video generation with model: ${modelName}`);
+
+            // Construct prompt content
+            // Veo supports text prompt directly.
+            // It might also support 'videoConfig' in generation config if needed in future.
+
+            const response = await client.models.generateContent({
+                model: modelName,
+                contents: prompt,
+                config: {
+                    // Veo specific config can go here if documentation specifics arise.
+                    // For now, simple text prompt is the baseline.
+                },
+            });
+
+            console.log(`[GeminiProvider] Video API response received`);
+
+            // Extract inline video data
+            const allParts = response.candidates?.flatMap((c: any) => c.content?.parts || []) || [];
+            const videoParts = allParts.filter(
+                (part: any) => part.inlineData && part.inlineData.mimeType?.startsWith('video/')
+            );
+
+            if (videoParts.length === 0) {
+                console.error(
+                    `[GeminiProvider] No video inline data in response. Full response:`,
+                    JSON.stringify(response, null, 2)
+                );
+                throw new Error('Gemini video generation did not return any inline video data.');
+            }
+
+            console.log(`[GeminiProvider] Found ${videoParts.length} videos in response`);
+
+            const firstVideo = videoParts[0].inlineData;
+            const mime = firstVideo.mimeType || 'video/mp4';
+            const base64Data = firstVideo.data;
+            const dataSizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
+
+            // Save video to temp file
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const os = await import('os');
+
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-videos-'));
+            const ext = mime.split('/')[1] || 'mp4';
+            const fileName = `video_${Date.now()}.${ext}`;
+            const filePath = path.join(tempDir, fileName);
+
+            const buffer = Buffer.from(base64Data, 'base64');
+            await fs.writeFile(filePath, buffer);
+
+            console.log(
+                `[GeminiProvider] Saved video to: ${filePath} (${Math.round(buffer.length / 1024)}KB)`
+            );
+
+            return {
+                kind: 'video',
+                subType: 'mp4',
+                format: 'base64',
+                value: base64Data,
+                mime,
+                meta: {
+                    provider: this.name,
+                    model: modelName,
+                    dataSizeKB,
+                    filePath,
+                },
+                raw: response,
+            };
+        } catch (error) {
+            console.error(`[GeminiProvider] Video generation error:`, error);
             throw error;
         }
     }

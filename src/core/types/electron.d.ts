@@ -67,6 +67,15 @@ export interface TasksAPI {
     ) => Promise<Task>;
     delete: (id: number) => Promise<void>;
     reorder: (projectId: number, taskIds: number[]) => Promise<void>;
+    executeScript: (
+        taskId: number
+    ) => Promise<{
+        success: boolean;
+        output: string;
+        error?: string;
+        logs: string[];
+        duration: number;
+    }>;
 }
 
 export interface AppAPI {
@@ -514,6 +523,14 @@ export interface TaskHistoryAPI {
     ) => Promise<unknown>;
 }
 
+export interface OperatorsAPI {
+    list: (projectId?: number) => Promise<any[]>;
+    get: (id: number) => Promise<any | null>;
+    create: (data: any) => Promise<any>;
+    update: (id: number, data: any) => Promise<any>;
+    delete: (id: number) => Promise<void>;
+}
+
 export interface ElectronAPI {
     projects: ProjectsAPI;
     tasks: TasksAPI;
@@ -531,6 +548,7 @@ export interface ElectronAPI {
     localProviders: LocalProvidersAPI;
     taskExecution: TaskExecutionAPI;
     taskHistory: TaskHistoryAPI;
+    operators: OperatorsAPI;
     store?: StoreAPI;
 }
 

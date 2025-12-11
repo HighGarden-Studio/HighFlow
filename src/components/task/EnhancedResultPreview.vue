@@ -11,6 +11,8 @@ import type { AiResult, AiSubType } from '@core/types/ai';
 import { extractTaskResult } from '../../renderer/utils/aiResultHelpers';
 import { marked } from 'marked';
 import type { MarkedOptions, Tokens } from 'marked';
+import FileTreeItem from './FileTreeItem.vue';
+import { useProjectStore } from '../../renderer/stores/projectStore';
 
 // Output format type
 type OutputFormat =
@@ -152,6 +154,174 @@ const markdownHtml = ref('');
 // History state
 const history = ref<TaskHistoryEntry[]>([]);
 const selectedVersionId = ref<number | null>(null);
+
+const projectStore = useProjectStore();
+const currentProject = computed(() => projectStore.currentProject);
+
+// Tree View State
+const isTreeView = ref(true);
+
+interface FileTreeNode {
+    name: string;
+    path: string; // Full path for files, current folder path for folders
+    type: 'file' | 'folder';
+    status?: 'created' | 'modified'; // Only for files
+    children?: FileTreeNode[]; // Only for folders
+}
+
+// Build File Tree
+const fileTree = computed(() => {
+    const root: FileTreeNode[] = [];
+    const files = resultFiles.value;
+
+    if (files.length === 0) return root;
+
+    // Helper to find or create a folder node
+    const findOrCreateFolder = (
+        parentChildren: FileTreeNode[],
+        name: string,
+        fullPath: string
+    ): FileTreeNode => {
+        let node = parentChildren.find((n) => n.name === name && n.type === 'folder');
+        if (!node) {
+            node = {
+                name,
+                path: fullPath,
+                type: 'folder',
+                children: [],
+            };
+            parentChildren.push(node);
+        }
+        return node;
+    };
+
+    // Determine Root Path
+    // Prefer project's baseDevFolder to show file structure relative to project root
+    let rootPath = currentProject.value?.baseDevFolder || '';
+
+    // Normalize root path (remove trailing slash)
+    if (rootPath) {
+        rootPath = rootPath.replace(/[/\\]$/, '');
+    }
+
+    // If no project root, or if files don't share it, fall back to Common Prefix logic
+    // This handles cases where we are viewing files outside the project or in a different context
+    const paths = files.map((f) => f.path);
+    const splitPaths = paths.map((p) => p.split(/[/\\]/));
+
+    // Check if we should use common prefix instead
+    const useCommonPrefix = !rootPath || files.some((f) => !f.path.startsWith(rootPath));
+    let rootPathDepth = 0;
+
+    if (useCommonPrefix && splitPaths.length > 0) {
+        const firstPath = splitPaths[0];
+        if (firstPath) {
+            const commonPrefix = firstPath.slice(0, firstPath.length - 1);
+            let prefixLen = commonPrefix.length;
+
+            for (let i = 1; i < splitPaths.length; i++) {
+                const p = splitPaths[i];
+                if (!p) continue;
+                for (let j = 0; j < prefixLen; j++) {
+                    if (p[j] !== commonPrefix[j]) {
+                        prefixLen = j;
+                        break;
+                    }
+                }
+            }
+            rootPathDepth = prefixLen;
+            // commonPrefixPath was unused
+        }
+    }
+
+    files.forEach((file) => {
+        let relativeParts: string[];
+        let currentPathString = '';
+
+        if (!useCommonPrefix && rootPath && file.path.startsWith(rootPath)) {
+            // Strip project root
+            const relativePath = file.path.substring(rootPath.length).replace(/^[/\\]/, '');
+            relativeParts = relativePath.split(/[/\\]/);
+            currentPathString = rootPath;
+        } else {
+            // Use common prefix logic
+            const parts = file.path.split(/[/\\]/);
+            relativeParts = parts.slice(rootPathDepth);
+            currentPathString = parts.slice(0, rootPathDepth).join('/');
+        }
+
+        let currentLevel = root;
+        let currentPath = currentPathString;
+
+        relativeParts.forEach((part, index) => {
+            // Skip empty parts
+            if (!part) return;
+
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            const isLast = index === relativeParts.length - 1;
+
+            if (isLast) {
+                currentLevel.push({
+                    name: part,
+                    path: file.path,
+                    type: 'file',
+                    status: file.type, // 'created' or 'modified'
+                    children: [],
+                });
+            } else {
+                const folder = findOrCreateFolder(currentLevel, part, currentPath);
+                currentLevel = folder.children!;
+            }
+        });
+    });
+
+    // Sort: Folders first, then files
+    const sortNodes = (nodes: FileTreeNode[]) => {
+        nodes.sort((a, b) => {
+            if (a.type === b.type) {
+                return a.name.localeCompare(b.name);
+            }
+            return a.type === 'folder' ? -1 : 1;
+        });
+        nodes.forEach((node) => {
+            if (node.children) {
+                sortNodes(node.children);
+            }
+        });
+    };
+    sortNodes(root);
+
+    // If we have a project root, wrap the tree in a root node representing the base folder
+    if (currentProject.value && rootPath) {
+        // Get directory name from rootPath or project title
+        let rootName = currentProject.value.title;
+        // Try to get actual folder name from path
+        const pathParts = rootPath.split(/[/\\]/);
+        if (pathParts.length > 0) {
+            const lastPart = pathParts[pathParts.length - 1];
+            if (lastPart) rootName = lastPart;
+        }
+
+        return [
+            {
+                name: rootName,
+                path: rootPath,
+                type: 'folder',
+                children: root,
+                status: undefined,
+            } as FileTreeNode,
+        ];
+    }
+
+    return root;
+});
+
+const onTreeSelect = (path: string) => {
+    const file = resultFiles.value.find((f) => f.path === path);
+    if (file) {
+        selectedFile.value = file;
+    }
+};
 
 const fetchHistory = async () => {
     if (!props.task?.id) return;
@@ -343,7 +513,6 @@ const resultFiles = computed<ResultFile[]>(() => {
         if (filePath && !filesMap.has(filePath)) {
             const fs = require('fs');
             let size = 0;
-            let content: string | undefined;
             try {
                 const stats = fs.statSync(filePath);
                 size = stats.size;
@@ -407,7 +576,13 @@ const transcript = computed(() => {
     return safeExecutionResult.value?.transcript || [];
 });
 
-const viewMode = ref<'preview' | 'log'>('preview');
+const sortedTranscript = computed(() => {
+    return [...transcript.value].sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+});
+
+const viewMode = ref<'preview' | 'log' | 'split'>('preview');
 
 watch(
     () => props.open,
@@ -432,12 +607,11 @@ watch(
             // Load history
             fetchHistory();
 
-            // Default to preview if files exist, else log if transcript exists
-            if (resultFiles.value.length > 0) {
+            // Default to preview
+            if (content.value && outputFormat.value === 'html') {
+                viewMode.value = 'split';
+            } else {
                 viewMode.value = 'preview';
-                // selectedFile.value = null; // Already reset in other watcher
-            } else if (transcript.value.length > 0) {
-                viewMode.value = 'log';
             }
         } else {
             selectedVersionId.value = null; // Reset version when closing
@@ -1291,76 +1465,126 @@ onMounted(() => {
                     <div class="flex-1 flex overflow-hidden">
                         <!-- Sidebar (File List) -->
                         <div
-                            v-if="resultFiles.length > 0"
                             class="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex flex-col"
                         >
                             <div
-                                class="p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                class="p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider flex justify-between items-center"
                             >
-                                생성된 파일 ({{ resultFiles.length }})
-                            </div>
-                            <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
-                                <!-- Main Result Item -->
+                                <span>파일 목록 ({{ resultFiles.length + 1 }})</span>
                                 <button
-                                    class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
-                                    :class="
-                                        !selectedFile
-                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                    "
-                                    @click="selectedFile = null"
+                                    class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                    @click="isTreeView = !isTreeView"
+                                    title="트리/리스트 뷰 전환"
                                 >
                                     <svg
+                                        v-if="isTreeView"
                                         class="w-4 h-4"
                                         fill="none"
-                                        stroke="currentColor"
                                         viewBox="0 0 24 24"
+                                        stroke="currentColor"
                                     >
                                         <path
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                             stroke-width="2"
-                                            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                                            d="M4 6h16M4 10h16M4 14h16M4 18h16"
                                         />
                                     </svg>
-                                    <span class="truncate">에이전트 메시지</span>
-                                </button>
-
-                                <!-- File Items -->
-                                <button
-                                    v-for="file in resultFiles"
-                                    :key="file.path"
-                                    class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors group"
-                                    :class="
-                                        selectedFile === file
-                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                    "
-                                    @click="selectedFile = file"
-                                >
-                                    <!-- File Icon based on extension -->
                                     <svg
-                                        class="w-4 h-4 flex-shrink-0"
+                                        v-else
+                                        class="w-4 h-4"
                                         fill="none"
-                                        stroke="currentColor"
                                         viewBox="0 0 24 24"
+                                        stroke="currentColor"
                                     >
                                         <path
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                             stroke-width="2"
-                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                            d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
                                         />
                                     </svg>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="truncate">{{ file.path }}</div>
-                                        <div
-                                            class="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        >
-                                            {{ file.type === 'created' ? 'Created' : 'Modified' }}
-                                        </div>
-                                    </div>
                                 </button>
+                            </div>
+                            <div class="flex-1 overflow-y-auto px-2 pb-2">
+                                <!-- Tree View -->
+                                <div v-if="isTreeView" class="space-y-0.5">
+                                    <FileTreeItem
+                                        v-for="node in fileTree"
+                                        :key="node.path"
+                                        :node="node"
+                                        :selected-path="selectedFile?.path"
+                                        @select="onTreeSelect"
+                                    />
+                                </div>
+
+                                <!-- List View -->
+                                <div v-else class="space-y-1">
+                                    <!-- Main Result Item -->
+                                    <button
+                                        class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                                        :class="
+                                            !selectedFile
+                                                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                        "
+                                        @click="selectedFile = null"
+                                    >
+                                        <svg
+                                            class="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                                            />
+                                        </svg>
+                                        <span class="truncate">에이전트 메시지</span>
+                                    </button>
+
+                                    <!-- File Items -->
+                                    <button
+                                        v-for="file in resultFiles"
+                                        :key="file.path"
+                                        class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors group"
+                                        :class="
+                                            selectedFile === file
+                                                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                        "
+                                        @click="selectedFile = file"
+                                        :title="file.path"
+                                    >
+                                        <!-- File Icon based on extension -->
+                                        <svg
+                                            class="w-4 h-4 flex-shrink-0"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                            />
+                                        </svg>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="truncate">{{ file.path }}</div>
+                                            <div
+                                                class="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                {{
+                                                    file.type === 'created' ? 'Created' : 'Modified'
+                                                }}
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -1387,21 +1611,22 @@ onMounted(() => {
                                             Result Preview
                                         </button>
                                         <button
-                                            @click="viewMode = 'log'"
+                                            v-if="outputFormat === 'html'"
+                                            @click="viewMode = 'split'"
                                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
                                             :class="[
-                                                viewMode === 'log'
+                                                viewMode === 'split'
                                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
                                         >
-                                            Interaction Log
+                                            Split View
                                         </button>
                                     </div>
 
                                     <!-- Content Container -->
                                     <div
-                                        v-if="viewMode === 'preview'"
+                                        v-if="viewMode === 'preview' || viewMode === 'split'"
                                         class="flex-1 flex flex-col overflow-hidden"
                                     >
                                         <!-- File Info Bar -->
@@ -1559,9 +1784,49 @@ onMounted(() => {
                                             </div>
 
                                             <!-- HTML View -->
-                                            <div v-else-if="outputFormat === 'html'" class="h-full">
+                                            <div
+                                                v-else-if="outputFormat === 'html'"
+                                                class="h-full flex flex-col"
+                                            >
                                                 <div
-                                                    class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                                                    v-if="viewMode === 'split'"
+                                                    class="flex-1 flex overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg"
+                                                >
+                                                    <!-- Code Side -->
+                                                    <div
+                                                        class="flex-1 border-r border-gray-200 dark:border-gray-700 overflow-auto bg-gray-50 dark:bg-gray-900"
+                                                    >
+                                                        <div
+                                                            class="p-2 text-xs font-mono text-gray-500 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800"
+                                                        >
+                                                            HTML Source
+                                                        </div>
+                                                        <div class="p-4">
+                                                            <pre
+                                                                class="text-xs font-mono whitespace-pre-wrap dark:text-gray-300"
+                                                                >{{ content }}</pre
+                                                            >
+                                                        </div>
+                                                    </div>
+                                                    <!-- Preview Side -->
+                                                    <div class="flex-1 bg-white flex flex-col">
+                                                        <div
+                                                            class="p-2 text-xs font-mono text-gray-500 border-b border-gray-200 bg-gray-50"
+                                                        >
+                                                            Preview
+                                                        </div>
+                                                        <iframe
+                                                            :srcdoc="content"
+                                                            class="flex-1 w-full h-full border-0 bg-white"
+                                                            sandbox="allow-scripts"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <!-- Standard Preview (non-split) -->
+                                                <div
+                                                    v-else
+                                                    class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 h-full flex flex-col"
                                                 >
                                                     <div
                                                         class="mb-4 text-xs text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700"
@@ -1570,7 +1835,7 @@ onMounted(() => {
                                                     </div>
                                                     <iframe
                                                         :srcdoc="content"
-                                                        class="w-full h-[calc(100%-2rem)] min-h-[400px] bg-white rounded border border-gray-200"
+                                                        class="flex-1 w-full border-0 bg-white rounded"
                                                         sandbox="allow-scripts"
                                                     />
                                                 </div>
@@ -2089,102 +2354,124 @@ onMounted(() => {
                                                     >
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <!-- Close Content Container (Preview) -->
 
-                                    <!-- Log Viewer -->
-                                    <div
-                                        v-else
-                                        class="flex-1 overflow-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900"
-                                    >
-                                        <div
-                                            v-for="(item, index) in transcript"
-                                            :key="index"
-                                            class="flex flex-col gap-2"
-                                        >
+                                            <!-- Integrated Interaction Log -->
                                             <div
-                                                class="flex items-center gap-2 text-xs text-gray-500"
+                                                v-if="!selectedFile && sortedTranscript.length > 0"
+                                                class="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700"
                                             >
-                                                <span
-                                                    class="font-bold uppercase"
-                                                    :class="{
-                                                        'text-blue-600': item.role === 'assistant',
-                                                        'text-green-600': item.role === 'user',
-                                                        'text-gray-600': item.role === 'system',
-                                                    }"
-                                                    >{{ item.role }}</span
+                                                <h3
+                                                    class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4 px-2"
                                                 >
-                                                <span>{{
-                                                    new Date(item.timestamp).toLocaleTimeString()
-                                                }}</span>
-                                            </div>
-
-                                            <!-- Assistant Message -->
-                                            <div
-                                                v-if="
-                                                    item.role === 'assistant' &&
-                                                    item.type === 'message'
-                                                "
-                                                class="prose dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm text-sm"
-                                            >
-                                                <!-- We might need to handle mixed blocks here, but for now raw text content -->
-                                                <!-- Claude Code content is array of blocks. Need parsing? -->
-                                                <!-- For now, check if metadata.raw.content is string or array -->
-                                                <div
-                                                    v-if="
-                                                        Array.isArray(
-                                                            (item.metadata?.raw as any)?.content
-                                                        )
-                                                    "
-                                                >
+                                                    Interaction Log (Latest First)
+                                                </h3>
+                                                <div class="space-y-4">
                                                     <div
-                                                        v-for="(block, bIdx) in (
-                                                            item.metadata?.raw as any
-                                                        ).content"
-                                                        :key="bIdx"
+                                                        v-for="(item, index) in sortedTranscript"
+                                                        :key="index"
+                                                        class="flex flex-col gap-2"
                                                     >
                                                         <div
-                                                            v-if="block.type === 'text'"
-                                                            v-html="
-                                                                renderMarkdownContent(block.text)
-                                                            "
-                                                        ></div>
-                                                        <div
-                                                            v-else-if="block.type === 'tool_use'"
-                                                            class="text-xs text-gray-500 italic mt-2"
+                                                            class="flex items-center gap-2 text-xs text-gray-500"
                                                         >
-                                                            Tool Call: {{ block.name }}
+                                                            <span
+                                                                class="font-bold uppercase"
+                                                                :class="{
+                                                                    'text-blue-600':
+                                                                        item.role === 'assistant',
+                                                                    'text-green-600':
+                                                                        item.role === 'user',
+                                                                    'text-gray-600':
+                                                                        item.role === 'system',
+                                                                }"
+                                                                >{{ item.role }}</span
+                                                            >
+                                                            <span>{{
+                                                                new Date(
+                                                                    item.timestamp
+                                                                ).toLocaleTimeString()
+                                                            }}</span>
+                                                        </div>
+
+                                                        <div
+                                                            v-if="
+                                                                item.role === 'assistant' &&
+                                                                item.type === 'message'
+                                                            "
+                                                            class="prose dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm text-sm"
+                                                        >
+                                                            <div
+                                                                v-if="
+                                                                    Array.isArray(
+                                                                        (item.metadata?.raw as any)
+                                                                            ?.content
+                                                                    )
+                                                                "
+                                                            >
+                                                                <div
+                                                                    v-for="(block, bIdx) in (
+                                                                        item.metadata?.raw as any
+                                                                    ).content"
+                                                                    :key="bIdx"
+                                                                >
+                                                                    <div
+                                                                        v-if="block.type === 'text'"
+                                                                        v-html="
+                                                                            renderMarkdownContent(
+                                                                                block.text
+                                                                            )
+                                                                        "
+                                                                    ></div>
+                                                                    <div
+                                                                        v-else-if="
+                                                                            block.type ===
+                                                                            'tool_use'
+                                                                        "
+                                                                        class="text-xs text-gray-500 italic mt-2"
+                                                                    >
+                                                                        Tool Call: {{ block.name }}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div v-else>No content</div>
+                                                        </div>
+
+                                                        <div
+                                                            v-else-if="
+                                                                item.role === 'user' &&
+                                                                item.type === 'tool_result'
+                                                            "
+                                                            class="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono overflow-x-auto"
+                                                        >
+                                                            <div
+                                                                v-if="
+                                                                    (item.metadata?.result as any)
+                                                                        ?.file
+                                                                "
+                                                                class="text-green-600 font-bold mb-1"
+                                                            >
+                                                                File Op:
+                                                                {{
+                                                                    (item.metadata?.result as any)
+                                                                        .file.filePath
+                                                                }}
+                                                            </div>
+                                                            <pre>{{
+                                                                (item.metadata?.result as any)?.file
+                                                                    ?.content ||
+                                                                JSON.stringify(
+                                                                    item.metadata?.result,
+                                                                    null,
+                                                                    2
+                                                                )
+                                                            }}</pre>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div v-else>No content</div>
-                                            </div>
-
-                                            <!-- User Tool Result -->
-                                            <div
-                                                v-else-if="
-                                                    item.role === 'user' &&
-                                                    item.type === 'tool_result'
-                                                "
-                                                class="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono overflow-x-auto"
-                                            >
-                                                <div
-                                                    v-if="(item.metadata?.result as any)?.file"
-                                                    class="text-green-600 font-bold mb-1"
-                                                >
-                                                    File Op:
-                                                    {{
-                                                        (item.metadata?.result as any).file.filePath
-                                                    }}
-                                                </div>
-                                                <pre>{{
-                                                    (item.metadata?.result as any)?.file?.content ||
-                                                    JSON.stringify(item.metadata?.result, null, 2)
-                                                }}</pre>
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- Close Content Container (Preview) -->
                                 </div>
                                 <!-- Close Preview Area -->
 

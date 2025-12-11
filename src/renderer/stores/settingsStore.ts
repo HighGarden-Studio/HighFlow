@@ -610,6 +610,8 @@ export const useSettingsStore = defineStore('settings', () => {
             models: [
                 'gemini-3-pro-image-preview', // Nano Banana Pro (premium, 4K, grounding)
                 'gemini-2.5-flash-image', // Nano Banana (fast, stable)
+                'veo-3.1-generate-preview',
+                'veo-2.0-generate-preview',
                 'gemini-3.0-pro-exp',
                 'gemini-3.0-flash-exp',
                 'gemini-2.0-flash-exp',
@@ -2084,7 +2086,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
             const storedProfile = loadFromStorage<Partial<UserProfile> | null>('userProfile', null);
             if (storedProfile) {
-                userProfile.value = { ...userProfile.value, ...storedProfile };
+                userProfile.value = {
+                    ...userProfile.value,
+                    ...storedProfile,
+                    language: storedProfile.language || 'ko',
+                };
             }
 
             const storedGeneral = loadFromStorage<Partial<GeneralSettings> | null>(

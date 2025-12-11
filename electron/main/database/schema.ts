@@ -214,6 +214,7 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         isPaused: integer('is_paused', { mode: 'boolean' }).notNull().default(false), // IN_PROGRESS 일시정지
         autoReview: integer('auto_review', { mode: 'boolean' }).notNull().default(false), // 자동 REVIEW 수행
         autoReviewed: integer('auto_reviewed', { mode: 'boolean' }).notNull().default(false), // AI 자동 검토 완료
+        autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false), // 자동 승인 (검토 없이 완료)
         reviewFailed: integer('review_failed', { mode: 'boolean' }).notNull().default(false), // 리뷰 실패 여부 (점수 7점 이하)
         triggerConfig: text('trigger_config', { mode: 'json' }), // 트리거 설정 (의존성, 시간)
         pausedAt: integer('paused_at', { mode: 'timestamp' }), // 일시정지 시간
@@ -232,6 +233,11 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
             .default('[]'), // 추천 AI Provider 목록
         requiredMCPs: text('required_mcps', { mode: 'json' }).notNull().default('[]'), // 필요한 MCP 서버 목록
         aiOptimizedPrompt: text('ai_optimized_prompt'), // AI 실행용 최적화된 프롬프트
+        // Script Task 필드
+        taskType: text('task_type').default('ai'), // 'ai' | 'script'
+        scriptCode: text('script_code'), // 스크립트 코드
+        scriptLanguage: text('script_language'), // 'javascript' | 'typescript' | 'python'
+        scriptRuntime: text('script_runtime'), // 실행 환경 정보
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),

@@ -63,3 +63,19 @@ export function getProviderIcon(providerId: string): string {
 
     return providerIconMap[providerId] || 'ph:cube';
 }
+
+/**
+ * Get file icon for script languages
+ * Uses vscode-icons prefix for file type icons
+ * @param language - The script language
+ * @returns Iconify icon name for the language
+ */
+export function getScriptLanguageIcon(language: string): string {
+    const languageIconMap: Record<string, string> = {
+        javascript: 'vscode-icons:file-type-js-official',
+        typescript: 'vscode-icons:file-type-typescript-official',
+        python: 'vscode-icons:file-type-python',
+    };
+
+    return languageIconMap[language] || 'vscode-icons:file-type-text';
+}

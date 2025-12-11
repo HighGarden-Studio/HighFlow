@@ -15,6 +15,9 @@ import { useSettingsStore } from '../../renderer/stores/settingsStore';
 import { useTaskStore } from '../../renderer/stores/taskStore';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
+import CodeEditor from '../common/CodeEditor.vue';
+import type { ScriptLanguage } from '@core/types/database';
+import NotificationSettings from '../common/NotificationSettings.vue';
 
 // Helper to check if a provider is a local agent
 function isLocalAgentProvider(provider: string | null): {
@@ -79,8 +82,12 @@ onUnmounted(() => {
 
 // Local state
 const localTask = ref<Task | null>(null);
-const activeTab = ref<'prompt' | 'settings' | 'details' | 'comments' | 'history'>('prompt');
+const activeTab = ref<'prompt' | 'settings' | 'details' | 'notifications' | 'comments' | 'history'>(
+    'prompt'
+);
 const promptText = ref('');
+const scriptCode = ref('');
+const scriptLanguage = ref<ScriptLanguage>('javascript');
 const aiProvider = ref<AIProvider | null>(null);
 const aiModel = ref<string | null>(null);
 const reviewAiProvider = ref<AIProvider | null>(null);
@@ -288,90 +295,125 @@ const sequencesToTaskIds = (sequences: string): number[] => {
 };
 
 // Watch for task changes
+const isInitializing = ref(false);
+const previousTaskId = ref<number | null>(null);
+
+// Watch for task changes
 watch(
     () => props.task,
     (newTask) => {
         if (newTask) {
-            localTask.value = { ...newTask };
-            promptText.value = newTask.description || '';
-
-            // Inherit from project if task doesn't have explicit settings
-            const project = projectStore.currentProject;
-            const effectiveProvider = (newTask.aiProvider ||
-                project?.aiProvider ||
-                null) as AIProvider | null;
-            const effectiveModel = newTask.aiModel || project?.aiModel || null;
-
-            aiProvider.value = effectiveProvider;
-            aiModel.value = effectiveModel;
-
-            // For review settings, also inherit from project if not set
-            reviewAiProvider.value = (newTask.reviewAiProvider ||
-                effectiveProvider) as AIProvider | null;
-            reviewAiModel.value =
-                newTask.reviewAiModel ||
-                effectiveModel ||
-                getDefaultModelForProvider(reviewAiProvider.value);
-            autoReview.value = newTask.autoReview || false;
-            selectedMCPTools.value = Array.isArray(newTask.requiredMCPs)
-                ? [...newTask.requiredMCPs]
-                : [];
-            loadTaskMCPConfig(newTask);
-            selectedMCPTools.value.forEach((id) => ensureMCPConfigEntry(id));
-            if (!localAgentWorkingDir.value && baseDevFolder.value) {
-                localAgentWorkingDir.value = baseDevFolder.value;
+            // Only re-initialize if this is a different task
+            // For the same task, Vue's reactivity will handle updates
+            if (previousTaskId.value === newTask.id) {
+                // Same task - skip re-initialization to prevent loops
+                return;
             }
 
-            // Check if aiProvider is a local agent and set execution mode accordingly
-            const aiProviderInfo = isLocalAgentProvider(effectiveProvider);
-            if (aiProviderInfo.isLocal) {
-                executionMode.value = 'local';
-                selectedLocalAgent.value = aiProviderInfo.agentType;
-            } else {
-                executionMode.value = 'api';
-                selectedLocalAgent.value = null;
-            }
+            previousTaskId.value = newTask.id;
+            isInitializing.value = true;
+            try {
+                localTask.value = { ...newTask };
+                promptText.value = newTask.description || '';
 
-            // 트리거 설정 로드
-            if (newTask.triggerConfig) {
-                if (newTask.triggerConfig.dependsOn) {
-                    triggerType.value = 'dependency';
-                    // Convert task IDs to project sequences for display
-                    dependencyTaskIds.value = taskIdsToSequences(
-                        newTask.triggerConfig.dependsOn.taskIds
-                    );
-                    dependencyOperator.value = newTask.triggerConfig.dependsOn.operator;
-                    dependencyExecutionPolicy.value =
-                        newTask.triggerConfig.dependsOn.executionPolicy || 'once';
-                } else if (newTask.triggerConfig.scheduledAt) {
-                    triggerType.value = 'time';
-                    scheduleType.value = newTask.triggerConfig.scheduledAt.type;
-                    scheduledDatetime.value = newTask.triggerConfig.scheduledAt.datetime || '';
-                    cronExpression.value = newTask.triggerConfig.scheduledAt.cron || '';
-                    timezone.value = newTask.triggerConfig.scheduledAt.timezone || 'Asia/Seoul';
+                // Initialize script fields for script tasks
+                console.log('[TaskDetailPanel] Task loaded:', {
+                    id: newTask.id,
+                    title: newTask.title,
+                    taskType: newTask.taskType,
+                    scriptLanguage: newTask.scriptLanguage,
+                    hasScriptCode: !!newTask.scriptCode,
+                });
+                if (newTask.taskType === 'script') {
+                    scriptCode.value = newTask.scriptCode || '';
+                    scriptLanguage.value =
+                        (newTask.scriptLanguage as ScriptLanguage) || 'javascript';
                 }
-            } else {
-                triggerType.value = 'none';
-            }
 
-            // Details tab 필드 초기화
-            priority.value = newTask.priority || 'medium';
-            tags.value = newTask.tags
-                ? typeof newTask.tags === 'string'
-                    ? JSON.parse(newTask.tags)
-                    : newTask.tags
-                : [];
-            assignedOperatorId.value = newTask.assignedOperatorId || null;
-            estimatedMinutes.value = newTask.estimatedMinutes || 0;
-            dueDate.value = newTask.dueDate
-                ? new Date(newTask.dueDate).toISOString().slice(0, 16)
-                : '';
+                // Inherit from project if task doesn't have explicit settings
+                const project = projectStore.currentProject;
+                const effectiveProvider = (newTask.aiProvider ||
+                    project?.aiProvider ||
+                    null) as AIProvider | null;
+                const effectiveModel = newTask.aiModel || project?.aiModel || null;
 
-            // 히스토리 탭이 열려있으면 히스토리 새로고침
-            if (activeTab.value === 'history') {
-                loadTaskHistory();
+                aiProvider.value = effectiveProvider;
+                aiModel.value = effectiveModel;
+
+                // For review settings, also inherit from project if not set
+                reviewAiProvider.value = (newTask.reviewAiProvider ||
+                    effectiveProvider) as AIProvider | null;
+                reviewAiModel.value =
+                    newTask.reviewAiModel ||
+                    effectiveModel ||
+                    getDefaultModelForProvider(reviewAiProvider.value);
+                autoReview.value = newTask.autoReview || false;
+                selectedMCPTools.value = Array.isArray(newTask.requiredMCPs)
+                    ? [...newTask.requiredMCPs]
+                    : [];
+                loadTaskMCPConfig(newTask);
+                selectedMCPTools.value.forEach((id) => ensureMCPConfigEntry(id));
+                if (!localAgentWorkingDir.value && baseDevFolder.value) {
+                    localAgentWorkingDir.value = baseDevFolder.value;
+                }
+
+                // Check if aiProvider is a local agent and set execution mode accordingly
+                const aiProviderInfo = isLocalAgentProvider(effectiveProvider);
+                if (aiProviderInfo.isLocal) {
+                    executionMode.value = 'local';
+                    selectedLocalAgent.value = aiProviderInfo.agentType;
+                } else {
+                    executionMode.value = 'api';
+                    selectedLocalAgent.value = null;
+                }
+
+                // 트리거 설정 로드
+                if (newTask.triggerConfig) {
+                    if (newTask.triggerConfig.dependsOn) {
+                        triggerType.value = 'dependency';
+                        // Convert task IDs to project sequences for display
+                        dependencyTaskIds.value = taskIdsToSequences(
+                            newTask.triggerConfig.dependsOn.taskIds
+                        );
+                        dependencyOperator.value = newTask.triggerConfig.dependsOn.operator;
+                        dependencyExecutionPolicy.value =
+                            newTask.triggerConfig.dependsOn.executionPolicy || 'once';
+                    } else if (newTask.triggerConfig.scheduledAt) {
+                        triggerType.value = 'time';
+                        scheduleType.value = newTask.triggerConfig.scheduledAt.type;
+                        scheduledDatetime.value = newTask.triggerConfig.scheduledAt.datetime || '';
+                        cronExpression.value = newTask.triggerConfig.scheduledAt.cron || '';
+                        timezone.value = newTask.triggerConfig.scheduledAt.timezone || 'Asia/Seoul';
+                    }
+                } else {
+                    triggerType.value = 'none';
+                }
+
+                // Details tab 필드 초기화
+                priority.value = newTask.priority || 'medium';
+                tags.value = newTask.tags
+                    ? typeof newTask.tags === 'string'
+                        ? JSON.parse(newTask.tags)
+                        : newTask.tags
+                    : [];
+                assignedOperatorId.value = newTask.assignedOperatorId || null;
+                estimatedMinutes.value = newTask.estimatedMinutes || 0;
+                dueDate.value = newTask.dueDate
+                    ? new Date(newTask.dueDate).toISOString().slice(0, 16)
+                    : '';
+
+                // 히스토리 탭이 열려있으면 히스토리 새로고침
+                if (activeTab.value === 'history') {
+                    loadTaskHistory();
+                }
+            } finally {
+                // Use nextTick to ensure watchers have fired and been ignored
+                setTimeout(() => {
+                    isInitializing.value = false;
+                }, 0);
             }
         } else {
+            previousTaskId.value = null;
             localTask.value = null;
             selectedMCPTools.value = [];
             taskMCPConfig.value = {};
@@ -392,6 +434,7 @@ watch(isDevProject, (isDev) => {
 
 // Persist execution-related changes
 watch([aiProvider, executionMode, selectedLocalAgent, localAgentWorkingDir], () => {
+    if (isInitializing.value) return;
     persistExecutionSettings();
 });
 
@@ -416,6 +459,7 @@ watch(
 );
 
 watch(aiModel, () => {
+    if (isInitializing.value) return;
     persistExecutionSettings();
 });
 
@@ -429,6 +473,7 @@ watch(
         ) {
             reviewAiModel.value = defaultModel;
         }
+        if (isInitializing.value) return;
         persistExecutionSettings();
     }
 );
@@ -444,8 +489,29 @@ watch(
 );
 
 watch(reviewAiModel, () => {
+    if (isInitializing.value) return;
     persistExecutionSettings();
 });
+
+// Enforce mutual exclusivity between autoReview and autoApprove
+watch(autoReview, (newValue) => {
+    if (isInitializing.value) return;
+    if (newValue && localTask.value?.autoApprove) {
+        // Disable autoApprove when autoReview is enabled
+        localTask.value.autoApprove = false;
+    }
+});
+
+watch(
+    () => localTask.value?.autoApprove,
+    (newValue) => {
+        if (isInitializing.value) return;
+        if (newValue && autoReview.value) {
+            // Disable autoReview when autoApprove is enabled
+            autoReview.value = false;
+        }
+    }
+);
 
 // Watch for tab changes to load history
 watch(activeTab, (newTab) => {
@@ -799,6 +865,7 @@ function handleSave() {
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: buildMCPConfigPayload(),
         expectedOutputFormat: localTask.value.expectedOutputFormat,
+        assignedOperatorId: assignedOperatorId.value,
     };
 
     emit('save', updatedTask as Task);
@@ -809,43 +876,19 @@ async function handleDetailsUpdate() {
     if (!localTask.value) return;
 
     const updatedTask = {
-        ...localTask.value,
+        ...(localTask.value as any), // Cast to any to allow overriding properties safely
         priority: priority.value,
-        tags: JSON.stringify(tags.value),
+        tags: tags.value, // Use array directly, backend/drizzle handles JSON serialization
         assignedOperatorId: assignedOperatorId.value,
         estimatedMinutes: estimatedMinutes.value,
         dueDate: dueDate.value ? new Date(dueDate.value).toISOString() : null,
     };
 
-    try {
-        await window.electron.tasks.update(updatedTask.id, updatedTask as any);
-        localTask.value = updatedTask;
-        // Refresh task data
-        emit('save', updatedTask as Task);
-    } catch (error) {
-        console.error('Failed to update task details:', error);
-    }
-}
+    // Optimistic update
+    localTask.value = updatedTask as Task;
 
-/**
- * Handle execute
- */
-async function handleExecute() {
-    if (!localTask.value) return;
-
-    // Local Agent 실행 모드
-    if (executionMode.value === 'local' && selectedLocalAgent.value && localAgentWorkingDir.value) {
-        await handleLocalAgentExecute();
-        return;
-    }
-
-    // API 실행 모드
-    // isExecuting.value = true; // Removed local state
-    // executionProgress.value = 0; // Removed local state
-
-    // Simulation logic removed
-
-    emit('execute', localTask.value);
+    // Delegate API call to parent's handler (taskStore)
+    emit('save', updatedTask as Task);
 }
 
 /**
@@ -998,6 +1041,85 @@ function handleClose() {
 function handleSubdivide() {
     if (!localTask.value) return;
     emit('subdivide', localTask.value);
+}
+
+/**
+ * Handle execute
+ */
+async function handleExecute() {
+    if (!localTask.value) return;
+
+    try {
+        // Check if it's a script task or AI task
+        if (localTask.value.taskType === 'script') {
+            // Execute script task
+            console.log(`Executing script task ${localTask.value.id}`);
+
+            if (!localTask.value.scriptCode) {
+                alert('스크립트 코드가 없습니다.');
+                return;
+            }
+
+            const result = await window.electron.tasks.executeScript(localTask.value.id);
+
+            if (result.success) {
+                console.log('Script execution completed:', result);
+            } else {
+                console.error('Script execution failed:', result.error);
+            }
+        } else {
+            // Execute AI task (existing logic)
+            console.log(`Executing AI task ${localTask.value.id}`);
+            // Local Agent 실행 모드
+            if (
+                executionMode.value === 'local' &&
+                selectedLocalAgent.value &&
+                localAgentWorkingDir.value
+            ) {
+                await handleLocalAgentExecute();
+                return;
+            }
+            emit('execute', localTask.value);
+        }
+    } catch (error) {
+        console.error('Task execution error:', error);
+        alert(`실행 오류: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
+// Notification config helpers
+function parseNotificationConfig(config: any): any {
+    if (!config) return null;
+    try {
+        return typeof config === 'string' ? JSON.parse(config) : config;
+    } catch (error) {
+        console.error('Failed to parse notification config:', error);
+        return null;
+    }
+}
+
+async function handleUpdateNotificationConfig(config: any) {
+    if (!localTask.value) return;
+
+    try {
+        const electron = window.electron;
+        if (electron) {
+            // @ts-ignore - IPC handler exists
+            await electron.ipcRenderer.invoke(
+                'tasks:update-notification-config',
+                localTask.value.id,
+                config
+            );
+            console.log('Notification config updated');
+        }
+    } catch (error) {
+        console.error('Failed to update notification config:', error);
+    }
+}
+
+async function handleTestNotification() {
+    // TODO: Implement test notification
+    console.log('Test notification requested');
 }
 
 /**
@@ -1233,6 +1355,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
             >
                 <div
                     class="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-h-[90vh]"
+                    style="min-height: 900px"
                 >
                     <!-- Header -->
                     <div
@@ -1308,10 +1431,16 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     'prompt',
                                     'settings',
                                     'details',
+                                    'notifications',
                                     'comments',
                                     'history',
                                 ] as const"
                                 :key="tab"
+                                v-show="
+                                    tab !== 'settings' ||
+                                    !localTask?.taskType ||
+                                    localTask?.taskType === 'ai'
+                                "
                                 :class="[
                                     'pb-2 px-1 text-sm font-medium transition-colors',
                                     activeTab === tab
@@ -1322,14 +1451,16 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                             >
                                 {{
                                     tab === 'prompt'
-                                        ? '프롬프트'
+                                        ? '실행 설정'
                                         : tab === 'settings'
                                           ? 'AI 설정'
                                           : tab === 'details'
                                             ? '상세 정보'
-                                            : tab === 'comments'
-                                              ? '댓글'
-                                              : '히스토리'
+                                            : tab === 'notifications'
+                                              ? '알림'
+                                              : tab === 'comments'
+                                                ? '댓글'
+                                                : '히스토리'
                                 }}
                             </button>
                         </div>
@@ -1384,101 +1515,158 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                             </div>
                         </div>
 
-                        <!-- Prompt Tab -->
-                        <div v-if="activeTab === 'prompt'" class="space-y-4">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <label
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
-                                        프롬프트 (작업 설명)
-                                    </label>
-                                    <div class="flex items-center gap-2">
-                                        <MacroInsertButton
-                                            :dependent-task-ids="dependentTaskIdList"
+                        <!-- 실행 설정 Tab -->
+                        <div v-if="activeTab === 'prompt'" class="space-y-6">
+                            <!-- AI Task: Prompt Section -->
+                            <div v-if="!localTask?.taskType || localTask?.taskType === 'ai'">
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-2">
+                                            <label
+                                                class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                            >
+                                                프롬프트 (작업 설명)
+                                            </label>
+                                            <div class="flex items-center gap-2">
+                                                <MacroInsertButton
+                                                    :dependent-task-ids="dependentTaskIdList"
+                                                    :disabled="isReadOnly"
+                                                    @insert="handleMacroInsert"
+                                                />
+                                                <button
+                                                    :disabled="isReadOnly"
+                                                    @click="showTemplatePicker = true"
+                                                    :class="[
+                                                        'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
+                                                        isReadOnly
+                                                            ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                                            : 'bg-gray-600 hover:bg-gray-500 text-white',
+                                                    ]"
+                                                >
+                                                    <svg
+                                                        class="w-4 h-4 mr-1.5"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"
+                                                        />
+                                                    </svg>
+                                                    템플릿
+                                                </button>
+                                                <button
+                                                    :disabled="isReadOnly"
+                                                    @click="showPromptEnhancer = true"
+                                                    :class="[
+                                                        'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
+                                                        isReadOnly
+                                                            ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                                            : 'bg-purple-600 hover:bg-purple-500 text-white',
+                                                    ]"
+                                                >
+                                                    <svg
+                                                        class="w-4 h-4 mr-1.5"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                                                        />
+                                                    </svg>
+                                                    AI 고도화
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <textarea
+                                            ref="promptTextarea"
+                                            v-model="promptText"
                                             :disabled="isReadOnly"
-                                            @insert="handleMacroInsert"
+                                            rows="15"
+                                            :class="[
+                                                'w-full px-3 py-2 border rounded-lg font-mono text-sm',
+                                                isReadOnly
+                                                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 cursor-not-allowed'
+                                                    : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                                            ]"
+                                            placeholder="AI에게 전달할 작업 지시사항을 입력하세요..."
                                         />
-                                        <button
-                                            :disabled="isReadOnly"
-                                            @click="showTemplatePicker = true"
-                                            :class="[
-                                                'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
-                                                isReadOnly
-                                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    : 'bg-gray-600 hover:bg-gray-500 text-white',
-                                            ]"
+                                        <div
+                                            class="flex items-center justify-between mt-2 text-xs text-gray-500"
                                         >
-                                            <svg
-                                                class="w-4 h-4 mr-1.5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
+                                            <span>{{ promptText.length }}자</span>
+                                            <span
+                                                v-if="promptText.length < 50"
+                                                class="text-yellow-500"
                                             >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"
-                                                />
-                                            </svg>
-                                            템플릿
-                                        </button>
-                                        <button
-                                            :disabled="isReadOnly"
-                                            @click="showPromptEnhancer = true"
-                                            :class="[
-                                                'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
-                                                isReadOnly
-                                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    : 'bg-purple-600 hover:bg-purple-500 text-white',
-                                            ]"
-                                        >
-                                            <svg
-                                                class="w-4 h-4 mr-1.5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
+                                                더 상세한 지시사항을 작성하면 좋은 결과를 얻을 수
+                                                있습니다
+                                            </span>
+                                        </div>
+
+                                        <!-- 매크로 사용 힌트 -->
+                                        <div v-if="promptText && promptText.includes('{{')">
+                                            <p
+                                                class="mt-2 text-xs text-indigo-600 dark:text-indigo-400"
                                             >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                                                />
-                                            </svg>
-                                            AI 고도화
-                                        </button>
+                                                ✨ 매크로가 포함되어 있습니다. 실행 시 실제 값으로
+                                                치환됩니다.
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-                                <textarea
-                                    ref="promptTextarea"
-                                    v-model="promptText"
-                                    :disabled="isReadOnly"
-                                    rows="15"
-                                    :class="[
-                                        'w-full px-3 py-2 border rounded-lg font-mono text-sm',
-                                        isReadOnly
-                                            ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 cursor-not-allowed'
-                                            : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-                                    ]"
-                                    placeholder="AI에게 전달할 작업 지시사항을 입력하세요..."
-                                />
-                                <div
-                                    class="flex items-center justify-between mt-2 text-xs text-gray-500"
-                                >
-                                    <span>{{ promptText.length }}자</span>
-                                    <span v-if="promptText.length < 50" class="text-yellow-500">
-                                        더 상세한 지시사항을 작성하면 좋은 결과를 얻을 수 있습니다
-                                    </span>
+                            </div>
+
+                            <!-- Script Task: Code Editor -->
+                            <div v-else-if="localTask?.taskType === 'script'" class="space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <label
+                                        class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                    >
+                                        스크립트 코드
+                                    </label>
+                                    <select
+                                        v-model="scriptLanguage"
+                                        class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    >
+                                        <option value="javascript">JavaScript</option>
+                                        <option value="typescript">TypeScript</option>
+                                        <option value="python">Python</option>
+                                    </select>
                                 </div>
 
-                                <!-- 매크로 사용 힌트 -->
-                                <div v-if="promptText && promptText.includes('{{')">
-                                    <p class="mt-2 text-xs text-indigo-600 dark:text-indigo-400">
-                                        ✨ 매크로가 포함되어 있습니다. 실행 시 실제 값으로
-                                        치환됩니다.
-                                    </p>
+                                <CodeEditor
+                                    v-model="scriptCode"
+                                    :language="scriptLanguage"
+                                    height="450px"
+                                />
+
+                                <div
+                                    class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+                                >
+                                    <MacroInsertButton
+                                        :dependent-task-ids="dependentTaskIdList"
+                                        :disabled="isReadOnly"
+                                        @insert="handleMacroInsert"
+                                    />
+                                    <span v-pre
+                                        >매크로 사용 가능:
+                                        <code
+                                            class="text-purple-600 dark:text-purple-400"
+                                            >{{task:N}}</code
+                                        >,
+                                        <code class="text-purple-600 dark:text-purple-400">{{
+                                            project.name
+                                        }}</code>
+                                        등</span
+                                    >
                                 </div>
                             </div>
 
@@ -1716,8 +1904,34 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
 
                         <!-- Settings Tab -->
                         <div v-if="activeTab === 'settings'" class="space-y-6">
-                            <!-- AI Execution Info Section -->
+                            <!-- Script Task Notice -->
                             <div
+                                v-if="localTask?.taskType === 'script'"
+                                class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300"
+                                >
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path
+                                            fill-rule="evenodd"
+                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                            clip-rule="evenodd"
+                                        />
+                                    </svg>
+                                    <div>
+                                        <div class="font-medium">스크립트 태스크</div>
+                                        <div class="text-xs mt-0.5">
+                                            작성한 코드를 직접 실행합니다. AI 실행 설정이 필요하지
+                                            않습니다.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Execution Info Section (AI Tasks Only) -->
+                            <div
+                                v-if="!localTask?.taskType || localTask?.taskType === 'ai'"
                                 class="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3"
                             >
                                 <h4
@@ -1946,9 +2160,13 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </div>
                             </div>
 
-                            <!-- Local Agent Settings (when local mode selected) -->
+                            <!-- Local Agent Settings (when local mode selected, AI tasks only) -->
                             <div
-                                v-if="executionMode === 'local' && isDevProject"
+                                v-if="
+                                    (!localTask?.taskType || localTask?.taskType === 'ai') &&
+                                    executionMode === 'local' &&
+                                    isDevProject
+                                "
                                 class="space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
                             >
                                 <h4
@@ -2076,9 +2294,13 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </div>
                             </div>
 
-                            <!-- AI Provider Selection (when API mode selected) -->
-                            <!-- AI Provider Selection (when API mode selected) -->
-                            <div v-if="executionMode === 'api'">
+                            <!-- AI Provider Selection (when API mode selected, AI tasks only) -->
+                            <div
+                                v-if="
+                                    (!localTask?.taskType || localTask?.taskType === 'ai') &&
+                                    executionMode === 'api'
+                                "
+                            >
                                 <AIProviderSelector
                                     v-model:provider="aiProvider"
                                     v-model:model="aiModel"
@@ -2193,6 +2415,80 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             v-model:model="reviewAiModel"
                                             label="리뷰 AI (제공자/모델)"
                                         />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 자동 승인 옵션 -->
+                            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        v-model="localTask.autoApprove"
+                                        type="checkbox"
+                                        class="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                    />
+                                    <div class="flex-1">
+                                        <span
+                                            class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                        >
+                                            자동 승인
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            실행 성공 시 검토 없이 바로 완료(DONE) 처리
+                                        </p>
+                                    </div>
+                                </label>
+
+                                <!-- Warning if project has auto-review enabled -->
+                                <div
+                                    v-if="
+                                        localTask.autoApprove &&
+                                        projectStore.currentProject?.autoReview
+                                    "
+                                    class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                        <p class="text-xs text-amber-700 dark:text-amber-300">
+                                            이 태스크는 프로젝트 자동 검토 대신 자동 승인을
+                                            사용합니다
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Info if neither is enabled -->
+                                <div
+                                    v-if="
+                                        !localTask.autoApprove &&
+                                        !projectStore.currentProject?.autoReview
+                                    "
+                                    class="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                        <p class="text-xs text-blue-700 dark:text-blue-300">
+                                            실행 완료 후 수동 검토가 필요합니다
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -2595,6 +2891,38 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     Update Details
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Notifications Tab -->
+                        <div v-if="activeTab === 'notifications'" class="space-y-4">
+                            <div class="flex items-center gap-2 mb-4">
+                                <svg
+                                    class="w-5 h-5 text-purple-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                >
+                                    <path
+                                        d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"
+                                    />
+                                </svg>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    알림 설정
+                                </h3>
+                            </div>
+
+                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                태스크 실행, 리뷰 이벤트 발생 시 Slack 또는 Webhook으로 알림을 받을
+                                수 있습니다. 태스크별 설정이 프로젝트 설정보다 우선합니다.
+                            </p>
+
+                            <NotificationSettings
+                                v-if="localTask"
+                                :config="parseNotificationConfig(localTask.notificationConfig)"
+                                :has-auto-review="localTask.autoReview || false"
+                                level="task"
+                                @update="handleUpdateNotificationConfig"
+                                @test="handleTestNotification"
+                            />
                         </div>
 
                         <!-- Comments Tab -->

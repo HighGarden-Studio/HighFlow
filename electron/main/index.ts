@@ -25,6 +25,8 @@ import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
 import type { ProjectStatus, ProjectExportData } from '@core/types/database';
 import log from 'electron-log'; // Added for logging
+import { taskScheduler } from './services/task-scheduler';
+import { taskNotificationService } from './services/task-notification-service';
 
 // Configure logging
 log.initialize();
@@ -229,6 +231,23 @@ async function registerIpcHandlers(): Promise<void> {
         }
     );
 
+    // Update project notification config
+    ipcMain.handle(
+        'projects:update-notification-config',
+        async (_event, projectId: number, config: any) => {
+            try {
+                const project = await projectRepo.update(projectId, {
+                    notificationConfig: config ? JSON.stringify(config) : null,
+                });
+                mainWindow?.webContents.send('project:updated', project);
+                return project;
+            } catch (error) {
+                console.error('Error updating project notification config:', error);
+                throw error;
+            }
+        }
+    );
+
     ipcMain.handle('projects:delete', async (_event, id: number) => {
         try {
             await projectRepo.delete(id);
@@ -308,8 +327,23 @@ async function registerIpcHandlers(): Promise<void> {
         try {
             const task = await taskRepo.update(id, data);
             mainWindow?.webContents.send('task:updated', task);
+
+            // Update scheduler if trigger config changed
+            if (data.triggerConfig !== undefined) {
+                await taskScheduler.updateTask(task);
+            }
+
             if (data.status) {
                 mainWindow?.webContents.send('task:status-changed', { id, status: data.status });
+
+                // Send notification for status change
+                if (
+                    data.status === 'done' ||
+                    data.status === 'in_review' ||
+                    data.status === 'blocked'
+                ) {
+                    await taskNotificationService.notifyStatusChange(id, task.status, data.status);
+                }
 
                 // Check for dependent tasks if status changed to 'done'
                 if (data.status === 'done') {
@@ -322,6 +356,23 @@ async function registerIpcHandlers(): Promise<void> {
             throw error;
         }
     });
+
+    // Update task notification config
+    ipcMain.handle(
+        'tasks:update-notification-config',
+        async (_event, taskId: number, config: any) => {
+            try {
+                const task = await taskRepo.update(taskId, {
+                    notificationConfig: config ? JSON.stringify(config) : null,
+                });
+                mainWindow?.webContents.send('task:updated', task);
+                return task;
+            } catch (error) {
+                console.error('Error updating task notification config:', error);
+                throw error;
+            }
+        }
+    );
 
     ipcMain.handle('tasks:delete', async (_event, id: number) => {
         try {
@@ -347,6 +398,65 @@ async function registerIpcHandlers(): Promise<void> {
             return await taskRepo.getGroupedByStatus(projectId);
         } catch (error) {
             console.error('Error getting grouped tasks:', error);
+            throw error;
+        }
+    });
+
+    // Script task execution
+    ipcMain.handle('tasks:execute-script', async (_event, taskId: number) => {
+        try {
+            const { scriptExecutor } = await import('./services/script-executor');
+            const task = await taskRepo.findById(taskId);
+
+            if (!task) {
+                throw new Error(`Task ${taskId} not found`);
+            }
+
+            if (task.taskType !== 'script') {
+                throw new Error(`Task ${taskId} is not a script task`);
+            }
+
+            // Update status to in_progress
+            await taskRepo.update(taskId, {
+                status: 'in_progress',
+                startedAt: new Date(),
+            });
+
+            mainWindow?.webContents.send('task:updated', await taskRepo.findById(taskId));
+
+            // Execute script
+            const result = await scriptExecutor.execute(task, task.projectId);
+
+            // Update task with result
+            const finalStatus = task.autoReview ? 'in_review' : result.success ? 'done' : 'done';
+            await taskRepo.update(taskId, {
+                status: finalStatus,
+                result: result.output,
+                completedAt: result.success ? new Date() : null,
+                actualCost: 0, // Scripts have no cost
+            });
+
+            const updatedTask = await taskRepo.findById(taskId);
+            mainWindow?.webContents.send('task:updated', updatedTask);
+
+            // Trigger dependent tasks if successful
+            if (result.success && updatedTask) {
+                const { checkAndExecuteDependentTasks } =
+                    await import('./ipc/task-execution-handlers');
+                await checkAndExecuteDependentTasks(taskId, updatedTask);
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Error executing script task:', error);
+
+            // Update task status to done with error
+            await taskRepo.update(taskId, {
+                status: 'done',
+                result: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            });
+
+            mainWindow?.webContents.send('task:updated', await taskRepo.findById(taskId));
             throw error;
         }
     });
@@ -444,6 +554,12 @@ app.whenReady().then(async () => {
         // Create main window
         createWindow();
 
+        // Initialize task scheduler (after window is created)
+        if (mainWindow) {
+            await taskScheduler.initialize(mainWindow);
+            taskNotificationService.initialize(mainWindow);
+        }
+
         // macOS: Re-create window when dock icon clicked
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0) {
@@ -458,6 +574,9 @@ app.whenReady().then(async () => {
 
 // Quit when all windows are closed (except on macOS)
 app.on('window-all-closed', () => {
+    // Clean up scheduler
+    taskScheduler.shutdown();
+
     if (process.platform !== 'darwin') {
         app.quit();
     }

@@ -66,6 +66,9 @@ export type AIModel =
     | 'o1'
     | 'gemini-2.5-flash-image' // Nano Banana (fast, stable)
     | 'gemini-3-pro-image-preview' // Nano Banana Pro (premium, 4K)
+    | 'gemini-3-pro-preview' // Gemini 3 Pro
+    | 'veo-3.1-generate-preview' // Veo 3.1 Video
+    | 'veo-2.0-generate-preview' // Veo 2.0 Video
     | 'gemini-3.0-pro-exp'
     | 'gemini-3.0-flash-exp'
     | 'gemini-2.0-flash-exp'

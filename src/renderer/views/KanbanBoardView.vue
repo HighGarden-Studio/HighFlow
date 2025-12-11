@@ -5,7 +5,7 @@
  * Task board with drag-and-drop support featuring full TaskCard component
  * with execute, retry, pause, resume, stop, subdivide, tags, subtasks features
  */
-import { onMounted, computed, ref } from 'vue';
+import { onMounted, onUnmounted, computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore, type TaskStatus, type TaskPriority, type Task } from '../stores/taskStore';
@@ -50,9 +50,16 @@ const createInColumn = ref<TaskStatus>('todo');
 const newTaskTitle = ref('');
 const newTaskDescription = ref('');
 const newTaskPriority = ref<TaskPriority>('medium');
+const newTaskType = ref<'ai' | 'script'>('ai');
+const newTaskScriptLanguage = ref<'javascript' | 'typescript' | 'python'>('javascript');
 const creating = ref(false);
 const draggedTask = ref<number | null>(null);
-const selectedTask = ref<Task | null>(null);
+const selectedTaskId = ref<number | null>(null);
+const selectedTask = computed(() => {
+    if (!selectedTaskId.value) return null;
+    // Directly access tasks array to get stable object reference
+    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
+});
 const showDetailPanel = ref(false);
 
 // Subdivision modal state
@@ -114,6 +121,8 @@ function openCreateModal(status: TaskStatus) {
     newTaskTitle.value = '';
     newTaskDescription.value = '';
     newTaskPriority.value = 'medium';
+    newTaskType.value = 'ai';
+    newTaskScriptLanguage.value = 'javascript';
     showCreateModal.value = true;
 }
 
@@ -125,13 +134,24 @@ async function handleCreateTask() {
         const basePrompt = `${newTaskTitle.value}\n\n${newTaskDescription.value}`;
         const autoTags = tagService.generatePromptTags(basePrompt);
 
-        const task = await taskStore.createTask({
+        const taskData: any = {
             projectId: projectId.value,
             title: newTaskTitle.value.trim(),
             description: newTaskDescription.value.trim(),
             priority: newTaskPriority.value,
             tags: autoTags,
-        });
+            taskType: newTaskType.value,
+        };
+
+        // Add script-specific fields
+        if (newTaskType.value === 'script') {
+            taskData.scriptLanguage = newTaskScriptLanguage.value;
+            taskData.scriptCode = getScriptTemplate(newTaskScriptLanguage.value);
+        }
+
+        console.log('[KanbanBoard] Creating task:', taskData);
+        const task = await taskStore.createTask(taskData);
+        console.log('[KanbanBoard] Task created:', task);
 
         if (task) {
             // Track tag usage for better suggestions
@@ -146,6 +166,15 @@ async function handleCreateTask() {
     } finally {
         creating.value = false;
     }
+}
+
+function getScriptTemplate(language: 'javascript' | 'typescript' | 'python'): string {
+    const templates = {
+        javascript: `// JavaScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
+        typescript: `// TypeScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
+        python: `# Python Script\n# 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nprint('Script started')\n\n# Your code here\n\nprint('Script completed')\n`,
+    };
+    return templates[language];
 }
 
 function handleDragStart(taskId: number) {
@@ -179,13 +208,13 @@ async function handleDrop(status: TaskStatus) {
 // };
 
 function openTaskDetail(task: Task) {
-    selectedTask.value = task;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 function closeDetailPanel() {
     showDetailPanel.value = false;
-    selectedTask.value = null;
+    selectedTaskId.value = null;
 }
 
 async function handleTaskSave(task: Task) {
@@ -307,7 +336,7 @@ async function handleEnhancePrompt(task: Task) {
 
 function handlePreviewPrompt(task: Task) {
     // Open task detail panel with prompt preview
-    selectedTask.value = task;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
@@ -325,19 +354,19 @@ async function handleRetry(task: Task) {
 
 function handleViewHistory(task: Task) {
     // Open task detail panel with history view
-    selectedTask.value = task;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 function handleViewProgress(task: Task) {
     // Open task detail panel with progress view
-    selectedTask.value = task;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 function handleViewStepHistory(task: Task) {
     // Open task detail panel with step history view
-    selectedTask.value = task;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
@@ -743,7 +772,10 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
     await taskStore.fetchTasks(projectId.value);
-    taskStore.initEventListeners();
+    const cleanup = taskStore.initEventListeners();
+    onUnmounted(() => {
+        cleanup();
+    });
 });
 </script>
 
@@ -1127,6 +1159,68 @@ onMounted(async () => {
                                     ]"
                                 >
                                     {{ priority }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Task Type Selection -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Task Type
+                            </label>
+                            <div class="flex gap-2">
+                                <button
+                                    type="button"
+                                    @click="newTaskType = 'ai'"
+                                    :class="[
+                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                                        newTaskType === 'ai'
+                                            ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+                                    ]"
+                                >
+                                    🤖 AI Task
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="newTaskType = 'script'"
+                                    :class="[
+                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                                        newTaskType === 'script'
+                                            ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-500'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+                                    ]"
+                                >
+                                    ⚡ Script Task
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Script Language Selection (shown only for script tasks) -->
+                        <div v-if="newTaskType === 'script'">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Script Language
+                            </label>
+                            <div class="flex gap-2">
+                                <button
+                                    v-for="lang in ['javascript', 'typescript', 'python']"
+                                    :key="lang"
+                                    type="button"
+                                    @click="newTaskScriptLanguage = lang as any"
+                                    :class="[
+                                        'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
+                                        newTaskScriptLanguage === lang
+                                            ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+                                    ]"
+                                >
+                                    {{
+                                        lang === 'javascript'
+                                            ? '🟨 JS'
+                                            : lang === 'typescript'
+                                              ? '🔷 TS'
+                                              : '🐍 PY'
+                                    }}
                                 </button>
                             </div>
                         </div>
