@@ -130,6 +130,9 @@ function buildGraph() {
             if (sourceTask) {
                 // Get output type label from SOURCE task (dependency)
                 const outputLabel = getOutputTypeLabel(sourceTask.outputType);
+                console.log(
+                    `📊 Edge ${depId}->${task.id}: outputType="${sourceTask.outputType}", label="${outputLabel}"`
+                );
 
                 taskEdges.push({
                     id: `e${depId}-${task.id}`,
@@ -150,6 +153,7 @@ function buildGraph() {
                     label: outputLabel,
                     data: {
                         onEdgeRemove: (edgeId: string) => {
+                            console.log('🗑️ Removing edge:', edgeId);
                             handleEdgeRemove([
                                 {
                                     id: edgeId,

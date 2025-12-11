@@ -11,16 +11,17 @@ interface Props {
     sourcePosition: string;
     targetPosition: string;
     label?: string;
-    markerEnd?: any; // Allow optional for compatibility
+    markerEnd?: any;
     style?: any;
-    data?: any;
+    data?: {
+        onEdgeRemove?: (edgeId: string) => void;
+    };
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
     (e: 'edgeClick', edgeId: string): void;
-    (e: 'edgeRemove', edgeId: string): void;
 }>();
 
 // Calculate bezier path
@@ -42,7 +43,10 @@ const labelY = computed(() => (props.sourceY + props.targetY) / 2);
 
 function handleRemove(event: MouseEvent) {
     event.stopPropagation();
-    emit('edgeRemove', props.id);
+    console.log('🔴 Delete button clicked for edge:', props.id);
+    if (props.data?.onEdgeRemove) {
+        props.data.onEdgeRemove(props.id);
+    }
 }
 </script>
 
