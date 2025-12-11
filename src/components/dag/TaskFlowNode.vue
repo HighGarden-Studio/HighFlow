@@ -46,12 +46,13 @@ function handleApprove() {
         <!-- Connection handles -->
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
-        <!-- TaskCard component -->
-        <div @click="handleClick">
+        <!-- TaskCard component with max-width -->
+        <div class="task-card-wrapper" @click="handleClick">
             <TaskCard
                 :task="data.task"
                 :subtasks="[]"
                 :is-dragging="false"
+                :hide-metadata="true"
                 @execute="handleExecute"
                 @previewResult="handlePreviewResult"
                 @retry="handleRetry"
@@ -66,7 +67,12 @@ function handleApprove() {
 <style scoped>
 .task-flow-node {
     position: relative;
-    min-width: 300px;
+    min-width: 280px;
+    max-width: 280px;
+}
+
+.task-card-wrapper {
+    max-width: 280px;
 }
 
 /* Connection handles */

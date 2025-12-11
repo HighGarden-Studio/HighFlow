@@ -16,6 +16,7 @@ interface Props {
     task: Task;
     subtasks?: Task[]; // 서브테스크 목록
     isDragging?: boolean;
+    hideMetadata?: boolean; // Hide metadata section in DAG view
     showAssignee?: boolean;
     showDueDate?: boolean;
     showPriority?: boolean;
@@ -2174,7 +2175,8 @@ const dependencySequences = computed(() => {
                     </div>
 
                     <!-- Subtask Footer -->
-                    <div class="flex items-center justify-between text-xs">
+                    <!-- Metadata: Assignee, Due Date, Estimated Duration -->
+                    <div v-if="!hideMetadata" class="flex items-center justify-between text-xs">
                         <div class="flex items-center gap-2">
                             <!-- Priority Badge -->
                             <span
