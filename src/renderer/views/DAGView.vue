@@ -4,7 +4,7 @@
  *
  * Modern DAG visualization using Vue Flow with automatic layout
  */
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, markRaw } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { VueFlow, useVueFlow, Position, MarkerType } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
