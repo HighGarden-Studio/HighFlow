@@ -191,69 +191,96 @@ function computeHierarchicalLayout(): { nodes: DAGNode[]; edges: DAGEdge[] } {
     const { nodes, edges } = graphData.value;
     if (nodes.length === 0) return { nodes, edges };
 
-    // Group by dependency level
-    const levels = new Map<number, DAGNode[]>();
-    const levelMap = new Map<number, number>();
-
-    function getLevel(node: DAGNode): number {
-        if (levelMap.has(node.id)) return levelMap.get(node.id)!;
-
-        const deps = getTaskDependencies(node.task);
-        if (deps.length === 0) {
-            levelMap.set(node.id, 0);
-            return 0;
-        }
-
-        let maxLevel = -1;
-        deps.forEach((depId) => {
-            const depNode = nodes.find((n) => n.id === depId);
-            if (depNode) {
-                const depLevel = getLevel(depNode);
-                maxLevel = Math.max(maxLevel, depLevel);
-            }
-        });
-
-        const nodeLevel = maxLevel + 1;
-        levelMap.set(node.id, nodeLevel);
-        return nodeLevel;
-    }
-
-    // Calculate levels for all nodes
+    // Build dependency map
+    const dependencyMap = new Map<number, number[]>();
     nodes.forEach((node) => {
-        const lvl = getLevel(node);
-        if (!levels.has(lvl)) levels.set(lvl, []);
-        levels.get(lvl)!.push(node);
+        dependencyMap.set(node.id, getTaskDependencies(node.task));
     });
 
-    // Position nodes with topological ordering within levels
-    const sortedLevels = Array.from(levels.entries()).sort((a, b) => a[0] - b[0]);
-    sortedLevels.forEach(([level, levelNodes]) => {
-        const y = level * LEVEL_HEIGHT + 100;
-
-        // Sort nodes within level by dependency count (left = fewer dependencies = executed first)
-        levelNodes.sort((a, b) => {
-            const aDeps = getTaskDependencies(a.task).length;
-            const bDeps = getTaskDependencies(b.task).length;
-            if (aDeps !== bDeps) return aDeps - bDeps;
-            // Secondary sort by ID for consistency
-            return a.id - b.id;
+    // Build reverse dependency map (who depends on this node)
+    const reverseDeps = new Map<number, number[]>();
+    nodes.forEach((node) => reverseDeps.set(node.id, []));
+    nodes.forEach((node) => {
+        const deps = dependencyMap.get(node.id) || [];
+        deps.forEach((depId) => {
+            if (reverseDeps.has(depId)) {
+                reverseDeps.get(depId)!.push(node.id);
+            }
         });
+    });
 
-        const totalWidth = levelNodes.length * (NODE_WIDTH + HORIZONTAL_SPACING);
-        const startX = -totalWidth / 2 + NODE_WIDTH / 2;
+    // Topological sorting with BFS
+    const levelMap = new Map<number, number>();
+    const inDegree = new Map<number, number>();
 
-        levelNodes.forEach((node, index) => {
-            // Check if there's a custom position
+    // Initialize in-degree
+    nodes.forEach((node) => {
+        const deps = dependencyMap.get(node.id) || [];
+        inDegree.set(node.id, deps.length);
+    });
+
+    // BFS queue - start with nodes that have no dependencies
+    const queue: number[] = [];
+    nodes.forEach((node) => {
+        if (inDegree.get(node.id) === 0) {
+            levelMap.set(node.id, 0);
+            queue.push(node.id);
+        }
+    });
+
+    // Process queue
+    while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        const currentLevel = levelMap.get(currentId) || 0;
+
+        // Update dependent nodes
+        const dependents = reverseDeps.get(currentId) || [];
+        dependents.forEach((depId) => {
+            const newDegree = (inDegree.get(depId) || 0) - 1;
+            inDegree.set(depId, newDegree);
+
+            if (newDegree === 0) {
+                // Set level to max(dependencies) + 1
+                const deps = dependencyMap.get(depId) || [];
+                const maxLevel = deps.reduce((max, id) => Math.max(max, levelMap.get(id) || 0), -1);
+                levelMap.set(depId, maxLevel + 1);
+                queue.push(depId);
+            }
+        });
+    }
+
+    // Group by level
+    const levels = new Map<number, DAGNode[]>();
+    nodes.forEach((node) => {
+        const level = levelMap.get(node.id) || 0;
+        if (!levels.has(level)) levels.set(level, []);
+        levels.get(level)!.push(node);
+    });
+
+    // Position nodes
+    const maxLevel = levels.size > 0 ? Math.max(...Array.from(levels.keys())) : 0;
+    const startX = 150;
+    const levelSpacing = 450;
+
+    for (let level = 0; level <= maxLevel; level++) {
+        const nodesInLevel = levels.get(level) || [];
+        nodesInLevel.sort((a, b) => a.id - b.id);
+
+        const x = startX + level * levelSpacing;
+        const totalHeight = nodesInLevel.length * LEVEL_HEIGHT;
+        const startY = -totalHeight / 2 + LEVEL_HEIGHT / 2;
+
+        nodesInLevel.forEach((node, idx) => {
             const customPos = customNodePositions.value.get(node.id);
             if (customPos) {
                 node.x = customPos.x;
                 node.y = customPos.y;
             } else {
-                node.x = startX + index * (NODE_WIDTH + HORIZONTAL_SPACING);
-                node.y = y;
+                node.x = x;
+                node.y = startY + idx * LEVEL_HEIGHT;
             }
         });
-    });
+    }
 
     return { nodes, edges };
 }
