@@ -821,7 +821,6 @@ function renderTaskNode(parent: any, node: DAGNode) {
     }
 
     // Auto-execution conditions (like Kanban)
-    const deps = getTaskDependencies(task);
 
     if (deps.length > 0) {
         const depText = deps.length === 1 ? `Task #${deps[0]}` : `${deps.length} tasks`;
@@ -872,8 +871,9 @@ function renderTaskNode(parent: any, node: DAGNode) {
         .attr('font-weight', 'bold')
         .text(statusText);
 
-    // Action buttons (right side)
-    let buttonX = NODE_WIDTH - 40;
+    // Action Buttons - at bottom
+    const buttonY = NODE_HEIGHT - 25;
+    let actionButtonX = NODE_WIDTH - 15;
 
     // Execute button (for TODO tasks)
     if (task.status === 'todo') {
