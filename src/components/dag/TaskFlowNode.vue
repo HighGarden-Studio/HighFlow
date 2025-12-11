@@ -55,8 +55,8 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
 function handleWrapperDragOver(event: DragEvent) {
     const types = event.dataTransfer?.types || [];
     if (types.includes('application/x-operator')) {
-        event.preventDefault();
-        event.stopPropagation();
+        event.preventDefault(); // CRITICAL: Required for drop to work!
+        // Don't stopPropagation - let it bubble to parent
         isOperatorDragOver.value = true;
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = 'copy';
@@ -77,7 +77,7 @@ function handleWrapperDrop(event: DragEvent) {
 
     if (operatorData) {
         event.preventDefault();
-        event.stopPropagation();
+        // Don't stopPropagation - let parent wrapper handle it too
         isOperatorDragOver.value = false;
 
         try {
