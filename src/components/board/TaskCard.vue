@@ -17,6 +17,8 @@ interface Props {
     subtasks?: Task[]; // 서브테스크 목록
     isDragging?: boolean;
     hideMetadata?: boolean; // Hide metadata section in DAG view
+    hidePrompt?: boolean; // Hide prompt/script content in DAG view
+    hideExtraActions?: boolean; // Hide extra action buttons in DAG view
     showAssignee?: boolean;
     showDueDate?: boolean;
     showPriority?: boolean;
@@ -1105,9 +1107,9 @@ const dependencySequences = computed(() => {
                 </div>
             </div>
 
-            <!-- Second Row: Output Format & Execution Order -->
+            <!-- Second Row: Output Format & Execution Order & Tags -->
             <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <!-- Expected Output Icon -->
                     <span
                         v-if="outputFormatInfo"
@@ -1121,6 +1123,23 @@ const dependencySequences = computed(() => {
                         <IconRenderer :emoji="outputFormatInfo.icon" class="w-4 h-4" />
                         <span class="font-semibold">{{ outputFormatInfo.label }}</span>
                     </span>
+
+                    <!-- Tags (moved here) -->
+                    <template v-if="showTags && tags.length > 0">
+                        <span
+                            v-for="(tag, index) in tags.slice(0, 3)"
+                            :key="index"
+                            class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                        >
+                            {{ tag }}
+                        </span>
+                        <span
+                            v-if="tags.length > 3"
+                            class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                        >
+                            +{{ tags.length - 3 }}
+                        </span>
+                    </template>
 
                     <!-- Execution Order -->
                     <span
@@ -1390,28 +1409,11 @@ const dependencySequences = computed(() => {
 
         <!-- Description -->
         <p
-            v-if="task.description && !isNeedsApprovalStatus && !hasMissingProvider"
+            v-if="!hidePrompt && task.description && !isNeedsApprovalStatus && !hasMissingProvider"
             class="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mb-3"
         >
             {{ task.description }}
         </p>
-
-        <!-- Tags -->
-        <div v-if="showTags && tags.length > 0" class="flex flex-wrap gap-1 mb-3">
-            <span
-                v-for="(tag, index) in tags.slice(0, 3)"
-                :key="index"
-                class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-            >
-                {{ tag }}
-            </span>
-            <span
-                v-if="tags.length > 3"
-                class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-            >
-                +{{ tags.length - 3 }}
-            </span>
-        </div>
 
         <!-- Streaming Preview - 실시간 AI 응답 미리보기 -->
         <div
@@ -1646,7 +1648,10 @@ const dependencySequences = computed(() => {
         </div>
 
         <!-- Action Buttons - Status specific -->
-        <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-2">
+        <div
+            v-if="!hideExtraActions"
+            class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-2"
+        >
             <!-- Preview Prompt Button - Shows warning if execution settings missing for TODO tasks -->
             <button
                 :class="[

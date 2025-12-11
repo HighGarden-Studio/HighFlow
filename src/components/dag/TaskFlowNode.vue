@@ -53,6 +53,8 @@ function handleApprove() {
                 :subtasks="[]"
                 :is-dragging="false"
                 :hide-metadata="true"
+                :hide-prompt="true"
+                :hide-extra-actions="true"
                 @execute="handleExecute"
                 @previewResult="handlePreviewResult"
                 @retry="handleRetry"
