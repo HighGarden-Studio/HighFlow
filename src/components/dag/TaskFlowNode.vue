@@ -52,7 +52,7 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
         <!-- TaskCard component with max-width -->
-        <div class="task-card-wrapper" @click="handleClick">
+        <div class="task-card-wrapper">
             <TaskCard
                 :task="data.task"
                 :subtasks="[]"
@@ -60,6 +60,7 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
                 :hide-metadata="true"
                 :hide-prompt="true"
                 :hide-extra-actions="true"
+                @click="handleClick"
                 @execute="handleExecute"
                 @previewResult="handlePreviewResult"
                 @retry="handleRetry"
