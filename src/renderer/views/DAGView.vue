@@ -543,64 +543,134 @@ function renderTaskNode(parent: any, node: DAGNode) {
             .attr('repeatCount', 'indefinite');
     }
 
-    // First line: Provider/Operator/Script icon + model | Task ID
-    let firstLineText = '';
-    let firstLineIcon = '';
+    // Header badge (Kanban-style)
+    let currentY = 25;
 
-    if (task.assignedOperatorId) {
-        firstLineIcon = '🤖';
-        firstLineText = 'Operator';
-    } else if (task.taskType === 'script') {
-        firstLineIcon = '📜';
-        firstLineText = 'Script';
+    if (task.taskType === 'script' && task.scriptLanguage) {
+        // Script badge
+        const badge = nodeGroup.append('g');
+        badge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', 10)
+            .attr('width', 120)
+            .attr('height', 24)
+            .attr('rx', 6)
+            .attr('fill', '#059669')
+            .attr('opacity', 0.2);
+        badge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', 10)
+            .attr('width', 120)
+            .attr('height', 24)
+            .attr('rx', 6)
+            .attr('fill', 'none')
+            .attr('stroke', '#10B981')
+            .attr('stroke-width', 1.5);
+        badge
+            .append('text')
+            .attr('x', 20)
+            .attr('y', 26)
+            .attr('fill', '#10B981')
+            .attr('font-size', 13)
+            .attr('font-weight', 'bold')
+            .text(`📜 ${task.scriptLanguage}`);
     } else if (task.aiProvider) {
-        const providerIcons: Record<string, string> = {
+        // AI Provider badge
+        const isOperator = !!task.assignedOperatorId;
+        const color = isOperator ? '#7C3AED' : '#3B82F6';
+        const icons: Record<string, string> = {
             openai: '✨',
             anthropic: '🧠',
             google: '🔮',
             gemini: '💎',
         };
-        firstLineIcon = providerIcons[task.aiProvider.toLowerCase()] || '🤖';
-        firstLineText = task.aiProvider;
+        const icon = icons[task.aiProvider.toLowerCase()] || '🤖';
+
+        const badge = nodeGroup.append('g');
+        badge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', 10)
+            .attr('width', NODE_WIDTH - 20)
+            .attr('height', 24)
+            .attr('rx', 6)
+            .attr('fill', color)
+            .attr('opacity', 0.2);
+        badge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', 10)
+            .attr('width', NODE_WIDTH - 20)
+            .attr('height', 24)
+            .attr('rx', 6)
+            .attr('fill', 'none')
+            .attr('stroke', color)
+            .attr('stroke-width', 1.5);
+        badge
+            .append('text')
+            .attr('x', 20)
+            .attr('y', 26)
+            .attr('fill', color)
+            .attr('font-size', 13)
+            .attr('font-weight', 'bold')
+            .text(`${icon} ${task.aiProvider}`);
         if (task.aiModel) {
-            firstLineText += ` (${task.aiModel})`;
+            badge
+                .append('text')
+                .attr('x', NODE_WIDTH - 20)
+                .attr('y', 26)
+                .attr('text-anchor', 'end')
+                .attr('fill', color)
+                .attr('font-size', 11)
+                .attr('opacity', 0.8)
+                .text(task.aiModel);
         }
     } else {
-        firstLineIcon = '🤖';
-        firstLineText = 'AI';
+        const badge = nodeGroup.append('g');
+        badge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', 10)
+            .attr('width', 100)
+            .attr('height', 24)
+            .attr('rx', 6)
+            .attr('fill', '#6B7280')
+            .attr('opacity', 0.2);
+        badge
+            .append('text')
+            .attr('x', 20)
+            .attr('y', 26)
+            .attr('fill', '#9CA3AF')
+            .attr('font-size', 12)
+            .text('❓ 미설정');
     }
 
+    currentY = 50;
+
+    // Task ID
     nodeGroup
         .append('text')
         .attr('x', 10)
-        .attr('y', 20)
-        .attr('fill', '#9CA3AF')
-        .attr('font-size', 12)
-        .text(`${firstLineIcon} ${firstLineText}`);
-
-    // Task ID (right side of first line)
-    nodeGroup
-        .append('text')
-        .attr('x', NODE_WIDTH - 10)
-        .attr('y', 20)
-        .attr('text-anchor', 'end')
+        .attr('y', currentY)
         .attr('fill', '#60A5FA')
         .attr('font-weight', 'bold')
-        .attr('font-size', 14)
+        .attr('font-size', 13)
         .text(`#${task.projectSequence}`);
 
-    let currentY = 40;
+    currentY += 22;
 
-    // Second line: Operator details (if assigned)
+    // Operator info (if assigned)
     if (task.assignedOperatorId) {
         nodeGroup
             .append('text')
             .attr('x', 10)
             .attr('y', currentY)
-            .attr('fill', '#9CA3AF')
+            .attr('fill', '#A78BFA')
             .attr('font-size', 11)
-            .text(`Operator: ${task.assignedOperatorId}`);
-        currentY += 20;
+            .text(`🤖 Operator: ${task.assignedOperatorId}`);
+        currentY += 18;
     }
 
     // Title
@@ -608,13 +678,13 @@ function renderTaskNode(parent: any, node: DAGNode) {
     nodeGroup
         .append('text')
         .attr('x', 10)
-        .attr('y', currentY + 10)
+        .attr('y', currentY)
         .attr('fill', '#F3F4F6')
         .attr('font-size', 14)
         .attr('font-weight', 'bold')
         .text(title);
 
-    currentY += 30;
+    currentY += 25;
 
     // Output format
     if (task.outputFormat) {
