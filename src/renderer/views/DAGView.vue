@@ -18,6 +18,7 @@ import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
+import ProjectHeader from '../../components/project/ProjectHeader.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -268,41 +269,11 @@ onMounted(async () => {
 
 <template>
     <div class="dag-view-container">
+        <!-- Header -->
+        <ProjectHeader :project-id="projectId" :project-title="project?.title" current-view="dag" />
+
         <!-- Operator Panel -->
         <OperatorPanel :project-id="projectId" />
-
-        <!-- Header -->
-        <header class="dag-header">
-            <div class="header-left">
-                <button @click="router.push('/projects')" class="back-btn">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                        />
-                    </svg>
-                </button>
-                <div>
-                    <h1 class="title">{{ project?.title }}</h1>
-                    <p class="subtitle">DAG View</p>
-                </div>
-            </div>
-
-            <div class="header-right">
-                <!-- View Switcher -->
-                <div class="view-switcher">
-                    <button @click="router.push(`/projects/${projectId}`)" class="view-btn">
-                        Overview
-                    </button>
-                    <button @click="router.push(`/projects/${projectId}/board`)" class="view-btn">
-                        Board
-                    </button>
-                    <button class="view-btn active">DAG</button>
-                </div>
-            </div>
-        </header>
 
         <!-- Vue Flow Container -->
         <div class="flow-container">
