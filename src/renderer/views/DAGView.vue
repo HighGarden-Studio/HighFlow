@@ -454,20 +454,6 @@ function renderDAG() {
     const { nodes, edges } =
         layoutMode.value === 'hierarchical' ? computeHierarchicalLayout() : computeForceLayout();
 
-    // Define single shared arrow marker with auto orientation
-    const defs = svg.append('defs');
-    defs.append('marker')
-        .attr('id', 'arrowhead')
-        .attr('markerWidth', 10)
-        .attr('markerHeight', 10)
-        .attr('refX', 9)
-        .attr('refY', 3)
-        .attr('orient', 'auto')
-        .attr('markerUnits', 'strokeWidth')
-        .append('polygon')
-        .attr('points', '0 0, 10 3, 0 6')
-        .attr('fill', '#9CA3AF');
-
     // Draw edges
     const edgeGroup = g.append('g').attr('class', 'edges');
     edges.forEach((edge, edgeIndex) => {
@@ -499,7 +485,7 @@ function renderDAG() {
             }
         }
 
-        // Draw edge path with shared marker
+        // Draw edge path without marker
         edgeGroup
             .append('path')
             .attr('class', 'edge-path')
@@ -507,8 +493,29 @@ function renderDAG() {
             .attr('d', path)
             .attr('stroke', '#9CA3AF')
             .attr('stroke-width', 2)
-            .attr('fill', 'none')
-            .attr('marker-end', 'url(#arrowhead)');
+            .attr('fill', 'none');
+
+        // Draw arrow manually at target point
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        const arrowSize = 8;
+        const arrowPoints = [
+            [targetX, targetY],
+            [
+                targetX - arrowSize * Math.cos(angle - Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle - Math.PI / 6),
+            ],
+            [
+                targetX - arrowSize * Math.cos(angle + Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle + Math.PI / 6),
+            ],
+        ];
+
+        edgeGroup
+            .append('polygon')
+            .attr('class', 'edge-arrow')
+            .attr('data-edge-index', edgeIndex)
+            .attr('points', arrowPoints.map((p) => p.join(',')).join(' '))
+            .attr('fill', '#9CA3AF');
 
         // Add output format label on edge
         const sourceNode = edge.source as DAGNode;
@@ -1313,6 +1320,26 @@ function redrawEdgesForNode(node: DAGNode) {
 
         // Update path
         svg.select(`.edge-path[data-edge-index="${edgeIndex}"]`).attr('d', path);
+
+        // Update arrow position and angle
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        const arrowSize = 8;
+        const arrowPoints = [
+            [targetX, targetY],
+            [
+                targetX - arrowSize * Math.cos(angle - Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle - Math.PI / 6),
+            ],
+            [
+                targetX - arrowSize * Math.cos(angle + Math.PI / 6),
+                targetY - arrowSize * Math.sin(angle + Math.PI / 6),
+            ],
+        ];
+
+        svg.select(`.edge-arrow[data-edge-index="${edgeIndex}"]`).attr(
+            'points',
+            arrowPoints.map((p) => p.join(',')).join(' ')
+        );
 
         // Update label position if exists
         const midX = (sourceX + targetX) / 2;
