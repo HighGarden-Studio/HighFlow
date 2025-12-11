@@ -377,8 +377,12 @@ watch(
 // Initial load
 onMounted(async () => {
     if (projectId.value) {
+        // Load project first, then tasks
         await projectStore.setCurrentProject(projectId.value);
         await taskStore.fetchTasks(projectId.value);
+
+        // Wait a tick to ensure project is set, then build graph
+        await nextTick();
         buildGraph();
     }
 });
