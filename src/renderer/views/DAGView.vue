@@ -660,19 +660,6 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
 
     // operatorData is now passed as parameter from renderDAG
 
-    if (task.taskType === 'script') {
-        badgeBgClass = 'bg-green-100 dark:bg-green-900/50';
-        badgeTextClass = 'text-green-700 dark:text-green-300';
-    } else if (task.aiProvider) {
-        if (operatorData) {
-            badgeBgClass = 'bg-purple-100 dark:bg-purple-900/50';
-            badgeTextClass = 'text-purple-700 dark:text-purple-300';
-        } else {
-            badgeBgClass = 'bg-blue-100 dark:bg-blue-900/50';
-            badgeTextClass = 'text-blue-700 dark:text-blue-300';
-        }
-    }
-
     // Card background with border
     const cardBg = nodeGroup
         .append('rect')
