@@ -660,27 +660,32 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
 
     // operatorData is now passed as parameter from renderDAG
 
-    // Card background with border
+    // Card background with border (calculate height dynamically)
+    let totalHeight = 0;
+    const headerHeight = operatorData ? 65 : 48;
+    const bodyMinHeight = 80; // Minimum for ID + title
+    totalHeight = headerHeight + bodyMinHeight;
+
     const cardBg = nodeGroup
         .append('rect')
         .attr('width', NODE_WIDTH)
-        .attr('height', NODE_HEIGHT)
+        .attr('height', totalHeight)
         .attr('rx', 8)
         .attr('fill', 'white')
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
-    // === HEADER SECTION (STATUS COLOR) ===
-    const headerHeight = operatorData ? 130 : 70;
+    // === HEADER SECTION (STATUS COLOR + OPACITY 0.5) ===
     const headerColor = statusColors[task.status] || '#6B7280';
 
-    // Header background (status color)
+    // Header background (status color + opacity 0.5)
     nodeGroup
         .append('rect')
         .attr('width', NODE_WIDTH)
         .attr('height', headerHeight)
         .attr('rx', 8)
-        .attr('fill', headerColor);
+        .attr('fill', headerColor)
+        .attr('fill-opacity', 0.5);
 
     // Cover bottom corners
     nodeGroup
@@ -690,19 +695,18 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .attr('height', 8)
         .attr('fill', headerColor);
 
-    let headerY = 12;
+    let headerY = 5; // Reduced padding
 
-    // 1. Operator section (if assigned) - black opacity 0.3 background
     if (operatorData) {
-        const opHeight = 50;
+        const opHeight = 26; // Reduced height
 
         nodeGroup
             .append('rect')
-            .attr('x', 12)
+            .attr('x', 5)
             .attr('y', headerY)
-            .attr('width', NODE_WIDTH - 24)
+            .attr('width', NODE_WIDTH - 10)
             .attr('height', opHeight)
-            .attr('rx', 6)
+            .attr('rx', 4)
             .attr('fill', 'black')
             .attr('fill-opacity', 0.3);
 
@@ -712,29 +716,29 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         // Avatar
         nodeGroup
             .append('text')
-            .attr('x', 20)
-            .attr('y', opCenterY + 6)
-            .attr('font-size', 18)
+            .attr('x', 10)
+            .attr('y', opCenterY + 4)
+            .attr('font-size', 14)
             .attr('text-anchor', 'start')
             .text(operatorData.avatar || '🤖');
 
         // Name
         nodeGroup
             .append('text')
-            .attr('x', 45)
-            .attr('y', opCenterY - 4)
+            .attr('x', 28)
+            .attr('y', opCenterY - 2)
             .attr('fill', 'white')
-            .attr('font-size', 11)
+            .attr('font-size', 10)
             .attr('font-weight', 'bold')
             .text(operatorData.name);
 
         // Role
         nodeGroup
             .append('text')
-            .attr('x', 45)
-            .attr('y', opCenterY + 10)
+            .attr('x', 28)
+            .attr('y', opCenterY + 8)
             .attr('fill', 'white')
-            .attr('font-size', 9)
+            .attr('font-size', 8)
             .attr('opacity', 0.9)
             .text(operatorData.role);
 
@@ -747,19 +751,19 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
             .attr('fill', 'none')
             .attr('stroke-linecap', 'round');
 
-        headerY += opHeight + 8;
+        headerY += opHeight + 4; // Reduced gap
     }
 
     // 2. Provider/Script section - black opacity 0.3 background
-    const providerHeight = 38;
+    const providerHeight = 28; // Reduced height
 
     nodeGroup
         .append('rect')
-        .attr('x', 12)
+        .attr('x', 5)
         .attr('y', headerY)
-        .attr('width', NODE_WIDTH - 24)
+        .attr('width', NODE_WIDTH - 10)
         .attr('height', providerHeight)
-        .attr('rx', 6)
+        .attr('rx', 4)
         .attr('fill', 'black')
         .attr('fill-opacity', 0.3);
 
@@ -768,24 +772,24 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
 
     // Icon and text
     if (task.taskType === 'script' && task.scriptLanguage) {
-        createSVGIcon(nodeGroup, 'script', 20, providerCenterY - 8, 16, 'white');
+        createSVGIcon(nodeGroup, 'script', 10, providerCenterY - 6, 12, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 42)
-            .attr('y', providerCenterY + 4)
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
             .attr('fill', 'white')
-            .attr('font-size', 12)
+            .attr('font-size', 10)
             .attr('font-weight', 'bold')
             .text(task.scriptLanguage);
     } else if (task.aiProvider) {
         const iconType = task.aiProvider.toLowerCase();
-        createSVGIcon(nodeGroup, iconType, 20, providerCenterY - 8, 16, 'white');
+        createSVGIcon(nodeGroup, iconType, 10, providerCenterY - 6, 12, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 42)
-            .attr('y', providerCenterY + 4)
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
             .attr('fill', 'white')
-            .attr('font-size', 12)
+            .attr('font-size', 10)
             .attr('font-weight', 'bold')
             .text(task.aiProvider);
 
@@ -802,18 +806,27 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
                 .text(task.aiModel);
         }
     } else {
-        createSVGIcon(nodeGroup, 'robot', 20, providerCenterY - 8, 16, 'white');
+        createSVGIcon(nodeGroup, 'robot', 10, providerCenterY - 6, 12, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 42)
-            .attr('y', providerCenterY + 4)
+            .attr('x', 26)
+            .attr('y', providerCenterY + 3)
             .attr('fill', 'white')
-            .attr('font-size', 11)
+            .attr('font-size', 9)
             .text('미설정');
     }
 
-    // === BODY SECTION ===
-    let bodyY = headerHeight + 16;
+    // === BODY SECTION (DARK BACKGROUND) ===
+    let bodyY = headerHeight + 5; // Reduced padding
+
+    // Body background
+    nodeGroup
+        .append('rect')
+        .attr('x', 0)
+        .attr('y', headerHeight)
+        .attr('width', NODE_WIDTH)
+        .attr('height', totalHeight - headerHeight)
+        .attr('fill', 'rgba(31, 41, 55, 0.3)');
 
     // Task ID with styled background
     const idColor = '#60A5FA';
