@@ -393,14 +393,16 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
 }
 
 /**
- * Handle drop on VueFlow canvas
+ * Handle drop on wrapper div (VueFlow pattern)
  */
-function handleVueFlowDrop(event: DragEvent) {
-    console.log('🔴 VueFlow drop event!', event);
+function onDrop(event: DragEvent) {
+    console.log('🔴 Wrapper div drop event!', event);
     const operatorData = event.dataTransfer?.getData('application/x-operator');
     console.log('🔴 Operator data:', operatorData);
 
     if (operatorData) {
+        event.preventDefault();
+
         // Find which node is under the cursor
         const target = event.target as HTMLElement;
         const nodeElement = target.closest('.vue-flow__node');
@@ -422,12 +424,15 @@ function handleVueFlowDrop(event: DragEvent) {
 }
 
 /**
- * Handle dragover on VueFlow canvas
+ * Handle dragover on VueFlow (required for drop to work)
  */
-function handleVueFlowDragOver(event: DragEvent) {
+function onDragOver(event: DragEvent) {
     const types = event.dataTransfer?.types || [];
     if (types.includes('application/x-operator')) {
-        event.dataTransfer!.dropEffect = 'copy';
+        event.preventDefault();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'copy';
+        }
     }
 }
 
@@ -464,8 +469,8 @@ onMounted(async () => {
         <!-- Operator Panel -->
         <OperatorPanel :project-id="projectId" />
 
-        <!-- Vue Flow Canvas -->
-        <div class="flex-1 bg-gray-900">
+        <!-- Vue Flow Canvas with Drag & Drop wrapper -->
+        <div class="flex-1 bg-gray-900" @drop="onDrop">
             <VueFlow
                 v-model:nodes="nodes"
                 v-model:edges="edges"
@@ -478,11 +483,7 @@ onMounted(async () => {
                 :edges-focusable="false"
                 :edges-updatable="false"
                 :nodes-draggable="false"
-                @nodes-change="onNodesChange"
-                @edges-change="onEdgesChange"
-                @connect="onConnect"
-                @drop.prevent="handleVueFlowDrop"
-                @dragover.prevent="handleVueFlowDragOver"
+                @dragover="onDragOver"
             >
                 <!-- Custom node template -->
                 <template #node-taskCard="{ data }">
