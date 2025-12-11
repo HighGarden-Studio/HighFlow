@@ -626,6 +626,7 @@ function renderTaskNode(parent: any, node: DAGNode) {
     });
 
     // Background
+    // Status colors for border
     const statusColors: Record<string, string> = {
         todo: '#6B7280',
         in_progress: '#3B82F6',
@@ -634,26 +635,44 @@ function renderTaskNode(parent: any, node: DAGNode) {
         blocked: '#EF4444',
     };
 
-    // Node background with animated border for running tasks
-    const nodeRect = nodeGroup
+    // Determine header color based on task type and provider
+    let headerColor = '#1F2937'; // Default dark
+    let headerTextColor = '#FFFFFF';
+
+    if (task.assignedOperatorId) {
+        headerColor = '#7C3AED'; // Purple for operator
+    } else if (task.taskType === 'script') {
+        headerColor = '#059669'; // Green for scripts
+    } else if (task.aiProvider) {
+        const providerColors: Record<string, string> = {
+            openai: '#10A37F',
+            anthropic: '#D97757',
+            google: '#4285F4',
+            gemini: '#8E44AD',
+        };
+        headerColor = providerColors[task.aiProvider.toLowerCase()] || '#3B82F6';
+    }
+
+    // Card background with border
+    const cardBg = nodeGroup
         .append('rect')
         .attr('width', NODE_WIDTH)
         .attr('height', NODE_HEIGHT)
         .attr('rx', 8)
-        .attr('fill', '#1F2937')
+        .attr('fill', '#FFFFFF')
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
     // Add pulsing animation for running tasks
     if (task.status === 'in_progress') {
-        nodeRect
+        cardBg
             .append('animate')
             .attr('attributeName', 'stroke-width')
             .attr('values', '4;6;4')
             .attr('dur', '2s')
             .attr('repeatCount', 'indefinite');
 
-        nodeRect
+        cardBg
             .append('animate')
             .attr('attributeName', 'stroke-opacity')
             .attr('values', '1;0.6;1')
@@ -661,162 +680,144 @@ function renderTaskNode(parent: any, node: DAGNode) {
             .attr('repeatCount', 'indefinite');
     }
 
-    // Header badge (Kanban-style)
-    let currentY = 25;
+    // Header section (colored)
+    const headerHeight = 50;
+    nodeGroup
+        .append('rect')
+        .attr('width', NODE_WIDTH)
+        .attr('height', headerHeight)
+        .attr('rx', 8)
+        .attr('fill', headerColor);
 
+    // Cover bottom corners of header
+    nodeGroup
+        .append('rect')
+        .attr('y', headerHeight - 8)
+        .attr('width', NODE_WIDTH)
+        .attr('height', 8)
+        .attr('fill', headerColor);
+
+    // Header content
+    let headerY = 20;
+
+    // Task type icon and name
     if (task.taskType === 'script' && task.scriptLanguage) {
-        // Script badge
-        const badge = nodeGroup.append('g');
-        badge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', 10)
-            .attr('width', 120)
-            .attr('height', 24)
-            .attr('rx', 6)
-            .attr('fill', '#059669')
-            .attr('opacity', 0.2);
-        badge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', 10)
-            .attr('width', 120)
-            .attr('height', 24)
-            .attr('rx', 6)
-            .attr('fill', 'none')
-            .attr('stroke', '#10B981')
-            .attr('stroke-width', 1.5);
-        // SVG icon
-        createSVGIcon(badge, 'script', 14, 15, 14, '#10B981');
-        badge
+        createSVGIcon(nodeGroup, 'script', 10, headerY - 7, 14, headerTextColor);
+        nodeGroup
             .append('text')
-            .attr('x', 32)
-            .attr('y', 26)
-            .attr('fill', '#10B981')
+            .attr('x', 30)
+            .attr('y', headerY + 3)
+            .attr('fill', headerTextColor)
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
             .text(task.scriptLanguage);
     } else if (task.aiProvider) {
-        // AI Provider badge
-        const isOperator = !!task.assignedOperatorId;
-        const color = isOperator ? '#7C3AED' : '#3B82F6';
         const iconType = task.aiProvider.toLowerCase();
-
-        const badge = nodeGroup.append('g');
-        badge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', 10)
-            .attr('width', NODE_WIDTH - 20)
-            .attr('height', 24)
-            .attr('rx', 6)
-            .attr('fill', color)
-            .attr('opacity', 0.2);
-        badge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', 10)
-            .attr('width', NODE_WIDTH - 20)
-            .attr('height', 24)
-            .attr('rx', 6)
-            .attr('fill', 'none')
-            .attr('stroke', color)
-            .attr('stroke-width', 1.5);
-        // SVG icon
-        createSVGIcon(badge, iconType, 14, 15, 14, color);
-        badge
+        createSVGIcon(nodeGroup, iconType, 10, headerY - 7, 14, headerTextColor);
+        nodeGroup
             .append('text')
-            .attr('x', 32)
-            .attr('y', 26)
-            .attr('fill', color)
+            .attr('x', 30)
+            .attr('y', headerY + 3)
+            .attr('fill', headerTextColor)
             .attr('font-size', 13)
             .attr('font-weight', 'bold')
             .text(task.aiProvider);
+
+        // AI Model on right
         if (task.aiModel) {
-            badge
+            nodeGroup
                 .append('text')
-                .attr('x', NODE_WIDTH - 20)
-                .attr('y', 26)
+                .attr('x', NODE_WIDTH - 10)
+                .attr('y', headerY + 3)
                 .attr('text-anchor', 'end')
-                .attr('fill', color)
+                .attr('fill', headerTextColor)
                 .attr('font-size', 11)
-                .attr('opacity', 0.8)
+                .attr('opacity', 0.9)
                 .text(task.aiModel);
         }
     } else {
-        const badge = nodeGroup.append('g');
-        badge
-            .append('rect')
-            .attr('x', 10)
-            .attr('y', 10)
-            .attr('width', 100)
-            .attr('height', 24)
-            .attr('rx', 6)
-            .attr('fill', '#6B7280')
-            .attr('opacity', 0.2);
-        createSVGIcon(badge, 'robot', 14, 15, 14, '#9CA3AF');
-        badge
+        createSVGIcon(nodeGroup, 'robot', 10, headerY - 7, 14, headerTextColor);
+        nodeGroup
             .append('text')
-            .attr('x', 32)
-            .attr('y', 26)
-            .attr('fill', '#9CA3AF')
+            .attr('x', 30)
+            .attr('y', headerY + 3)
+            .attr('fill', headerTextColor)
             .attr('font-size', 12)
             .text('미설정');
     }
 
-    currentY = 50;
+    headerY = 37;
+
+    // Operator badge in header (if assigned)
+    if (task.assignedOperatorId) {
+        const operatorBadge = nodeGroup.append('g');
+        operatorBadge
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', headerY - 10)
+            .attr('width', 120)
+            .attr('height', 18)
+            .attr('rx', 3)
+            .attr('fill', 'rgba(255, 255, 255, 0.2)');
+        createSVGIcon(operatorBadge, 'robot', 14, headerY - 8, 10, headerTextColor);
+        operatorBadge
+            .append('text')
+            .attr('x', 28)
+            .attr('y', headerY + 2)
+            .attr('fill', headerTextColor)
+            .attr('font-size', 10)
+            .attr('font-weight', '600')
+            .text(`Operator: ${task.assignedOperatorId}`);
+    }
+
+    // Body section starts
+    let bodyY = headerHeight + 20;
 
     // Task ID
     nodeGroup
         .append('text')
         .attr('x', 10)
-        .attr('y', currentY)
+        .attr('y', bodyY)
         .attr('fill', '#60A5FA')
         .attr('font-weight', 'bold')
         .attr('font-size', 13)
         .text(`#${task.projectSequence}`);
 
-    currentY += 22;
-
-    // Operator info (if assigned)
-    if (task.assignedOperatorId) {
-        const operatorGroup = nodeGroup.append('g');
-        createSVGIcon(operatorGroup, 'robot', 10, currentY - 10, 12, '#A78BFA');
-        operatorGroup
-            .append('text')
-            .attr('x', 26)
-            .attr('y', currentY)
-            .attr('fill', '#A78BFA')
-            .attr('font-size', 11)
-            .text(`Operator: ${task.assignedOperatorId}`);
-        currentY += 18;
-    }
+    bodyY += 22;
 
     // Title
     const title = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
     nodeGroup
         .append('text')
         .attr('x', 10)
-        .attr('y', currentY)
-        .attr('fill', '#F3F4F6')
+        .attr('y', bodyY)
+        .attr('fill', '#1F2937')
         .attr('font-size', 14)
         .attr('font-weight', 'bold')
         .text(title);
 
-    currentY += 25;
+    bodyY += 25;
 
-    // Output format
-    if (task.outputFormat) {
-        const outputGroup = nodeGroup.append('g');
-        createSVGIcon(outputGroup, 'file', 10, currentY - 10, 12, '#9CA3AF');
-        outputGroup
+    // Auto-run indicator
+    if (task.autoExecuteOnDependencyComplete) {
+        const autoGroup = nodeGroup.append('g');
+        autoGroup
+            .append('rect')
+            .attr('x', 10)
+            .attr('y', bodyY - 12)
+            .attr('width', 90)
+            .attr('height', 18)
+            .attr('rx', 3)
+            .attr('fill', '#DBEAFE');
+        autoGroup
             .append('text')
-            .attr('x', 26)
-            .attr('y', currentY)
-            .attr('fill', '#9CA3AF')
-            .attr('font-size', 11)
-            .text(task.outputFormat);
-        currentY += 20;
+            .attr('x', 15)
+            .attr('y', bodyY)
+            .attr('fill', '#1E40AF')
+            .attr('font-size', 10)
+            .attr('font-weight', '600')
+            .text('⚡ Auto-run');
+        bodyY += 20;
     }
 
     // Auto-execution conditions (like Kanban)
