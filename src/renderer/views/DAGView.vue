@@ -20,6 +20,7 @@ import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import CustomEdge from '../../components/dag/CustomEdge.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -55,9 +56,14 @@ const { onConnect, addEdges, fitView } = useVueFlow();
 const nodes = ref<Node[]>([]);
 const edges = ref<Edge[]>([]);
 
-// Node types
+// Register node types
 const nodeTypes = {
     taskCard: TaskFlowNode,
+};
+
+// Register edge types
+const edgeTypes = {
+    custom: CustomEdge,
 };
 
 /**
@@ -122,15 +128,15 @@ function buildGraph() {
             // Only create edge if dependency task exists
             const sourceTask = tasks.value.find((t) => t.id === depId);
             if (sourceTask) {
-                // Get output type label
+                // Get output type label from SOURCE task (dependency)
                 const outputLabel = getOutputTypeLabel(sourceTask.outputType);
 
                 taskEdges.push({
                     id: `e${depId}-${task.id}`,
                     source: String(depId),
                     target: String(task.id),
-                    type: 'smoothstep', // Use smoothstep for better routing
-                    animated: task.status === 'in_progress', // Animate edges for in-progress tasks
+                    type: 'custom', // Use custom edge with delete button
+                    animated: task.status === 'in_progress',
                     style: {
                         stroke: getEdgeColor(task),
                         strokeWidth: 2,
@@ -142,17 +148,17 @@ function buildGraph() {
                         color: getEdgeColor(task),
                     },
                     label: outputLabel,
-                    labelStyle: {
-                        fill: '#9CA3AF',
-                        fontWeight: 600,
-                        fontSize: 11,
+                    data: {
+                        onEdgeRemove: (edgeId: string) => {
+                            handleEdgeRemove([
+                                {
+                                    id: edgeId,
+                                    source: String(depId),
+                                    target: String(task.id),
+                                } as Edge,
+                            ]);
+                        },
                     },
-                    labelBgStyle: {
-                        fill: '#1F2937',
-                        fillOpacity: 0.95,
-                        rx: 4,
-                    },
-                    labelBgPadding: [4, 8] as [number, number],
                 });
             }
         });
@@ -375,6 +381,7 @@ onMounted(async () => {
                 :nodes="nodes"
                 :edges="edges"
                 :node-types="nodeTypes"
+                :edge-types="edgeTypes"
                 :default-viewport="{ zoom: 0.8 }"
                 :min-zoom="0.2"
                 :max-zoom="4"
