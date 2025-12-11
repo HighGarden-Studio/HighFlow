@@ -635,15 +635,13 @@ function renderTaskNode(parent: any, node: DAGNode) {
         blocked: '#EF4444',
     };
 
-    // Load operator data if assigned (like Kanban board does)
-    let operatorData: any = null;
-    if (task.assignedOperatorId) {
-        try {
-            operatorData = await window.electron.operators.get(task.assignedOperatorId);
-        } catch (error) {
-            console.error('Failed to load operator:', error);
-        }
-    }
+    // Note: Operator data loading removed (async not supported in D3 render)
+    // Will render operator ID only for now
+    const operatorData = null;
+
+    // Determine header section colors
+    let headerColor = '#7C3AED'; // Purple for header background
+    let headerTextColor = '#FFFFFF'; // White text on dark
 
     // Determine badge colors (Kanban style)
     let badgeBgClass = 'bg-gray-100'; // default
