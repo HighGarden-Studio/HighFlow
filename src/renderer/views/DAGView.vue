@@ -402,6 +402,36 @@ function renderDAG() {
             .attr('stroke-width', 2)
             .attr('fill', 'none')
             .attr('marker-end', `url(#${markerId})`);
+
+        // Add output format label on edge
+        const sourceNode = edge.source as DAGNode;
+        if (sourceNode.task.outputFormat) {
+            const midX = (sourceX + targetX) / 2;
+            const midY = (sourceY + targetY) / 2;
+
+            // Background for label
+            edgeGroup
+                .append('rect')
+                .attr('x', midX - 35)
+                .attr('y', midY - 12)
+                .attr('width', 70)
+                .attr('height', 24)
+                .attr('rx', 4)
+                .attr('fill', '#1F2937')
+                .attr('stroke', '#9CA3AF')
+                .attr('stroke-width', 1);
+
+            // Label text
+            edgeGroup
+                .append('text')
+                .attr('x', midX)
+                .attr('y', midY + 4)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#9CA3AF')
+                .attr('font-size', 10)
+                .attr('font-weight', '500')
+                .text(sourceNode.task.outputFormat);
+        }
     });
 
     // Draw nodes
