@@ -117,14 +117,23 @@ pnpm build:linux
 
 ## 📚 Documentation
 
+### For Developers
+
 - [Architecture Decision Records](./ARCHITECTURE.md)
 - [Project Structure](./PROJECT_STRUCTURE.md)
 - [Development Roadmap](./DEVELOPMENT_ROADMAP.md)
 - [Technology Stack Rationale](./TECH_STACK_RATIONALE.md)
-- [Recent Changes](./docs/RECENT_CHANGES.md) - **Latest updates and context**
-- [AI Quick Reference](./docs/AI_QUICK_REF.md) - **For AI assistants (Claude, Gemini)**
-- [API Documentation](./docs/API.md) _(coming soon)_
-- [Plugin Development Guide](./docs/PLUGIN_GUIDE.md) _(coming soon)_
+
+### For AI Assistants
+
+- **[Complete Project Overview](./docs/PROJECT_OVERVIEW_FOR_AI.md)** - Start here!
+- [AI Quick Reference](./docs/AI_QUICK_REF.md) - Quick lookup
+- [Recent Changes](./docs/RECENT_CHANGES.md) - Latest updates
+
+### Coming Soon
+
+- [API Documentation](./docs/API.md)
+- [Plugin Development Guide](./docs/PLUGIN_GUIDE.md)
 
 ## 🛠️ Technology Stack
 
