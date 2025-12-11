@@ -290,9 +290,12 @@ export const useTaskStore = defineStore('tasks', () => {
             } = mergedUpdate as Record<string, unknown>;
             // Convert to plain JSON object to avoid serialization issues with Date objects and Vue reactivity
             const plainData = JSON.parse(JSON.stringify(updateData));
+            console.log('📝 TaskStore.updateTask calling API:', id, plainData);
             const task = await api.tasks.update(id, plainData);
+            console.log('📝 Task updated from API:', task);
             if (index >= 0) {
                 tasks.value[index] = { ...tasks.value[index], ...task };
+                console.log('📝 Task updated in store:', tasks.value[index]);
             }
             if (currentTask.value?.id === id && currentTask.value) {
                 currentTask.value = { ...currentTask.value, ...task };
