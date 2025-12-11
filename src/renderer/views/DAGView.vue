@@ -820,20 +820,6 @@ function renderTaskNode(parent: any, node: DAGNode) {
         bodyY += 20;
     }
 
-    // Auto-execution conditions (like Kanban)
-
-    if (deps.length > 0) {
-        const depText = deps.length === 1 ? `Task #${deps[0]}` : `${deps.length} tasks`;
-
-        nodeGroup
-            .append('text')
-            .attr('x', 10)
-            .attr('y', currentY)
-            .attr('fill', '#10B981')
-            .attr('font-size', 10)
-            .text(`🔗 Auto-execute after ${depText}`);
-    }
-
     // Status badge
     const statusText =
         task.status === 'todo'
@@ -877,137 +863,127 @@ function renderTaskNode(parent: any, node: DAGNode) {
 
     // Execute button (for TODO tasks)
     if (task.status === 'todo') {
-        const execButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskExecute(task);
-            });
+        const execBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        execButton
+        execBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
             .attr('fill', '#10B981')
-            .attr('stroke', '#FFFFFF')
+            .attr('stroke', '#34D399')
             .attr('stroke-width', 1.5);
 
-        execButton
+        execBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
             .text('▶');
 
-        buttonX -= 30;
+        execBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleTaskExecute(task);
+        });
+
+        actionButtonX -= 35;
     }
 
-    // Retry button (for failed IN_PROGRESS tasks)
-    if (task.status === 'in_progress' && task.lastExecutionResult?.success === false) {
-        const retryButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskExecute(task); // Retry uses execute
-            });
+    // Approve button (for NEEDS_APPROVAL)
+    if (task.status === 'needs_approval') {
+        const approveBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        retryButton
+        approveBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
             .attr('fill', '#F59E0B')
-            .attr('stroke', '#FFFFFF')
+            .attr('stroke', '#FBBF24')
             .attr('stroke-width', 1.5);
 
-        retryButton
+        approveBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 10)
-            .text('↻');
-
-        buttonX -= 30;
-    }
-
-    // Approve button (for NEEDS_APPROVAL or IN_REVIEW tasks)
-    if (task.status === 'needs_approval' || task.status === 'in_review') {
-        const approveButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleTaskApprove(task);
-            });
-
-        approveButton
-            .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
-            .attr('fill', '#3B82F6')
-            .attr('stroke', '#FFFFFF')
-            .attr('stroke-width', 1.5);
-
-        approveButton
-            .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
-            .attr('font-weight', 'bold')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
             .text('✓');
 
-        buttonX -= 30;
+        approveBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleApprovalOpen(task);
+        });
+
+        actionButtonX -= 35;
     }
 
-    // View Results button (for DONE tasks)
-    if (task.status === 'done') {
-        const viewButton = nodeGroup
-            .append('g')
-            .attr('class', 'action-button')
-            .style('cursor', 'pointer')
-            .on('click', (event: MouseEvent) => {
-                event.stopPropagation();
-                handleNodeClick(task); // Open detail panel
-            });
+    // Retry button (for failed REVIEW tasks)
+    if (task.status === 'in_review' && task.executionResult?.success === false) {
+        const retryBtn = nodeGroup.append('g').style('cursor', 'pointer');
 
-        viewButton
+        retryBtn
             .append('circle')
-            .attr('cx', buttonX)
-            .attr('cy', bottomY + 12)
-            .attr('r', 10)
-            .attr('fill', '#8B5CF6')
-            .attr('stroke', '#FFFFFF')
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
+            .attr('fill', '#F59E0B')
+            .attr('stroke', '#FBBF24')
             .attr('stroke-width', 1.5);
 
-        viewButton
+        retryBtn
             .append('text')
-            .attr('x', buttonX)
-            .attr('y', bottomY + 12)
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('fill', '#FFFFFF')
-            .attr('font-size', 12)
-            .text('👁');
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
+            .text('↻');
 
-        buttonX -= 30;
+        retryBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleTaskExecute(task);
+        });
+
+        actionButtonX -= 35;
     }
 
+    // View Results button (for completed)
+    if (task.status === 'done' || task.status === 'in_review') {
+        const viewBtn = nodeGroup.append('g').style('cursor', 'pointer');
+
+        viewBtn
+            .append('circle')
+            .attr('cx', actionButtonX)
+            .attr('cy', buttonY)
+            .attr('r', 12)
+            .attr('fill', '#8B5CF6')
+            .attr('stroke', '#A78BFA')
+            .attr('stroke-width', 1.5);
+
+        viewBtn
+            .append('text')
+            .attr('x', actionButtonX)
+            .attr('y', buttonY + 1)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', 14)
+            .text('👁');
+
+        viewBtn.on('click', function (event: any) {
+            event.stopPropagation();
+            handleNodeClick(task);
+        });
+
+        actionButtonX -= 35;
+    }
     // Connection handle (right side, centered vertically)
     const handleGroup = nodeGroup
         .append('g')
