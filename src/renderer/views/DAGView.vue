@@ -377,10 +377,9 @@ watch(
 /**
  * Handle operator assignment
  */
-async function handleOperatorAssign(data: { task: Task; operatorId: number }) {
-    const { task, operatorId } = data;
+async function handleOperatorDrop(taskId: number, operatorId: number) {
     try {
-        await taskStore.updateTask(task.id, {
+        await taskStore.updateTask(taskId, {
             operatorId: operatorId,
         });
         // Refresh tasks to show updated operator
@@ -452,7 +451,7 @@ onMounted(async () => {
                         @execute="handleTaskExecute(data.task)"
                         @approve="handleTaskApprove(data.task)"
                         @retry="handleTaskRetry(data.task)"
-                        @operatorAssign="handleOperatorAssign"
+                        @operatorDrop="handleOperatorDrop"
                     />
                 </template>
             </VueFlow>
