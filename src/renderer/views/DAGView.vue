@@ -660,14 +660,6 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
 
     // operatorData is now passed as parameter from renderDAG
 
-    // Determine header section colors
-    let headerColor = '#7C3AED'; // Purple for header background
-    let headerTextColor = '#FFFFFF'; // White text on dark
-
-    // Determine badge colors (Kanban style)
-    let badgeBgClass = 'bg-gray-100'; // default
-    let badgeTextClass = 'text-gray-500';
-
     if (task.taskType === 'script') {
         badgeBgClass = 'bg-green-100 dark:bg-green-900/50';
         badgeTextClass = 'text-green-700 dark:text-green-300';
@@ -687,172 +679,126 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .attr('width', NODE_WIDTH)
         .attr('height', NODE_HEIGHT)
         .attr('rx', 8)
-        .attr('fill', '#1F2937') // bg-gray-800 (dark theme like Kanban)
+        .attr('fill', 'white')
         .attr('stroke', statusColors[task.status] || '#6B7280')
         .attr('stroke-width', task.status === 'in_progress' ? 4 : 3);
 
-    let currentY = 12;
+    // === HEADER SECTION (STATUS COLOR) ===
+    const headerHeight = operatorData ? 130 : 70;
+    const headerColor = statusColors[task.status] || '#6B7280';
 
-    // === OPERATOR SECTION (TOP PRIORITY) ===
+    // Header background (status color)
+    nodeGroup
+        .append('rect')
+        .attr('width', NODE_WIDTH)
+        .attr('height', headerHeight)
+        .attr('rx', 8)
+        .attr('fill', headerColor);
+
+    // Cover bottom corners
+    nodeGroup
+        .append('rect')
+        .attr('y', headerHeight - 8)
+        .attr('width', NODE_WIDTH)
+        .attr('height', 8)
+        .attr('fill', headerColor);
+
+    let headerY = 12;
+
+    // 1. Operator section (if assigned) - black opacity 0.3 background
     if (operatorData) {
-        const operatorHeight = 50;
-
-        // Purple gradient background
-        const opGradient = nodeGroup
-            .append('defs')
-            .append('linearGradient')
-            .attr('id', `opGrad-${task.id}`)
-            .attr('x1', '0%')
-            .attr('y1', '0%')
-            .attr('x2', '100%')
-            .attr('y2', '0%');
-        opGradient
-            .append('stop')
-            .attr('offset', '0%')
-            .attr('stop-color', '#F3E8FF')
-            .attr('stop-opacity', 0.9);
-        opGradient
-            .append('stop')
-            .attr('offset', '100%')
-            .attr('stop-color', '#FAF5FF')
-            .attr('stop-opacity', 0.7);
+        const opHeight = 50;
 
         nodeGroup
             .append('rect')
             .attr('x', 12)
-            .attr('y', currentY)
+            .attr('y', headerY)
             .attr('width', NODE_WIDTH - 24)
-            .attr('height', operatorHeight)
-            .attr('rx', 8) // Kanban border radius
-            .attr('fill', `url(#opGrad-${task.id})`)
-            .attr('stroke', '#E9D5FF')
-            .attr('stroke-width', 1);
+            .attr('height', opHeight)
+            .attr('rx', 6)
+            .attr('fill', 'black')
+            .attr('fill-opacity', 0.3);
 
-        // Operator avatar/emoji
+        // Operator content - centered alignment
+        const opCenterY = headerY + opHeight / 2;
+
+        // Avatar
         nodeGroup
             .append('text')
-            .attr('x', 22)
-            .attr('y', currentY + 28)
-            .attr('font-size', 20)
+            .attr('x', 20)
+            .attr('y', opCenterY + 6)
+            .attr('font-size', 18)
+            .attr('text-anchor', 'start')
             .text(operatorData.avatar || '🤖');
 
-        // Operator name
+        // Name
         nodeGroup
             .append('text')
-            .attr('x', 50)
-            .attr('y', currentY + 23)
-            .attr('fill', '#581C87')
+            .attr('x', 45)
+            .attr('y', opCenterY - 4)
+            .attr('fill', 'white')
             .attr('font-size', 11)
             .attr('font-weight', 'bold')
             .text(operatorData.name);
 
-        // Operator role
+        // Role
         nodeGroup
             .append('text')
-            .attr('x', 50)
-            .attr('y', currentY + 38)
-            .attr('fill', '#7E22CE')
+            .attr('x', 45)
+            .attr('y', opCenterY + 10)
+            .attr('fill', 'white')
             .attr('font-size', 9)
+            .attr('opacity', 0.9)
             .text(operatorData.role);
 
         // Checkmark
         nodeGroup
             .append('path')
-            .attr('d', `M${NODE_WIDTH - 25},${currentY + 20} l3,3 l6,-6`)
-            .attr('stroke', '#7C3AED')
-            .attr('stroke-width', 2)
+            .attr('d', `M${NODE_WIDTH - 25},${opCenterY - 4} l2,2 l4,-4`)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 1.5)
             .attr('fill', 'none')
             .attr('stroke-linecap', 'round');
 
-        currentY += operatorHeight + 8;
-
-        // Divider
-        nodeGroup
-            .append('line')
-            .attr('x1', 12)
-            .attr('x2', NODE_WIDTH - 12)
-            .attr('y1', currentY)
-            .attr('y2', currentY)
-            .attr('stroke', '#E9D5FF')
-            .attr('stroke-width', 1);
-
-        currentY += 8;
-    }
-    if (task.status === 'in_progress') {
-        cardBg
-            .append('animate')
-            .attr('attributeName', 'stroke-width')
-            .attr('values', '4;6;4')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
-
-        cardBg
-            .append('animate')
-            .attr('attributeName', 'stroke-opacity')
-            .attr('values', '1;0.6;1')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
+        headerY += opHeight + 8;
     }
 
-    // === PROVIDER/SCRIPT HEADER ===
-    const headerHeight = 40;
-
-    // Determine colors based on type
-    let headerBg, headerText, headerBorder;
-    if (task.taskType === 'script') {
-        headerBg = '#DCFCE7';
-        headerText = '#047857';
-        headerBorder = '#86EFAC';
-    } else if (task.aiProvider) {
-        if (operatorData) {
-            headerBg = '#F3E8FF';
-            headerText = '#7E22CE';
-            headerBorder = '#E9D5FF';
-        } else {
-            headerBg = '#DBEAFE';
-            headerText = '#1E40AF';
-            headerBorder = '#93C5FD';
-        }
-    } else {
-        headerBg = '#F3F4F6';
-        headerText = '#6B7280';
-        headerBorder = '#E5E7EB';
-    }
+    // 2. Provider/Script section - black opacity 0.3 background
+    const providerHeight = 38;
 
     nodeGroup
         .append('rect')
         .attr('x', 12)
-        .attr('y', currentY)
+        .attr('y', headerY)
         .attr('width', NODE_WIDTH - 24)
-        .attr('height', headerHeight)
-        .attr('rx', 6) // Kanban border radius
-        .attr('fill', headerBg)
-        .attr('fill-opacity', 0.8)
-        .attr('stroke', headerBorder)
-        .attr('stroke-width', 1);
+        .attr('height', providerHeight)
+        .attr('rx', 6)
+        .attr('fill', 'black')
+        .attr('fill-opacity', 0.3);
 
-    let headerY = currentY + 12; // Icon positioning within header
+    // Provider content - centered alignment
+    const providerCenterY = headerY + providerHeight / 2;
 
-    // Task type icon and name
+    // Icon and text
     if (task.taskType === 'script' && task.scriptLanguage) {
-        createSVGIcon(nodeGroup, 'script', 20, headerY, 16, headerText);
+        createSVGIcon(nodeGroup, 'script', 20, providerCenterY - 8, 16, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 30)
-            .attr('y', headerY + 3)
-            .attr('fill', headerText)
-            .attr('font-size', 13)
+            .attr('x', 42)
+            .attr('y', providerCenterY + 4)
+            .attr('fill', 'white')
+            .attr('font-size', 12)
             .attr('font-weight', 'bold')
             .text(task.scriptLanguage);
     } else if (task.aiProvider) {
         const iconType = task.aiProvider.toLowerCase();
-        createSVGIcon(nodeGroup, iconType, 20, headerY, 16, headerText);
+        createSVGIcon(nodeGroup, iconType, 20, providerCenterY - 8, 16, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 30)
-            .attr('y', headerY + 3)
-            .attr('fill', headerText)
-            .attr('font-size', 13)
+            .attr('x', 42)
+            .attr('y', providerCenterY + 4)
+            .attr('fill', 'white')
+            .attr('font-size', 12)
             .attr('font-weight', 'bold')
             .text(task.aiProvider);
 
@@ -860,44 +806,61 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         if (task.aiModel) {
             nodeGroup
                 .append('text')
-                .attr('x', NODE_WIDTH - 10)
-                .attr('y', headerY + 3)
+                .attr('x', NODE_WIDTH - 16)
+                .attr('y', providerCenterY + 4)
                 .attr('text-anchor', 'end')
-                .attr('fill', headerText)
-                .attr('font-size', 11)
+                .attr('fill', 'white')
+                .attr('font-size', 10)
                 .attr('opacity', 0.9)
                 .text(task.aiModel);
         }
     } else {
-        createSVGIcon(nodeGroup, 'robot', 20, headerY, 16, headerText);
+        createSVGIcon(nodeGroup, 'robot', 20, providerCenterY - 8, 16, 'white');
         nodeGroup
             .append('text')
-            .attr('x', 30)
-            .attr('y', headerY + 3)
-            .attr('fill', headerText)
-            .attr('font-size', 12)
+            .attr('x', 42)
+            .attr('y', providerCenterY + 4)
+            .attr('fill', 'white')
+            .attr('font-size', 11)
             .text('미설정');
     }
 
-    currentY += headerHeight + 12;
-
     // === BODY SECTION ===
-    let bodyY = currentY;
+    let bodyY = headerHeight + 16;
 
-    // Task ID
+    // Task ID with styled background
+    const idColor = '#60A5FA';
+    const idText = `#${task.projectSequence}`;
+    const idWidth = idText.length * 8 + 12;
+
+    // ID background (color + opacity 0.3)
+    nodeGroup
+        .append('rect')
+        .attr('x', 12)
+        .attr('y', bodyY - 2)
+        .attr('width', idWidth)
+        .attr('height', 20)
+        .attr('rx', 4)
+        .attr('fill', idColor)
+        .attr('fill-opacity', 0.3)
+        .attr('stroke', idColor)
+        .attr('stroke-width', 1);
+
+    // ID text
     nodeGroup
         .append('text')
-        .attr('x', 10)
-        .attr('y', bodyY)
-        .attr('fill', '#60A5FA')
+        .attr('x', 12 + idWidth / 2)
+        .attr('y', bodyY + 12)
+        .attr('text-anchor', 'middle')
+        .attr('fill', idColor)
         .attr('font-weight', 'bold')
-        .attr('font-size', 13)
-        .text(`#${task.projectSequence}`);
+        .attr('font-size', 12)
+        .text(idText);
 
-    bodyY += 22;
+    bodyY += 28;
 
     // Title
-    const title = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+    const title = task.title.length > 28 ? task.title.substring(0, 25) + '...' : task.title;
     nodeGroup
         .append('text')
         .attr('x', 10)
