@@ -866,7 +866,7 @@ function renderTaskNode(parent: any, node: DAGNode, operatorData: any = null) {
         .append('text')
         .attr('x', 10)
         .attr('y', bodyY)
-        .attr('fill', '#1F2937')
+        .attr('fill', 'rgb(156, 163, 175)')
         .attr('font-size', 14)
         .attr('font-weight', 'bold')
         .text(title);
