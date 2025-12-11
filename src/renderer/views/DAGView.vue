@@ -375,6 +375,15 @@ watch(
 );
 
 /**
+ * Handle task save from detail panel
+ */
+async function handleTaskSave(task: Task) {
+    await taskStore.fetchTasks(projectId.value);
+    buildGraph();
+    selectedTaskId.value = null;
+}
+
+/**
  * Handle operator assignment
  */
 async function handleOperatorDrop(taskId: number, operatorId: number) {

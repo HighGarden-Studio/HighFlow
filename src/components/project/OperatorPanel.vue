@@ -144,18 +144,22 @@ function handleDragStart(event: DragEvent, operator: Operator) {
 
     // Changed from 'move' to 'copy' to match dropEffect
     event.dataTransfer.effectAllowed = 'copy';
-    event.dataTransfer.setData(
-        'application/x-operator',
-        JSON.stringify({
-            id: operator.id,
-            name: operator.name,
-            avatar: operator.avatar,
-            role: operator.role,
-            color: operator.color,
-            aiProvider: operator.aiProvider,
-            aiModel: operator.aiModel,
-        })
-    );
+    const operatorData = JSON.stringify({
+        id: operator.id,
+        name: operator.name,
+        avatar: operator.avatar,
+        role: operator.role,
+        color: operator.color,
+        aiProvider: operator.aiProvider,
+        aiModel: operator.aiModel,
+    });
+    event.dataTransfer.setData('application/x-operator', operatorData);
+
+    // Store globally as fallback for mouseup
+    (window as any).__operatorDragData = {
+        'application/x-operator': operatorData,
+    };
+
     console.log('🟠 Operator drag started:', operator.id);
 
     // Add visual feedback
@@ -165,6 +169,8 @@ function handleDragStart(event: DragEvent, operator: Operator) {
 
 function handleDragEnd(event: DragEvent) {
     console.log('🟠 Operator drag ended');
+    // Clear global drag data
+    delete (window as any).__operatorDragData;
     const target = event.target as HTMLElement;
     target.classList.remove('dragging');
 }

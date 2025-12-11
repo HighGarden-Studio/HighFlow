@@ -95,7 +95,29 @@ const nodeRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
     if (nodeRef.value) {
-        console.log('🟣 Setting up native drop listener for task:', props.data.task.id);
+        console.log('🟣 Setting up native listeners for task:', props.data.task.id);
+
+        // Try mouseup event instead of drop for better compatibility
+        nodeRef.value.addEventListener('mouseup', (e: Event) => {
+            const event = e as MouseEvent;
+            // Check if this is the end of a drag operation
+            if (isOperatorDragOver.value) {
+                console.log('🟣 NATIVE mouseup during drag!');
+                // Create a synthetic DragEvent
+                const dataTransfer = (window as any).__operatorDragData;
+                if (dataTransfer) {
+                    const syntheticEvent = {
+                        dataTransfer: {
+                            getData: (type: string) => dataTransfer[type] || '',
+                        },
+                        preventDefault: () => {},
+                        stopPropagation: () => {},
+                    } as unknown as DragEvent;
+                    handleWrapperDrop(syntheticEvent);
+                }
+                isOperatorDragOver.value = false;
+            }
+        });
 
         nodeRef.value.addEventListener('drop', (e: Event) => {
             const event = e as DragEvent;
