@@ -366,20 +366,22 @@ async function handleTaskRetry(task: Task) {
 }
 
 // Watch for task changes and rebuild graph
-watch(
-    tasks,
-    () => {
-        buildGraph();
-    },
-    { deep: true }
-);
+// DISABLED: This watch with deep:true causes infinite loops
+// buildGraph() is called explicitly when needed (onMounted, after connections, etc.)
+// watch(
+//     tasks,
+//     () => {
+//         buildGraph();
+//     },
+//     { deep: true }
+// );
 
 /**
  * Handle task save from detail panel
  */
 async function handleTaskSave(task: Task) {
     await taskStore.fetchTasks(projectId.value);
-    // buildGraph() is automatically called by watch(tasks) - no need to call it here
+    buildGraph(); // Rebuild graph after fetching updated tasks
     selectedTaskId.value = null;
 }
 
