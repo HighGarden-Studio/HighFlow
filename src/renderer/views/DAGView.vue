@@ -108,7 +108,16 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
 /**
  * Build graph from tasks
  */
+let isBuilding = false;
 function buildGraph() {
+    if (isBuilding) {
+        console.log('⏸️ buildGraph already running, skipping...');
+        return;
+    }
+
+    isBuilding = true;
+    console.log('🔄 Building graph with', tasks.value.length, 'tasks');
+
     const taskNodes: Node[] = [];
     const taskEdges: Edge[] = [];
 
@@ -181,6 +190,7 @@ function buildGraph() {
     // Fit view after layout
     nextTick(() => {
         fitView({ padding: 0.2, duration: 200 });
+        isBuilding = false;
     });
 }
 
