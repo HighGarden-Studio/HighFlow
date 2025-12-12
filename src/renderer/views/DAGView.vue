@@ -381,7 +381,6 @@ async function handleTaskSave(task: Task) {
     await taskStore.fetchTasks(projectId.value);
     buildGraph();
     selectedTaskId.value = null;
-    showDetailPanel.value = false;
 }
 
 /**
