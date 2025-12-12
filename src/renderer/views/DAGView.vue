@@ -379,7 +379,7 @@ watch(
  */
 async function handleTaskSave(task: Task) {
     await taskStore.fetchTasks(projectId.value);
-    buildGraph();
+    // buildGraph() is automatically called by watch(tasks) - no need to call it here
     selectedTaskId.value = null;
 }
 
