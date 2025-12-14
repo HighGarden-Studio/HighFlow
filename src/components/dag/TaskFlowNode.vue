@@ -19,7 +19,9 @@ const emit = defineEmits<{
     (e: 'previewResult', task: Task): void;
     (e: 'retry', task: Task): void;
     (e: 'approve', task: Task): void;
+    (e: 'stop', task: Task): void;
     (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'provideInput', task: Task): void;
 }>();
 
 // Operator drag state
@@ -49,6 +51,14 @@ function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🔵 TaskFlowNode handleOperatorDrop:', taskId, operatorId);
     emit('operatorDrop', taskId, operatorId);
     console.log('🔵 TaskFlowNode emitted operatorDrop');
+}
+
+function handleProvideInput() {
+    emit('provideInput', props.data.task);
+}
+
+function handleStop() {
+    emit('stop', props.data.task);
 }
 
 // Direct drag/drop handlers for wrapper
@@ -147,6 +157,63 @@ onUnmounted(() => {
         <!-- Connection handles -->
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
+        <!-- Status Icon Overlay -->
+        <div class="status-icon-overlay">
+            <div v-if="data.task.status === 'in_progress'" class="status-icon executing">
+                <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                    ></circle>
+                    <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                </svg>
+            </div>
+            <div v-else-if="data.task.status === 'done'" class="status-icon done">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M5 13l4 4L19 7"
+                    ></path>
+                </svg>
+            </div>
+            <div v-else-if="data.task.status === 'in_review'" class="status-icon review">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    ></path>
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    ></path>
+                </svg>
+            </div>
+            <div v-else-if="data.task.status === 'blocked'" class="status-icon blocked">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                    ></path>
+                </svg>
+            </div>
+        </div>
+
         <!-- TaskCard component with max-width -->
         <div class="task-card-wrapper">
             <TaskCard
@@ -154,13 +221,16 @@ onUnmounted(() => {
                 :subtasks="[]"
                 :is-dragging="false"
                 :hide-prompt="true"
-                :hide-extra-actions="true"
+                :hide-prompt-actions="true"
+                :hide-connection-handles="true"
                 @click="handleClick"
                 @execute="handleExecute"
                 @previewResult="handlePreviewResult"
                 @retry="handleRetry"
                 @approve="handleApprove"
+                @stop="handleStop"
                 @operatorDrop="handleOperatorDrop"
+                @provideInput="handleProvideInput"
             />
         </div>
 
@@ -209,5 +279,83 @@ onUnmounted(() => {
 .operator-drag-over {
     transform: scale(1.02);
     transition: transform 0.2s;
+}
+
+/* Status icon overlay */
+.status-icon-overlay {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.status-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgb(31, 41, 55);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.status-icon.executing {
+    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    color: white;
+}
+
+.status-icon.done {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: white;
+}
+
+.status-icon.review {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    color: white;
+}
+
+.status-icon.blocked {
+    background: linear-gradient(135deg, #ef4444, #f87171);
+    color: white;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Better rotating border animation for DAG view - using sliding gradient */
+:deep(.task-pulse-border) {
+    position: relative;
+    border: 4px solid transparent !important;
+    background-image:
+        linear-gradient(rgb(31, 41, 55), rgb(31, 41, 55)),
+        linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd, #60a5fa, #3b82f6, #60a5fa, #3b82f6);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    background-size:
+        100% 100%,
+        400% 100%;
+    animation: rotate-border 3s linear infinite !important;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+}
+
+@keyframes rotate-border {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 400% 50%;
+    }
 }
 </style>

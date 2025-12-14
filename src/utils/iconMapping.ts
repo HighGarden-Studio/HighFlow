@@ -59,7 +59,14 @@ export function getProviderIcon(providerId: string): string {
         'claude-code': 'simple-icons:anthropic',
         codex: 'simple-icons:openai',
         antigravity: 'simple-icons:google',
+        // Default HighFlow
+        'default-highflow': 'simple-icons:hexo',
     };
+
+    // If the providerId already looks like an icon string (has colon), return it as is
+    if (providerId.includes(':')) {
+        return providerId;
+    }
 
     return providerIconMap[providerId] || 'ph:cube';
 }

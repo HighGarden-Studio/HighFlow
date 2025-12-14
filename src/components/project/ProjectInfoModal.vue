@@ -4,11 +4,16 @@
  *
  * Modal wrapper for ProjectInfoPanel to display project information
  * including main prompt, AI guidelines, and project stats
+ * Also includes AI Context/Memory panel in tabs
  */
 
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 import ProjectInfoPanel from './ProjectInfoPanel.vue';
+import ProjectMemoryPanel from './ProjectMemoryPanel.vue';
 import { getAPI } from '../../utils/electron';
+
+// Tab state
+const activeTab = ref<'info' | 'context'>('info');
 
 // ========================================
 // Types
@@ -48,6 +53,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'close'): void;
     (e: 'edit'): void;
+    (e: 'update'): void;
 }>();
 
 // ========================================
@@ -287,19 +293,61 @@ watch(
                             </button>
                         </div>
 
+                        <!-- Tab Navigation -->
+                        <div class="flex border-b border-gray-700 bg-gray-800/30">
+                            <button
+                                @click="activeTab = 'info'"
+                                :class="[
+                                    'px-6 py-3 text-sm font-medium transition-colors relative',
+                                    activeTab === 'info'
+                                        ? 'text-blue-400'
+                                        : 'text-gray-400 hover:text-gray-200',
+                                ]"
+                            >
+                                📋 프로젝트 정보
+                                <div
+                                    v-if="activeTab === 'info'"
+                                    class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
+                                />
+                            </button>
+                            <button
+                                @click="activeTab = 'context'"
+                                :class="[
+                                    'px-6 py-3 text-sm font-medium transition-colors relative',
+                                    activeTab === 'context'
+                                        ? 'text-blue-400'
+                                        : 'text-gray-400 hover:text-gray-200',
+                                ]"
+                            >
+                                🧠 AI 컨텍스트
+                                <div
+                                    v-if="activeTab === 'context'"
+                                    class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
+                                />
+                            </button>
+                        </div>
+
                         <!-- Modal Content -->
-                        <div class="flex-1 overflow-y-auto p-6">
-                            <ProjectInfoPanel
-                                :project="project"
-                                @edit="handleEdit"
-                                @open-output="handleOpenOutput"
-                                @update-guidelines="handleUpdateGuidelines"
-                                @update-base-folder="handleUpdateBaseFolder"
-                                @update-output-type="handleUpdateOutputType"
-                                @update-ai-settings="handleUpdateAISettings"
-                                @update-auto-review-settings="handleUpdateAutoReviewSettings"
-                                @update-mcp-config="handleUpdateMCPConfig"
-                            />
+                        <div class="flex-1 overflow-y-auto">
+                            <!-- Project Info Tab -->
+                            <div v-show="activeTab === 'info'" class="p-6">
+                                <ProjectInfoPanel
+                                    :project="project"
+                                    @edit="handleEdit"
+                                    @open-output="handleOpenOutput"
+                                    @update-guidelines="handleUpdateGuidelines"
+                                    @update-base-folder="handleUpdateBaseFolder"
+                                    @update-output-type="handleUpdateOutputType"
+                                    @update-ai-settings="handleUpdateAISettings"
+                                    @update-auto-review-settings="handleUpdateAutoReviewSettings"
+                                    @update-mcp-config="handleUpdateMCPConfig"
+                                />
+                            </div>
+
+                            <!-- AI Context Tab -->
+                            <div v-show="activeTab === 'context'">
+                                <ProjectMemoryPanel :project="project" />
+                            </div>
                         </div>
 
                         <!-- Modal Footer -->

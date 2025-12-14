@@ -44,6 +44,9 @@ export class CreateTaskCommand extends BaseCommand {
 
 /**
  * Update Task Command
+ *
+ * NOTE: This command uses direct store updates to avoid structuredClone
+ * issues with Electron IPC. The undo/redo operations bypass IPC entirely.
  */
 export class UpdateTaskCommand extends BaseCommand {
     private taskId: number;
@@ -58,18 +61,45 @@ export class UpdateTaskCommand extends BaseCommand {
     ) {
         super(description || `Update task ${taskId}`);
         this.taskId = taskId;
-        this.newData = { ...newData };
-        this.previousData = { ...previousData };
+        // Store the data as-is, we'll handle serialization in execute/undo
+        this.newData = newData;
+        this.previousData = previousData;
     }
 
     async execute(): Promise<void> {
-        const api = getAPI();
-        await api.tasks.update(this.taskId, this.newData);
+        // Import taskStore dynamically to avoid circular dependencies
+        const { useTaskStore } = await import('../../../src/renderer/stores/taskStore');
+        const taskStore = useTaskStore();
+
+        console.log('📝 UpdateTaskCommand.execute - before updateTask');
+        // Use the store's updateTask method directly (bypasses IPC)
+        await taskStore.updateTask(this.taskId, this.newData);
+
+        // Refresh tasks to ensure UI updates (especially DAG view)
+        console.log('📝 UpdateTaskCommand.execute - currentProjectId:', taskStore.currentProjectId);
+        if (taskStore.currentProjectId) {
+            console.log('📝 UpdateTaskCommand.execute - calling fetchTasks');
+            await taskStore.fetchTasks(taskStore.currentProjectId);
+            console.log('📝 UpdateTaskCommand.execute - fetchTasks completed');
+        }
     }
 
     async undo(): Promise<void> {
-        const api = getAPI();
-        await api.tasks.update(this.taskId, this.previousData);
+        // Import taskStore dynamically to avoid circular dependencies
+        const { useTaskStore } = await import('../../../src/renderer/stores/taskStore');
+        const taskStore = useTaskStore();
+
+        console.log('↩️ UpdateTaskCommand.undo - before updateTask');
+        // Use the store's updateTask method directly (bypasses IPC)
+        await taskStore.updateTask(this.taskId, this.previousData);
+
+        // Refresh tasks to ensure UI updates (especially DAG view)
+        console.log('↩️ UpdateTaskCommand.undo - currentProjectId:', taskStore.currentProjectId);
+        if (taskStore.currentProjectId) {
+            console.log('↩️ UpdateTaskCommand.undo - calling fetchTasks');
+            await taskStore.fetchTasks(taskStore.currentProjectId);
+            console.log('↩️ UpdateTaskCommand.undo - fetchTasks completed');
+        }
     }
 }
 

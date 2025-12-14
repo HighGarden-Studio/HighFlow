@@ -571,6 +571,56 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                 </div>
                             </div>
 
+                            <!-- Default Gemini Notice -->
+                            <div
+                                v-if="provider.id === 'default-highflow'"
+                                class="p-4 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="w-10 h-10 bg-blue-100 dark:bg-blue-800 rounded-lg flex items-center justify-center flex-shrink-0"
+                                    >
+                                        <IconRenderer
+                                            icon="simple-icons:hexo"
+                                            class="w-5 h-5 text-blue-600 dark:text-blue-300"
+                                        />
+                                    </div>
+                                    <div class="flex-1">
+                                        <p
+                                            class="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2"
+                                        >
+                                            ✨ 기본 제공 HighFlow AI (Credit)
+                                        </p>
+                                        <ul
+                                            class="text-xs text-blue-700 dark:text-blue-300 space-y-1"
+                                        >
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-green-600 dark:text-green-400"
+                                                    >✓</span
+                                                >
+                                                <span>로그인 후 앱 계정의 크레딧을 사용합니다</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-green-600 dark:text-green-400"
+                                                    >✓</span
+                                                >
+                                                <span>별도의 API 키가 필요하지 않습니다</span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <span class="text-yellow-600 dark:text-yellow-400"
+                                                    >⚠</span
+                                                >
+                                                <span>스트리밍은 지원하지 않습니다</span>
+                                            </li>
+                                        </ul>
+                                        <p class="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                                            로그인하지 않은 경우 Task 실행 시 로그인 안내가
+                                            표시됩니다.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- OAuth Connection Section -->
                             <div
                                 v-if="

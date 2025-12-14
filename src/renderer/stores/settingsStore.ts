@@ -78,6 +78,7 @@ export interface AIProviderConfig {
     apiKey?: string;
     oauthToken?: string;
     oauth?: OAuthConfig;
+    requiresLogin?: boolean; // Requires user login (for proxy providers)
     // Configuration
     baseUrl?: string;
     enabled: boolean;
@@ -623,6 +624,45 @@ export const useSettingsStore = defineStore('settings', () => {
             ],
             defaultModel: 'gemini-1.5-flash',
             supportsStreaming: true,
+            supportsVision: true,
+            supportsTools: true,
+            maxTokens: 1000000,
+        },
+        {
+            id: 'default-highflow',
+            name: 'Default HighFlow (Credit)',
+            description: '로그인하면 사용 가능한 HighFlow 기반 AI (앱 크레딧 사용)',
+            icon: 'simple-icons:hexo',
+            website: 'https://highflow.ai',
+            tags: [
+                'chat',
+                'code',
+                'reasoning',
+                'image-analysis',
+                'long-context',
+                'multi-modal',
+                'agent',
+                'free-tier',
+            ],
+            authMethods: ['oauth'], // Requires cloud login
+            requiresLogin: true, // Login required to use
+            enabled: false,
+            models: [
+                'gemini-3-pro-image-preview',
+                'gemini-2.5-flash-image',
+                'veo-3.1-generate-preview',
+                'veo-2.0-generate-preview',
+                'gemini-3.0-pro-exp',
+                'gemini-3.0-flash-exp',
+                'gemini-2.0-flash-exp',
+                'gemini-2.0-flash-thinking-exp-1219',
+                'gemini-1.5-pro',
+                'gemini-1.5-flash',
+                'gemini-1.5-flash-8b',
+                'gemini-exp-1206',
+            ],
+            defaultModel: 'gemini-1.5-flash',
+            supportsStreaming: false, // Streaming not supported through proxy
             supportsVision: true,
             supportsTools: true,
             maxTokens: 1000000,

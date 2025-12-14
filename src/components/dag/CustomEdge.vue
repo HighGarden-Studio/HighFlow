@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { getBezierPath } from '@vue-flow/core';
+import IconRenderer from '../common/IconRenderer.vue';
 
 interface Props {
     id: string;
@@ -15,6 +16,12 @@ interface Props {
     style?: any;
     data?: {
         onEdgeRemove?: (edgeId: string) => void;
+        formatInfo?: {
+            label: string;
+            icon: string;
+            bgColor?: string;
+            textColor?: string;
+        } | null;
     };
 }
 
@@ -73,7 +80,21 @@ function handleRemove(event: MouseEvent) {
             class="edge-label-container"
         >
             <div class="edge-label-wrapper">
-                <div class="edge-label">
+                <div
+                    v-if="data?.formatInfo"
+                    :class="[
+                        'edge-label-badge',
+                        data.formatInfo.bgColor || 'bg-gray-700',
+                        data.formatInfo.textColor || 'text-gray-200',
+                    ]"
+                >
+                    <IconRenderer :emoji="data.formatInfo.icon" class="w-3.5 h-3.5" />
+                    <span class="label-text">{{ data.formatInfo.label }}</span>
+                    <button class="delete-button" @click="handleRemove" title="의존성 제거">
+                        ×
+                    </button>
+                </div>
+                <div v-else class="edge-label">
                     <span class="label-text">{{ label || 'Output' }}</span>
                     <button class="delete-button" @click="handleRemove" title="의존성 제거">
                         ×
@@ -169,5 +190,24 @@ function handleRemove(event: MouseEvent) {
 
 .delete-button:active {
     transform: scale(0.95);
+}
+
+/* Badge style for formatted labels */
+.edge-label-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.95;
+    transition: all 0.2s;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.custom-edge:hover .edge-label-badge {
+    opacity: 1;
+    transform: scale(1.05);
 }
 </style>

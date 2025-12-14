@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import type { Task, TaskHistoryEntry, MCPConfig } from '@core/types/database';
+import type { Task, TaskHistoryEntry, MCPConfig, InputTaskConfig } from '@core/types/database';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
 import PromptEnhancerPanel from '../prompt/PromptEnhancerPanel.vue';
 import PromptTemplatePicker from '../prompt/PromptTemplatePicker.vue';
 import TaskExecutionProgress from './TaskExecutionProgress.vue';
 import MacroInsertButton from '../common/MacroInsertButton.vue';
+
 import AIProviderSelector from '../common/AIProviderSelector.vue';
 import MCPToolSelector from '../common/MCPToolSelector.vue';
 import IconRenderer from '../common/IconRenderer.vue';
@@ -149,6 +150,31 @@ const executionProgress = ref(0);
 const streamingResult = ref('');
 const comments = ref<Array<{ id: number; author: string; text: string; timestamp: Date }>>([]);
 const newComment = ref('');
+
+// Task Title Editing
+const isEditingTitle = ref(false);
+const editedTitle = ref('');
+
+function startEditTitle() {
+    if (!props.task) return;
+    editedTitle.value = props.task.title;
+    isEditingTitle.value = true;
+}
+
+function cancelEditTitle() {
+    isEditingTitle.value = false;
+    editedTitle.value = '';
+}
+
+async function saveTitle() {
+    if (!props.task || !editedTitle.value.trim()) return;
+    try {
+        await taskStore.updateTask(props.task.id, { title: editedTitle.value });
+        isEditingTitle.value = false;
+    } catch (error) {
+        console.error('Failed to update task title:', error);
+    }
+}
 
 // Details tab state
 const priority = ref<'low' | 'medium' | 'high' | 'urgent' | 'critical'>('medium');
@@ -297,12 +323,21 @@ const sequencesToTaskIds = (sequences: string): number[] => {
 // Watch for task changes
 const isInitializing = ref(false);
 const previousTaskId = ref<number | null>(null);
+const isSavingInternally = ref(false); // Track internal saves to prevent re-initialization
 
 // Watch for task changes
 watch(
     () => props.task,
     (newTask) => {
         if (newTask) {
+            // Skip re-initialization if this update is from our own save
+            if (isSavingInternally.value) {
+                console.log('[TaskDetailPanel] Skipping re-initialization (internal save)');
+                // Just update localTask to keep in sync
+                localTask.value = { ...newTask };
+                return;
+            }
+
             // Only re-initialize if this is a different task
             // For the same task, Vue's reactivity will handle updates
             if (previousTaskId.value === newTask.id) {
@@ -438,9 +473,59 @@ watch([aiProvider, executionMode, selectedLocalAgent, localAgentWorkingDir], () 
     persistExecutionSettings();
 });
 
+// Sync aiProvider when Local Agent is selected
+watch(selectedLocalAgent, (newAgent) => {
+    if (isInitializing.value) return;
+    if (executionMode.value === 'local' && newAgent) {
+        const agentTypeToProviderId: Record<LocalAgentType, string> = {
+            claude: 'claude-code',
+            codex: 'codex',
+            antigravity: 'antigravity',
+        };
+        const newProvider = agentTypeToProviderId[newAgent] as AIProvider;
+        if (aiProvider.value !== newProvider) {
+            console.log('[TaskDetailPanel] Syncing aiProvider to local agent:', newProvider);
+            aiProvider.value = newProvider;
+        }
+    }
+});
+
+// Sync aiProvider when Execution Mode changes
+watch(executionMode, (newMode) => {
+    if (isInitializing.value) return;
+
+    if (newMode === 'local') {
+        if (selectedLocalAgent.value) {
+            const agentTypeToProviderId: Record<LocalAgentType, string> = {
+                claude: 'claude-code',
+                codex: 'codex',
+                antigravity: 'antigravity',
+            };
+            const newProvider = agentTypeToProviderId[selectedLocalAgent.value] as AIProvider;
+            if (aiProvider.value !== newProvider) {
+                console.log('[TaskDetailPanel] Mode -> Local: Syncing aiProvider:', newProvider);
+                aiProvider.value = newProvider;
+            }
+        }
+    } else if (newMode === 'api') {
+        // Safe check for local provider
+        const currentProvider = aiProvider.value;
+        const currentIsLocal = currentProvider && isLocalAgentProvider(currentProvider).isLocal;
+
+        if (currentIsLocal) {
+            console.log('[TaskDetailPanel] Mode -> API: Resetting local provider');
+            aiProvider.value = null;
+            aiModel.value = null;
+        }
+    }
+});
+
 watch(
     () => aiProvider.value,
     (provider) => {
+        // If provider is null or local agent, don't set default model from API providers
+        if (!provider || isLocalAgentProvider(provider).isLocal) return;
+
         const defaultModel = getDefaultModelForProvider(provider);
         if (!providerModelOptions.value.some((opt) => opt.id === aiModel.value) || !aiModel.value) {
             aiModel.value = defaultModel;
@@ -702,6 +787,10 @@ const baseWorkingDirPlaceholder = computed(() => baseDevFolder.value || '/path/t
 
 function persistExecutionSettings() {
     if (!localTask.value) return;
+
+    // Set flag to prevent re-initialization from our own save
+    isSavingInternally.value = true;
+
     emit('save', {
         ...localTask.value,
         aiProvider: aiProvider.value,
@@ -715,6 +804,11 @@ function persistExecutionSettings() {
         mcpConfig: buildMCPConfigPayload(),
         expectedOutputFormat: localTask.value.expectedOutputFormat,
     } as Task);
+
+    // Reset flag after save completes (use timeout to ensure task prop update happens first)
+    setTimeout(() => {
+        isSavingInternally.value = false;
+    }, 100);
 }
 
 function createKeyValuePair(): KeyValuePair {
@@ -811,6 +905,79 @@ function syncLocalMCPConfig(): void {
         ...localTask.value,
         mcpConfig: payload,
     } as Task;
+}
+
+/**
+ * Input Task Config Helpers
+ */
+function getInputConfig(): InputTaskConfig {
+    if (!localTask.value?.inputConfig) {
+        return {
+            sourceType: 'USER_INPUT',
+            userInput: { message: '', required: true, mode: 'short' },
+        };
+    }
+    if (typeof localTask.value.inputConfig === 'string') {
+        try {
+            return JSON.parse(localTask.value.inputConfig);
+        } catch {
+            return {
+                sourceType: 'USER_INPUT',
+                userInput: { message: '', required: true, mode: 'short' },
+            };
+        }
+    }
+    return localTask.value.inputConfig as InputTaskConfig;
+}
+
+function updateInputConfig(key: keyof InputTaskConfig, value: any) {
+    if (!localTask.value) return;
+    const current = getInputConfig();
+    const updated = { ...current, [key]: value };
+    // Keep as object - taskStore will handle JSON serialization
+    (localTask.value as any).inputConfig = updated;
+    emit('save', localTask.value);
+}
+
+function toggleFileExtension(ext: string, checked: boolean) {
+    if (!localTask.value) return;
+    const config = getInputConfig();
+    const localFile = config.localFile || { acceptedExtensions: [], readMode: 'text' };
+    let extensions = localFile.acceptedExtensions || [];
+
+    if (checked) {
+        if (!extensions.includes(ext)) extensions.push(ext);
+    } else {
+        extensions = extensions.filter((e) => e !== ext);
+    }
+
+    updateInputConfig('localFile', { ...localFile, acceptedExtensions: extensions });
+}
+
+async function handleSelectLocalFile() {
+    if (!localStorage.value && !localTask.value) return;
+
+    try {
+        const config = getInputConfig();
+        const extensions = config.localFile?.acceptedExtensions || [];
+
+        // Prepare filters based on accepted extensions
+        const filters = extensions.length > 0 ? [{ name: 'Allowed Files', extensions }] : undefined;
+
+        // @ts-ignore - fs API exists in preload
+        const filePath = await window.electron.fs.selectFile(filters);
+
+        if (filePath) {
+            updateInputConfig('localFile', {
+                ...config.localFile,
+                filePath,
+                acceptedExtensions: config.localFile?.acceptedExtensions || [],
+                readMode: config.localFile?.readMode || 'text',
+            });
+        }
+    } catch (error) {
+        console.error('Failed to select file:', error);
+    }
 }
 
 /**
@@ -1364,11 +1531,56 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                         <div class="flex items-start justify-between">
                             <div class="flex-1">
                                 <!-- Title -->
-                                <h2
-                                    class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
-                                >
-                                    {{ localTask?.title || '태스크 상세' }}
-                                </h2>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div v-if="isEditingTitle" class="flex-1 flex gap-2">
+                                        <input
+                                            v-model="editedTitle"
+                                            class="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xl font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            @keyup.enter="saveTitle"
+                                            @keyup.esc="cancelEditTitle"
+                                            autoFocus
+                                        />
+                                        <button
+                                            class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 whitespace-nowrap"
+                                            @click="saveTitle"
+                                        >
+                                            저장
+                                        </button>
+                                        <button
+                                            class="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 whitespace-nowrap"
+                                            @click="cancelEditTitle"
+                                        >
+                                            취소
+                                        </button>
+                                    </div>
+                                    <div v-else class="flex-1 flex items-center gap-2 group">
+                                        <h2
+                                            class="text-xl font-semibold text-gray-900 dark:text-white cursor-pointer hover:underline decoration-dashed decoration-gray-400 decoration-1 underline-offset-4"
+                                            @click="startEditTitle"
+                                        >
+                                            {{ localTask?.title || '태스크 상세' }}
+                                        </h2>
+                                        <button
+                                            class="p-1 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-500"
+                                            @click="startEditTitle"
+                                            title="제목 편집"
+                                        >
+                                            <svg
+                                                class="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
 
                                 <!-- Badges -->
                                 <div class="flex items-center gap-2">
@@ -1667,6 +1879,297 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         }}</code>
                                         등</span
                                     >
+                                </div>
+                            </div>
+
+                            <!-- Input Task Settings (Moved to Execution Settings tab) -->
+                            <div
+                                v-else-if="localTask?.taskType === 'input'"
+                                class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700 space-y-4 mb-6"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-200 font-semibold"
+                                >
+                                    <svg
+                                        class="w-5 h-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                        />
+                                    </svg>
+                                    Input Task 설정
+                                </div>
+
+                                <!-- Source Type Selection -->
+                                <div>
+                                    <label
+                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                    >
+                                        입력 소스 유형
+                                    </label>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <button
+                                            v-for="type in [
+                                                {
+                                                    id: 'USER_INPUT',
+                                                    label: 'User Input',
+                                                    icon: '👤',
+                                                },
+                                                {
+                                                    id: 'LOCAL_FILE',
+                                                    label: 'Local File',
+                                                    icon: '📂',
+                                                },
+                                                {
+                                                    id: 'REMOTE_RESOURCE',
+                                                    label: 'Remote URL',
+                                                    icon: '🌐',
+                                                },
+                                            ]"
+                                            :key="type.id"
+                                            @click="updateInputConfig('sourceType', type.id)"
+                                            :class="[
+                                                'px-3 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-2',
+                                                getInputConfig().sourceType === type.id
+                                                    ? 'bg-yellow-100 dark:bg-yellow-800 border-yellow-500 text-yellow-900 dark:text-yellow-100'
+                                                    : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
+                                            ]"
+                                        >
+                                            <span>{{ type.icon }}</span>
+                                            <span>{{ type.label }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- USER_INPUT Configuration -->
+                                <div
+                                    v-if="getInputConfig().sourceType === 'USER_INPUT'"
+                                    class="space-y-3 pt-2 border-t border-yellow-200 dark:border-yellow-700"
+                                >
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            입력 모드
+                                        </label>
+                                        <div class="flex gap-2">
+                                            <button
+                                                v-for="mode in ['short', 'long', 'confirm']"
+                                                :key="mode"
+                                                @click="
+                                                    updateInputConfig('userInput', {
+                                                        ...getInputConfig().userInput,
+                                                        mode,
+                                                    })
+                                                "
+                                                :class="[
+                                                    'px-2 py-1 rounded text-xs border capitalize',
+                                                    getInputConfig().userInput?.mode === mode
+                                                        ? 'bg-yellow-500 text-white border-yellow-500'
+                                                        : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400',
+                                                ]"
+                                            >
+                                                {{ mode }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            요청 메시지
+                                        </label>
+                                        <input
+                                            :value="getInputConfig().userInput?.message || ''"
+                                            @input="
+                                                updateInputConfig('userInput', {
+                                                    ...getInputConfig().userInput,
+                                                    message: ($event.target as HTMLInputElement)
+                                                        .value,
+                                                })
+                                            "
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
+                                            placeholder="사용자에게 보여질 메시지"
+                                        />
+                                    </div>
+
+                                    <div v-if="getInputConfig().userInput?.mode !== 'confirm'">
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            Placeholder (선택)
+                                        </label>
+                                        <input
+                                            :value="getInputConfig().userInput?.placeholder || ''"
+                                            @input="
+                                                updateInputConfig('userInput', {
+                                                    ...getInputConfig().userInput,
+                                                    placeholder: ($event.target as HTMLInputElement)
+                                                        .value,
+                                                })
+                                            "
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            placeholder="입력 예시"
+                                        />
+                                    </div>
+
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            :checked="
+                                                getInputConfig().userInput?.required !== false
+                                            "
+                                            @change="
+                                                updateInputConfig('userInput', {
+                                                    ...getInputConfig().userInput,
+                                                    required: ($event.target as HTMLInputElement)
+                                                        .checked,
+                                                })
+                                            "
+                                            class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
+                                        />
+                                        <span class="text-sm text-gray-700 dark:text-gray-300"
+                                            >필수 입력</span
+                                        >
+                                    </label>
+                                </div>
+
+                                <!-- LOCAL_FILE Configuration -->
+                                <div
+                                    v-if="getInputConfig().sourceType === 'LOCAL_FILE'"
+                                    class="space-y-3 pt-2 border-t border-yellow-200 dark:border-yellow-700"
+                                >
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            허용 확장자
+                                        </label>
+                                        <div class="flex flex-wrap gap-2">
+                                            <label
+                                                v-for="ext in ['txt', 'md', 'csv', 'xlsx', 'json']"
+                                                :key="ext"
+                                                class="flex items-center gap-1.5 text-sm cursor-pointer"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    :checked="
+                                                        getInputConfig().localFile?.acceptedExtensions?.includes(
+                                                            ext
+                                                        )
+                                                    "
+                                                    @change="
+                                                        toggleFileExtension(
+                                                            ext,
+                                                            ($event.target as HTMLInputElement)
+                                                                .checked
+                                                        )
+                                                    "
+                                                    class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
+                                                />
+                                                <span class="text-gray-700 dark:text-gray-300">{{
+                                                    ext
+                                                }}</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            읽기 모드
+                                        </label>
+                                        <select
+                                            :value="getInputConfig().localFile?.readMode || 'text'"
+                                            @change="
+                                                updateInputConfig('localFile', {
+                                                    ...getInputConfig().localFile,
+                                                    readMode: ($event.target as HTMLSelectElement)
+                                                        .value,
+                                                })
+                                            "
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        >
+                                            <option value="text">텍스트 (기본)</option>
+                                            <option value="table">테이블 (CSV/Excel)</option>
+                                            <option value="binary">바이너리</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            대상 파일
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                readonly
+                                                :value="getInputConfig().localFile?.filePath || ''"
+                                                class="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                                                placeholder="파일을 선택하세요"
+                                            />
+                                            <button
+                                                @click="handleSelectLocalFile"
+                                                class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                                            >
+                                                파일 선택
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- REMOTE_RESOURCE Configuration -->
+                                <div
+                                    v-if="getInputConfig().sourceType === 'REMOTE_RESOURCE'"
+                                    class="space-y-3 pt-2 border-t border-yellow-200 dark:border-yellow-700"
+                                >
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            리소스 유형
+                                        </label>
+                                        <select
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        >
+                                            <option value="general">일반 웹페이지 URL</option>
+                                            <option value="google_drive" disabled>
+                                                Google Drive (준비 중)
+                                            </option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            기본 URL (선택)
+                                        </label>
+                                        <input
+                                            :value="getInputConfig().remoteResource?.url || ''"
+                                            @input="
+                                                updateInputConfig('remoteResource', {
+                                                    ...getInputConfig().remoteResource,
+                                                    url: ($event.target as HTMLInputElement).value,
+                                                })
+                                            "
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            placeholder="https://example.com"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -2060,15 +2563,18 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </p>
                             </div>
 
-                            <!-- Execution Mode Selection -->
-                            <div>
+                            <!-- Execution Mode Selection (AI tasks only) -->
+                            <div
+                                v-if="!localTask?.taskType || localTask?.taskType === 'ai'"
+                                class="mb-6"
+                            >
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3"
                                 >
-                                    실행 모드
+                                    실행 방식
                                 </label>
                                 <div class="grid grid-cols-2 gap-3">
-                                    <!-- API Mode -->
+                                    <!-- AI API Mode -->
                                     <label
                                         :class="[
                                             'flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all',
@@ -2107,7 +2613,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 >AI API</span
                                             >
                                             <span class="text-xs text-gray-500 dark:text-gray-400"
-                                                >클라우드 AI 서비스 사용</span
+                                                >클라우드 AI 서비스</span
                                             >
                                         </div>
                                     </label>
@@ -2153,21 +2659,21 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 >Local Agent</span
                                             >
                                             <span class="text-xs text-gray-500 dark:text-gray-400"
-                                                >로컬 CLI 에이전트 사용</span
+                                                >로컬 CLI 에이전트</span
                                             >
                                         </div>
                                     </label>
                                 </div>
                             </div>
 
-                            <!-- Local Agent Settings (when local mode selected, AI tasks only) -->
+                            <!-- Local Agent Settings (when local mode selected) -->
                             <div
                                 v-if="
                                     (!localTask?.taskType || localTask?.taskType === 'ai') &&
                                     executionMode === 'local' &&
                                     isDevProject
                                 "
-                                class="space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                                class="space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 mb-6"
                             >
                                 <h4
                                     class="text-sm font-semibold text-green-800 dark:text-green-200 flex items-center gap-2"
@@ -2195,6 +2701,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                     >
                                         에이전트 선택
                                     </label>
+
                                     <div class="space-y-2">
                                         <label
                                             v-for="agent in availableLocalAgents"
@@ -2215,28 +2722,30 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 class="sr-only"
                                             />
                                             <IconRenderer :emoji="agent.icon" class="w-5 h-5" />
-                                            <div class="flex-1">
+                                            <div class="flex-1 flex items-center justify-between">
+                                                <div>
+                                                    <span
+                                                        class="text-sm font-medium text-green-900 dark:text-green-100"
+                                                        >{{ agent.name }}</span
+                                                    >
+                                                    <span
+                                                        v-if="agent.version"
+                                                        class="ml-2 text-xs text-green-600 dark:text-green-400"
+                                                    >
+                                                        v{{ agent.version }}
+                                                    </span>
+                                                </div>
                                                 <span
-                                                    class="text-sm font-medium text-gray-900 dark:text-white"
-                                                    >{{ agent.name }}</span
+                                                    :class="[
+                                                        'px-2 py-1 text-xs rounded',
+                                                        agent.installed
+                                                            ? 'bg-green-200 dark:bg-green-700 text-green-700 dark:text-green-200'
+                                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
+                                                    ]"
                                                 >
-                                                <span
-                                                    v-if="agent.version"
-                                                    class="ml-2 text-xs text-green-600 dark:text-green-400"
-                                                >
-                                                    v{{ agent.version }}
+                                                    {{ agent.installed ? '설치됨' : '미설치' }}
                                                 </span>
                                             </div>
-                                            <span
-                                                :class="[
-                                                    'px-2 py-1 text-xs rounded',
-                                                    agent.installed
-                                                        ? 'bg-green-200 dark:bg-green-700 text-green-700 dark:text-green-200'
-                                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-                                                ]"
-                                            >
-                                                {{ agent.installed ? '설치됨' : '미설치' }}
-                                            </span>
                                         </label>
                                     </div>
                                 </div>
@@ -2252,44 +2761,16 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         <input
                                             v-model="localAgentWorkingDir"
                                             type="text"
-                                            readonly
-                                            class="flex-1 px-3 py-2 border border-green-300 dark:border-green-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                                             :placeholder="baseWorkingDirPlaceholder"
-                                            :disabled="!isDevProject"
+                                            class="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-green-300 dark:border-green-700 rounded-lg"
                                         />
                                         <button
+                                            type="button"
                                             @click="selectWorkingDirectory"
-                                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-                                            :disabled="!isDevProject"
+                                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                                         >
                                             찾아보기
                                         </button>
-                                    </div>
-                                    <p class="text-xs text-green-600 dark:text-green-400 mt-1">
-                                        Local Agent가 작업을 수행할 프로젝트 디렉토리를 선택하세요.
-                                    </p>
-                                </div>
-
-                                <!-- Session Info -->
-                                <div
-                                    v-if="localAgentExecution.hasActiveSession.value"
-                                    class="mt-4 p-3 bg-green-100 dark:bg-green-800/30 rounded-lg"
-                                >
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-2">
-                                            <div
-                                                class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
-                                            />
-                                            <span class="text-sm text-green-700 dark:text-green-300"
-                                                >세션 활성화됨</span
-                                            >
-                                        </div>
-                                        <span class="text-xs text-green-600 dark:text-green-400">
-                                            {{
-                                                localAgentExecution.currentSession.value
-                                                    ?.messageCount || 0
-                                            }}개 메시지
-                                        </span>
                                     </div>
                                 </div>
                             </div>

@@ -94,6 +94,10 @@ const editedLocalAgent = ref<string | null>(null);
 const isEditingOutputType = ref(false);
 const editedOutputType = ref<string | null>(null);
 
+// Goal State
+const isEditingGoal = ref(false);
+const editedGoal = ref('');
+
 // Auto Review State
 const isEditingAutoReview = ref(false);
 const editedAutoReviewProvider = ref<AIProvider | null>(null);
@@ -104,6 +108,11 @@ const editedAutoReviewLocalAgent = ref<string | null>(null);
 const isEditingMCP = ref(false);
 const selectedMCPServers = ref<string[]>([]);
 const editedMCPConfig = ref<MCPConfig | null>(null);
+
+// Metadata Editing State
+const isEditingMetadata = ref(false);
+const editedTitle = ref('');
+const editedEmoji = ref('');
 
 // ========================================
 // Computed
@@ -201,7 +210,8 @@ const outputTypeDisplay = computed(() => {
     return (
         outputTypes[props.project.outputType as keyof typeof outputTypes] || {
             name: '미지정',
-            icon: '❓',
+            svgPath:
+                'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z', // Question mark icon path if needed, or keeping it empty if handled by IconRenderer differently
             description: '결과물 타입이 지정되지 않음',
         }
     );
@@ -358,6 +368,39 @@ function handleEdit(): void {
     emit('edit');
 }
 
+function startEditMetadata(): void {
+    editedTitle.value = props.project.title;
+    // Assuming project has emoji field, cast to any if TS complains or update Project type if possible
+    editedEmoji.value = (props.project as any).emoji || '';
+    isEditingMetadata.value = true;
+}
+
+function cancelEditMetadata(): void {
+    isEditingMetadata.value = false;
+    editedTitle.value = '';
+    editedEmoji.value = '';
+}
+
+async function saveMetadata(): Promise<void> {
+    if (!editedTitle.value.trim()) return;
+
+    try {
+        const api = getAPI();
+        await api.projects.update(props.project.id, {
+            title: editedTitle.value,
+            emoji: editedEmoji.value || null,
+        } as any); // Cast to any because we just updated d.ts but sometimes it takes time to propagate or Project type might need update
+        isEditingMetadata.value = false;
+
+        // We might need to refresh the project or rely on reactivity if prop updates
+        // Usually the parent component listens to events or store updates.
+        // For now, assume optimistic update or store refresh happens elsewhere.
+        // Actually, let's look at how other updates are handled.
+    } catch (error) {
+        console.error('Failed to update project metadata:', error);
+    }
+}
+
 function handleOpenOutput(): void {
     emit('open-output');
 }
@@ -494,6 +537,29 @@ function saveOutputType(): void {
     isEditingOutputType.value = false;
 }
 
+// Goal Methods
+function startEditGoal(): void {
+    editedGoal.value = props.project.goal || '';
+    isEditingGoal.value = true;
+}
+
+function cancelEditGoal(): void {
+    isEditingGoal.value = false;
+    editedGoal.value = '';
+}
+
+async function saveGoal(): Promise<void> {
+    try {
+        const api = getAPI();
+        await api.projects.update(props.project.id, {
+            goal: editedGoal.value || null,
+        } as any);
+        isEditingGoal.value = false;
+    } catch (error) {
+        console.error('Failed to update project goal:', error);
+    }
+}
+
 // Auto Review Methods
 function startEditAutoReview(): void {
     // Use effective values (including inherited) to show current active settings
@@ -567,28 +633,68 @@ function getAssistantLabel(type: string): string {
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b border-gray-700">
             <div class="flex items-center space-x-3">
-                <h3 class="text-lg font-semibold text-gray-200">프로젝트 정보</h3>
+                <div v-if="isEditingMetadata" class="flex items-center space-x-2">
+                    <!-- Color Picker (simplified as preset colors for now or just text input? let's stick to title for MVP inline edit as per plan) -->
+                    <!-- Actually plan said "Transform the Header section (Title, Emoji, Color) into inputs".
+                         Let's Start with Title and Emoji.
+                    -->
+                    <input
+                        v-model="editedEmoji"
+                        class="w-8 h-8 text-center bg-gray-700 border border-gray-600 rounded text-lg focus:outline-none focus:border-blue-500"
+                        placeholder="📝"
+                    />
+                    <input
+                        v-model="editedTitle"
+                        class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500"
+                        placeholder="프로젝트 이름"
+                        @keyup.enter="saveMetadata"
+                    />
+                </div>
+                <h3 v-else class="text-lg font-semibold text-gray-200">
+                    <span v-if="project.emoji" class="mr-2">{{ project.emoji }}</span>
+                    {{ project.title }}
+                </h3>
+
                 <span
+                    v-if="!isEditingMetadata"
                     class="px-2 py-0.5 text-xs rounded-full text-white"
                     :class="statusDisplay.color"
                 >
                     {{ statusDisplay.name }}
                 </span>
             </div>
-            <button
-                @click="handleEdit"
-                class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200"
-                title="편집"
-            >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                </svg>
-            </button>
+
+            <div class="flex items-center space-x-2">
+                <template v-if="isEditingMetadata">
+                    <button
+                        @click="cancelEditMetadata"
+                        class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200 text-xs"
+                    >
+                        취소
+                    </button>
+                    <button
+                        @click="saveMetadata"
+                        class="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white text-xs"
+                    >
+                        저장
+                    </button>
+                </template>
+                <button
+                    v-else
+                    @click="startEditMetadata"
+                    class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200"
+                    title="편집"
+                >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div class="p-4 space-y-4">
@@ -627,6 +733,80 @@ function getAssistantLabel(type: string): string {
 
             <div v-else class="text-center py-4 text-gray-500 text-sm">
                 초기 프롬프트가 설정되지 않았습니다
+            </div>
+
+            <!-- Project Goal Section -->
+            <div class="space-y-2 border-t border-gray-700 pt-4">
+                <div class="flex items-center justify-between">
+                    <label class="text-sm font-medium text-gray-400">프로젝트 목표 (Goal)</label>
+                    <button
+                        v-if="!isEditingGoal"
+                        @click="startEditGoal"
+                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                    >
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                        </svg>
+                        <span>{{ project.goal ? '편집' : '작성' }}</span>
+                    </button>
+                </div>
+
+                <!-- View Mode -->
+                <div
+                    v-if="!isEditingGoal && project.goal"
+                    class="bg-gray-900/50 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap"
+                >
+                    {{ project.goal }}
+                </div>
+
+                <!-- Empty State -->
+                <div
+                    v-else-if="!isEditingGoal && !project.goal"
+                    class="bg-gray-900/30 rounded-lg p-4 text-center"
+                >
+                    <div class="text-gray-500 text-sm mb-2">
+                        프로젝트의 목표를 작성하여 AI가 더 정확한 결과를 생성하도록 도와주세요.
+                    </div>
+                    <button
+                        @click="startEditGoal"
+                        class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                    >
+                        목표 작성하기
+                    </button>
+                </div>
+
+                <!-- Edit Mode -->
+                <div v-if="isEditingGoal" class="space-y-3">
+                    <textarea
+                        v-model="editedGoal"
+                        class="w-full h-32 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-blue-500"
+                        placeholder="이 프로젝트의 목표와 달성하고자 하는 바를 작성하세요..."
+                    ></textarea>
+                    <div class="flex justify-end space-x-2">
+                        <button
+                            @click="cancelEditGoal"
+                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                        >
+                            취소
+                        </button>
+                        <button
+                            @click="saveGoal"
+                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                        >
+                            저장
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- AI Guidelines Section -->

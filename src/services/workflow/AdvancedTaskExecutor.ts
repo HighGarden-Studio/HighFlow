@@ -118,7 +118,8 @@ export class AdvancedTaskExecutor {
                 const aiResult = (await this.executeWithTimeout(
                     task,
                     context,
-                    timeout
+                    timeout,
+                    options
                 )) as AIExecutionResult;
 
                 const endTime = new Date();
@@ -221,10 +222,11 @@ export class AdvancedTaskExecutor {
     private async executeWithTimeout(
         task: Task,
         context: ExecutionContext,
-        timeout: number
+        timeout: number,
+        options: ExecutionOptions
     ): Promise<any> {
         return Promise.race([
-            this.executeTaskLogic(task, context),
+            this.executeTaskLogic(task, context, options),
             new Promise((_, reject) =>
                 setTimeout(() => reject(new TimeoutError(task.id, timeout)), timeout)
             ),
@@ -236,8 +238,10 @@ export class AdvancedTaskExecutor {
      */
     private async executeTaskLogic(
         task: Task,
-        context: ExecutionContext
+        context: ExecutionContext,
+        options: ExecutionOptions
     ): Promise<AIExecutionResult> {
+        const { onLog } = options;
         // 컨텍스트 변수 치환
         let processedDescription = this.substituteVariables(task.description || '', context);
         console.log(`[AdvancedTaskExecutor] ExecuteTaskLogic ${processedDescription}`);
@@ -300,9 +304,7 @@ export class AdvancedTaskExecutor {
                       if (externalOnToken) {
                           externalOnToken(token);
                       }
-                      console.log(
-                          `[Stream] ${token.slice(0, 50)}${token.length > 50 ? '...' : ''}`
-                      );
+                      // Verbose logging removed - only start/completion summaries logged
                   }
                 : undefined,
             onProgress: (progress) => {
@@ -314,7 +316,16 @@ export class AdvancedTaskExecutor {
                         content: progress.currentContent,
                     });
                 }
-                console.log(`[Progress] ${progress.phase} - ${progress.elapsedTime}ms`);
+                // Verbose logging removed - only start/completion summaries logged
+                if (progress.phase === 'completed') {
+                    onLog?.('info', `[AdvancedTaskExecutor] Task execution completed`, {
+                        taskId: task.id,
+                        provider: progress.provider,
+                        model: progress.model,
+                        tokensGenerated: progress.tokensGenerated,
+                        elapsedTime: progress.elapsedTime,
+                    });
+                }
             },
             fallbackProviders: (context.metadata?.fallbackProviders as any[]) || [
                 'openai',

@@ -21,6 +21,8 @@ import {
 import { registerTaskHistoryHandlers } from './ipc/task-history-handlers';
 import { registerSystemHandlers } from './ipc/system-handlers';
 import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
+import { registerAuthHandlers } from './ipc/auth-handlers';
+import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
 import type { ProjectStatus, ProjectExportData } from '@core/types/database';
@@ -313,7 +315,15 @@ async function registerIpcHandlers(): Promise<void> {
         'tasks:create',
         async (_event, data: Partial<NewTask> & { projectId: number; title: string }) => {
             try {
-                const task = await taskRepo.create(data as any);
+                // Set autoApprove to true by default for Input Tasks
+                const taskData = {
+                    ...data,
+                    autoApprove:
+                        data.taskType === 'input' && data.autoApprove === undefined
+                            ? true
+                            : data.autoApprove,
+                };
+                const task = await taskRepo.create(taskData as any);
                 mainWindow?.webContents.send('task:created', task);
                 return task;
             } catch (error) {
@@ -325,6 +335,10 @@ async function registerIpcHandlers(): Promise<void> {
 
     ipcMain.handle('tasks:update', async (_event, id: number, data: Partial<Task>) => {
         try {
+            // Get previous task state to check for status changes
+            const previousTask = await taskRepo.findById(id);
+            const previousStatus = previousTask?.status;
+
             const task = await taskRepo.update(id, data);
             mainWindow?.webContents.send('task:updated', task);
 
@@ -333,7 +347,16 @@ async function registerIpcHandlers(): Promise<void> {
                 await taskScheduler.updateTask(task);
             }
 
-            if (data.status) {
+            // Check if status actually changed
+            const statusChanged = data.status && data.status !== previousStatus;
+
+            console.log(`[TaskStore] Update task ${id}:`, {
+                newStatus: data.status,
+                prevStatus: previousStatus,
+                statusChanged,
+            });
+
+            if (statusChanged) {
                 mainWindow?.webContents.send('task:status-changed', { id, status: data.status });
 
                 // Send notification for status change
@@ -345,7 +368,7 @@ async function registerIpcHandlers(): Promise<void> {
                     await taskNotificationService.notifyStatusChange(id, task.status, data.status);
                 }
 
-                // Check for dependent tasks if status changed to 'done'
+                // Check for dependent tasks ONLY if status changed to 'done'
                 if (data.status === 'done') {
                     await checkAndExecuteDependentTasks(id, task);
                 }
@@ -483,6 +506,10 @@ async function registerIpcHandlers(): Promise<void> {
         };
     });
 
+    ipcMain.handle('app:getVersion', () => {
+        return app.getVersion();
+    });
+
     // ========================================
     // Window IPC Handlers
     // ========================================
@@ -527,6 +554,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register task history handlers
     registerTaskHistoryHandlers();
+
+    // Register auth handlers
+    registerAuthHandlers();
 
     // Register operator handlers
     registerOperatorHandlers();

@@ -14,6 +14,8 @@ export type AIProvider =
     | 'openai'
     | 'anthropic'
     | 'google'
+    | 'default-highflow'
+    | 'default-gemini'
     | 'azure-openai'
     | 'mistral'
     | 'cohere'

@@ -91,6 +91,8 @@ const appAPI = {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:getInfo'),
 
     getPaths: (): Promise<AppPaths> => ipcRenderer.invoke('app:getPaths'),
+
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
 };
 
 // ========================================
@@ -661,6 +663,10 @@ const taskExecutionAPI = {
     reject: (taskId: number): Promise<{ success: boolean }> =>
         ipcRenderer.invoke('taskExecution:reject', taskId),
 
+    // Input task handlers
+    submitInput: (taskId: number, payload: any): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('task:submitInput', taskId, payload),
+
     // IN_REVIEW state handlers
     completeReview: (taskId: number): Promise<{ success: boolean }> =>
         ipcRenderer.invoke('taskExecution:completeReview', taskId),
@@ -756,12 +762,7 @@ const taskExecutionAPI = {
 
     onProgress: (callback: (data: ProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: ProgressData) => {
-            console.log(
-                '[Preload] taskExecution:progress received:',
-                data.taskId,
-                data.phase,
-                data.content?.slice(0, 30)
-            );
+            // Verbose logging removed - only start/completion summaries logged
             callback(data);
         };
         ipcRenderer.on('taskExecution:progress', handler);
@@ -1005,6 +1006,38 @@ const taskHistoryAPI = {
 };
 
 // ========================================
+// Auth API
+// ========================================
+
+const authAPI = {
+    // Google OAuth login
+    login: () => ipcRenderer.invoke('auth:login'),
+
+    // Logout
+    logout: () => ipcRenderer.invoke('auth:logout'),
+
+    // Get current authenticated user
+    getCurrentUser: () => ipcRenderer.invoke('auth:getCurrentUser'),
+
+    // Get session token
+    getSessionToken: () => ipcRenderer.invoke('auth:getSessionToken'),
+};
+
+// ========================================
+// HTTP API (Authenticated Requests)
+// ========================================
+
+const httpAPI = {
+    // Generic authenticated HTTP request
+    request: (params: {
+        method: 'get' | 'post' | 'put' | 'delete' | 'patch';
+        url: string;
+        data?: any;
+        params?: Record<string, any>;
+    }) => ipcRenderer.invoke('http:request', params),
+};
+
+// ========================================
 // Expose APIs to renderer via contextBridge
 // ========================================
 
@@ -1027,6 +1060,8 @@ const electronAPI = {
     taskExecution: taskExecutionAPI,
     taskHistory: taskHistoryAPI,
     operators: operatorsAPI,
+    auth: authAPI,
+    http: httpAPI,
 };
 
 // Expose to renderer

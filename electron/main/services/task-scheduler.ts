@@ -37,6 +37,23 @@ class TaskScheduler {
             this.scheduledTasks.size,
             'scheduled tasks'
         );
+
+        // Periodic health check - log scheduled tasks every 5 minutes
+        setInterval(
+            () => {
+                console.log(
+                    '[TaskScheduler] Health check - Active scheduled tasks:',
+                    this.scheduledTasks.size
+                );
+                if (this.scheduledTasks.size > 0) {
+                    console.log(
+                        '[TaskScheduler] Registered task IDs:',
+                        Array.from(this.scheduledTasks.keys())
+                    );
+                }
+            },
+            5 * 60 * 1000
+        ); // Every 5 minutes
     }
 
     /**

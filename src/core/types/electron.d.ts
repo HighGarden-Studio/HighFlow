@@ -48,6 +48,7 @@ export interface ProjectsAPI {
             title: string;
             description: string;
             status: string;
+            emoji?: string | null;
             baseDevFolder?: string | null;
             projectGuidelines?: string | null;
         }>
@@ -67,9 +68,7 @@ export interface TasksAPI {
     ) => Promise<Task>;
     delete: (id: number) => Promise<void>;
     reorder: (projectId: number, taskIds: number[]) => Promise<void>;
-    executeScript: (
-        taskId: number
-    ) => Promise<{
+    executeScript: (taskId: number) => Promise<{
         success: boolean;
         output: string;
         error?: string;
@@ -81,6 +80,7 @@ export interface TasksAPI {
 export interface AppAPI {
     getInfo: () => Promise<AppInfo>;
     getPaths: () => Promise<AppPaths>;
+    getVersion: () => Promise<string>;
 }
 
 export interface WindowAPI {
@@ -334,13 +334,7 @@ export interface LocalProvidersAPI {
 }
 
 // Task Execution Types
-export type TaskExecutionStatus =
-    | 'running'
-    | 'paused'
-    | 'stopped'
-    | 'completed'
-    | 'failed'
-    | 'needs_approval';
+export type TaskExecutionStatus = 'running' | 'paused' | 'stopped' | 'completed' | 'failed';
 
 export interface ExecutionProgress {
     percentage: number;
@@ -393,6 +387,7 @@ export interface TaskExecutionAPI {
     pause: (taskId: number) => Promise<{ success: boolean; error?: string }>;
     resume: (taskId: number) => Promise<{ success: boolean; error?: string }>;
     stop: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    submitInput: (taskId: number, input: unknown) => Promise<{ success: boolean; error?: string }>;
 
     // Status queries
     getStatus: (taskId: number) => Promise<{
@@ -531,6 +526,40 @@ export interface OperatorsAPI {
     delete: (id: number) => Promise<void>;
 }
 
+// Cloud User Authentication
+export interface CloudUser {
+    id: string;
+    email: string;
+    displayName: string;
+    photoUrl: string;
+    creditBalance: number;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export interface AuthAPI {
+    login: () => Promise<{
+        success: boolean;
+        data?: {
+            sessionToken: string;
+            expiresAt: string;
+            user: CloudUser;
+        };
+        error?: string;
+    }>;
+    logout: () => Promise<{ success: boolean; error?: string }>;
+    getCurrentUser: () => Promise<{
+        success: boolean;
+        data?: CloudUser | null;
+        error?: string;
+    }>;
+    getSessionToken: () => Promise<{
+        success: boolean;
+        data?: string | null;
+        error?: string;
+    }>;
+}
+
 export interface ElectronAPI {
     projects: ProjectsAPI;
     tasks: TasksAPI;
@@ -549,6 +578,7 @@ export interface ElectronAPI {
     taskExecution: TaskExecutionAPI;
     taskHistory: TaskHistoryAPI;
     operators: OperatorsAPI;
+    auth: AuthAPI;
     store?: StoreAPI;
 }
 

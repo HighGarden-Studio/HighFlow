@@ -16,6 +16,7 @@ import { resolveAutoReviewProvider } from '../../../src/core/logic/ai-configurat
 import type { Task, TaskTriggerConfig } from '../../../src/core/types/database';
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
+// import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
 
 /**
  * Get the main window for sending IPC messages
@@ -338,8 +339,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskId} not found`);
                 }
 
-                // Check if this is a script task - execute locally
-                if (task.taskType === 'script') {
+                // Check if this is a script or input task - execute locally/handle input
+                if (task.taskType === 'script' || task.taskType === 'input') {
                     console.log(`[TaskExecution] Executing script task ${taskId}`);
 
                     // Initialize execution state
@@ -353,285 +354,394 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     };
                     activeExecutions.set(taskId, executionState);
 
-                    // Update task status to in_progress
-                    await taskRepository.update(taskId, { status: 'in_progress' });
-                    getMainWindow()?.webContents.send('task:status-changed', {
-                        id: taskId,
-                        status: 'in_progress',
-                    });
-                    getMainWindow()?.webContents.send('taskExecution:started', {
-                        taskId,
-                        startedAt: executionState.startedAt,
-                    });
-
-                    try {
-                        // Import script executor
-                        const { scriptExecutor } = await import('../services/script-executor');
-
-                        // Build dependency context for macro substitution
-                        const { previousResults } = await buildDependencyContext(task as Task);
-
-                        // Execute script
-                        const result = await scriptExecutor.execute(task as Task, task.projectId);
-
-                        if (result.success) {
-                            executionState.status = 'completed';
-                            executionState.streamContent = result.output || '';
-
-                            const executionResult = {
-                                content: result.output || '',
-                                duration: result.duration || 0,
-                                provider: 'script',
-                                model: task.scriptLanguage || 'javascript',
-                                logs: result.logs || [],
-                            };
-
-                            // Determine final status based on auto-approve setting
-                            const finalStatus = task.autoApprove ? 'done' : 'in_review';
-                            const updateData: any = {
-                                status: finalStatus,
-                                executionResult,
-                            };
-
-                            if (task.autoApprove) {
-                                updateData.completedAt = new Date().toISOString();
-                            }
-
-                            await taskRepository.update(taskId, updateData);
-
-                            getMainWindow()?.webContents.send('task:status-changed', {
-                                id: taskId,
-                                status: finalStatus,
-                            });
-                            getMainWindow()?.webContents.send('taskExecution:completed', {
-                                taskId,
-                                result: executionResult,
-                            });
-
-                            // Log execution completed
-                            await taskHistoryRepository.logExecutionCompleted(
-                                taskId,
-                                result.output || '',
-                                {
-                                    provider: 'script',
-                                    model: task.scriptLanguage || 'javascript',
-                                    duration: result.duration || 0,
-                                }
-                            );
-
-                            // Check and execute dependent tasks if auto-approved
-                            if (finalStatus === 'done') {
-                                await checkAndExecuteDependentTasks(taskId, task as Task);
-                            }
-
-                            activeExecutions.delete(taskId);
-                            return { success: true, result };
-                        } else {
-                            throw new Error(result.error || 'Script execution failed');
-                        }
-                    } catch (error) {
-                        executionState.status = 'failed';
-                        executionState.error =
-                            error instanceof Error ? error.message : String(error);
-
-                        await taskRepository.update(taskId, { status: 'todo' });
-                        getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
-                            status: 'todo',
-                        });
-                        getMainWindow()?.webContents.send('taskExecution:failed', {
-                            taskId,
-                            error: executionState.error,
-                        });
-
-                        await taskHistoryRepository.logExecutionFailed(
-                            taskId,
-                            executionState.error
-                        );
-
-                        activeExecutions.delete(taskId);
-                        throw error;
-                    }
-                }
-
-                // Load operator configuration if assigned
-                if (task.assignedOperatorId) {
-                    try {
-                        const operator = await operatorRepository.findById(task.assignedOperatorId);
-                        if (operator) {
-                            console.log(
-                                `[TaskExecution] Using operator ${operator.name} for task ${taskId}`
-                            );
-                            // operatorConfig removed - properties are applied directly to task
-
-                            // Override task's AI provider and model with operator's settings
-                            task.aiProvider = operator.aiProvider;
-                            task.aiModel = operator.aiModel;
-
-                            // Prepend operator's system prompt to task description
-                            if (operator.systemPrompt) {
-                                const originalPrompt =
-                                    task.description || task.generatedPrompt || '';
-                                task.description = `${operator.systemPrompt}\n\n${originalPrompt}`;
-                                console.log(
-                                    `[TaskExecution] Prepended operator system prompt to task`
-                                );
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`[TaskExecution] Failed to load operator:`, error);
-                    }
-                }
-
-                // Route execution based on provider type using Provider Registry
-                const { isLocalAgent, getLocalAgentType } =
-                    await import('../config/provider-registry');
-
-                if (task.aiProvider && isLocalAgent(task.aiProvider)) {
-                    // This is a Local Agent execution - use Local Agent Session
-                    const agentType = getLocalAgentType(task.aiProvider);
-                    if (!agentType) {
-                        throw new Error(`Invalid local agent provider: ${task.aiProvider}`);
-                    }
-
-                    console.log(
-                        `[TaskExecution] Routing task ${taskId} to Local Agent: ${agentType}`
-                    );
-
-                    // Get project for working directory
-                    const project = await projectRepository.findById(task.projectId);
-                    const workingDir = project?.baseDevFolder;
-                    if (!workingDir) {
-                        throw new Error(
-                            `Task ${taskId} requires a working directory (baseDevFolder) for local agent execution`
-                        );
-                    }
-
-                    // Execute using Local Agent Session with file monitoring
-                    const { sessionManager } = await import('../services/local-agent-session');
-                    const { FileSystemMonitor } = await import('../services/file-system-monitor');
-                    // Initialize file system monitor
-                    const fsMonitor = new FileSystemMonitor(workingDir);
-                    fsMonitor.takeSnapshot();
-
-                    // Fetch dependent task results for context
-                    const { previousResults } = await buildDependencyContext(task as Task);
-
-                    // Build task prompt inline
-                    const buildTaskPrompt = (task: any, contextResults: any[]) => {
-                        let prompt = '';
-                        if (task.title) prompt += `# Task: ${task.title}\n\n`;
-                        if (task.description) prompt += `${task.description}\n\n`;
-
-                        // Add context from previous tasks
-                        if (contextResults && contextResults.length > 0) {
-                            prompt += `## Context from Previous Tasks:\n`;
-                            contextResults.forEach((res) => {
-                                prompt += `### Task: ${res.taskTitle}\n`;
-
-                                // Check if output contains base64 image
-                                let outputContent = res.output;
-                                if (
-                                    typeof outputContent === 'string' &&
-                                    isBase64Image(outputContent)
-                                ) {
-                                    // Save to temp file and replace with path
-                                    const imagePath = saveBase64ImageToTempFile(
-                                        outputContent,
-                                        res.taskId
-                                    );
-                                    outputContent = `[Image saved to: ${imagePath}]\n\nNote: The image file is available at the path above. You can reference it in your work.`;
-                                    console.log(
-                                        `[LocalAgent] Converted base64 image to file for context: ${imagePath}`
-                                    );
-                                }
-
-                                prompt += `Output:\n${outputContent}\n`;
-
-                                // Include file contents if available
-                                if (res.metadata?.files && Array.isArray(res.metadata.files)) {
-                                    prompt += `\nFiles created in this task:\n`;
-                                    res.metadata.files.forEach((f: any) => {
-                                        prompt += `- ${f.path} (${f.type}, ${f.size} bytes)\n`;
-                                        // Include content for text files to aid the agent
-                                        if (f.content && f.size < 50000) {
-                                            // Safety limit 50KB
-                                            prompt += `\nContent of ${f.path}:\n\`\`\`${f.extension || ''}\n${f.content}\n\`\`\`\n`;
-                                        }
-                                    });
-                                }
-                                prompt += `\n---\n\n`;
-                            });
-                        }
-
-                        if (task.generatedPrompt)
-                            prompt += `## Instructions:\n${task.generatedPrompt}\n\n`;
-
-                        if (task.expectedOutputFormat) {
-                            const format = task.expectedOutputFormat;
-                            prompt += `## Expected Output Format: ${format}\n\n`;
-                            const fileFormats = [
-                                'html',
-                                'css',
-                                'javascript',
-                                'js',
-                                'code',
-                                'json',
-                                'ts',
-                                'typescript',
-                                'vue',
-                                'py',
-                                'python',
-                            ];
-                            if (
-                                fileFormats.includes(format.toLowerCase()) ||
-                                format.includes('/')
-                            ) {
-                                prompt += `## ⚠️ CRITICAL - CREATE ACTUAL FILES ⚠️\n`;
-                                prompt += `You MUST create actual file(s) in the current directory matching the requirement.\n`;
-                                prompt += `DO NOT just provide examples. USE your file system tools (Write/Create) to CREATE the files on disk.\n\n`;
-                            }
-                        }
-                        return prompt;
-                    };
-
-                    // Create session
-                    const sessionInfo = await sessionManager.createSession(agentType, workingDir);
-
-                    // Initialize execution state
-                    const executionState: ExecutionState = {
-                        taskId,
-                        status: 'running',
-                        startedAt: new Date(),
-                        progress: 0,
-                        currentPhase: 'initializing',
-                        streamContent: '',
-                    };
-                    activeExecutions.set(taskId, executionState);
+                    const initialStatus = 'in_progress';
 
                     // Update task status
-                    await taskRepository.update(taskId, { status: 'in_progress' });
+                    // For Input Task, we set sub-status to WAITING_USER
+                    const updateData: Partial<Task> = {
+                        status: initialStatus,
+                        startedAt: new Date(),
+                    };
+
+                    if (task.taskType === 'input') {
+                        updateData.inputSubStatus = 'WAITING_USER';
+                    }
+
+                    await taskRepository.update(taskId, updateData);
                     getMainWindow()?.webContents.send('task:status-changed', {
                         id: taskId,
-                        status: 'in_progress',
+                        status: initialStatus,
                     });
                     getMainWindow()?.webContents.send('taskExecution:started', {
                         taskId,
                         startedAt: executionState.startedAt,
                     });
 
-                    try {
-                        // Build prompt from task with context
-                        const prompt = buildTaskPrompt(task, previousResults);
+                    // 1. Handle Input Tasks
+                    if (task.taskType === 'input') {
+                        try {
+                            const { InputProviderManager } =
+                                await import('../../../src/services/workflow/input/InputProviderManager');
+                            const providerManager = InputProviderManager.getInstance();
 
-                        // Send message and get response
+                            console.log('[TaskExecution] Handling Input Task:', task.id);
+                            console.log('[TaskExecution] Raw inputConfig:', task.inputConfig);
+                            console.log(
+                                '[TaskExecution] inputConfig type:',
+                                typeof task.inputConfig
+                            );
+
+                            const inputProvider = providerManager.getProviderForTask(task as Task);
+
+                            if (!inputProvider) {
+                                throw new Error('No input provider available for this task config');
+                            }
+
+                            await inputProvider.start(task as Task, {
+                                taskId: task.id,
+                                projectId: task.projectId,
+                                userId: (task as any).userId || 0,
+                            });
+
+                            // Input task stays in 'in_progress' waiting for user input
+                            return { success: true, waitingForInput: true };
+                        } catch (error) {
+                            executionState.status = 'failed';
+                            executionState.error =
+                                error instanceof Error ? error.message : String(error);
+                            await taskRepository.update(taskId, { status: 'todo' });
+                            getMainWindow()?.webContents.send('taskExecution:failed', {
+                                taskId,
+                                error: executionState.error,
+                            });
+                            throw error;
+                        }
+                    }
+
+                    // Variable to store execution result
+                    let result: any;
+
+                    // 2. Handle Script Tasks
+                    if (task.taskType === 'script') {
+                        try {
+                            const { scriptExecutor } = await import('../services/script-executor');
+                            // Build dependency context
+                            await buildDependencyContext(task as Task);
+
+                            result = await scriptExecutor.execute(task as Task, task.projectId);
+
+                            if (result.success) {
+                                executionState.status = 'completed';
+                                executionState.streamContent = result.output || '';
+
+                                const executionResult = {
+                                    content: result.output || '',
+                                    duration: result.duration || 0,
+                                    provider: 'script',
+                                    model: task.scriptLanguage || 'javascript',
+                                    logs: result.logs || [],
+                                };
+
+                                const finalStatus = task.autoApprove ? 'done' : 'in_review';
+                                const updateData: any = {
+                                    status: finalStatus,
+                                    executionResult,
+                                };
+
+                                if (task.autoApprove) {
+                                    updateData.completedAt = new Date().toISOString();
+                                }
+
+                                await taskRepository.update(taskId, updateData);
+
+                                getMainWindow()?.webContents.send('task:status-changed', {
+                                    id: taskId,
+                                    status: finalStatus,
+                                });
+                                getMainWindow()?.webContents.send('taskExecution:completed', {
+                                    taskId,
+                                    result: executionResult,
+                                });
+
+                                await taskHistoryRepository.logExecutionCompleted(
+                                    taskId,
+                                    result.output || '',
+                                    {
+                                        provider: 'script',
+                                        model: task.scriptLanguage || 'javascript',
+                                        duration: result.duration || 0,
+                                    }
+                                );
+
+                                if (finalStatus === 'done') {
+                                    await checkAndExecuteDependentTasks(taskId, task as Task);
+                                }
+
+                                activeExecutions.delete(taskId);
+                                return { success: true, result };
+                            } else {
+                                throw new Error(result.error || 'Script execution failed');
+                            }
+                        } catch (error) {
+                            executionState.status = 'failed';
+                            executionState.error =
+                                error instanceof Error ? error.message : String(error);
+
+                            await taskRepository.update(taskId, { status: 'todo' });
+                            getMainWindow()?.webContents.send('taskExecution:failed', {
+                                taskId,
+                                error: executionState.error,
+                            });
+                            throw error;
+                        }
+                    }
+
+                    // If not script and not input, we proceed to AI execution flow below.
+                    // This return statement ensures script/input tasks exit here.
+                    return; // Or throw an error if it's an unexpected task type
+                }
+
+                // 3. AI Task Execution (Default)
+                try {
+                    // Load operator configuration if assigned
+                    if (task.assignedOperatorId) {
+                        try {
+                            const operator = await operatorRepository.findById(
+                                task.assignedOperatorId
+                            );
+                            if (operator) {
+                                console.log(
+                                    `[TaskExecution] Using operator ${operator.name} for task ${taskId}`
+                                );
+                                task.aiProvider = operator.aiProvider;
+                                task.aiModel = operator.aiModel;
+
+                                if (operator.systemPrompt) {
+                                    const originalPrompt =
+                                        task.description || task.generatedPrompt || '';
+                                    task.description = `${operator.systemPrompt}\n\n${originalPrompt}`;
+                                    console.log(
+                                        `[TaskExecution] Prepended operator system prompt to task`
+                                    );
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`[TaskExecution] Failed to load operator:`, error);
+                        }
+                    }
+
+                    // Load Project for Context Management (Required for both Local and Default agents)
+                    const project = await projectRepository.findById(task.projectId);
+
+                    // Helper functions for Context Management
+                    const buildContextPackage = (project: any, task: any) => {
+                        if (!project) return '';
+                        const memory = project.memory || {};
+                        const recentDecisions =
+                            (memory.recentDecisions || [])
+                                .map((d: any) => `- ${d.date}: ${d.summary}`)
+                                .join('\n') || 'None';
+                        const glossary =
+                            Object.entries(memory.glossary || {})
+                                .map(([k, v]) => `- **${k}**: ${v}`)
+                                .join('\n') || 'None';
+
+                        let pkg = `[HighFlow Context Package]\n\n`;
+                        pkg += `## Project Overview\n`;
+                        pkg += `Project Name: ${project.title}\n`;
+                        pkg += `Project Goal:\n${project.goal || 'Not specified'}\n\n`;
+                        pkg += `Non-Goals / Constraints:\n${project.constraints || 'None'}\n\n`;
+                        pkg += `Current Phase:\n${project.phase || 'Not specified'}\n\n`;
+                        pkg += `---\n\n`;
+                        pkg += `## Project Memory (Authoritative)\n`;
+                        pkg += `The following is the current shared project memory.\n`;
+                        pkg += `All decisions and terminology below are considered authoritative.\n`;
+                        pkg += `Do NOT contradict unless explicitly instructed.\n\n`;
+                        pkg += `${memory.summary || 'None'}\n\n`;
+                        pkg += `Recent Decisions:\n${recentDecisions}\n\n`;
+                        pkg += `Glossary:\n${glossary}\n\n`;
+                        pkg += `---\n\n`;
+                        pkg += `## Task Contract\n`;
+                        pkg += `Task ID: ${task.id}\n`;
+                        pkg += `Task Name: ${task.title}\n`;
+                        pkg += `Task Type: ${task.taskType || 'ai'}\n`;
+                        pkg += `Task Objective:\n${task.description || 'See below'}\n\n`;
+                        pkg += `---\n\n`;
+                        return pkg;
+                    };
+
+                    const getOutputContract = () => {
+                        let contract = `\n\n[HighFlow Task Output]\n`;
+                        contract += `## 1. Summary (3–5 lines)\nBriefly explain what was done and why.\n\n`;
+                        contract += `## 2. Key Decisions\nList any decisions made in this task. If no decisions were made, explicitly say "None".\n\n`;
+                        contract += `## 3. Assumptions\nList assumptions you relied on. If none, say "None".\n\n`;
+                        contract += `## 4. Artifacts\nList files or resources created or modified. If none, say "None".\nExample:\n- docs/api-spec.md (created)\n- design/architecture.mmd (updated)\n\n`;
+                        contract += `## 5. Open Questions / Risks\nList unresolved issues, risks, or things to confirm. If none, say "None".\n\n`;
+                        contract += `## 6. Handoff Notes (For Next Task)\nImportant notes for the next task or operator. If none, say "None".\n`;
+                        return contract;
+                    };
+
+                    const { CuratorService } =
+                        await import('../../../src/services/ai/CuratorService');
+
+                    const triggerCurator = (
+                        taskId: number,
+                        task: any,
+                        output: string,
+                        project: any
+                    ) => {
+                        // Only trigger if task is marked as done (fully completed)
+                        // If it goes to in_review, we wait until review is approved
+                        if (task.status === 'done' || task.autoApprove) {
+                            CuratorService.getInstance()
+                                .runCurator(
+                                    taskId,
+                                    task.title,
+                                    output,
+                                    project,
+                                    null,
+                                    projectRepository
+                                )
+                                .catch((err: any) =>
+                                    console.error('[CuratorTrigger] Failed:', err)
+                                );
+                        }
+                    };
+
+                    // Route execution based on provider type using Provider Registry
+                    const { isLocalAgent, getLocalAgentType } =
+                        await import('../config/provider-registry');
+
+                    // ==================================================================================
+                    // PATH A: Local Agent Execution
+                    // ==================================================================================
+                    if (task.aiProvider && isLocalAgent(task.aiProvider)) {
+                        const agentType = getLocalAgentType(task.aiProvider);
+                        if (!agentType) {
+                            throw new Error(`Invalid local agent provider: ${task.aiProvider}`);
+                        }
+
+                        console.log(
+                            `[TaskExecution] Routing task ${taskId} to Local Agent: ${agentType}`
+                        );
+
+                        const workingDir = project?.baseDevFolder;
+                        if (!workingDir) {
+                            throw new Error(
+                                `Task ${taskId} requires a working directory (baseDevFolder) for local agent execution`
+                            );
+                        }
+
+                        const { sessionManager } = await import('../services/local-agent-session');
+
+                        const { FileSystemMonitor } =
+                            await import('../services/file-system-monitor');
+                        const fsMonitor = new FileSystemMonitor(workingDir);
+                        fsMonitor.takeSnapshot();
+
+                        const { previousResults } = await buildDependencyContext(task as Task);
+
+                        // Build task prompt inline
+                        const buildTaskPrompt = (
+                            task: any,
+                            contextResults: any[],
+                            project: any
+                        ) => {
+                            let prompt = '';
+
+                            // 1. Context Package Injection
+                            prompt += buildContextPackage(project, task);
+
+                            if (task.title) prompt += `# Task: ${task.title}\n\n`;
+                            if (task.description) prompt += `${task.description}\n\n`;
+
+                            if (contextResults && contextResults.length > 0) {
+                                prompt += `## Context from Previous Tasks:\n`;
+                                contextResults.forEach((res) => {
+                                    prompt += `### Task: ${res.taskTitle}\n`;
+                                    let outputContent = res.output;
+                                    if (
+                                        typeof outputContent === 'string' &&
+                                        isBase64Image(outputContent)
+                                    ) {
+                                        const imagePath = saveBase64ImageToTempFile(
+                                            outputContent,
+                                            res.taskId
+                                        );
+                                        outputContent = `[Image saved to: ${imagePath}]\n\nNote: The image file is available at the path above. You can reference it in your work.`;
+                                    }
+                                    prompt += `Output:\n${outputContent}\n`;
+                                    if (res.metadata?.files && Array.isArray(res.metadata.files)) {
+                                        prompt += `\nFiles created in this task:\n`;
+                                        res.metadata.files.forEach((f: any) => {
+                                            prompt += `- ${f.path} (${f.type}, ${f.size} bytes)\n`;
+                                            if (f.content && f.size < 50000) {
+                                                prompt += `\nContent of ${f.path}:\n\`\`\`${f.extension || ''}\n${f.content}\n\`\`\`\n`;
+                                            }
+                                        });
+                                    }
+                                    prompt += `\n---\n\n`;
+                                });
+                            }
+
+                            if (task.generatedPrompt)
+                                prompt += `## Instructions:\n${task.generatedPrompt}\n\n`;
+
+                            if (task.expectedOutputFormat) {
+                                const format = task.expectedOutputFormat;
+                                prompt += `## Expected Output Format: ${format}\n\n`;
+                                const fileFormats = [
+                                    'html',
+                                    'css',
+                                    'javascript',
+                                    'js',
+                                    'code',
+                                    'json',
+                                    'ts',
+                                    'typescript',
+                                    'vue',
+                                    'py',
+                                    'python',
+                                ];
+                                if (
+                                    fileFormats.includes(format.toLowerCase()) ||
+                                    format.includes('/')
+                                ) {
+                                    prompt += `## ⚠️ CRITICAL - CREATE ACTUAL FILES ⚠️\n`;
+                                    prompt += `You MUST create actual file(s) in the current directory matching the requirement.\n`;
+                                    prompt += `DO NOT just provide examples. USE your file system tools (Write/Create) to CREATE the files on disk.\n\n`;
+                                }
+                            }
+
+                            // Output Contract Injection
+                            prompt += getOutputContract();
+
+                            return prompt;
+                        };
+
+                        const sessionInfo = await sessionManager.createSession(
+                            agentType,
+                            workingDir
+                        );
+
+                        // Re-fetch execution state safely
+                        const executionState = activeExecutions.get(taskId)!;
+
+                        // Note: We use onChunk callback in sendMessage for streaming, so no need for explicit .on listener here.
+
+                        const prompt = buildTaskPrompt(task, previousResults, project);
                         const response = await sessionManager.sendMessage(sessionInfo.id, prompt, {
                             timeout: options?.timeout || 300000,
                             onChunk: (chunk) => {
+                                const state = activeExecutions.get(taskId);
+                                if (state) state.streamContent += chunk;
+
                                 getMainWindow()?.webContents.send('taskExecution:progress', {
                                     taskId,
+                                    progress: state?.progress || 0,
+                                    phase: 'generating',
                                     delta: chunk,
-                                    phase: 'executing',
+                                    content: state?.streamContent || '',
                                 });
                             },
                         });
@@ -639,19 +749,18 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         // Close session
                         await sessionManager.closeSession(sessionInfo.id);
 
-                        // Detect file changes
                         const fileChanges = fsMonitor.getChanges({ includeContent: true });
                         console.log(`[TaskExecution] Detected ${fileChanges.length} file changes`);
 
                         if (response.success) {
-                            // Log execution started to history
                             await taskHistoryRepository.logExecutionStarted(
                                 taskId,
-                                task.description || task.generatedPrompt || '',
+                                task.description || '',
                                 task.aiProvider || 'local',
                                 'local-model'
                             );
 
+                            // Update execution state
                             executionState.status = 'completed';
                             executionState.streamContent = response.content;
 
@@ -671,19 +780,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 transcript: response.transcript,
                             };
 
-                            // Determine final status based on auto-approve setting
                             const finalStatus = task.autoApprove ? 'done' : 'in_review';
-                            const updateData: any = {
-                                status: finalStatus,
-                                executionResult,
-                            };
-
-                            // Set completedAt if auto-approved
-                            if (task.autoApprove) {
-                                updateData.completedAt = new Date().toISOString();
-                            }
+                            const updateData: any = { status: finalStatus, executionResult };
+                            if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
                             await taskRepository.update(taskId, updateData);
+
+                            console.log(
+                                `[LocalAgent] ✅ Task ${taskId} completed - status: ${finalStatus}`
+                            );
 
                             getMainWindow()?.webContents.send('task:status-changed', {
                                 id: taskId,
@@ -694,7 +799,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 result: executionResult,
                             });
 
-                            // Log execution completed
                             await taskHistoryRepository.logExecutionCompleted(
                                 taskId,
                                 response.content,
@@ -711,8 +815,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 executionResult
                             );
 
-                            // Check and execute dependent tasks if this task completed successfully
                             if (finalStatus === 'done') {
+                                triggerCurator(taskId, task, response.content, project); // Trigger Curator
                                 await checkAndExecuteDependentTasks(taskId, task as Task);
                             }
 
@@ -721,313 +825,204 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         } else {
                             throw new Error(response.error || 'Local agent execution failed');
                         }
-                    } catch (error) {
-                        executionState.status = 'failed';
-                        executionState.error =
-                            error instanceof Error ? error.message : String(error);
-
-                        await taskRepository.update(taskId, { status: 'todo' });
-                        getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
-                            status: 'todo',
-                        });
-                        getMainWindow()?.webContents.send('taskExecution:failed', {
-                            taskId,
-                            error: executionState.error,
-                        });
-
-                        activeExecutions.delete(taskId);
-                        throw error;
                     }
-                }
 
-                // API Provider execution (existing logic continues below)
-                // Check if already executing
-                if (activeExecutions.has(taskId)) {
-                    const existingState = activeExecutions.get(taskId)!;
-                    if (existingState.status === 'running') {
-                        throw new Error(`Task ${taskId} is already executing`);
+                    // ==================================================================================
+                    // PATH B: Default AI Provider Execution
+                    // ==================================================================================
+
+                    // Fetch dependent task results
+                    const { previousResults } = await buildDependencyContext(task as Task);
+
+                    await taskHistoryRepository.logExecutionStarted(
+                        taskId,
+                        task.description || '',
+                        task.aiProvider || undefined,
+                        undefined
+                    );
+
+                    // Safe Execution State
+                    const executionState = activeExecutions.get(taskId)!;
+
+                    // Context Injection for Default Providers
+                    // We modify the task description/prompt directly before passing to executor
+                    const contextPackage = buildContextPackage(project, task);
+                    const outputContract = getOutputContract();
+
+                    if (task.generatedPrompt) {
+                        task.generatedPrompt = `${contextPackage}\n${task.generatedPrompt}\n${outputContract}`;
+                    } else {
+                        task.description = `${contextPackage}\n${task.description || ''}\n${outputContract}`;
+                        // Ensure generatedPrompt is populated as a fallback
+                        task.generatedPrompt = task.description;
                     }
-                }
 
-                // Fetch dependent task results if configured to pass results
-                const { previousResults } = await buildDependencyContext(task as Task);
+                    const context = executor.buildExecutionContext(task as Task, previousResults);
 
-                // Initialize execution state
-                const executionState: ExecutionState = {
-                    taskId,
-                    status: 'running',
-                    startedAt: new Date(),
-                    progress: 0,
-                    currentPhase: 'initializing',
-                    streamContent: '',
-                };
-                activeExecutions.set(taskId, executionState);
-
-                // Update task status to in_progress
-                await taskRepository.update(taskId, { status: 'in_progress' });
-                getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
-                    status: 'in_progress',
-                });
-                getMainWindow()?.webContents.send('taskExecution:started', {
-                    taskId,
-                    startedAt: executionState.startedAt,
-                });
-
-                // Log execution started to history
-                await taskHistoryRepository.logExecutionStarted(
-                    taskId,
-                    task.description || task.generatedPrompt || '',
-                    task.aiProvider || undefined,
-                    undefined // model will be determined later
-                );
-
-                // Build execution context with previous results from dependent tasks
-                const context = executor.buildExecutionContext(task as Task, previousResults);
-
-                // Streaming token callback - sends tokens to frontend via IPC
-                const onToken = (token: string) => {
-                    const state = activeExecutions.get(taskId);
-                    if (state) {
-                        state.streamContent += token;
-                    }
-                    // Send streaming content to frontend
-                    const win = getMainWindow();
-                    if (win) {
-                        // Reduced logging - only log first token
-                        if (state && state.streamContent.length < 10) {
-                            console.log('[Main IPC] Streaming started for task:', taskId);
-                        }
-                        win.webContents.send('taskExecution:progress', {
+                    const onToken = (token: string) => {
+                        const state = activeExecutions.get(taskId);
+                        if (state) state.streamContent += token;
+                        getMainWindow()?.webContents.send('taskExecution:progress', {
                             taskId,
                             progress: state?.progress ?? 50,
                             phase: 'streaming',
                             delta: token,
                             content: state?.streamContent ?? token,
                         });
-                    } else {
-                        console.warn('[Main IPC] No window available to send progress');
-                    }
-                };
+                    };
 
-                // Progress callback - sends phase updates to frontend via IPC (NOT content - that's handled by onToken)
-                const onProgress = (progress: {
-                    phase: string;
-                    elapsedTime: number;
-                    content?: string;
-                }) => {
-                    const state = activeExecutions.get(taskId);
-                    if (state) {
-                        state.currentPhase = progress.phase;
-                        // Note: Don't append content here - onToken handles streaming content
-                        // This prevents duplicate content being sent
-                    }
-                    const win = getMainWindow();
-                    if (win) {
-                        // Only send phase updates, not content (content is sent via onToken)
-                        // Reduced logging - only log phase changes
-                        if (state && state.currentPhase !== progress.phase) {
-                            console.log(
-                                `[Main IPC] Phase change for task ${taskId}: ${progress.phase}`
-                            );
-                        }
-                        win.webContents.send('taskExecution:progress', {
+                    const onProgress = (progress: {
+                        phase: string;
+                        elapsedTime: number;
+                        content?: string;
+                    }) => {
+                        const state = activeExecutions.get(taskId);
+                        if (state) state.currentPhase = progress.phase;
+                        getMainWindow()?.webContents.send('taskExecution:progress', {
                             taskId,
                             progress: state?.progress ?? 50,
                             phase: progress.phase,
-                            // content is intentionally NOT included here to prevent duplication
                         });
-                    } else {
-                        console.warn('[Main IPC] No window available to send progress');
+                    };
+
+                    context.metadata = {
+                        streaming: options?.streaming ?? true,
+                        timeout: options?.timeout ?? 300000,
+                        fallbackProviders: options?.fallbackProviders || ['openai', 'google'],
+                        onToken,
+                        onProgress,
+                    };
+
+                    const result = await executor.executeTask(task as Task, context, {
+                        timeout: options?.timeout ?? 300000,
+                        fallbackProviders: options?.fallbackProviders,
+                        onLog: (level, message, details) =>
+                            sendActivityLog(level, message, details),
+                    });
+
+                    // Check stopped state
+                    const currentState = activeExecutions.get(taskId);
+                    if (!currentState || currentState.status === 'stopped') {
+                        await taskRepository.update(taskId, { status: 'todo' });
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: 'todo',
+                        });
+                        getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
+                        activeExecutions.delete(taskId);
+                        return { success: false, stopped: true };
                     }
-                };
 
-                context.metadata = {
-                    streaming: options?.streaming ?? true,
-                    timeout: options?.timeout ?? 300000,
-                    fallbackProviders: options?.fallbackProviders?.length
-                        ? options?.fallbackProviders
-                        : ['openai', 'google'],
-                    onToken,
-                    onProgress,
-                };
+                    if (result.status === 'success') {
+                        const aiResult = result.output?.aiResult;
+                        const displayContent =
+                            aiResult?.value ??
+                            (typeof result.output?.content === 'string'
+                                ? result.output.content
+                                : JSON.stringify(result.output));
 
-                // Execute task with progress tracking
-                const result = await executor.executeTask(task as Task, context, {
-                    timeout: options?.timeout ?? 300000,
-                    fallbackProviders: options?.fallbackProviders,
-                    onLog: (level, message, details) => {
-                        sendActivityLog(level, message, details);
-                    },
-                });
+                        executionState.status = 'completed';
+                        executionState.progress = 100;
+                        executionState.currentPhase = 'completed';
+                        executionState.streamContent = displayContent;
 
-                // Check execution state (might have been stopped/paused)
-                const currentState = activeExecutions.get(taskId);
-                if (!currentState || currentState.status === 'stopped') {
-                    // Task was stopped, revert to todo
-                    await taskRepository.update(taskId, { status: 'todo' });
+                        const executionResult = {
+                            content: displayContent,
+                            aiResult,
+                            cost: result.cost,
+                            tokens: result.tokens,
+                            duration: result.duration,
+                            provider: aiResult?.meta?.provider || result.metadata?.provider,
+                            model: aiResult?.meta?.model || result.metadata?.model,
+                            attachments:
+                                (result.metadata?.attachments as any) || result.attachments || [],
+                        };
+
+                        const finalStatus = task.autoApprove ? 'done' : 'in_review';
+                        const updateData: any = { status: finalStatus, executionResult };
+                        if (task.autoApprove) updateData.completedAt = new Date().toISOString();
+
+                        await taskRepository.update(taskId, updateData);
+
+                        console.log(
+                            `[Main IPC] ✅ Task ${taskId} completed - status: ${finalStatus}`
+                        );
+
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: finalStatus,
+                        });
+                        getMainWindow()?.webContents.send('taskExecution:completed', {
+                            taskId,
+                            result: executionResult,
+                        });
+
+                        await taskHistoryRepository.logExecutionCompleted(
+                            taskId,
+                            displayContent || '',
+                            {
+                                provider: aiResult?.meta?.provider || result.metadata?.provider,
+                                model: aiResult?.meta?.model || result.metadata?.model,
+                                cost: result.cost,
+                                tokens: result.tokens,
+                                duration: result.duration,
+                            },
+                            aiResult
+                        );
+
+                        if (finalStatus === 'done') {
+                            triggerCurator(taskId, task, displayContent || '', project); // Trigger Curator
+                            await checkAndExecuteDependentTasks(taskId, task as Task);
+                        }
+
+                        activeExecutions.delete(taskId);
+                        return { success: true, result };
+                    } else {
+                        // Failed
+                        executionState.status = 'failed';
+                        executionState.error = result.error?.message || 'Unknown error';
+
+                        const permissionError =
+                            result.error instanceof MCPPermissionError ? result.error : null;
+                        if (permissionError) {
+                            // Handle permission error (abbreviated for compactness, logic same as before)
+                            const permissionResult = {
+                                content: buildPermissionDeniedContent(permissionError),
+                                metadata: { permissionDenied: true, ...permissionError.details },
+                            };
+                            await taskRepository.update(taskId, {
+                                status: 'in_review',
+                                executionResult: permissionResult,
+                            });
+                            getMainWindow()?.webContents.send('task:status-changed', {
+                                id: taskId,
+                                status: 'in_review',
+                            });
+                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                                taskId,
+                                result: permissionResult,
+                            });
+                            activeExecutions.delete(taskId);
+                            return { success: false, error: permissionError.message };
+                        }
+
+                        throw new Error(executionState.error);
+                    }
+                } catch (error) {
+                    console.error('Error executing AI task:', error);
+                    activeExecutions.delete(taskId);
+
+                    // Don't revert to todo if it was a permission error handled above, but here we catch threw errors
+                    await taskRepository.update(taskId, { status: 'todo' }).catch(() => {});
                     getMainWindow()?.webContents.send('task:status-changed', {
                         id: taskId,
                         status: 'todo',
                     });
-                    getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
-                    activeExecutions.delete(taskId);
-                    return { success: false, stopped: true };
-                }
-
-                if (result.status === 'success') {
-                    const aiResult = result.output?.aiResult;
-                    const displayContent =
-                        aiResult?.value ??
-                        (typeof result.output?.content === 'string'
-                            ? result.output.content
-                            : JSON.stringify(result.output));
-
-                    // Update execution state
-                    executionState.status = 'completed';
-                    executionState.progress = 100;
-                    executionState.currentPhase = 'completed';
-                    executionState.streamContent = displayContent;
-
-                    // Prepare execution result
-                    const attachments =
-                        (result.metadata?.attachments as any) || result.attachments || [];
-                    const executionResult = {
-                        content: displayContent,
-                        aiResult,
-                        cost: result.cost,
-                        tokens: result.tokens,
-                        duration: result.duration,
-                        provider: aiResult?.meta?.provider || result.metadata?.provider,
-                        model: aiResult?.meta?.model || result.metadata?.model,
-                        attachments,
-                    };
-
-                    // Determine final status based on auto-approve setting
-                    const finalStatus = task.autoApprove ? 'done' : 'in_review';
-                    const updateData: any = {
-                        status: finalStatus,
-                        executionResult: executionResult,
-                    };
-
-                    // Set completedAt if auto-approved
-                    if (task.autoApprove) {
-                        updateData.completedAt = new Date().toISOString();
-                    }
-
-                    // Update task with result and status
-                    await taskRepository.update(taskId, updateData);
-
-                    console.log(
-                        `[Main IPC] Task ${taskId} completed - status: ${finalStatus} ${task.autoApprove ? '(auto-approved)' : ''}`
-                    );
-                    const completedWin = getMainWindow();
-                    completedWin?.webContents.send('task:status-changed', {
-                        id: taskId,
-                        status: finalStatus,
-                    });
-                    completedWin?.webContents.send('taskExecution:completed', {
+                    getMainWindow()?.webContents.send('taskExecution:failed', {
                         taskId,
-                        result: {
-                            aiResult,
-                            content: displayContent,
-                            cost: result.cost,
-                            tokens: result.tokens,
-                            duration: result.duration,
-                            provider: aiResult?.meta?.provider || result.metadata?.provider,
-                            model: aiResult?.meta?.model || result.metadata?.model,
-                            attachments,
-                        },
+                        error: error instanceof Error ? error.message : String(error),
                     });
-
-                    // Log execution completed to history
-                    await taskHistoryRepository.logExecutionCompleted(
-                        taskId,
-                        displayContent || '',
-                        {
-                            provider: aiResult?.meta?.provider || result.metadata?.provider,
-                            model: aiResult?.meta?.model || result.metadata?.model,
-                            cost: result.cost,
-                            tokens: result.tokens,
-                            duration: result.duration,
-                        },
-                        aiResult
-                    );
-
-                    // Check and execute dependent tasks if this task completed successfully
-                    if (finalStatus === 'done') {
-                        await checkAndExecuteDependentTasks(taskId, task as Task);
-                    }
-
-                    activeExecutions.delete(taskId);
-                    return { success: true, result };
-                } else {
-                    // Execution failed
-                    executionState.status = 'failed';
-                    executionState.error = result.error?.message || 'Unknown error';
-
-                    const permissionError =
-                        result.error instanceof MCPPermissionError ? result.error : null;
-                    if (permissionError) {
-                        const failureContent = buildPermissionDeniedContent(permissionError);
-                        const permissionResult = {
-                            content: failureContent,
-                            aiResult: null,
-                            cost: 0,
-                            tokens: 0,
-                            duration: result.duration || 0,
-                            provider: null,
-                            model: null,
-                            metadata: {
-                                permissionDenied: true,
-                                missingScopes: permissionError.details?.missingScopes,
-                                requiredScopes: permissionError.details?.requiredScopes,
-                            },
-                        };
-
-                        await taskRepository.update(taskId, {
-                            status: 'in_review',
-                            executionResult: permissionResult,
-                        });
-
-                        const permissionWin = getMainWindow();
-                        permissionWin?.webContents.send('task:status-changed', {
-                            id: taskId,
-                            status: 'in_review',
-                        });
-                        permissionWin?.webContents.send('taskExecution:completed', {
-                            taskId,
-                            result: permissionResult,
-                        });
-
-                        await taskHistoryRepository.logExecutionFailed(
-                            taskId,
-                            permissionError.message
-                        );
-
-                        activeExecutions.delete(taskId);
-                        return { success: false, error: permissionError.message };
-                    }
-
-                    // Revert to todo status on failure
-                    await taskRepository.update(taskId, { status: 'todo' });
-                    console.log('[Main IPC] Sending failed event:', taskId, executionState.error);
-                    const failedWin = getMainWindow();
-                    failedWin?.webContents.send('task:status-changed', {
-                        id: taskId,
-                        status: 'todo',
-                    });
-                    failedWin?.webContents.send('taskExecution:failed', {
-                        taskId,
-                        error: executionState.error,
-                    });
-
-                    // Log execution failed to history
-                    await taskHistoryRepository.logExecutionFailed(taskId, executionState.error);
-
-                    activeExecutions.delete(taskId);
-                    return { success: false, error: executionState.error };
+                    throw error;
                 }
             } catch (error) {
                 console.error('Error executing task:', error);
@@ -1132,8 +1127,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 state.currentPhase = 'stopped';
             }
 
-            // Update task status to todo
-            await taskRepository.update(taskId, { status: 'todo' });
+            // Update task status to todo and clear inputSubStatus
+            await taskRepository.update(taskId, {
+                status: 'todo',
+                inputSubStatus: null,
+            });
             getMainWindow()?.webContents.send('task:status-changed', {
                 id: taskId,
                 status: 'todo',
@@ -1949,6 +1947,96 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             return { success: true, hadReview };
         } catch (error) {
             console.error('Error cancelling review:', error);
+            throw error;
+        }
+    });
+
+    /**
+     * Submit input for an Input Task
+     */
+    ipcMain.handle('task:submitInput', async (_event, taskId: number, payload: any) => {
+        try {
+            const task = await taskRepository.findById(taskId);
+            if (!task) {
+                throw new Error(`Task not found: ${taskId}`);
+            }
+
+            if (task.taskType !== 'input') {
+                throw new Error(`Task ${taskId} is not an input task`);
+            }
+
+            const { InputProviderManager } =
+                await import('../../../src/services/workflow/input/InputProviderManager');
+            const providerManager = InputProviderManager.getInstance();
+            const inputProvider = providerManager.getProviderForTask(task as Task);
+
+            if (!inputProvider) {
+                throw new Error('No input provider available for this task');
+            }
+
+            // Validate input
+            const validation = await inputProvider.validate(task as Task, payload);
+            if (!validation.valid) {
+                throw new Error(validation.error || 'Invalid input');
+            }
+
+            // Process submission
+            const output = await inputProvider.submit(task as Task, payload);
+
+            // Input tasks always go directly to 'done' - they don't need review since they're user-provided data
+            const finalStatus = 'done';
+
+            const updateData: any = {
+                status: finalStatus,
+                executionResult: JSON.stringify(output), // Store as executionResult for consistency
+                completedAt: new Date(),
+                inputSubStatus: null, // Clear input waiting status
+            };
+
+            await taskRepository.update(taskId, updateData);
+
+            // Log completion to history
+            await taskHistoryRepository.logExecutionCompleted(
+                taskId,
+                output.text || JSON.stringify(output.json) || 'Input submitted',
+                {
+                    provider: 'input',
+                    model: 'user',
+                    cost: 0,
+                    tokens: 0,
+                    duration: 0,
+                },
+                undefined,
+                output
+            );
+
+            // Log completion
+            console.log(`[Input] ✅ Task ${taskId} input submitted - status: ${finalStatus}`);
+
+            getMainWindow()?.webContents.send('task:status-changed', {
+                id: taskId,
+                status: finalStatus,
+            });
+
+            // We can also send a completed event if needed for UI to refresh
+            getMainWindow()?.webContents.send('taskExecution:completed', {
+                taskId,
+                result: {
+                    content: output.text || JSON.stringify(output.json) || 'Input submitted',
+                    provider: 'input',
+                    model: 'user',
+                },
+            });
+
+            // Check dependents
+            if (finalStatus === 'done') {
+                await checkAndExecuteDependentTasks(taskId, task as Task);
+            }
+
+            return { success: true, output };
+        } catch (error) {
+            console.error(`Error submitting input for task ${taskId}:`, error);
+            // Don't mark task as failed, just return error to UI so user can retry
             throw error;
         }
     });

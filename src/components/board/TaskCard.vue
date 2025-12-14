@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { Task } from '@core/types/database';
+import type { Task, InputTaskConfig, InputSourceType } from '@core/types/database';
 import { useTaskStore } from '../../renderer/stores/taskStore';
 import { getProviderIcon, getScriptLanguageIcon } from '../../utils/iconMapping';
 import IconRenderer from '../common/IconRenderer.vue';
@@ -19,11 +19,13 @@ interface Props {
     hideMetadata?: boolean; // Hide metadata section in DAG view
     hidePrompt?: boolean; // Hide prompt/script content in DAG view
     hideExtraActions?: boolean; // Hide extra action buttons in DAG view
+    hidePromptActions?: boolean; // 프롬프트/세분화/스크립트 관련 버튼만 숨김 (NEW)
     showAssignee?: boolean;
     showDueDate?: boolean;
     showPriority?: boolean;
     showTags?: boolean;
     missingProvider?: MissingProviderInfo | null; // 미연동 Provider 정보
+    hideConnectionHandles?: boolean; // Hide connection handles (for DAG view)
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -34,6 +36,8 @@ const props = withDefaults(defineProps<Props>(), {
     showPriority: true,
     showTags: true,
     missingProvider: null,
+    hidePromptActions: false, // NEW: Default to showing prompt actions
+    hideConnectionHandles: false,
 });
 
 const emit = defineEmits<{
@@ -58,6 +62,7 @@ const emit = defineEmits<{
     (e: 'connectionCancel'): void; // 연결 취소
     (e: 'connectProvider', providerId: string): void; // Provider 연동
     (e: 'operatorDrop', taskId: number, operatorId: number): void; // Operator 할당
+    (e: 'provideInput', task: Task): void; // 입력 제공
 }>();
 
 // Task store for global execution state
@@ -400,26 +405,63 @@ const aiProviderColor = computed(() => {
 const hasMissingProvider = computed(() => !!props.missingProvider);
 
 /**
+ * Check if task has auto-execution configured
+ */
+const hasAutoExecution = computed(() => {
+    const config = props.task.triggerConfig;
+    if (!config) return false;
+
+    // Check if scheduled execution is set (cron or specific datetime)
+    const hasSchedule = !!(config.scheduledAt?.cron || config.scheduledAt?.datetime);
+
+    // Check if dependency-based auto execution (any dependencies set)
+    const hasDependencies = (config.dependsOn?.taskIds?.length ?? 0) > 0;
+
+    return hasSchedule || hasDependencies;
+});
+
+/**
  * Show action buttons based on task status
  */
 // 세분화된 테스크는 실행 불가, 미연동 Provider가 있으면 실행 불가
 const canExecute = computed(() => !props.task.isSubdivided && !hasMissingProvider.value);
-const showExecuteButton = computed(() => props.task.status === 'todo' && canExecute.value);
-const showEnhancePromptButton = computed(() => props.task.status === 'todo' && canExecute.value);
+
+// 자동실행/예약실행이 설정된 경우 실행/재실행 버튼 숨김
+const showExecuteButton = computed(
+    () => !hasAutoExecution.value && props.task.status === 'todo' && canExecute.value
+);
+
+const showEnhancePromptButton = computed(
+    () => !props.hidePromptActions && props.task.status === 'todo' && canExecute.value
+);
+
 const showPreviewResultButton = computed(
     () => props.task.status === 'in_review' || props.task.status === 'done'
 );
-const showRetryButton = computed(() => props.task.status === 'in_review' && canExecute.value);
+
+// 자동실행/예약실행이 설정된 경우 재실행 버튼 숨김
+const showRetryButton = computed(
+    () => !hasAutoExecution.value && props.task.status === 'in_review' && canExecute.value
+);
+
 const showHistoryButton = computed(() => props.task.status === 'done');
 const showProgressButton = computed(() => props.task.status === 'in_progress' && canExecute.value);
+
 // 세분화 버튼은 1뎁스(parentTaskId === null)이고 TODO 상태이며 아직 세분화되지 않은 경우만 표시
 const showSubdivideButton = computed(
     () =>
-        props.task.parentTaskId === null && props.task.status === 'todo' && !props.task.isSubdivided
+        !props.hidePromptActions &&
+        props.task.parentTaskId === null &&
+        props.task.status === 'todo' &&
+        !props.task.isSubdivided
 );
-// NEEDS_APPROVAL 상태: 사용자 승인 필요
-const showApprovalButton = computed(() => props.task.status === 'needs_approval');
-const isNeedsApprovalStatus = computed(() => props.task.status === 'needs_approval');
+// NEEDS_APPROVAL removal - handling via generic status if needed, or removal
+const showApprovalButton = computed(() => false); // Deprecated
+const isNeedsApprovalStatus = computed(() => false); // Deprecated
+
+const isWaitingForInput = computed(
+    () => props.task.status === 'in_progress' && props.task.inputSubStatus === 'WAITING_USER'
+);
 
 // 승인 요청 정보 (confirmationRequest 필드에서 가져옴)
 const confirmationInfo = computed(() => {
@@ -460,6 +502,11 @@ function handlePreviewPrompt(event: Event) {
 function handlePreviewResult(event: Event) {
     event.stopPropagation();
     emit('previewResult', props.task);
+}
+
+function handleProvideInput(event: Event) {
+    event.stopPropagation();
+    emit('provideInput', props.task);
 }
 
 function handleRetry(event: Event) {
@@ -523,6 +570,12 @@ const isOperatorDragOver = ref(false);
 function handleOperatorDragOver(event: DragEvent) {
     // Check if this is an operator drag
     const types = event.dataTransfer?.types || [];
+
+    // Prevent operator assignment for input and script tasks
+    if (props.task.taskType === 'input' || props.task.taskType === 'script') {
+        return;
+    }
+
     if (types.includes('application/x-operator')) {
         event.preventDefault();
         isOperatorDragOver.value = true;
@@ -534,7 +587,7 @@ function handleOperatorDragOver(event: DragEvent) {
 function handleOperatorDragLeave(event: DragEvent) {
     // Only clear operator drag state if we're leaving the card entirely
     const relatedTarget = event.relatedTarget as HTMLElement;
-    if (!relatedTarget || !event.currentTarget?.contains(relatedTarget)) {
+    if (!relatedTarget || !(event.currentTarget as HTMLElement)?.contains(relatedTarget)) {
         isOperatorDragOver.value = false;
     }
 }
@@ -543,6 +596,13 @@ function handleOperatorDrop(event: DragEvent) {
     console.log('🎯 TaskCard handleOperatorDrop called');
     const operatorData = event.dataTransfer?.getData('application/x-operator');
     console.log('🎯 Operator data:', operatorData);
+
+    // Prevent operator assignment for input and script tasks
+    if (props.task.taskType === 'input' || props.task.taskType === 'script') {
+        isOperatorDragOver.value = false;
+        return;
+    }
+
     if (operatorData) {
         // This is an operator drop
         event.preventDefault();
@@ -599,6 +659,19 @@ const aiProviderInfo = computed(() => {
         google: {
             name: 'Gemini',
             icon: 'google',
+            color: 'text-blue-700 dark:text-blue-300',
+            bgColor: 'bg-blue-100 dark:bg-blue-900/50',
+        },
+        'default-highflow': {
+            name: 'Default HighFlow',
+            icon: 'simple-icons:hexo',
+            color: 'text-blue-700 dark:text-blue-300',
+            bgColor: 'bg-blue-100 dark:bg-blue-900/50',
+        },
+        'default-gemini': {
+            // Backward compatibility
+            name: 'Default HighFlow',
+            icon: 'simple-icons:hexo',
             color: 'text-blue-700 dark:text-blue-300',
             bgColor: 'bg-blue-100 dark:bg-blue-900/50',
         },
@@ -682,6 +755,59 @@ const effectiveAIModel = computed(() => {
 });
 
 /**
+ * Input Task - Subtype Display Info
+ */
+const inputTaskInfo = computed(() => {
+    if (props.task.taskType !== 'input') return null;
+
+    let config: InputTaskConfig | null = null;
+    try {
+        if (typeof props.task.inputConfig === 'string') {
+            config = JSON.parse(props.task.inputConfig);
+        } else {
+            config = props.task.inputConfig as InputTaskConfig;
+        }
+    } catch (e) {
+        return { name: 'Input Task', icon: '⌨️', color: 'text-gray-700', bgColor: 'bg-gray-100' };
+    }
+
+    if (!config?.sourceType) {
+        return { name: 'Input Task', icon: '⌨️', color: 'text-gray-700', bgColor: 'bg-gray-100' };
+    }
+
+    switch (config.sourceType) {
+        case 'USER_INPUT':
+            return {
+                name: 'User Input',
+                icon: '👤',
+                color: 'text-indigo-700 dark:text-indigo-300',
+                bgColor: 'bg-indigo-100 dark:bg-indigo-900/50',
+            };
+        case 'LOCAL_FILE':
+            return {
+                name: 'Local File',
+                icon: '📁',
+                color: 'text-amber-700 dark:text-amber-300',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/50',
+            };
+        case 'REMOTE_RESOURCE':
+            return {
+                name: 'Remote URL',
+                icon: '🌐',
+                color: 'text-emerald-700 dark:text-emerald-300',
+                bgColor: 'bg-emerald-100 dark:bg-emerald-900/50',
+            };
+        default:
+            return {
+                name: 'Input Task',
+                icon: '⌨️',
+                color: 'text-gray-700',
+                bgColor: 'bg-gray-100',
+            };
+    }
+});
+
+/**
  * 예상 결과물 형식 아이콘/라벨 매핑
  */
 const outputFormatInfo = computed(() => {
@@ -689,7 +815,43 @@ const outputFormatInfo = computed(() => {
         expectedOutputFormat?: unknown;
         outputFormat?: unknown;
         codeLanguage?: unknown;
+        inputConfig?: string | InputTaskConfig;
+        taskType?: string;
     };
+
+    // For Input Tasks, derive output format from config if not explicitly set
+    if (taskData.taskType === 'input') {
+        let inputType: InputSourceType | undefined;
+        try {
+            if (typeof taskData.inputConfig === 'string') {
+                inputType = JSON.parse(taskData.inputConfig).sourceType;
+            } else {
+                inputType = (taskData.inputConfig as InputTaskConfig)?.sourceType;
+            }
+        } catch {}
+
+        if (inputType === 'USER_INPUT')
+            return {
+                label: 'Text Input',
+                icon: '✍️',
+                bgColor: 'bg-indigo-100 dark:bg-indigo-900/40',
+                textColor: 'text-indigo-700 dark:text-indigo-200',
+            };
+        if (inputType === 'LOCAL_FILE')
+            return {
+                label: 'File Input',
+                icon: '📁',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/40',
+                textColor: 'text-amber-700 dark:text-amber-200',
+            };
+        if (inputType === 'REMOTE_RESOURCE')
+            return {
+                label: 'Web Resource',
+                icon: '🌐',
+                bgColor: 'bg-emerald-100 dark:bg-emerald-900/40',
+                textColor: 'text-emerald-700 dark:text-emerald-200',
+            };
+    }
 
     const rawFormat =
         taskData.expectedOutputFormat || taskData.outputFormat || taskData.codeLanguage || null;
@@ -891,6 +1053,9 @@ const dependencySequences = computed(() => {
         :class="[
             'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
             isDragging && 'opacity-50 rotate-2',
+            task.status === 'in_progress' && 'task-pulse-border',
+            task.inputSubStatus === 'WAITING_USER' &&
+                'ring-2 ring-yellow-400 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/10',
             isConnectionTarget
                 ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-[1.02]'
                 : isOperatorDragOver
@@ -924,7 +1089,11 @@ const dependencySequences = computed(() => {
     >
         <!-- Connection Points - 마우스 호버시 또는 드래그 중 표시 -->
         <div
-            v-show="(isHovered || isConnectionDragging) && task.status === 'todo'"
+            v-show="
+                !hideConnectionHandles &&
+                (isHovered || isConnectionDragging) &&
+                task.status === 'todo'
+            "
             class="absolute -right-3 top-1/2 -translate-y-1/2 z-20"
         >
             <div
@@ -957,7 +1126,11 @@ const dependencySequences = computed(() => {
 
         <!-- Left Connection Point (입력점 - 우측과 동일하게 드래그 가능) -->
         <div
-            v-show="(isHovered || isConnectionDragging) && task.status === 'todo'"
+            v-show="
+                !hideConnectionHandles &&
+                (isHovered || isConnectionDragging) &&
+                task.status === 'todo'
+            "
             class="absolute -left-3 top-1/2 -translate-y-1/2 z-20"
         >
             <div
@@ -1051,6 +1224,16 @@ const dependencySequences = computed(() => {
                     <IconRenderer :emoji="scriptIcon" class="w-5 h-5" />
                     <span class="text-sm font-semibold">{{ task.scriptLanguage }}</span>
                 </div>
+                <!-- Input Subtype Badge (for input tasks) -->
+                <div
+                    v-else-if="inputTaskInfo"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium"
+                    :class="[inputTaskInfo.bgColor, inputTaskInfo.color]"
+                    :title="`Input Type: ${inputTaskInfo.name}`"
+                >
+                    <span class="text-lg">{{ inputTaskInfo.icon }}</span>
+                    <span class="text-sm font-semibold">{{ inputTaskInfo.name }}</span>
+                </div>
                 <!-- AI Provider Badge (for AI tasks) -->
                 <div
                     v-else-if="aiProviderInfo"
@@ -1128,7 +1311,15 @@ const dependencySequences = computed(() => {
                         <span class="font-semibold">{{ outputFormatInfo.label }}</span>
                     </span>
 
-                    <!-- Tags (moved here) -->
+                    <!-- Waiting for Input Badge -->
+                    <div
+                        v-if="task.inputSubStatus === 'WAITING_USER'"
+                        class="mt-2 flex items-center justify-center p-1.5 rounded bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700/50 text-yellow-800 dark:text-yellow-200 text-xs font-medium animate-pulse"
+                    >
+                        <span class="mr-1">⏳</span> 사용자 입력 대기 중
+                    </div>
+
+                    <!-- Tags -->
                     <template v-if="showTags && tags.length > 0">
                         <span
                             v-for="(tag, index) in tags.slice(0, 3)"
@@ -1404,8 +1595,18 @@ const dependencySequences = computed(() => {
                         Provider 연동 필요
                     </p>
                     <p class="text-xs text-amber-600 dark:text-amber-300 mt-1">
-                        이 태스크를 실행하려면 <strong>{{ missingProvider?.name }}</strong> 연동이
-                        필요합니다.
+                        <template
+                            v-if="
+                                missingProvider?.id === 'default-highflow' ||
+                                missingProvider?.id === 'default-gemini'
+                            "
+                        >
+                            이 태스크를 실행하려면 <strong>로그인</strong>이 필요합니다.
+                        </template>
+                        <template v-else>
+                            이 태스크를 실행하려면
+                            <strong>{{ missingProvider?.name }}</strong> 연동이 필요합니다.
+                        </template>
                     </p>
                 </div>
             </div>
@@ -1606,23 +1807,6 @@ const dependencySequences = computed(() => {
                 </div>
             </div>
 
-            <!-- Estimated Duration -->
-            <div
-                v-if="task.estimatedMinutes"
-                class="flex items-center gap-1 text-gray-500 dark:text-gray-400 mr-auto ml-2"
-                title="예상 소요 시간"
-            >
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                </svg>
-                {{ Math.floor(task.estimatedMinutes / 60) }}h {{ task.estimatedMinutes % 60 }}m
-            </div>
-
             <!-- Right side: Due Date -->
             <div v-if="showDueDate && task.dueDate" class="flex items-center gap-1">
                 <svg
@@ -1708,13 +1892,17 @@ const dependencySequences = computed(() => {
                         ? '설정 필요'
                         : task.taskType === 'script'
                           ? '스크립트'
-                          : '프롬프트'
+                          : task.taskType === 'input'
+                            ? '실행설정'
+                            : '프롬프트'
                 }}
             </button>
 
-            <!-- Subdivide Button - Available for 1st level tasks only (not for script tasks) -->
+            <!-- Subdivide Button - Available for 1st level tasks only (not for script/input tasks) -->
             <button
-                v-if="showSubdivideButton && task.taskType !== 'script'"
+                v-if="
+                    showSubdivideButton && task.taskType !== 'script' && task.taskType !== 'input'
+                "
                 class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-teal-500 text-white hover:bg-teal-600 transition-colors flex items-center justify-center gap-1"
                 @click="handleSubdivide"
                 title="테스크를 서브테스크로 세분화"
@@ -1734,7 +1922,7 @@ const dependencySequences = computed(() => {
             <template v-if="hasMissingProvider && task.status === 'todo'">
                 <button
                     class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors flex items-center justify-center gap-1"
-                    @click="handleConnectProvider"
+                    @click.stop="handleConnectProviderClick"
                     :title="`${missingProvider?.name} 연동하기`"
                 >
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1774,8 +1962,14 @@ const dependencySequences = computed(() => {
                 </button>
             </template>
 
-            <!-- Enhance Prompt Button - Only for AI tasks (not for script tasks) -->
-            <template v-if="showEnhancePromptButton && task.taskType !== 'script'">
+            <!-- Enhance Prompt Button - Only for AI tasks (not for script/input tasks) -->
+            <template
+                v-if="
+                    showEnhancePromptButton &&
+                    task.taskType !== 'script' &&
+                    task.taskType !== 'input'
+                "
+            >
                 <button
                     class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-purple-500 text-white hover:bg-purple-600 transition-colors flex items-center justify-center gap-1"
                     @click="handleEnhancePrompt"
@@ -1903,7 +2097,26 @@ const dependencySequences = computed(() => {
 
             <!-- IN_PROGRESS Status Buttons -->
             <template v-if="showProgressButton">
+                <!-- Waiting for Input Button -->
                 <button
+                    v-if="isWaitingForInput"
+                    class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-rose-500 text-white hover:bg-rose-600 transition-colors flex items-center justify-center gap-1 animate-pulse"
+                    @click.stop="handleProvideInput"
+                    title="입력값 제공하기"
+                >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                    </svg>
+                    입력하기
+                </button>
+
+                <button
+                    v-else
                     class="flex-1 min-w-[80px] px-2 py-1.5 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
                     :class="{ 'animate-pulse': !task.isPaused }"
                     @click="handleViewProgress"
@@ -2286,5 +2499,37 @@ const dependencySequences = computed(() => {
 
 .group:hover .group-hover\:opacity-100 {
     opacity: 1;
+}
+
+/* Rotating gradient border for in-progress tasks */
+@keyframes rotate-border {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 300% 50%;
+    }
+}
+
+.task-pulse-border {
+    position: relative;
+    border: 4px solid transparent !important;
+    background-image:
+        linear-gradient(white, white),
+        linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd, #60a5fa, #3b82f6, #60a5fa, #3b82f6);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    background-size:
+        100% 100%,
+        400% 100%;
+    animation: rotate-border 3s linear infinite;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+}
+
+/* Dark mode version */
+.dark .task-pulse-border {
+    background-image:
+        linear-gradient(rgb(31, 41, 55), rgb(31, 41, 55)),
+        linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd, #60a5fa, #3b82f6, #60a5fa, #3b82f6);
 }
 </style>

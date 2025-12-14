@@ -14,6 +14,7 @@ import type { Node, Edge } from '@vue-flow/core';
 import dagre from 'dagre';
 import { useTaskStore, type TaskStatus } from '../stores/taskStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useUIStore } from '../stores/uiStore';
 import type { Task } from '@core/types/database';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import OperatorPanel from '../../components/project/OperatorPanel.vue';
@@ -22,6 +23,7 @@ import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
+import InputTaskForm from '../../components/task/InputTaskForm.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -33,6 +35,7 @@ const route = useRoute();
 const router = useRouter();
 const taskStore = useTaskStore();
 const projectStore = useProjectStore();
+const uiStore = useUIStore();
 
 // Computed
 const projectId = computed(() => Number(route.params.id));
@@ -40,6 +43,9 @@ const project = computed(() => projectStore.projects.find((p) => p.id === projec
 const tasks = computed(() => taskStore.tasks);
 
 // UI State
+// Debounce timer for buildGraph
+let buildGraphTimer: ReturnType<typeof setTimeout> | null = null;
+const DEBOUNCE_MS = 100; // Wait 100ms before rebuilding to batch multiple changes
 const showDetailPanel = ref(false);
 const selectedTaskId = ref<number | null>(null);
 const selectedTask = computed(() => {
@@ -49,6 +55,10 @@ const selectedTask = computed(() => {
 const showProjectInfoModal = ref(false);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
+
+// Input Modal State
+const showInputModal = ref(false);
+const inputTask = ref<Task | null>(null);
 
 // Vue Flow setup
 const { onConnect, addEdges, fitView } = useVueFlow();
@@ -139,9 +149,13 @@ function buildGraph() {
             const sourceTask = tasks.value.find((t) => t.id === depId);
             if (sourceTask) {
                 // Get output type label from SOURCE task (dependency)
-                const outputLabel = getOutputTypeLabel(sourceTask.outputType);
+                // Use expectedOutputFormat (AI-generated) if available, fallback to outputType
+                const outputFormat = sourceTask.expectedOutputFormat || sourceTask.outputType;
+                const formatInfo = getOutputFormatInfo(outputFormat);
+
                 console.log(
-                    `📊 Edge ${depId}->${task.id}: outputType="${sourceTask.outputType}", label="${outputLabel}"`
+                    `📊 Edge ${depId}->${task.id}: expectedOutputFormat="${sourceTask.expectedOutputFormat}", outputType="${sourceTask.outputType}", formatInfo:`,
+                    formatInfo
                 );
 
                 taskEdges.push({
@@ -160,8 +174,9 @@ function buildGraph() {
                         height: 20,
                         color: getEdgeColor(task),
                     },
-                    label: outputLabel,
+                    label: formatInfo ? `${formatInfo.icon} ${formatInfo.label}` : '📄 Output', // Icon + text (e.g., "🧩 JSON")
                     data: {
+                        formatInfo, // Pass full formatInfo to CustomEdge for icon rendering
                         onEdgeRemove: (edgeId: string) => {
                             console.log('🗑️ Removing edge:', edgeId);
                             handleEdgeRemove([
@@ -195,6 +210,30 @@ function buildGraph() {
 }
 
 /**
+ * Rebuild graph with debouncing to avoid excessive rebuilds
+ */
+function rebuildGraphDebounced() {
+    if (buildGraphTimer) {
+        clearTimeout(buildGraphTimer);
+    }
+    buildGraphTimer = setTimeout(() => {
+        buildGraph();
+        buildGraphTimer = null;
+    }, DEBOUNCE_MS);
+}
+
+/**
+ * Force immediate graph rebuild (no debounce)
+ */
+function rebuildGraphImmediate() {
+    if (buildGraphTimer) {
+        clearTimeout(buildGraphTimer);
+        buildGraphTimer = null;
+    }
+    buildGraph();
+}
+
+/**
  * Get edge color based on task status
  */
 function getEdgeColor(task: Task): string {
@@ -213,22 +252,165 @@ function getEdgeColor(task: Task): string {
 }
 
 /**
- * Get formatted output type label
+ * Get output format info - matching TaskCard logic
  */
-function getOutputTypeLabel(outputType: string | null): string {
-    if (!outputType) return '📄 Output';
+function getOutputFormatInfo(
+    outputFormat: string | null
+): { label: string; icon: string; bgColor: string; textColor: string } | null {
+    if (!outputFormat || typeof outputFormat !== 'string') return null;
 
-    const typeMap: Record<string, string> = {
-        text: '📄 Text',
-        code: '💻 Code',
-        image: '🖼️ Image',
-        file: '📁 File',
-        json: '📊 JSON',
-        html: '🌐 HTML',
-        markdown: '📝 MD',
+    const format = outputFormat.toLowerCase().trim();
+    const codeFormats = [
+        'js',
+        'jsx',
+        'ts',
+        'tsx',
+        'javascript',
+        'typescript',
+        'python',
+        'go',
+        'java',
+        'c',
+        'cpp',
+        'c++',
+        'c#',
+        'csharp',
+        'rust',
+        'ruby',
+        'php',
+        'swift',
+        'kotlin',
+        'solidity',
+        'scala',
+        'perl',
+        'lua',
+        'elixir',
+        'haskell',
+        'dart',
+        'r',
+    ];
+
+    const map: Record<string, { label: string; icon: string; bgColor: string; textColor: string }> =
+        {
+            text: {
+                label: 'Text',
+                icon: '📝',
+                bgColor: 'bg-gray-100 dark:bg-gray-800',
+                textColor: 'text-gray-700 dark:text-gray-200',
+            },
+            markdown: {
+                label: 'Markdown',
+                icon: '📄',
+                bgColor: 'bg-emerald-100 dark:bg-emerald-900/40',
+                textColor: 'text-emerald-700 dark:text-emerald-200',
+            },
+            html: {
+                label: 'HTML',
+                icon: '🌐',
+                bgColor: 'bg-blue-100 dark:bg-blue-900/40',
+                textColor: 'text-blue-700 dark:text-blue-200',
+            },
+            pdf: {
+                label: 'PDF',
+                icon: '📕',
+                bgColor: 'bg-rose-100 dark:bg-rose-900/40',
+                textColor: 'text-rose-700 dark:text-rose-200',
+            },
+            json: {
+                label: 'JSON',
+                icon: '🧩',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/40',
+                textColor: 'text-amber-700 dark:text-amber-200',
+            },
+            yaml: {
+                label: 'YAML',
+                icon: '🗂️',
+                bgColor: 'bg-amber-100 dark:bg-amber-900/40',
+                textColor: 'text-amber-700 dark:text-amber-200',
+            },
+            csv: {
+                label: 'CSV',
+                icon: '📊',
+                bgColor: 'bg-indigo-100 dark:bg-indigo-900/40',
+                textColor: 'text-indigo-700 dark:text-indigo-200',
+            },
+            sql: {
+                label: 'SQL',
+                icon: '🗄️',
+                bgColor: 'bg-purple-100 dark:bg-purple-900/40',
+                textColor: 'text-purple-700 dark:text-purple-200',
+            },
+            shell: {
+                label: 'Shell',
+                icon: '💻',
+                bgColor: 'bg-slate-100 dark:bg-slate-800',
+                textColor: 'text-slate-700 dark:text-slate-200',
+            },
+            mermaid: {
+                label: 'Mermaid',
+                icon: '📈',
+                bgColor: 'bg-teal-100 dark:bg-teal-900/40',
+                textColor: 'text-teal-700 dark:text-teal-200',
+            },
+            svg: {
+                label: 'SVG',
+                icon: '🖼️',
+                bgColor: 'bg-pink-100 dark:bg-pink-900/40',
+                textColor: 'text-pink-700 dark:text-pink-200',
+            },
+            png: {
+                label: 'PNG',
+                icon: '🖼️',
+                bgColor: 'bg-pink-100 dark:bg-pink-900/40',
+                textColor: 'text-pink-700 dark:text-pink-200',
+            },
+            mp4: {
+                label: 'Video',
+                icon: '🎬',
+                bgColor: 'bg-orange-100 dark:bg-orange-900/40',
+                textColor: 'text-orange-700 dark:text-orange-200',
+            },
+            mp3: {
+                label: 'Audio',
+                icon: '🎵',
+                bgColor: 'bg-cyan-100 dark:bg-cyan-900/40',
+                textColor: 'text-cyan-700 dark:text-cyan-200',
+            },
+            diff: {
+                label: 'Diff',
+                icon: '🔀',
+                bgColor: 'bg-lime-100 dark:bg-lime-900/40',
+                textColor: 'text-lime-700 dark:text-lime-200',
+            },
+            log: {
+                label: 'Log',
+                icon: '📜',
+                bgColor: 'bg-gray-100 dark:bg-gray-800',
+                textColor: 'text-gray-700 dark:text-gray-200',
+            },
+            code: {
+                label: 'Code',
+                icon: '💻',
+                bgColor: 'bg-slate-100 dark:bg-slate-800',
+                textColor: 'text-slate-700 dark:text-slate-200',
+            },
+        };
+
+    if (map[format]) return map[format];
+    if (codeFormats.includes(format))
+        return {
+            label: outputFormat,
+            icon: '💻',
+            bgColor: 'bg-slate-100 dark:bg-slate-800',
+            textColor: 'text-slate-700 dark:text-slate-200',
+        };
+
+    return {
+        label: outputFormat,
+        icon: '📦',
+        bgColor: 'bg-gray-100 dark:bg-gray-800',
+        textColor: 'text-gray-700 dark:text-gray-200',
     };
-
-    return typeMap[outputType.toLowerCase()] || `📄 ${outputType}`;
 }
 
 /**
@@ -364,7 +546,17 @@ async function handleTaskCreated(task: Partial<Task>) {
  * Handle task events
  */
 async function handleTaskExecute(task: Task) {
-    await taskStore.executeTask(task.id);
+    const result = await taskStore.executeTask(task.id);
+    if (!result.success && result.error) {
+        uiStore.showToast({
+            message: `Failed to execute task: ${result.error}`,
+            type: 'error',
+        });
+    }
+    // Force immediate rebuild after execution to show updated state
+    // This is especially important for Input tasks that transition to WAITING_USER
+    await nextTick();
+    rebuildGraphImmediate();
 }
 
 async function handleTaskApprove(task: Task) {
@@ -375,24 +567,77 @@ async function handleTaskRetry(task: Task) {
     await taskStore.retryTask(task.id);
 }
 
+async function handleProvideInput(task: Task) {
+    // For INPUT tasks, open the input modal
+    inputTask.value = task;
+    showInputModal.value = true;
+}
+
+function closeInputModal() {
+    showInputModal.value = false;
+    inputTask.value = null;
+}
+
+async function handleInputSubmit(data: any) {
+    if (!inputTask.value) return;
+
+    try {
+        const result = await taskStore.submitInput(inputTask.value.id, data);
+        if (result.success) {
+            uiStore.showToast({
+                type: 'success',
+                message: '입력이 제출되었습니다.',
+            });
+            closeInputModal();
+        } else {
+            uiStore.showToast({
+                type: 'error',
+                message: result.error || '입력 제출 실패',
+            });
+        }
+    } catch (error) {
+        console.error('Failed to submit input:', error);
+        uiStore.showToast({
+            type: 'error',
+            message: '입력 제출 중 오류가 발생했습니다.',
+        });
+    }
+}
+
+async function handleStop(task: Task) {
+    const result = await taskStore.stopTask(task.id);
+    if (!result.success && result.error) {
+        uiStore.showToast({
+            message: `Failed to stop task: ${result.error}`,
+            type: 'error',
+        });
+    }
+}
+
 // Watch for task changes and rebuild graph
-// DISABLED: This watch with deep:true causes infinite loops
-// buildGraph() is called explicitly when needed (onMounted, after connections, etc.)
-// watch(
-//     tasks,
-//     () => {
-//         buildGraph();
-//     },
-//     { deep: true }
-// );
+// Use deep watch to detect both array changes AND individual task property changes
+// Use debouncing to avoid excessive rebuilds when multiple properties change
+watch(
+    tasks,
+    () => {
+        console.log('🔄 Tasks changed, scheduling graph rebuild');
+        rebuildGraphDebounced();
+    },
+    { deep: true, flush: 'post' } // Deep watch to detect task property changes
+);
 
 /**
  * Handle task save from detail panel
  */
 async function handleTaskSave(task: Task) {
-    await taskStore.fetchTasks(projectId.value);
+    // Save the updated task to the database
+    await taskStore.updateTask(task.id, task);
+
+    // Generate graph after store update (optimistic update handles the data)
     buildGraph(); // Rebuild graph after fetching updated tasks
-    selectedTaskId.value = null;
+
+    // Note: Don't clear selectedTaskId here - let the user close the panel explicitly
+    // This prevents the panel from closing when auto-saves occur from persistExecutionSettings()
 }
 
 /**
@@ -527,7 +772,7 @@ onMounted(async () => {
                 :fit-view-on-init="true"
                 :edges-focusable="false"
                 :edges-updatable="false"
-                :nodes-draggable="false"
+                :nodes-draggable="true"
                 @dragover="onDragOver"
             >
                 <!-- Custom node template -->
@@ -538,7 +783,9 @@ onMounted(async () => {
                         @execute="handleTaskExecute(data.task)"
                         @approve="handleTaskApprove(data.task)"
                         @retry="handleTaskRetry(data.task)"
+                        @stop="handleStop(data.task)"
                         @operatorDrop="handleOperatorDrop"
+                        @provideInput="handleProvideInput"
                     />
                 </template>
             </VueFlow>
@@ -563,6 +810,16 @@ onMounted(async () => {
             @close="showCreateModal = false"
             @save="handleTaskCreated"
         />
+
+        <!-- Input Modal -->
+        <Teleport to="body">
+            <InputTaskForm
+                v-if="showInputModal && inputTask"
+                :task="inputTask"
+                @close="closeInputModal"
+                @submit="handleInputSubmit"
+            />
+        </Teleport>
 
         <!-- Project Info Modal -->
         <ProjectInfoModal

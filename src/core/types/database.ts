@@ -13,13 +13,7 @@ import type { AiResult } from './ai';
 
 export type ProjectStatus = 'active' | 'completed' | 'archived' | 'on_hold';
 
-export type TaskStatus =
-    | 'todo'
-    | 'in_progress'
-    | 'needs_approval'
-    | 'in_review'
-    | 'done'
-    | 'blocked';
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
 
 /**
  * Task Status Transition Rules
@@ -67,8 +61,7 @@ export type TaskStatus =
 // Allowed status transitions
 export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
     todo: ['in_progress', 'done', 'blocked'],
-    in_progress: ['needs_approval', 'in_review', 'blocked', 'todo'],
-    needs_approval: ['in_progress', 'todo'],
+    in_progress: ['in_review', 'blocked', 'todo', 'done'], // done allowed for auto-approve
     in_review: ['done', 'in_progress', 'blocked'],
     done: ['in_progress', 'blocked'],
     blocked: ['todo'],
@@ -83,7 +76,7 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type ExecutionType = 'serial' | 'parallel';
 
-export type TaskType = 'ai' | 'script';
+export type TaskType = 'ai' | 'script' | 'input';
 
 export type ScriptLanguage = 'javascript' | 'typescript' | 'python';
 
@@ -91,6 +84,8 @@ export type AIProvider =
     | 'openai'
     | 'anthropic'
     | 'google'
+    | 'default-highflow'
+    | 'default-gemini'
     | 'azure-openai'
     | 'mistral'
     | 'cohere'
@@ -476,10 +471,33 @@ export interface Project extends BaseEntity {
     teamId: number | null;
     gitRepository: string | null;
     aiGuidelines?: string | null;
+
+    // AI Context Management (Memory)
+    goal?: string | null;
+    constraints?: string | null;
+    phase?: string | null;
+    memory?: ProjectMemory | null;
     outputType?: string | null;
     outputPath?: string | null;
     totalTokens: number;
     metadata?: any;
+}
+
+export interface ProjectMemory {
+    summary: string;
+    recentDecisions: DecisionLog[];
+    glossary: Record<string, string>;
+    lastUpdatedTask?: number;
+    lastUpdatedAt?: string;
+}
+
+export interface DecisionLog {
+    id: string; // UUID or short ID
+    date: string;
+    taskId: number;
+    summary: string;
+    details?: string;
+    category?: 'architecture' | 'policy' | 'tech-stack' | 'convention' | 'other';
 }
 
 export interface ImageGenerationConfig {
@@ -556,6 +574,11 @@ export interface Task extends BaseEntity {
     scriptCode?: string | null; // Script source code
     scriptLanguage?: ScriptLanguage | null; // 'javascript', 'typescript', or 'python'
     scriptRuntime?: string | null; // Runtime version (optional)
+
+    // Input Task Type
+    inputConfig?: InputTaskConfig | null;
+    inputSubStatus?: InputSubStatus | null; // Input task specific sub-status
+    output?: TaskOutput | null; // Standardized output for all task types
 }
 
 export interface TaskExecutionResult {
@@ -601,6 +624,60 @@ export interface TaskExecution extends BaseEntity {
     userFeedback: string | null;
     rating: number | null; // 1-5
     completedAt: Date | null;
+}
+
+// ========================================
+// Input Task & Output Contract Types
+// ========================================
+
+export type InputSubStatus =
+    | 'IDLE'
+    | 'WAITING_USER'
+    | 'READING_LOCAL_FILE'
+    | 'FETCHING_REMOTE'
+    | 'PARSING'
+    | 'VALIDATING';
+
+export type TaskOutputKind = 'text' | 'json' | 'table' | 'file' | 'binary' | 'error';
+
+export interface TaskOutput {
+    kind: TaskOutputKind;
+    mimeType?: string;
+    text?: string;
+    json?: any;
+    table?: {
+        columns: string[];
+        rows: any[][];
+    };
+    file?: {
+        name: string;
+        path?: string;
+        url?: string;
+        size?: number;
+        sha256?: string;
+    };
+    metadata?: Record<string, any>;
+}
+
+export type InputSourceType = 'USER_INPUT' | 'LOCAL_FILE' | 'REMOTE_RESOURCE';
+
+export interface InputTaskConfig {
+    sourceType: InputSourceType;
+    userInput?: {
+        mode: 'short' | 'long' | 'confirm';
+        message: string;
+        placeholder?: string;
+        required?: boolean;
+    };
+    localFile?: {
+        filePath?: string;
+        acceptedExtensions: string[];
+        readMode: 'text' | 'table' | 'binary';
+    };
+    remoteResource?: {
+        url?: string;
+        authType: 'none' | 'google_oauth';
+    };
 }
 
 export interface Comment extends BaseEntity {

@@ -98,6 +98,17 @@ export class GeminiProvider extends BaseAIProvider {
             bestFor: ['Fast responses', 'High volume', 'Cost-effective', 'Long context'],
         },
         {
+            name: 'gemini-2.0-flash-exp',
+            provider: 'google',
+            contextWindow: 1000000,
+            maxOutputTokens: 8192,
+            costPerInputToken: 0.0,
+            costPerOutputToken: 0.0,
+            averageLatency: 600,
+            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
+            bestFor: ['Experimental', 'Fastest', 'Free preview', 'Multimodal'],
+        },
+        {
             name: 'gemini-pro',
             provider: 'google',
             contextWindow: 32000,
@@ -686,7 +697,7 @@ export class GeminiProvider extends BaseAIProvider {
     /**
      * Map Gemini finish reason to standard finish reason
      */
-    private mapFinishReason(finishReason: string | undefined): AIResponse['finishReason'] {
+    protected mapFinishReason(finishReason: string | undefined): AIResponse['finishReason'] {
         switch (finishReason) {
             case 'STOP':
                 return 'stop';
@@ -701,7 +712,7 @@ export class GeminiProvider extends BaseAIProvider {
         }
     }
 
-    private buildGeminiConversation(
+    protected buildGeminiConversation(
         messages: AIMessage[],
         config: AIConfig
     ): {
@@ -762,7 +773,7 @@ export class GeminiProvider extends BaseAIProvider {
         };
     }
 
-    private mapTools(tools?: AIConfig['tools']) {
+    protected mapTools(tools?: AIConfig['tools']) {
         if (!tools || tools.length === 0) return undefined;
         return [
             {
@@ -775,7 +786,7 @@ export class GeminiProvider extends BaseAIProvider {
         ];
     }
 
-    private extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
+    protected extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
         const calls: ToolCall[] = [];
         for (const part of parts) {
             if (part.functionCall) {

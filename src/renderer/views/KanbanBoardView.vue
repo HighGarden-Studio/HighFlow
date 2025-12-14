@@ -15,6 +15,7 @@ import { getAPI } from '../../utils/electron';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import TaskCard from '../../components/board/TaskCard.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
+import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
@@ -51,7 +52,7 @@ const createInColumn = ref<TaskStatus>('todo');
 const newTaskTitle = ref('');
 const newTaskDescription = ref('');
 const newTaskPriority = ref<TaskPriority>('medium');
-const newTaskType = ref<'ai' | 'script'>('ai');
+const newTaskType = ref<'ai' | 'script' | 'input'>('ai');
 const newTaskScriptLanguage = ref<'javascript' | 'typescript' | 'python'>('javascript');
 const creating = ref(false);
 const draggedTask = ref<number | null>(null);
@@ -89,6 +90,10 @@ const livePreviewTask = ref<Task | null>(null);
 // Project Info Modal state
 const showProjectInfoModal = ref(false);
 
+// Input Modal state
+const showInputModal = ref(false);
+const inputTask = ref<Task | null>(null);
+
 // Connection line state
 const isConnectionMode = ref(false);
 const connectionLineStart = ref<{ x: number; y: number } | null>(null);
@@ -110,7 +115,6 @@ const groupedTasks = computed(() => taskStore.groupedTasks);
 const columns: { id: TaskStatus; title: string; color: string; icon?: string }[] = [
     { id: 'todo', title: 'To Do', color: 'bg-gray-500' },
     { id: 'in_progress', title: 'In Progress', color: 'bg-blue-500' },
-    { id: 'needs_approval', title: 'Needs Approval', color: 'bg-orange-500', icon: '🔔' },
     { id: 'in_review', title: 'In Review', color: 'bg-yellow-500' },
     { id: 'done', title: 'Done', color: 'bg-green-500' },
     { id: 'blocked', title: 'Blocked', color: 'bg-red-500', icon: '🚫' },
@@ -148,6 +152,16 @@ async function handleCreateTask() {
         if (newTaskType.value === 'script') {
             taskData.scriptLanguage = newTaskScriptLanguage.value;
             taskData.scriptCode = getScriptTemplate(newTaskScriptLanguage.value);
+        } else if (newTaskType.value === 'input') {
+            // Set default input config
+            taskData.inputConfig = JSON.stringify({
+                sourceType: 'USER_INPUT',
+                userInput: {
+                    message: '필요한 정보를 입력해주세요',
+                    required: true,
+                    mode: 'short',
+                },
+            });
         }
 
         console.log('[KanbanBoard] Creating task:', taskData);
@@ -769,6 +783,43 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
     }
 }
 
+// Input Modal handlers
+function handleOpenInputModal(task: Task) {
+    inputTask.value = task;
+    showInputModal.value = true;
+}
+
+function closeInputModal() {
+    showInputModal.value = false;
+    inputTask.value = null;
+}
+
+async function handleInputSubmit(data: any) {
+    if (!inputTask.value) return;
+
+    try {
+        const result = await taskStore.submitInput(inputTask.value.id, data);
+        if (result.success) {
+            uiStore.showToast({
+                type: 'success',
+                message: '입력이 제출되었습니다.',
+            });
+            closeInputModal();
+        } else {
+            uiStore.showToast({
+                type: 'error',
+                message: result.error || '입력 제출 실패',
+            });
+        }
+    } catch (error) {
+        console.error('Failed to submit input:', error);
+        uiStore.showToast({
+            type: 'error',
+            message: '입력 제출 중 오류가 발생했습니다.',
+        });
+    }
+}
+
 // Lifecycle
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
@@ -900,10 +951,9 @@ onMounted(async () => {
                             <span
                                 class="text-sm px-2 rounded-full"
                                 :class="
-                                    column.id === 'needs_approval' &&
                                     groupedTasks[column.id]?.length > 0
-                                        ? 'bg-orange-500 text-white animate-pulse'
-                                        : 'text-gray-500 bg-gray-700'
+                                        ? 'text-gray-900 bg-gray-200 dark:text-gray-200 dark:bg-gray-700'
+                                        : 'text-gray-500 bg-gray-100 dark:bg-gray-800'
                                 "
                             >
                                 {{ groupedTasks[column.id]?.length || 0 }}
@@ -975,6 +1025,7 @@ onMounted(async () => {
                                 @connection-cancel="handleConnectionCancel"
                                 @connect-provider="handleConnectProvider"
                                 @operator-drop="handleOperatorDrop"
+                                @provide-input="handleOpenInputModal"
                             />
                         </div>
 
@@ -1100,6 +1151,18 @@ onMounted(async () => {
                                     ]"
                                 >
                                     ⚡ Script Task
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="newTaskType = 'input'"
+                                    :class="[
+                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                                        newTaskType === 'input'
+                                            ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+                                    ]"
+                                >
+                                    ⌨️ Input Task
                                 </button>
                             </div>
                         </div>
@@ -1585,6 +1648,14 @@ onMounted(async () => {
             @close="closeEditModal"
             @save="handleEditModalSave"
             @delete="handleEditModalDelete"
+        />
+
+        <!-- Input Task Modal -->
+        <InputTaskModal
+            :show="showInputModal"
+            :task="inputTask"
+            @close="closeInputModal"
+            @submit="handleInputSubmit"
         />
 
         <!-- Live Streaming Preview Modal -->

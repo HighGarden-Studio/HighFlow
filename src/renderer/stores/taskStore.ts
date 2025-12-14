@@ -27,13 +27,7 @@ import {
 // Re-export Task type for convenience
 export type { Task };
 
-export type TaskStatus =
-    | 'todo'
-    | 'in_progress'
-    | 'needs_approval'
-    | 'in_review'
-    | 'done'
-    | 'blocked';
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // Re-export transition rules for convenience
@@ -49,7 +43,6 @@ export interface TaskFilters {
 export interface GroupedTasks {
     todo: Task[];
     in_progress: Task[];
-    needs_approval: Task[];
     in_review: Task[];
     done: Task[];
     blocked: Task[];
@@ -108,7 +101,6 @@ export const useTaskStore = defineStore('tasks', () => {
         const grouped: GroupedTasks = {
             todo: [],
             in_progress: [],
-            needs_approval: [],
             in_review: [],
             done: [],
             blocked: [],
@@ -537,6 +529,11 @@ export const useTaskStore = defineStore('tasks', () => {
      * Returns null if valid, or error message if invalid
      */
     function validateTaskForExecution(task: Task): string | null {
+        // Input and Script tasks don't require AI provider/prompt validation
+        if (task.taskType === 'input' || task.taskType === 'script') {
+            return null;
+        }
+
         // Check if prompt is set
         const hasPrompt = task.generatedPrompt || task.description;
         if (!hasPrompt) {
@@ -689,6 +686,36 @@ export const useTaskStore = defineStore('tasks', () => {
             console.error('Error executing task:', err);
             // 에러 발생 시 상태 롤백
             await updateTask(taskId, { status: originalStatus as TaskStatus });
+            return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
+    }
+
+    /**
+     * Submit input for an Input Task
+     */
+    async function submitInput(
+        taskId: number,
+        input: any
+    ): Promise<{ success: boolean; error?: string }> {
+        const task = tasks.value.find((t) => t.id === taskId);
+        if (!task) {
+            return { success: false, error: 'Task not found' };
+        }
+
+        try {
+            const api = getAPI();
+            if (!api?.taskExecution?.submitInput) {
+                console.error('submitInput API not available');
+                return { success: false, error: 'submitInput API not available' };
+            }
+
+            const result = await api.taskExecution.submitInput(taskId, input);
+            if (!result.success) {
+                return { success: false, error: result.error || 'Failed to submit input' };
+            }
+            return { success: true };
+        } catch (err) {
+            console.error('Error submitting input:', err);
             return { success: false, error: err instanceof Error ? err.message : String(err) };
         }
     }
@@ -1244,12 +1271,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Progress updates with streaming content
             const unsubscribeProgress = api.taskExecution.onProgress(
                 (data: TaskExecutionProgressPayload) => {
-                    console.log(
-                        '[TaskStore] Progress update:',
-                        data.taskId,
-                        data.phase,
-                        data.content?.slice(0, 20)
-                    );
+                    // Verbose logging removed - only start/completion summaries logged
                     const progressValue = data.progress ?? data.percentage ?? 0;
                     const existing = executionProgress.value.get(data.taskId) || {
                         progress: 0,
@@ -1642,12 +1664,38 @@ export const useTaskStore = defineStore('tasks', () => {
                     return;
                 }
 
+                // Log task status before execution
+                console.log(`[TaskStore] Task ${taskId} current status:`, taskToExecute.status);
+                console.log(`[TaskStore] Task ${taskId} title:`, taskToExecute.title);
+
                 // Execute the task
                 try {
-                    await executeTask(taskId, { force: true });
-                    console.log(`[TaskStore] Auto-execution started for task ${taskId}`);
+                    console.log(
+                        `[TaskStore] Calling executeTask for task ${taskId} with force: true`
+                    );
+                    const result = await executeTask(taskId, { force: true });
+
+                    if (result.success) {
+                        console.log(
+                            `[TaskStore] ✅ Auto-execution started successfully for task ${taskId}`
+                        );
+
+                        // Refresh tasks to sync UI with DB (especially for autoApprove: done status)
+                        if (currentProjectId.value) {
+                            console.log(`[TaskStore] Refreshing tasks after auto-execution`);
+                            await fetchTasks(currentProjectId.value);
+                        }
+                    } else {
+                        console.error(
+                            `[TaskStore] ❌ Auto-execution failed for task ${taskId}:`,
+                            result.error
+                        );
+                    }
                 } catch (error) {
-                    console.error(`[TaskStore] Failed to auto-execute task ${taskId}:`, error);
+                    console.error(
+                        `[TaskStore] ❌ Exception during auto-execute task ${taskId}:`,
+                        error
+                    );
                 }
             }
         );
@@ -2009,6 +2057,7 @@ export const useTaskStore = defineStore('tasks', () => {
         changeStatus,
         getAllowedTransitions,
         executeTask,
+        submitInput,
         pauseTask,
         resumeTask,
         stopTask,

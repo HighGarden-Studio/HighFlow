@@ -126,6 +126,12 @@ export const projects = sqliteTable(
         projectGuidelines: text('project_guidelines'), // 인터뷰 기반 프로젝트 지침
         baseDevFolder: text('base_dev_folder'), // 로컬 개발 베이스 폴더
         technicalStack: text('technical_stack', { mode: 'json' }), // 기술 스택 배열
+        // AI Context Management fields
+        goal: text('goal'), // Project goal/objective
+        constraints: text('constraints'), // Non-goals and constraints
+        phase: text('phase'), // Current project phase
+        memory: text('memory', { mode: 'json' }), // Project memory (summary, decisions, glossary)
+        notificationConfig: text('notification_config', { mode: 'json' }), // Project notification settings
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
@@ -238,6 +244,9 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         scriptCode: text('script_code'), // 스크립트 코드
         scriptLanguage: text('script_language'), // 'javascript' | 'typescript' | 'python'
         scriptRuntime: text('script_runtime'), // 실행 환경 정보
+        // Input Task 필드
+        inputConfig: text('input_config', { mode: 'json' }), // Input task configuration (sourceType, userInput, localFile, remoteResource)
+        inputSubStatus: text('input_sub_status'), // 'WAITING_USER' | 'PROCESSING' | null
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),

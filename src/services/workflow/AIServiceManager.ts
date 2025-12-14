@@ -450,7 +450,16 @@ export class AIServiceManager {
 
             // Try fallback providers
             if (options.fallbackProviders && options.fallbackProviders.length > 0) {
-                console.log(`Primary provider failed, trying fallbacks...`);
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                console.error(`[AIServiceManager] Primary provider failed: ${errorMsg}`);
+                options.onLog?.(
+                    'warn',
+                    `[AIServiceManager] Primary provider failed: ${errorMsg}. Trying fallbacks...`,
+                    {
+                        error: errorMsg,
+                        fallbackProviders: options.fallbackProviders,
+                    }
+                );
                 return this.executeWithFallback(task, context, options, startTime);
             }
 

@@ -40,9 +40,11 @@
         "db:push": "drizzle-kit push:sqlite",
         "db:studio": "drizzle-kit studio",
         "db:drop": "drizzle-kit drop",
-        "db:migrate": "tsx scripts/migrate.ts",
-        "db:seed": "tsx scripts/seed.ts",
-        "postinstall": "cd node_modules/.pnpm/better-sqlite3@12.5.0/node_modules/better-sqlite3 && npx node-gyp rebuild --target=29.0.1 --arch=arm64 --dist-url=https://electronjs.org/headers || true",
+        "db:migrate": "node scripts/rebuild-node.js && tsx scripts/migrate.ts",
+        "db:seed": "node scripts/rebuild-node.js && tsx scripts/seed.ts",
+        "rebuild:node": "node scripts/rebuild-node.js",
+        "rebuild:electron": "node scripts/rebuild-electron.js",
+        "postinstall": "node scripts/rebuild-electron.js",
         "release": "pnpm build && electron-builder --publish always"
     },
     "dependencies": {
@@ -66,7 +68,7 @@
         "abort-controller": "^3.0.0",
         "agentkeepalive": "^4.6.0",
         "ai": "^3.0.0",
-        "axios": "^1.6.7",
+        "axios": "^1.13.2",
         "better-sqlite3": "^12.5.0",
         "bindings": "^1.5.0",
         "cors": "^2.8.5",
@@ -229,7 +231,7 @@
         ]
     },
     "engines": {
-        "node": "22.0.0",
+        "node": "20.9.0",
         "pnpm": ">=8.0.0"
     },
     "packageManager": "pnpm@8.15.4",
