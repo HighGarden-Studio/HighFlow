@@ -14,6 +14,12 @@ import { projectRepository } from '../database/repositories/project-repository';
 import { operatorRepository } from '../database/repositories/operator-repository';
 import { resolveAutoReviewProvider } from '../../../src/core/logic/ai-configuration';
 import type { Task, TaskTriggerConfig } from '../../../src/core/types/database';
+import { eventBus } from '../../../src/services/events/EventBus';
+import type {
+    CuratorStartedEvent,
+    CuratorStepEvent,
+    CuratorCompletedEvent,
+} from '../../../src/services/events/EventBus';
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
@@ -339,6 +345,58 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskId} not found`);
                 }
 
+                // Validate dependencies
+                const triggerConfig = task.triggerConfig as any;
+                if (
+                    triggerConfig?.dependsOn?.taskIds &&
+                    triggerConfig.dependsOn.taskIds.length > 0
+                ) {
+                    const dependencyIds = triggerConfig.dependsOn.taskIds as number[];
+                    console.log(
+                        `[TaskExecution] Checking dependencies for task ${taskId}:`,
+                        dependencyIds
+                    );
+
+                    const incompleteDependencies: {
+                        id: number;
+                        title: string;
+                        status: string;
+                    }[] = [];
+
+                    for (const depId of dependencyIds) {
+                        const depTask = await taskRepository.findById(depId);
+                        if (!depTask) {
+                            console.warn(`[TaskExecution] Dependency task ${depId} not found`);
+                            continue;
+                        }
+
+                        // Check if dependency is done
+                        if (depTask.status !== 'done') {
+                            incompleteDependencies.push({
+                                id: depTask.id,
+                                title: depTask.title,
+                                status: depTask.status,
+                            });
+                        }
+                    }
+
+                    if (incompleteDependencies.length > 0) {
+                        const errorMsg = `Cannot execute task: Waiting for ${incompleteDependencies.length} dependencies to complete`;
+                        const details = `Incomplete dependencies:\n${incompleteDependencies.map((d) => `- ${d.title} (${d.status})`).join('\n')}`;
+
+                        console.error(`[TaskExecution] ${errorMsg}`);
+                        console.error(details);
+
+                        // Log failure to history
+                        await taskHistoryRepository.logExecutionFailed(taskId, errorMsg, {
+                            reason: 'dependency_validation_failed',
+                            incompleteDependencies,
+                        });
+
+                        throw new Error(`${errorMsg}\n${details}`);
+                    }
+                }
+
                 // Check if this is a script or input task - execute locally/handle input
                 if (task.taskType === 'script' || task.taskType === 'input') {
                     console.log(`[TaskExecution] Executing script task ${taskId}`);
@@ -502,6 +560,31 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 }
 
                 // 3. AI Task Execution (Default)
+                // Initialize execution state for AI tasks
+                let executionState: ExecutionState = {
+                    taskId,
+                    status: 'running',
+                    startedAt: new Date(),
+                    progress: 0,
+                    currentPhase: 'initializing',
+                    streamContent: '',
+                };
+                activeExecutions.set(taskId, executionState);
+
+                // Update task status to in_progress
+                await taskRepository.update(taskId, {
+                    status: 'in_progress',
+                    startedAt: new Date(),
+                });
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    id: taskId,
+                    status: 'in_progress',
+                });
+                getMainWindow()?.webContents.send('taskExecution:started', {
+                    taskId,
+                    startedAt: executionState.startedAt,
+                });
+
                 try {
                     // Load operator configuration if assigned
                     if (task.assignedOperatorId) {
@@ -725,7 +808,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         );
 
                         // Re-fetch execution state safely
-                        const executionState = activeExecutions.get(taskId)!;
+                        const tempState = activeExecutions.get(taskId);
+                        if (!tempState) {
+                            console.error(
+                                `[TaskExecution] Execution state was deleted for task ${taskId}`
+                            );
+                            throw new Error('Execution state was cleared before completion');
+                        }
+                        executionState = tempState;
 
                         // Note: We use onChunk callback in sendMessage for streaming, so no need for explicit .on listener here.
 
@@ -759,6 +849,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 task.aiProvider || 'local',
                                 'local-model'
                             );
+
+                            // Re-check execution state before updating
+                            const tempState = activeExecutions.get(taskId);
+                            if (!tempState) {
+                                console.error(
+                                    `[TaskExecution] Execution state was deleted for task ${taskId} during execution`
+                                );
+                                throw new Error('Execution state was cleared during execution');
+                            }
+                            executionState = tempState;
 
                             // Update execution state
                             executionState.status = 'completed';
@@ -842,7 +942,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     );
 
                     // Safe Execution State
-                    const executionState = activeExecutions.get(taskId)!;
+                    const tempState = activeExecutions.get(taskId);
+                    if (!tempState) {
+                        console.error(
+                            `[TaskExecution] Execution state was deleted for task ${taskId}`
+                        );
+                        throw new Error('Execution state was cleared before AI execution');
+                    }
+                    executionState = tempState;
 
                     // Context Injection for Default Providers
                     // We modify the task description/prompt directly before passing to executor
@@ -921,6 +1028,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 ? result.output.content
                                 : JSON.stringify(result.output));
 
+                        // Re-check execution state before updating
+                        const tempState = activeExecutions.get(taskId);
+                        if (!tempState) {
+                            console.error(
+                                `[TaskExecution] Execution state was deleted for task ${taskId} after execution`
+                            );
+                            throw new Error('Execution state was cleared after execution');
+                        }
+                        executionState = tempState;
+
                         executionState.status = 'completed';
                         executionState.progress = 100;
                         executionState.currentPhase = 'completed';
@@ -979,6 +1096,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         return { success: true, result };
                     } else {
                         // Failed
+                        // Re-check execution state before updating
+                        const tempState = activeExecutions.get(taskId);
+                        if (!tempState) {
+                            console.error(
+                                `[TaskExecution] Execution state was deleted for task ${taskId} during failure handling`
+                            );
+                            throw new Error('Execution state was cleared during failure handling');
+                        }
+                        executionState = tempState;
+
                         executionState.status = 'failed';
                         executionState.error = result.error?.message || 'Unknown error';
 
@@ -2042,6 +2169,23 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     });
 
     console.log('Task execution IPC handlers registered');
+
+    // ========================================
+    // Event Forwarding
+    // ========================================
+
+    // Forward Curator events to renderer
+    eventBus.on<CuratorStartedEvent>('ai.curator_started', (event) => {
+        getMainWindow()?.webContents.send('curator:started', event.payload);
+    });
+
+    eventBus.on<CuratorStepEvent>('ai.curator_step', (event) => {
+        getMainWindow()?.webContents.send('curator:step', event.payload);
+    });
+
+    eventBus.on<CuratorCompletedEvent>('ai.curator_completed', (event) => {
+        getMainWindow()?.webContents.send('curator:completed', event.payload);
+    });
 }
 
 /**

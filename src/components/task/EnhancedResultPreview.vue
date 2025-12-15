@@ -1515,6 +1515,55 @@ onMounted(() => {
                             <div class="flex-1 overflow-y-auto px-2 pb-2">
                                 <!-- Tree View -->
                                 <div v-if="isTreeView" class="space-y-0.5">
+                                    <!-- AI Response Button -->
+                                    <button
+                                        class="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2.5 transition-all mb-2 border border-transparent"
+                                        :class="
+                                            !selectedFile
+                                                ? 'bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-500/20 dark:to-purple-500/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
+                                        "
+                                        @click="selectedFile = null"
+                                    >
+                                        <!-- AI Sparkle Icon -->
+                                        <svg
+                                            class="w-5 h-5 flex-shrink-0"
+                                            :class="
+                                                !selectedFile
+                                                    ? 'text-blue-600 dark:text-blue-400'
+                                                    : ''
+                                            "
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                                            />
+                                        </svg>
+                                        <div class="flex-1">
+                                            <div class="font-medium">AI Response</div>
+                                            <div
+                                                class="text-xs opacity-70"
+                                                v-if="taskResult.provider"
+                                            >
+                                                {{ taskResult.provider }}
+                                                <span v-if="taskResult.model">
+                                                    · {{ taskResult.model }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <!-- Selected Indicator -->
+                                        <div
+                                            v-if="!selectedFile"
+                                            class="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400"
+                                        ></div>
+                                    </button>
+
+                                    <!-- File Tree -->
                                     <FileTreeItem
                                         v-for="node in fileTree"
                                         :key="node.path"
@@ -1526,18 +1575,24 @@ onMounted(() => {
 
                                 <!-- List View -->
                                 <div v-else class="space-y-1">
-                                    <!-- Main Result Item -->
+                                    <!-- AI Response Button -->
                                     <button
-                                        class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                                        class="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2.5 transition-all mb-2 border border-transparent"
                                         :class="
                                             !selectedFile
-                                                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                ? 'bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-500/20 dark:to-purple-500/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
                                         "
                                         @click="selectedFile = null"
                                     >
+                                        <!-- AI Sparkle Icon -->
                                         <svg
-                                            class="w-4 h-4"
+                                            class="w-5 h-5 flex-shrink-0"
+                                            :class="
+                                                !selectedFile
+                                                    ? 'text-blue-600 dark:text-blue-400'
+                                                    : ''
+                                            "
                                             fill="none"
                                             stroke="currentColor"
                                             viewBox="0 0 24 24"
@@ -1546,10 +1601,26 @@ onMounted(() => {
                                                 stroke-linecap="round"
                                                 stroke-linejoin="round"
                                                 stroke-width="2"
-                                                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                                                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                                             />
                                         </svg>
-                                        <span class="truncate">에이전트 메시지</span>
+                                        <div class="flex-1">
+                                            <div class="font-medium">AI Response</div>
+                                            <div
+                                                class="text-xs opacity-70"
+                                                v-if="taskResult.provider"
+                                            >
+                                                {{ taskResult.provider }}
+                                                <span v-if="taskResult.model">
+                                                    · {{ taskResult.model }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <!-- Selected Indicator -->
+                                        <div
+                                            v-if="!selectedFile"
+                                            class="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400"
+                                        ></div>
                                     </button>
 
                                     <!-- File Items -->
@@ -1832,16 +1903,202 @@ onMounted(() => {
                                             <!-- Markdown View -->
                                             <div
                                                 v-else-if="outputFormat === 'markdown'"
-                                                class="h-full"
+                                                class="h-full flex flex-col"
                                             >
+                                                <!-- AI Response: Structured Display (when no file selected) -->
                                                 <div
-                                                    class="prose dark:prose-invert max-w-none bg-gray-800 rounded-lg p-6"
+                                                    v-if="!selectedFile"
+                                                    class="h-full flex flex-col bg-white dark:bg-gray-900"
                                                 >
+                                                    <!-- Header Section -->
                                                     <div
-                                                        v-html="markdownHtml"
-                                                        class="markdown-content"
-                                                        @click="handleMarkdownClick"
-                                                    />
+                                                        class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-850"
+                                                    >
+                                                        <div class="flex items-start gap-3">
+                                                            <!-- AI Icon -->
+                                                            <div
+                                                                class="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg"
+                                                            >
+                                                                <svg
+                                                                    class="w-6 h-6 text-white"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        stroke-width="2"
+                                                                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                                                                    />
+                                                                </svg>
+                                                            </div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <h3
+                                                                    class="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                                                                >
+                                                                    AI Response
+                                                                </h3>
+                                                                <div
+                                                                    class="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400"
+                                                                >
+                                                                    <span
+                                                                        v-if="taskResult.provider"
+                                                                        class="inline-flex items-center gap-1.5"
+                                                                    >
+                                                                        <svg
+                                                                            class="w-4 h-4"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <path
+                                                                                stroke-linecap="round"
+                                                                                stroke-linejoin="round"
+                                                                                stroke-width="2"
+                                                                                d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+                                                                            />
+                                                                        </svg>
+                                                                        {{ taskResult.provider }}
+                                                                    </span>
+                                                                    <span
+                                                                        v-if="taskResult.model"
+                                                                        class="inline-flex items-center gap-1.5"
+                                                                    >
+                                                                        <svg
+                                                                            class="w-4 h-4"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <path
+                                                                                stroke-linecap="round"
+                                                                                stroke-linejoin="round"
+                                                                                stroke-width="2"
+                                                                                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                                                                            />
+                                                                        </svg>
+                                                                        {{ taskResult.model }}
+                                                                    </span>
+                                                                    <span
+                                                                        v-if="
+                                                                            safeExecutionResult?.duration
+                                                                        "
+                                                                        class="inline-flex items-center gap-1.5"
+                                                                    >
+                                                                        <svg
+                                                                            class="w-4 h-4"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <path
+                                                                                stroke-linecap="round"
+                                                                                stroke-linejoin="round"
+                                                                                stroke-width="2"
+                                                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                            />
+                                                                        </svg>
+                                                                        {{
+                                                                            Math.round(
+                                                                                safeExecutionResult.duration /
+                                                                                    1000
+                                                                            )
+                                                                        }}s
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Content Section with Enhanced Styling -->
+                                                    <div class="flex-1 overflow-y-auto">
+                                                        <div
+                                                            class="prose prose-lg dark:prose-invert max-w-none p-6 prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-gray-100 prose-h1:text-3xl prose-h1:mb-4 prose-h1:pb-3 prose-h1:border-b prose-h1:border-gray-200 dark:prose-h1:border-gray-700 prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-7 prose-p:mb-4 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 prose-pre:shadow-lg prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r prose-ul:my-4 prose-li:my-1 prose-strong:text-gray-900 dark:prose-strong:text-gray-100 prose-strong:font-semibold"
+                                                        >
+                                                            <div
+                                                                v-html="markdownHtml"
+                                                                class="markdown-content"
+                                                                @click="handleMarkdownClick"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Metadata Footer (Collapsible) -->
+                                                    <div
+                                                        v-if="
+                                                            safeExecutionResult?.tokens ||
+                                                            safeExecutionResult?.cost
+                                                        "
+                                                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                                                    >
+                                                        <div
+                                                            class="px-6 py-3 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400"
+                                                        >
+                                                            <span
+                                                                v-if="safeExecutionResult?.tokens"
+                                                                class="inline-flex items-center gap-1.5"
+                                                            >
+                                                                <svg
+                                                                    class="w-4 h-4"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        stroke-width="2"
+                                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                                    />
+                                                                </svg>
+                                                                <span class="font-medium"
+                                                                    >{{
+                                                                        safeExecutionResult.tokens.toLocaleString()
+                                                                    }}
+                                                                    tokens</span
+                                                                >
+                                                            </span>
+                                                            <span
+                                                                v-if="safeExecutionResult?.cost"
+                                                                class="inline-flex items-center gap-1.5"
+                                                            >
+                                                                <svg
+                                                                    class="w-4 h-4"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        stroke-width="2"
+                                                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                    />
+                                                                </svg>
+                                                                <span class="font-medium"
+                                                                    >${{
+                                                                        safeExecutionResult.cost.toFixed(
+                                                                            4
+                                                                        )
+                                                                    }}</span
+                                                                >
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- File Content: Simple Markdown Display (when file selected) -->
+                                                <div v-else class="h-full overflow-y-auto">
+                                                    <div
+                                                        class="prose dark:prose-invert max-w-none bg-gray-800 rounded-lg p-6"
+                                                    >
+                                                        <div
+                                                            v-html="markdownHtml"
+                                                            class="markdown-content"
+                                                            @click="handleMarkdownClick"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
 
