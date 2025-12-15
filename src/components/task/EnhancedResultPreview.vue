@@ -13,6 +13,8 @@ import { marked } from 'marked';
 import type { MarkedOptions, Tokens } from 'marked';
 import FileTreeItem from './FileTreeItem.vue';
 import { useProjectStore } from '../../renderer/stores/projectStore';
+import { Diff } from 'vue-diff';
+import 'vue-diff/dist/index.css';
 
 // Output format type
 type OutputFormat =
@@ -171,10 +173,10 @@ interface FileTreeNode {
 
 // Build File Tree
 const fileTree = computed(() => {
-    const root: FileTreeNode[] = [];
     const files = resultFiles.value;
+    const rootNodes: FileTreeNode[] = [];
 
-    if (files.length === 0) return root;
+    if (files.length === 0) return rootNodes;
 
     // Helper to find or create a folder node
     const findOrCreateFolder = (
@@ -195,87 +197,7 @@ const fileTree = computed(() => {
         return node;
     };
 
-    // Determine Root Path
-    // Prefer project's baseDevFolder to show file structure relative to project root
-    let rootPath = currentProject.value?.baseDevFolder || '';
-
-    // Normalize root path (remove trailing slash)
-    if (rootPath) {
-        rootPath = rootPath.replace(/[/\\]$/, '');
-    }
-
-    // If no project root, or if files don't share it, fall back to Common Prefix logic
-    // This handles cases where we are viewing files outside the project or in a different context
-    const paths = files.map((f) => f.path);
-    const splitPaths = paths.map((p) => p.split(/[/\\]/));
-
-    // Check if we should use common prefix instead
-    const useCommonPrefix = !rootPath || files.some((f) => !f.path.startsWith(rootPath));
-    let rootPathDepth = 0;
-
-    if (useCommonPrefix && splitPaths.length > 0) {
-        const firstPath = splitPaths[0];
-        if (firstPath) {
-            const commonPrefix = firstPath.slice(0, firstPath.length - 1);
-            let prefixLen = commonPrefix.length;
-
-            for (let i = 1; i < splitPaths.length; i++) {
-                const p = splitPaths[i];
-                if (!p) continue;
-                for (let j = 0; j < prefixLen; j++) {
-                    if (p[j] !== commonPrefix[j]) {
-                        prefixLen = j;
-                        break;
-                    }
-                }
-            }
-            rootPathDepth = prefixLen;
-            // commonPrefixPath was unused
-        }
-    }
-
-    files.forEach((file) => {
-        let relativeParts: string[];
-        let currentPathString = '';
-
-        if (!useCommonPrefix && rootPath && file.path.startsWith(rootPath)) {
-            // Strip project root
-            const relativePath = file.path.substring(rootPath.length).replace(/^[/\\]/, '');
-            relativeParts = relativePath.split(/[/\\]/);
-            currentPathString = rootPath;
-        } else {
-            // Use common prefix logic
-            const parts = file.path.split(/[/\\]/);
-            relativeParts = parts.slice(rootPathDepth);
-            currentPathString = parts.slice(0, rootPathDepth).join('/');
-        }
-
-        let currentLevel = root;
-        let currentPath = currentPathString;
-
-        relativeParts.forEach((part, index) => {
-            // Skip empty parts
-            if (!part) return;
-
-            currentPath = currentPath ? `${currentPath}/${part}` : part;
-            const isLast = index === relativeParts.length - 1;
-
-            if (isLast) {
-                currentLevel.push({
-                    name: part,
-                    path: file.path,
-                    type: 'file',
-                    status: file.type, // 'created' or 'modified'
-                    children: [],
-                });
-            } else {
-                const folder = findOrCreateFolder(currentLevel, part, currentPath);
-                currentLevel = folder.children!;
-            }
-        });
-    });
-
-    // Sort: Folders first, then files
+    // Sort nodes helper
     const sortNodes = (nodes: FileTreeNode[]) => {
         nodes.sort((a, b) => {
             if (a.type === b.type) {
@@ -289,27 +211,92 @@ const fileTree = computed(() => {
             }
         });
     };
-    sortNodes(root);
 
-    // If we have a project root, wrap the tree in a root node representing the base folder
-    if (currentProject.value && rootPath) {
-        // Get actual folder name from rootPath
-        const pathParts = rootPath.split(/[/\\]/).filter((p) => p);
-        const rootName =
-            pathParts.length > 0 ? pathParts[pathParts.length - 1] : currentProject.value.title;
-
-        return [
-            {
-                name: rootName,
-                path: rootPath,
-                type: 'folder',
-                children: root,
-                status: undefined,
-            } as FileTreeNode,
-        ];
+    // Determine Root Path
+    let rootPath = currentProject.value?.baseDevFolder || '';
+    if (rootPath) {
+        rootPath = rootPath.replace(/[/\\]$/, '');
     }
 
-    return root;
+    const projectRootChildren: FileTreeNode[] = [];
+
+    files.forEach((file) => {
+        // Check if file is inside project root
+        if (rootPath && file.path.startsWith(rootPath)) {
+            const relativePath = file.path.substring(rootPath.length).replace(/^[/\\]/, '');
+            const parts = relativePath.split(/[/\\]/);
+
+            let currentLevel = projectRootChildren;
+            let currentPath = rootPath;
+
+            parts.forEach((part, index) => {
+                if (!part) return;
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                const isLast = index === parts.length - 1;
+
+                if (isLast) {
+                    currentLevel.push({
+                        name: part,
+                        path: file.path,
+                        type: 'file',
+                        status: file.type,
+                        children: [],
+                    });
+                } else {
+                    const folder = findOrCreateFolder(currentLevel, part, currentPath);
+                    currentLevel = folder.children!;
+                }
+            });
+        } else {
+            // Outside project root - add to top level with full path
+            rootNodes.push({
+                name: file.path,
+                path: file.path,
+                type: 'file',
+                status: file.type,
+                children: [],
+            });
+        }
+    });
+
+    sortNodes(projectRootChildren);
+    sortNodes(rootNodes);
+
+    // If we have files in the project root, create a root node for them
+    if (
+        projectRootChildren.length > 0 ||
+        (rootPath && files.length > 0 && rootNodes.length === 0)
+    ) {
+        // Even if projectRootChildren is empty but we have a rootPath, we might want to show the root folder if we want to enforce it?
+        // But logic above only puts items in projectRootChildren if they match.
+        // If projectRootChildren has items, wrap them.
+
+        const pathParts = rootPath.split(/[/\\]/).filter((p) => p);
+        const rootName =
+            pathParts.length > 0
+                ? pathParts[pathParts.length - 1]
+                : currentProject.value?.title || 'Project Root';
+
+        const projectNode: FileTreeNode = {
+            name: rootName,
+            path: rootPath,
+            type: 'folder',
+            children: projectRootChildren,
+            status: undefined,
+        };
+
+        // Add project node to the beginning
+        rootNodes.unshift(projectNode);
+    }
+
+    // Fallback: If no root path configured (and thus everything considered 'outside'),
+    // maybe we should just return rootNodes which contains all files as flat list.
+    // Or if we want to support the old 'common prefix' logic when NO project root is defined?
+    // User requirement: "If not in project folder, show full path". This implies strict project root usage.
+    // If no project root definition, `rootPath` is empty, so everything goes to `else` block (rootNodes push).
+    // This results in valid flat list of full paths.
+
+    return rootNodes;
 });
 
 const onTreeSelect = (path: string) => {
@@ -376,29 +363,9 @@ const outputFormat = computed<OutputFormat>(() => {
         return getFormatFromExtension(selectedFile.value.extension);
     }
 
-    const subType = aiResult.value?.subType;
-    if (subType) {
-        const mapped = SUBTYPE_TO_FORMAT[subType];
-        if (mapped) {
-            console.log(
-                '[EnhancedResultPreview] Using mapped outputFormat:',
-                mapped,
-                'from subType:',
-                subType
-            );
-            return mapped;
-        }
-    }
-
-    const format =
-        (props.task as any)?.outputFormat ||
-        (props.task as any)?.expectedOutputFormat ||
-        (props.task as any)?.executionResult?.contentType ||
-        'markdown';
-
-    const result = coerceOutputFormat(format);
-    console.log('[EnhancedResultPreview] Final outputFormat:', result, 'aiResult:', aiResult.value);
-    return result;
+    // Always use markdown for AI Result view (when no file selected)
+    // User requested: "Always show markdown regardless of task result type"
+    return 'markdown';
 });
 
 // Get code language if output format is 'code'
@@ -578,7 +545,7 @@ const sortedTranscript = computed(() => {
     });
 });
 
-const viewMode = ref<'preview' | 'log' | 'split'>('preview');
+const viewMode = ref<'preview' | 'log' | 'split' | 'diff'>('preview');
 
 watch(
     () => props.open,
@@ -662,6 +629,64 @@ const content = computed(() => {
         aiResultFormat: aiResult.value?.format,
     });
     return result;
+});
+
+// Get previous result for diff comparison
+const previousResult = computed(() => {
+    // Get sorted history (newest first)
+    const sortedHistory = [...history.value].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (sortedHistory.length < 2) {
+        return null; // Need at least 2 executions to compare
+    }
+
+    // If a specific version is selected, find the one before it
+    let targetIndex = 0;
+    if (selectedVersionId.value) {
+        targetIndex = sortedHistory.findIndex((h) => h.id === selectedVersionId.value);
+        if (targetIndex < sortedHistory.length - 1) {
+            targetIndex++; // Get the one before selected
+        } else {
+            return null; // No previous version
+        }
+    } else {
+        // Use the second most recent (index 1)
+        targetIndex = 1;
+    }
+
+    const previousEntry = sortedHistory[targetIndex];
+    if (!previousEntry?.eventData) return null;
+
+    let data = previousEntry.eventData;
+    if (typeof data === 'string') {
+        try {
+            data = JSON.parse(data);
+        } catch (e) {
+            console.error('[EnhancedResultPreview] Failed to parse previous result:', e);
+            return null;
+        }
+    }
+
+    // Extract content from executionResult
+    if (data.executionResult) {
+        let execRes = data.executionResult;
+        if (typeof execRes === 'string') {
+            try {
+                execRes = JSON.parse(execRes);
+            } catch (e) {
+                return null;
+            }
+        }
+        return execRes.content || '';
+    }
+
+    return data.content || '';
+});
+
+const hasPreviousResult = computed(() => {
+    return !!previousResult.value && previousResult.value.length > 0;
 });
 
 // Auto-select first file if available and main content is short/empty
@@ -1726,6 +1751,42 @@ onMounted(() => {
                                                 <span>Logs ({{ scriptLogs.length }})</span>
                                             </div>
                                         </button>
+                                        <!-- Diff View Button -->
+                                        <button
+                                            @click="viewMode = 'diff'"
+                                            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+                                            :class="[
+                                                viewMode === 'diff'
+                                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                                                !hasPreviousResult
+                                                    ? 'opacity-50 cursor-not-allowed'
+                                                    : '',
+                                            ]"
+                                            :disabled="!hasPreviousResult"
+                                            :title="
+                                                hasPreviousResult
+                                                    ? 'Compare with previous result'
+                                                    : 'No previous result to compare'
+                                            "
+                                        >
+                                            <div class="flex items-center gap-2">
+                                                <svg
+                                                    class="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                                    />
+                                                </svg>
+                                                <span>Diff View</span>
+                                            </div>
+                                        </button>
                                     </div>
 
                                     <!-- Logs View -->
@@ -1753,6 +1814,53 @@ onMounted(() => {
                                                 class="text-gray-500 italic text-center py-8"
                                             >
                                                 No logs generated during script execution
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Diff View -->
+                                    <div
+                                        v-if="viewMode === 'diff'"
+                                        class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-900"
+                                    >
+                                        <div v-if="hasPreviousResult" class="flex-1 overflow-auto">
+                                            <Diff
+                                                :prev="previousResult || ''"
+                                                :current="content"
+                                                mode="split"
+                                                theme="dark"
+                                                language="markdown"
+                                            />
+                                        </div>
+                                        <div
+                                            v-else
+                                            class="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400"
+                                        >
+                                            <div class="text-center">
+                                                <svg
+                                                    class="mx-auto h-16 w-16 mb-4 text-gray-400 dark:text-gray-600"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="1.5"
+                                                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                                    />
+                                                </svg>
+                                                <p
+                                                    class="text-lg font-medium text-gray-700 dark:text-gray-300"
+                                                >
+                                                    No Previous Result
+                                                </p>
+                                                <p
+                                                    class="text-sm mt-2 text-gray-500 dark:text-gray-400"
+                                                >
+                                                    Execute this task at least twice to see
+                                                    differences
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

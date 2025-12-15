@@ -308,6 +308,42 @@ export const useTaskStore = defineStore('tasks', () => {
             if (index >= 0) {
                 tasks.value[index] = { ...tasks.value[index], ...task };
                 console.log('📝 Task updated in store:', tasks.value[index]);
+
+                // For INPUT tasks transitioning to in_progress, refetch after a delay to get inputSubStatus
+                const originalTask = tasks.value[index];
+                if (originalTask.taskType === 'input' && plainData.status === 'in_progress') {
+                    console.log('📝 INPUT task starting, scheduling refetch for inputSubStatus');
+                    setTimeout(async () => {
+                        try {
+                            const refreshedTask = await api.tasks.get(id);
+                            if (refreshedTask) {
+                                console.log(
+                                    '📝 INPUT task refetched, inputSubStatus:',
+                                    refreshedTask.inputSubStatus
+                                );
+                                // Force Vue reactivity by replacing entire array
+                                tasks.value = tasks.value.map((t) =>
+                                    t.id === id ? refreshedTask : t
+                                );
+                                if (currentTask.value?.id === id) {
+                                    currentTask.value = refreshedTask;
+                                }
+
+                                // Dispatch custom event to notify views (especially DAGView)
+                                window.dispatchEvent(
+                                    new CustomEvent('task:input-status-changed', {
+                                        detail: {
+                                            taskId: id,
+                                            inputSubStatus: refreshedTask.inputSubStatus,
+                                        },
+                                    })
+                                );
+                            }
+                        } catch (e) {
+                            console.error('📝 Failed to refetch INPUT task:', e);
+                        }
+                    }, 300);
+                }
             }
             if (currentTask.value?.id === id && currentTask.value) {
                 currentTask.value = { ...currentTask.value, ...task };
@@ -809,6 +845,61 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     /**
+     * Check and auto-trigger dependent tasks when a task completes
+     */
+    async function checkAndTriggerDependentTasks(completedTaskId: number): Promise<void> {
+        console.log('[TaskStore] Checking for tasks that depend on:', completedTaskId);
+
+        // Find all tasks in the same project that have triggerConfig.dependsOn including this task
+        const completedTask = tasks.value.find((t) => t.id === completedTaskId);
+        if (!completedTask) return;
+
+        const projectTasks = tasks.value.filter((t) => t.projectId === completedTask.projectId);
+
+        for (const task of projectTasks) {
+            const triggerConfig = task.triggerConfig;
+            if (!triggerConfig?.dependsOn) continue;
+
+            const { taskIds, operator, executionPolicy } = triggerConfig.dependsOn;
+            if (!taskIds.includes(completedTaskId)) continue;
+
+            console.log('[TaskStore] Found dependent task:', task.id, task.title);
+
+            // Check execution policy
+            const policy = executionPolicy || 'once';
+            if (policy === 'once' && task.status !== 'todo') {
+                console.log('[TaskStore] Skipping task (policy: once, status:', task.status, ')');
+                continue;
+            }
+
+            // Check if dependencies are satisfied
+            const allDone = taskIds.every((depId: number) => {
+                const depTask = tasks.value.find((t) => t.id === depId);
+                return depTask?.status === 'done';
+            });
+
+            const anyDone = taskIds.some((depId: number) => {
+                const depTask = tasks.value.find((t) => t.id === depId);
+                return depTask?.status === 'done';
+            });
+
+            const shouldTrigger = operator === 'all' ? allDone : anyDone;
+
+            if (shouldTrigger) {
+                console.log('[TaskStore] Auto-triggering task:', task.id, task.title);
+                try {
+                    // Execute the task
+                    await executeTask(task.id);
+                } catch (error) {
+                    console.error('[TaskStore] Failed to auto-trigger task:', task.id, error);
+                }
+            } else {
+                console.log('[TaskStore] Dependencies not yet satisfied for task:', task.id);
+            }
+        }
+    }
+
+    /**
      * Stop task and return to TODO
      */
     async function stopTask(taskId: number): Promise<{ success: boolean; error?: string }> {
@@ -817,7 +908,19 @@ export const useTaskStore = defineStore('tasks', () => {
             return { success: false, error: 'Task not found' };
         }
 
-        if (task.status !== 'in_progress') {
+        // If already in TODO, nothing to do
+        if (task.status === 'todo') {
+            console.log('[TaskStore] Task already in TODO status, skipping stop');
+            return { success: true };
+        }
+
+        // Allow stopping INPUT tasks that are waiting for user input
+        const isInputWaiting =
+            task.taskType === 'input' &&
+            task.status === 'in_progress' &&
+            task.inputSubStatus === 'WAITING_USER';
+
+        if (task.status !== 'in_progress' && !isInputWaiting) {
             return { success: false, error: 'Task must be in IN_PROGRESS status to stop' };
         }
 
@@ -837,7 +940,20 @@ export const useTaskStore = defineStore('tasks', () => {
         executionProgress.value.delete(taskId);
 
         // Always change status to TODO directly
-        return changeStatus(taskId, 'todo');
+        const result = await changeStatus(taskId, 'todo');
+
+        // Clear inputSubStatus for INPUT tasks
+        if (isInputWaiting && result.success) {
+            await updateTask(taskId, { inputSubStatus: null as any });
+            // Notify views about INPUT task status change
+            window.dispatchEvent(
+                new CustomEvent('task:input-status-changed', {
+                    detail: { taskId, inputSubStatus: null },
+                })
+            );
+        }
+
+        return result;
     }
 
     /**
@@ -1227,17 +1343,53 @@ export const useTaskStore = defineStore('tasks', () => {
         cleanupFns.push(unsubscribeDeleted);
 
         // Listen for task status changes from main process
-        const unsubscribeStatusChanged = api.events.on('task:status-changed', (data: unknown) => {
-            const { id, status } = data as { id: number; status: TaskStatus };
-            console.log('[TaskStore] Status changed event:', { id, status });
-            const index = tasks.value.findIndex((t) => t.id === id);
-            if (index >= 0) {
-                tasks.value[index] = { ...tasks.value[index], status };
+        const unsubscribeStatusChanged = api.events.on(
+            'task:status-changed',
+            async (data: unknown) => {
+                const { id, status } = data as { id: number; status: TaskStatus };
+                console.log('[TaskStore] Status changed event:', { id, status });
+                const index = tasks.value.findIndex((t) => t.id === id);
+                if (index >= 0) {
+                    const task = tasks.value[index];
+
+                    // For INPUT tasks transitioning to in_progress, refetch full data to get inputSubStatus
+                    if (task.taskType === 'input' && status === 'in_progress') {
+                        console.log('[TaskStore] INPUT task starting, refetching full data:', id);
+                        try {
+                            const updatedTask = await api.tasks.get(id);
+                            if (updatedTask) {
+                                tasks.value[index] = updatedTask;
+                                if (currentTask.value?.id === id) {
+                                    currentTask.value = updatedTask;
+                                }
+                            }
+                        } catch (error) {
+                            console.error('[TaskStore] Failed to refetch INPUT task:', error);
+                            // Fallback to simple status update
+                            tasks.value[index] = { ...tasks.value[index], status };
+                            if (currentTask.value?.id === id) {
+                                currentTask.value = { ...currentTask.value, status };
+                            }
+                        }
+                    } else {
+                        // Normal status update for non-INPUT tasks
+                        tasks.value[index] = { ...tasks.value[index], status };
+                        if (currentTask.value?.id === id) {
+                            currentTask.value = { ...currentTask.value, status };
+                        }
+                    }
+
+                    // Check and trigger dependent tasks when a task completes
+                    if (status === 'done') {
+                        console.log(
+                            '[TaskStore] Task completed, checking for dependent tasks:',
+                            id
+                        );
+                        checkAndTriggerDependentTasks(id);
+                    }
+                }
             }
-            if (currentTask.value?.id === id) {
-                currentTask.value = { ...currentTask.value, status };
-            }
-        });
+        );
         cleanupFns.push(unsubscribeStatusChanged);
 
         // Task execution event listeners
@@ -1281,16 +1433,26 @@ export const useTaskStore = defineStore('tasks', () => {
                     // Create new Map for Vue reactivity
                     const newMap = new Map(executionProgress.value);
                     const delta = data.delta ?? '';
-                    const cumulativeContent =
-                        typeof data.content === 'string'
-                            ? data.content
-                            : delta
-                              ? existing.content + delta
-                              : existing.content;
+
+                    // Fix: Prioritize delta for streaming, append to existing content
+                    // If content is provided directly (non-streaming or snapshot), we might use it differently
+                    // but per user request, we assume we should append chunks.
+                    // If delta exists, append it. If not, check if content is string and seemingly a chunk.
+                    // Ideally the backend ensures 'delta' is populated for streaming.
+
+                    let newContent = existing.content;
+                    if (delta) {
+                        newContent += delta;
+                    } else if (typeof data.content === 'string') {
+                        // Fallback: if no delta but content is string, assume it's a chunk to append
+                        // (unless we detect it's a full replacement, but strictly following user request to add)
+                        newContent += data.content;
+                    }
+
                     newMap.set(data.taskId, {
                         progress: progressValue,
                         phase: data.phase || existing.phase,
-                        content: cumulativeContent,
+                        content: newContent,
                         tokensUsed: data.tokensUsed || existing.tokensUsed,
                         cost: data.cost || existing.cost,
                     });
@@ -1350,10 +1512,19 @@ export const useTaskStore = defineStore('tasks', () => {
                             model: result?.model ?? existingExecution.model,
                             aiResult: normalizedAiResult ?? null,
                         };
+                        // Determine new status based on task type and auto-approve setting
+                        let newStatus: TaskStatus = 'in_review';
+                        if (task.taskType === 'input') {
+                            newStatus = 'done';
+                        } else if (task.autoApprove) {
+                            newStatus = 'done';
+                        }
+
                         tasks.value[index] = {
                             ...task,
-                            status: 'in_review', // Task completed, move to review
+                            status: newStatus,
                             executionResult,
+                            inputSubStatus: null, // Clear input waiting status
                         };
 
                         // Trigger auto-review if enabled

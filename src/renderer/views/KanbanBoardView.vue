@@ -5,7 +5,7 @@
  * Task board with drag-and-drop support featuring full TaskCard component
  * with execute, retry, pause, resume, stop, subdivide, tags, subtasks features
  */
-import { onMounted, onUnmounted, computed, ref } from 'vue';
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore, type TaskStatus, type TaskPriority, type Task } from '../stores/taskStore';
@@ -119,6 +119,22 @@ const columns: { id: TaskStatus; title: string; color: string; icon?: string }[]
     { id: 'done', title: 'Done', color: 'bg-green-500' },
     { id: 'blocked', title: 'Blocked', color: 'bg-red-500', icon: '🚫' },
 ];
+
+// Cache for missing provider info with operator check
+const missingProviderCache = ref<Map<number, MissingProviderInfo | null>>(new Map());
+
+// Update cache when tasks change
+watch(
+    () => taskStore.tasks,
+    async () => {
+        const newCache = new Map<number, MissingProviderInfo | null>();
+        for (const task of taskStore.tasks) {
+            newCache.set(task.id, await getMissingProviderForTask(task));
+        }
+        missingProviderCache.value = newCache;
+    },
+    { deep: true, immediate: true }
+);
 
 // Actions
 function openCreateModal(status: TaskStatus) {
@@ -541,12 +557,40 @@ const liveReviewContent = computed(() => {
 });
 
 /**
+ * Get cached missing provider info for a task
+ */
+function getCachedMissingProvider(taskId: number): MissingProviderInfo | null {
+    return missingProviderCache.value.get(taskId) || null;
+}
+
+/**
  * Task에 필요한 Provider가 연동되어 있는지 확인
  * 미연동된 Provider가 있으면 해당 정보 반환, 모두 연동되어 있으면 null 반환
  */
-function getMissingProviderForTask(task: Task): MissingProviderInfo | null {
+async function getMissingProviderForTask(task: Task): Promise<MissingProviderInfo | null> {
+    // INPUT and Script tasks don't need AI providers
+    if (task.taskType === 'input' || task.taskType === 'script') {
+        return null;
+    }
+
+    // If operator is assigned, check operator's AI provider instead
+    let providerToCheck: string | null | undefined = task.aiProvider;
+
+    if (task.assignedOperatorId) {
+        try {
+            const api = (window as any).electron;
+            const operator = await api.operators.get(task.assignedOperatorId);
+            if (operator && operator.aiProvider) {
+                providerToCheck = operator.aiProvider;
+            }
+        } catch (error) {
+            console.debug('Could not fetch operator for provider check:', error);
+            // Fallback to task's provider
+        }
+    }
+
     // Task에 명시적으로 지정된 aiProvider가 있는 경우
-    if (task.aiProvider) {
+    if (providerToCheck) {
         // Check if it's a local agent
         const localAgentMap: Record<string, string> = {
             'claude-code': 'claude',
@@ -554,7 +598,7 @@ function getMissingProviderForTask(task: Task): MissingProviderInfo | null {
             antigravity: 'antigravity',
         };
 
-        const localAgentType = localAgentMap[task.aiProvider];
+        const localAgentType = localAgentMap[providerToCheck];
         if (localAgentType) {
             // For local agents, check if they are installed
             // We don't have access to useLocalAgentExecution here, so we assume
@@ -565,25 +609,25 @@ function getMissingProviderForTask(task: Task): MissingProviderInfo | null {
                 return null;
             }
             // If no baseDevFolder, local agent is not available
-            const providerInfo = settingsStore.aiProviders.find((p) => p.id === task.aiProvider);
+            const providerInfo = settingsStore.aiProviders.find((p) => p.id === providerToCheck);
             return {
-                id: task.aiProvider as string,
-                name: providerInfo?.name || (task.aiProvider as string),
+                id: providerToCheck as string,
+                name: providerInfo?.name || (providerToCheck as string),
             };
         }
 
         // For API providers, check if enabled
         const enabledProviders = settingsStore.enabledProviders;
         const isProviderEnabled = enabledProviders.some(
-            (p) => p.id === task.aiProvider && p.enabled
+            (p) => p.id === providerToCheck && p.enabled
         );
 
         if (!isProviderEnabled) {
             // Provider 정보를 AI_PROVIDERS에서 가져옴
-            const providerInfo = settingsStore.aiProviders.find((p) => p.id === task.aiProvider);
+            const providerInfo = settingsStore.aiProviders.find((p) => p.id === providerToCheck);
             return {
-                id: task.aiProvider as string,
-                name: providerInfo?.name || (task.aiProvider as string),
+                id: providerToCheck as string,
+                name: providerInfo?.name || (providerToCheck as string),
             };
         }
     }
@@ -822,11 +866,37 @@ async function handleInputSubmit(data: any) {
 
 // Lifecycle
 onMounted(async () => {
-    await projectStore.fetchProject(projectId.value);
+    await projectStore.fetchProjects();
     await taskStore.fetchTasks(projectId.value);
     const cleanup = taskStore.initEventListeners();
+
+    // Set up IPC listeners for real-time updates
+    const api = (window as any).electron;
+
+    // Store listener references for cleanup
+    const statusChangedHandler = async (data: { id: number; status: string }) => {
+        console.log('[KanbanBoard] Task status changed:', data);
+        // Refresh tasks to get latest data
+        await taskStore.fetchTasks(projectId.value);
+    };
+
+    const taskUpdatedHandler = async (taskId: number) => {
+        console.log('[KanbanBoard] Task updated:', taskId);
+        // Refresh tasks to get latest data
+        await taskStore.fetchTasks(projectId.value);
+    };
+
+    // Register listeners
+    api.on('task:status-changed', statusChangedHandler);
+    api.on('task:updated', taskUpdatedHandler);
+
     onUnmounted(() => {
         cleanup();
+        // Clean up IPC listeners using stored references
+        if (api && api.off) {
+            api.off('task:status-changed', statusChangedHandler);
+            api.off('task:updated', taskUpdatedHandler);
+        }
     });
 });
 </script>
@@ -1001,7 +1071,8 @@ onMounted(async () => {
                                 :show-priority="true"
                                 :show-tags="true"
                                 :is-dragging="draggedTask === task.id"
-                                :missing-provider="getMissingProviderForTask(task)"
+                                :missing-provider="getCachedMissingProvider(task.id)"
+                                :hide-prompt-actions="true"
                                 @click="openTaskDetail"
                                 @edit="handleEditTask"
                                 @delete="handleDeleteTask"

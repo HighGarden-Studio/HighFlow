@@ -37,7 +37,11 @@ const activeTab = ref<
 const appInfo = ref<{ name: string; version: string; platform: string; isDev: boolean } | null>(
     null
 );
-const selectedProvider = ref<(typeof settingsStore.aiProviders)[0] | null>(null);
+const selectedProviderId = ref<string | null>(null);
+const selectedProvider = computed(() => {
+    if (!selectedProviderId.value) return null;
+    return settingsStore.aiProviders.find((p) => p.id === selectedProviderId.value) || null;
+});
 const showProviderModal = ref(false);
 const _showExportModal = ref(false);
 const showImportModal = ref(false);
@@ -105,16 +109,13 @@ function setTheme(theme: Theme) {
 }
 
 function openProviderModal(providerId: string) {
-    const provider = settingsStore.aiProviders.find((p) => p.id === providerId);
-    if (provider) {
-        selectedProvider.value = provider;
-        showProviderModal.value = true;
-    }
+    selectedProviderId.value = providerId;
+    showProviderModal.value = true;
 }
 
 function closeProviderModal() {
     showProviderModal.value = false;
-    selectedProvider.value = null;
+    selectedProviderId.value = null;
 }
 
 async function handleProviderSave(config: any) {

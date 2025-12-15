@@ -113,6 +113,7 @@
         "uuid": "^8.3.2",
         "vm2": "^3.10.0",
         "vue": "^3.4.21",
+        "vue-diff": "^1.2.4",
         "vue-echarts": "^6.7.0",
         "vue-router": "^4.3.0",
         "web-streams-polyfill": "^3.2.1",

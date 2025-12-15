@@ -4,7 +4,7 @@
  *
  * Modern DAG visualization using Vue Flow with automatic layout
  */
-import { ref, computed, watch, nextTick, onMounted, markRaw } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { VueFlow, useVueFlow, Position, MarkerType } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -24,6 +24,8 @@ import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import InputTaskForm from '../../components/task/InputTaskForm.vue';
+import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
+import { getAPI } from '../../utils/electron';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -60,8 +62,15 @@ const createInColumn = ref<TaskStatus>('todo');
 const showInputModal = ref(false);
 const inputTask = ref<Task | null>(null);
 
+// Result Preview State
+const showResultPreview = ref(false);
+const resultPreviewTask = ref<Task | null>(null);
+
+// Key to force VueFlow remount when nodes need refresh (disabled - too disruptive)
+// const vueFlowKey = ref(0);
+
 // Vue Flow setup
-const { onConnect, addEdges, fitView } = useVueFlow();
+const { onConnect, addEdges, fitView, updateNodeData } = useVueFlow();
 
 // Nodes and edges
 const nodes = ref<Node[]>([]);
@@ -133,11 +142,15 @@ function buildGraph() {
 
     // Create nodes
     tasks.value.forEach((task) => {
+        // Generate unique key that changes when critical task properties change
+        // This forces TaskCard remount only when needed
+        const taskKey = `${task.id}-${task.status}-${task.inputSubStatus || 'none'}`;
+
         taskNodes.push({
             id: String(task.id),
             type: 'taskCard',
             position: { x: 0, y: 0 }, // Will be set by layout
-            data: { task },
+            data: { task, taskKey },
         });
     });
 
@@ -158,6 +171,22 @@ function buildGraph() {
                     formatInfo
                 );
 
+                // Determine edge color based on SOURCE task status
+                let edgeColor: string;
+                switch (sourceTask.status) {
+                    case 'done':
+                        edgeColor = '#10b981'; // Green - completed
+                        break;
+                    case 'in_progress':
+                        edgeColor = '#3b82f6'; // Blue - in progress
+                        break;
+                    case 'in_review':
+                        edgeColor = '#f59e0b'; // Amber - in review
+                        break;
+                    default:
+                        edgeColor = getEdgeColor(task); // Default gray
+                }
+
                 taskEdges.push({
                     id: `e${depId}-${task.id}`,
                     source: String(depId),
@@ -165,14 +194,14 @@ function buildGraph() {
                     type: 'custom', // Use custom edge with delete button
                     animated: task.status === 'in_progress',
                     style: {
-                        stroke: getEdgeColor(task),
+                        stroke: edgeColor,
                         strokeWidth: 2,
                     },
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
                         width: 20,
                         height: 20,
-                        color: getEdgeColor(task),
+                        color: edgeColor,
                     },
                     label: formatInfo ? `${formatInfo.icon} ${formatInfo.label}` : '📄 Output', // Icon + text (e.g., "🧩 JSON")
                     data: {
@@ -231,6 +260,22 @@ function rebuildGraphImmediate() {
         buildGraphTimer = null;
     }
     buildGraph();
+}
+
+/**
+ * Update only node data without full graph rebuild
+ * Uses VueFlow's updateNodeData for smooth updates
+ */
+function updateNodesDataSmooth() {
+    console.log('[DAGView] Updating nodes data smoothly...');
+
+    // Update each node's data using VueFlow's API
+    taskStore.tasks.forEach((task) => {
+        const nodeId = String(task.id);
+        updateNodeData(nodeId, { task: { ...task } });
+    });
+
+    console.log('[DAGView] Nodes data updated');
 }
 
 /**
@@ -414,9 +459,10 @@ function getOutputFormatInfo(
 }
 
 /**
- * Handle node click
+ * Handle node click - open task detail panel
  */
 function handleNodeClick(task: Task) {
+    console.log('🖱️ [DAGView] handleNodeClick called', task.id);
     selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
@@ -560,17 +606,121 @@ async function handleTaskExecute(task: Task) {
 }
 
 async function handleTaskApprove(task: Task) {
-    await taskStore.approveTask(task.id);
+    console.log('🟣 [DAGView] handleTaskApprove called', task.id);
+
+    // IMPORTANT: Fetch latest task from store to avoid stale data from node
+    const latestTask = taskStore.tasks.find((t) => t.id === task.id);
+    if (!latestTask) {
+        console.error('❌ [DAGView] Task not found in store:', task.id);
+        return;
+    }
+
+    console.log('🟣 [DAGView] Latest task status:', latestTask.status);
+    const result = await taskStore.approveTask(latestTask.id);
+    console.log('🟣 [DAGView] Approve result:', result);
+    if (!result.success && result.error) {
+        console.error('❌ [DAGView] Approve failed:', result.error);
+    }
 }
 
 async function handleTaskRetry(task: Task) {
-    await taskStore.retryTask(task.id);
+    // Retry: reset to TODO first, then execute
+    if (task.status === 'done') {
+        await taskStore.updateTask(task.id, { status: 'todo' });
+    }
+    await taskStore.executeTask(task.id);
+}
+
+/**
+ * Handle preview result - open result preview modal
+ */
+function handlePreviewResult(task: Task) {
+    console.log('📊 [DAGView] handlePreviewResult called', task.id);
+    openResultPreview(task);
+}
+
+/**
+ * Open result preview modal
+ */
+async function openResultPreview(task: Task) {
+    // Fetch latest task data to ensure result is up-to-date
+    let fullTask: any = task;
+    try {
+        const fetched = await getAPI().tasks.get(task.id);
+        if (fetched) {
+            fullTask = { ...task, ...fetched };
+        }
+    } catch (error) {
+        console.error('Failed to fetch task for preview:', error);
+    }
+
+    const progress = taskStore.executionProgress.get(task.id);
+    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
+    const enriched = {
+        ...fullTask,
+        result:
+            (fullTask as any).result ||
+            (fullTask as any).executionResult?.content ||
+            progress?.content ||
+            reviewProgressEntry?.content ||
+            '',
+        outputFormat:
+            (fullTask as any).outputFormat ||
+            (fullTask as any).executionResult?.contentType ||
+            (fullTask as any).expectedOutputFormat,
+    } as Task;
+    resultPreviewTask.value = enriched;
+    showResultPreview.value = true;
+}
+
+/**
+ * Close result preview modal
+ */
+function closeResultPreview() {
+    showResultPreview.value = false;
+    resultPreviewTask.value = null;
+}
+
+/**
+ * Handle preview stream (live preview) - open task detail panel with live execution stream
+ */
+function handlePreviewStream(task: Task) {
+    console.log('🎥 [DAGView] handlePreviewStream called', task.id);
+    selectedTaskId.value = task.id;
+    showDetailPanel.value = true;
+    console.log(
+        '🎥 [DAGView] Set selectedTaskId:',
+        selectedTaskId.value,
+        'showDetailPanel:',
+        showDetailPanel.value
+    );
+}
+
+/**
+ * Handle view history
+ */
+function handleViewHistory(task: Task) {
+    console.log('📜 [DAGView] handleViewHistory called', task.id);
+    selectedTaskId.value = task.id;
+    showDetailPanel.value = true;
+    console.log(
+        '📜 [DAGView] Set selectedTaskId:',
+        selectedTaskId.value,
+        'showDetailPanel:',
+        showDetailPanel.value
+    );
 }
 
 async function handleProvideInput(task: Task) {
+    console.log('[DAGView] handleProvideInput called:', task?.id, task?.title);
+    console.log('[DAGView] Setting inputTask and opening modal...');
     // For INPUT tasks, open the input modal
     inputTask.value = task;
     showInputModal.value = true;
+    console.log('[DAGView] Modal state:', {
+        showInputModal: showInputModal.value,
+        inputTask: inputTask.value?.id,
+    });
 }
 
 function closeInputModal() {
@@ -589,6 +739,9 @@ async function handleInputSubmit(data: any) {
                 message: '입력이 제출되었습니다.',
             });
             closeInputModal();
+            // Force refresh tasks and rebuild graph to show state change
+            await taskStore.fetchTasks(projectId.value);
+            rebuildGraphImmediate();
         } else {
             uiStore.showToast({
                 type: 'error',
@@ -740,6 +893,35 @@ onMounted(async () => {
         // Wait a tick to ensure data is set, then build graph
         await nextTick();
         buildGraph();
+
+        // Subscribe to taskStore state changes for reliable updates
+        // This ensures INPUT task status updates (including inputSubStatus) are reflected immediately
+        const unsubscribe = taskStore.$subscribe(
+            async (mutation, state) => {
+                console.log('[DAGView] TaskStore mutation detected:', mutation.type);
+
+                // Trigger rebuild on any store mutation
+                await nextTick();
+                rebuildGraphImmediate();
+            },
+            { detached: true }
+        );
+
+        // Listen for custom INPUT task status change events
+        const handleInputStatusChange = async (event: Event) => {
+            const detail = (event as CustomEvent).detail;
+            console.log('[DAGView] INPUT task status changed event:', detail);
+            await nextTick();
+            // Rebuild graph - taskKey will handle selective TaskCard remount
+            rebuildGraphImmediate();
+        };
+        window.addEventListener('task:input-status-changed', handleInputStatusChange);
+
+        // Cleanup on unmount
+        onUnmounted(() => {
+            unsubscribe();
+            window.removeEventListener('task:input-status-changed', handleInputStatusChange);
+        });
     }
 });
 </script>
@@ -782,10 +964,13 @@ onMounted(async () => {
                         @click="handleNodeClick(data.task)"
                         @execute="handleTaskExecute(data.task)"
                         @approve="handleTaskApprove(data.task)"
+                        @preview-result="handlePreviewResult"
+                        @preview-stream="handlePreviewStream"
+                        @view-history="handleViewHistory"
                         @retry="handleTaskRetry(data.task)"
                         @stop="handleStop(data.task)"
-                        @operatorDrop="handleOperatorDrop"
-                        @provideInput="handleProvideInput"
+                        @operator-drop="handleOperatorDrop"
+                        @provide-input="handleProvideInput"
                     />
                 </template>
             </VueFlow>
@@ -813,13 +998,28 @@ onMounted(async () => {
 
         <!-- Input Modal -->
         <Teleport to="body">
-            <InputTaskForm
+            <div
                 v-if="showInputModal && inputTask"
-                :task="inputTask"
-                @close="closeInputModal"
-                @submit="handleInputSubmit"
-            />
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+                @click.self="closeInputModal"
+            >
+                <div class="max-w-2xl w-full mx-4" @click.stop>
+                    <InputTaskForm
+                        :task="inputTask"
+                        @close="closeInputModal"
+                        @submit="handleInputSubmit"
+                    />
+                </div>
+            </div>
         </Teleport>
+
+        <!-- Enhanced Result Preview Modal -->
+        <EnhancedResultPreview
+            v-if="resultPreviewTask"
+            :open="showResultPreview"
+            :task="resultPreviewTask"
+            @close="closeResultPreview"
+        />
 
         <!-- Project Info Modal -->
         <ProjectInfoModal

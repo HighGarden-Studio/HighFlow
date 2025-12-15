@@ -24,7 +24,7 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class GPTProvider extends BaseAIProvider {
     readonly name: AIProvider = 'openai';
-    readonly models: ModelInfo[] = [
+    readonly defaultModels: ModelInfo[] = [
         {
             name: 'gpt-4o',
             provider: 'openai',
@@ -140,9 +140,54 @@ export class GPTProvider extends BaseAIProvider {
     constructor() {
         super();
         console.log(
-            '[GPTProvider] Initialized with models:',
-            this.models.map((m) => m.name)
+            '[GPTProvider] Initialized with default models:',
+            this.defaultModels.map((m) => m.name)
         );
+    }
+
+    /**
+     * Fetch available models from OpenAI API
+     */
+    async fetchModels(): Promise<ModelInfo[]> {
+        try {
+            const client = this.getClient();
+            const response = await client.models.list();
+
+            // Filter to only GPT and DALL-E models
+            const gptModels = response.data
+                .filter(
+                    (m) =>
+                        m.id.startsWith('gpt-') ||
+                        m.id.startsWith('o1') ||
+                        m.id.startsWith('dall-e')
+                )
+                .map((m) => {
+                    // Check if model exists in default models for metadata
+                    const defaultModel = this.defaultModels.find((dm) => dm.name === m.id);
+                    return {
+                        name: m.id,
+                        provider: 'openai' as const,
+                        contextWindow: defaultModel?.contextWindow || 128000,
+                        maxOutputTokens: defaultModel?.maxOutputTokens || 4096,
+                        costPerInputToken: defaultModel?.costPerInputToken || 0,
+                        costPerOutputToken: defaultModel?.costPerOutputToken || 0,
+                        averageLatency: defaultModel?.averageLatency || 1000,
+                        features: defaultModel?.features || ['streaming'],
+                        bestFor: defaultModel?.bestFor || [],
+                        deprecated: m.id.includes('0314') || m.id.includes('0613'),
+                    };
+                })
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            console.log(
+                '[GPTProvider] Fetched models from API:',
+                gptModels.map((m) => m.name)
+            );
+            return gptModels;
+        } catch (error) {
+            console.error('[GPTProvider] Failed to fetch models from API:', error);
+            return this.defaultModels;
+        }
     }
 
     /**

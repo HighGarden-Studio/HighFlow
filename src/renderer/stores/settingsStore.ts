@@ -615,7 +615,6 @@ export const useSettingsStore = defineStore('settings', () => {
                 'veo-2.0-generate-preview',
                 'gemini-3.0-pro-exp',
                 'gemini-3.0-flash-exp',
-                'gemini-2.0-flash-exp',
                 'gemini-2.0-flash-thinking-exp-1219',
                 'gemini-1.5-pro',
                 'gemini-1.5-flash',
@@ -654,7 +653,6 @@ export const useSettingsStore = defineStore('settings', () => {
                 'veo-2.0-generate-preview',
                 'gemini-3.0-pro-exp',
                 'gemini-3.0-flash-exp',
-                'gemini-2.0-flash-exp',
                 'gemini-2.0-flash-thinking-exp-1219',
                 'gemini-1.5-pro',
                 'gemini-1.5-flash',
@@ -2275,6 +2273,26 @@ export const useSettingsStore = defineStore('settings', () => {
             }
 
             if (isValid) {
+                // Try to fetch updated models list from provider
+                try {
+                    const fetchedModels = await window.electron.ai.fetchModels(
+                        providerId,
+                        provider.apiKey
+                    );
+                    if (fetchedModels && Array.isArray(fetchedModels) && fetchedModels.length > 0) {
+                        const modelList = fetchedModels.map((m: any) => m.name);
+
+                        // Update provider with key, validation time, and NEW MODELS
+                        await updateAIProvider(providerId, {
+                            lastValidated: new Date().toISOString(),
+                            models: modelList,
+                        });
+                        return true;
+                    }
+                } catch (err) {
+                    console.warn(`[Settings] Failed to refresh models for ${providerId}:`, err);
+                }
+
                 await updateAIProvider(providerId, {
                     lastValidated: new Date().toISOString(),
                 });

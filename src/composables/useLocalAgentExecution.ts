@@ -68,6 +68,8 @@ export function useLocalAgentExecution() {
     const progress = ref(0);
     const messages = ref<{ role: 'user' | 'assistant'; content: string; timestamp: Date }[]>([]);
 
+    const transcript = ref<any[]>([]);
+
     // Agent availability check
     const installedAgents = ref<Map<LocalAgentType, { installed: boolean; version?: string }>>(
         new Map()
@@ -112,6 +114,7 @@ export function useLocalAgentExecution() {
                 workingDirectory
             );
             currentSession.value = session;
+            transcript.value = []; // Reset transcript on new session
 
             // Set up event listeners
             setupEventListeners();
@@ -133,10 +136,30 @@ export function useLocalAgentExecution() {
             (sessionId, message) => {
                 if (currentSession.value?.id === sessionId) {
                     console.log('[LocalAgentExecution] Message received:', message);
-                    // Handle streaming message
+
+                    // Add to transcript
+                    if (typeof message === 'object' && message !== null) {
+                        transcript.value.push({
+                            timestamp: new Date(),
+                            ...(message as Record<string, unknown>),
+                        });
+                    }
+
+                    // Handle streaming message content for legacy support
                     if (typeof message === 'object' && message !== null) {
                         const msg = message as Record<string, unknown>;
-                        if (msg.content && typeof msg.content === 'string') {
+                        if (msg.type === 'assistant' && msg.message) {
+                            const msgBody = msg.message as any;
+                            if (msgBody?.content && Array.isArray(msgBody.content)) {
+                                const text = msgBody.content
+                                    .filter((c: any) => c.type === 'text')
+                                    .map((c: any) => c.text)
+                                    .join('');
+                                if (text) {
+                                    streamedContent.value += text;
+                                }
+                            }
+                        } else if (msg.content && typeof msg.content === 'string') {
                             streamedContent.value += msg.content;
                         }
                     }
@@ -375,6 +398,7 @@ export function useLocalAgentExecution() {
         executionError.value = null;
         progress.value = 0;
         messages.value = [];
+        transcript.value = [];
     }
 
     /**

@@ -23,7 +23,7 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class ClaudeProvider extends BaseAIProvider {
     readonly name: AIProvider = 'anthropic';
-    readonly models: ModelInfo[] = [
+    readonly defaultModels: ModelInfo[] = [
         {
             name: 'claude-3-5-sonnet-20250219',
             provider: 'anthropic',
@@ -90,6 +90,53 @@ export class ClaudeProvider extends BaseAIProvider {
     setApiKey(apiKey: string): void {
         this.injectedApiKey = apiKey;
         this.client = null; // Reset client to use new key
+    }
+
+    /**
+     * Fetch available models from Anthropic API
+     */
+    async fetchModels(): Promise<ModelInfo[]> {
+        try {
+            const client = this.getClient();
+            // Anthropic models API endpoint
+            const response = await fetch('https://api.anthropic.com/v1/models', {
+                headers: {
+                    'x-api-key': this.injectedApiKey || process.env.ANTHROPIC_API_KEY || '',
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch models: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const models = (data.data || []).map((m: any) => {
+                const defaultModel = this.defaultModels.find((dm) => dm.name === m.id);
+                return {
+                    name: m.id,
+                    provider: 'anthropic' as const,
+                    displayName: m.display_name || m.id,
+                    contextWindow: defaultModel?.contextWindow || 200000,
+                    maxOutputTokens: defaultModel?.maxOutputTokens || 4096,
+                    costPerInputToken: defaultModel?.costPerInputToken || 0,
+                    costPerOutputToken: defaultModel?.costPerOutputToken || 0,
+                    averageLatency: defaultModel?.averageLatency || 1500,
+                    features: defaultModel?.features || ['streaming'],
+                    bestFor: defaultModel?.bestFor || [],
+                };
+            });
+
+            console.log(
+                '[ClaudeProvider] Fetched models from API:',
+                models.map((m: any) => m.name)
+            );
+            return models;
+        } catch (error) {
+            console.error('[ClaudeProvider] Failed to fetch models from API:', error);
+            return this.defaultModels;
+        }
     }
 
     async generateText(

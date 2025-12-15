@@ -12,53 +12,53 @@
  */
 export function getProviderIcon(providerId: string): string {
     const providerIconMap: Record<string, string> = {
-        // AI Providers - use simple-icons prefix for brands
-        openai: 'simple-icons:openai',
-        anthropic: 'simple-icons:anthropic',
-        google: 'simple-icons:google',
-        'azure-openai': 'simple-icons:microsoftazure',
-        mistral: 'simple-icons:mistral',
-        cohere: 'simple-icons:cohere',
-        groq: 'simple-icons:groq',
+        // AI Providers - use logos prefix for brands
+        openai: 'logos:openai-icon',
+        anthropic: 'logos:claude-icon',
+        google: 'logos:google-icon',
+        'azure-openai': 'logos:microsoft-azure',
+        mistral: 'logos:mistral-ai-icon',
+        cohere: 'simple-icons:cohere', // Not in logos, keep simple-icons
+        groq: 'simple-icons:groq', // Not in logos, keep simple-icons
         perplexity: 'ph:question',
         together: 'ph:stack',
         fireworks: 'ph:fire',
         deepseek: 'ph:binoculars',
-        huggingface: 'simple-icons:huggingface',
-        replicate: 'simple-icons:replicate',
+        huggingface: 'logos:huggingface-icon',
+        replicate: 'simple-icons:replicate', // Not in logos
         openrouter: 'ph:router',
         // Local Providers
-        ollama: 'simple-icons:ollama',
+        ollama: 'simple-icons:ollama', // Not in logos
         lmstudio: 'ph:desktop',
         // Chinese Providers
         zhipu: 'ph:robot',
         moonshot: 'ph:moon',
-        qwen: 'simple-icons:alibabadotcom',
-        baidu: 'simple-icons:baidu',
+        qwen: 'logos:alibaba-cloud',
+        baidu: 'logos:baidu',
         // Dev Tools & MCP
         filesystem: 'ph:folder',
-        git: 'simple-icons:git',
-        github: 'simple-icons:github',
-        gitlab: 'simple-icons:gitlab',
-        slack: 'simple-icons:slack',
-        postgres: 'simple-icons:postgresql',
-        postgresql: 'simple-icons:postgresql',
-        sqlite: 'simple-icons:sqlite',
-        puppeteer: 'simple-icons:puppeteer',
-        playwright: 'simple-icons:playwright',
-        brave_search: 'simple-icons:brave',
-        'brave-search': 'simple-icons:brave',
-        google_maps: 'simple-icons:googlemaps',
-        'google-maps': 'simple-icons:googlemaps',
+        git: 'logos:git-icon',
+        github: 'logos:github-icon',
+        gitlab: 'logos:gitlab',
+        slack: 'logos:slack-icon',
+        postgres: 'logos:postgresql',
+        postgresql: 'logos:postgresql',
+        sqlite: 'logos:sqlite',
+        puppeteer: 'logos:puppeteer',
+        playwright: 'logos:playwright',
+        brave_search: 'logos:brave',
+        'brave-search': 'logos:brave',
+        google_maps: 'logos:google-maps',
+        'google-maps': 'logos:google-maps',
         memory: 'ph:brain',
         fetch: 'ph:download',
         sequential_thinking: 'ph:brain',
         'sequential-thinking': 'ph:brain',
         everything: 'ph:magnifying-glass',
         // Local Agents
-        'claude-code': 'simple-icons:anthropic',
-        codex: 'simple-icons:openai',
-        antigravity: 'simple-icons:google',
+        'claude-code': 'logos:claude-icon',
+        codex: 'logos:openai-icon',
+        antigravity: 'logos:google-icon',
         // Default HighFlow
         'default-highflow': 'simple-icons:hexo',
     };
@@ -73,15 +73,15 @@ export function getProviderIcon(providerId: string): string {
 
 /**
  * Get file icon for script languages
- * Uses vscode-icons prefix for file type icons
+ * Uses logos prefix for file type icons
  * @param language - The script language
  * @returns Iconify icon name for the language
  */
 export function getScriptLanguageIcon(language: string): string {
     const languageIconMap: Record<string, string> = {
-        javascript: 'vscode-icons:file-type-js-official',
-        typescript: 'vscode-icons:file-type-typescript-official',
-        python: 'vscode-icons:file-type-python',
+        javascript: 'logos:javascript',
+        typescript: 'logos:typescript-icon',
+        python: 'logos:python',
     };
 
     return languageIconMap[language] || 'vscode-icons:file-type-text';

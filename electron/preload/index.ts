@@ -211,7 +211,13 @@ const eventsAPI = {
             'task:triggerAutoExecution',
             'task:autoExecutionStarting',
             // Activity Logging
+            'task:autoExecutionStarting',
+            // Activity Logging
             'activity:log',
+            // Curator Events
+            'curator:started',
+            'curator:step',
+            'curator:completed',
         ];
 
         if (validChannels.includes(channel)) {
@@ -1038,6 +1044,15 @@ const httpAPI = {
 };
 
 // ========================================
+// AI API
+// ========================================
+
+const aiAPI = {
+    fetchModels: (providerId: string, apiKey?: string) =>
+        ipcRenderer.invoke('ai:fetchModels', providerId, apiKey),
+};
+
+// ========================================
 // Expose APIs to renderer via contextBridge
 // ========================================
 
@@ -1062,6 +1077,7 @@ const electronAPI = {
     operators: operatorsAPI,
     auth: authAPI,
     http: httpAPI,
+    ai: aiAPI,
 };
 
 // Expose to renderer

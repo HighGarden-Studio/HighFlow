@@ -48,16 +48,19 @@ export type AIProvider =
     | 'local';
 
 export type AIModel =
+    // OpenAI Models
     | 'gpt-4o'
     | 'gpt-4o-mini'
     | 'o1-preview'
     | 'o1-mini'
+    | 'o1'
     | 'gpt-4-turbo'
     | 'gpt-4'
     | 'gpt-3.5-turbo'
     | 'gpt-image-1'
     | 'dall-e-3'
     | 'dall-e-2'
+    // Claude Models
     | 'claude-3-5-sonnet-20250219'
     | 'claude-3-opus-20240229'
     | 'claude-3-sonnet-20240229'
@@ -65,25 +68,40 @@ export type AIModel =
     | 'claude-3-5-haiku-20241022'
     | 'claude-4-5-sonnet-20251022'
     | 'claude-4-5-opus-20251022'
-    | 'o1'
-    | 'gemini-2.5-flash-image' // Nano Banana (fast, stable)
-    | 'gemini-3-pro-image-preview' // Nano Banana Pro (premium, 4K)
-    | 'gemini-3-pro-preview' // Gemini 3 Pro
-    | 'veo-3.1-generate-preview' // Veo 3.1 Video
-    | 'veo-2.0-generate-preview' // Veo 2.0 Video
+    // Gemini Models (Vertex AI / Gemini API)
+    | 'gemini-3.0-pro'
+    | 'gemini-2.5-pro'
+    | 'gemini-2.5-flash'
+    | 'gemini-2.5-flash-lite'
+    | 'gemini-2.5-flash-image'
+    | 'gemini-2.5-flash-preview-image-generation'
+    | 'gemini-2.0-flash'
+    | 'gemini-2.0-flash-lite'
+    | 'gemini-1.5-pro'
+    | 'gemini-1.5-flash'
+    | 'gemini-pro'
+    | 'gemini-3-pro-image-preview'
+    | 'gemini-3-pro-preview'
     | 'gemini-3.0-pro-exp'
     | 'gemini-3.0-flash-exp'
-    | 'gemini-2.0-flash-exp'
     | 'gemini-2.0-flash-thinking-exp-1219'
+    // Imagen Models
+    | 'imagen-4.0-generate-001'
+    | 'imagen-3.0-generate-002'
+    | 'imagen-3.0-generate-001'
+    | 'imagen-3.0'
+    | 'imagen-3.0-lite'
+    // Veo Video Models
+    | 'veo-3.1-generate-001'
+    | 'veo-3.0-generate-001'
+    | 'veo-2.0-generate-001'
+    | 'veo-3.1-generate-preview'
+    | 'veo-2.0-generate-preview'
+    // Other Models
     | 'deepseek-reasoner'
     | 'sonar'
     | 'sonar-pro'
     | 'sonar-reasoning'
-    | 'gemini-1.5-pro'
-    | 'gemini-1.5-flash'
-    | 'gemini-pro'
-    | 'imagen-3.0'
-    | 'imagen-3.0-lite'
     | 'llama-3.3-70b-versatile'
     | 'llama-3.1-70b-versatile'
     | 'llama-3.1-8b-instant'
@@ -93,7 +111,9 @@ export type AIModel =
     | 'antigravity-pro'
     | 'antigravity-standard'
     | 'codex-latest'
-    | 'codex-standard';
+    | 'codex-standard'
+    // Allow dynamic model names from API
+    | (string & {});
 
 export type TaskComplexity = 'simple' | 'medium' | 'complex';
 
@@ -480,6 +500,7 @@ export interface Capability {
 export interface ModelInfo {
     name: AIModel;
     provider: AIProvider;
+    displayName?: string;
     contextWindow: number;
     maxOutputTokens: number;
     costPerInputToken: number;
@@ -487,6 +508,10 @@ export interface ModelInfo {
     averageLatency: number;
     features: AIFeature[];
     bestFor: string[];
+    deprecated?: boolean;
+    deprecatedSince?: string;
+    replacementModel?: string;
+    supportedActions?: string[];
 }
 
 // ========================================

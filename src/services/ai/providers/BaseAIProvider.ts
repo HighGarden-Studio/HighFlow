@@ -21,7 +21,37 @@ import { buildPlainTextResult } from '../utils/aiResultUtils';
 
 export abstract class BaseAIProvider {
     abstract readonly name: AIProvider;
-    abstract readonly models: ModelInfo[];
+
+    /**
+     * Static model list (fallback when API fetch fails)
+     */
+    abstract readonly defaultModels: ModelInfo[];
+
+    /**
+     * Dynamic model list (fetched from API)
+     * Falls back to defaultModels if not fetched
+     */
+    protected _dynamicModels: ModelInfo[] | null = null;
+
+    /**
+     * Get models - returns dynamic models if available, otherwise default models
+     */
+    get models(): ModelInfo[] {
+        return this._dynamicModels || this.defaultModels;
+    }
+
+    /**
+     * Set dynamic models (called after API fetch)
+     */
+    setDynamicModels(models: ModelInfo[]): void {
+        this._dynamicModels = models;
+    }
+
+    /**
+     * Fetch available models from provider API
+     * Each provider should implement this to query their API
+     */
+    abstract fetchModels(): Promise<ModelInfo[]>;
 
     /**
      * Execute a prompt and get response
@@ -39,7 +69,8 @@ export abstract class BaseAIProvider {
         prompt: string,
         config: AIConfig,
         onToken: (token: string) => void,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): AsyncGenerator<StreamChunk>;
 
     /**

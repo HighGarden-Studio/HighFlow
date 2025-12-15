@@ -2,11 +2,12 @@
 import { Handle, Position } from '@vue-flow/core';
 import TaskCard from '../board/TaskCard.vue';
 import type { Task } from '@core/types/database';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 interface Props {
     data: {
         task: Task;
+        taskKey?: string; // Optional key to force TaskCard remount
     };
 }
 
@@ -17,6 +18,8 @@ const emit = defineEmits<{
     (e: 'click', task: Task): void;
     (e: 'execute', task: Task): void;
     (e: 'previewResult', task: Task): void;
+    (e: 'previewStream', task: Task): void;
+    (e: 'viewHistory', task: Task): void;
     (e: 'retry', task: Task): void;
     (e: 'approve', task: Task): void;
     (e: 'stop', task: Task): void;
@@ -26,6 +29,15 @@ const emit = defineEmits<{
 
 // Operator drag state
 const isOperatorDragOver = ref(false);
+
+// Computed: Check if this is an Input task waiting for user input
+const isInputTaskWaiting = computed(() => {
+    return (
+        props.data.task.taskType === 'input' &&
+        props.data.task.status === 'in_progress' &&
+        props.data.task.inputSubStatus === 'WAITING_USER'
+    );
+});
 
 function handleClick() {
     emit('click', props.data.task);
@@ -39,11 +51,20 @@ function handlePreviewResult() {
     emit('previewResult', props.data.task);
 }
 
+function handlePreviewStream() {
+    emit('previewStream', props.data.task);
+}
+
+function handleViewHistory() {
+    emit('viewHistory', props.data.task);
+}
+
 function handleRetry() {
     emit('retry', props.data.task);
 }
 
 function handleApprove() {
+    console.log('🔵 [TaskFlowNode] handleApprove called', props.data.task.id);
     emit('approve', props.data.task);
 }
 
@@ -159,7 +180,20 @@ onUnmounted(() => {
 
         <!-- Status Icon Overlay -->
         <div class="status-icon-overlay">
-            <div v-if="data.task.status === 'in_progress'" class="status-icon executing">
+            <!-- Input Task Waiting for User Input -->
+            <div v-if="isInputTaskWaiting" class="status-icon waiting-input">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    ></path>
+                </svg>
+            </div>
+
+            <!-- Executing (AI tasks) -->
+            <div v-else-if="data.task.status === 'in_progress'" class="status-icon executing">
                 <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
                     <circle
                         class="opacity-25"
@@ -217,6 +251,7 @@ onUnmounted(() => {
         <!-- TaskCard component with max-width -->
         <div class="task-card-wrapper">
             <TaskCard
+                :key="data.taskKey || data.task.id"
                 :task="data.task"
                 :subtasks="[]"
                 :is-dragging="false"
@@ -225,12 +260,14 @@ onUnmounted(() => {
                 :hide-connection-handles="true"
                 @click="handleClick"
                 @execute="handleExecute"
-                @previewResult="handlePreviewResult"
+                @preview-result="handlePreviewResult"
+                @preview-stream="handlePreviewStream"
+                @view-history="handleViewHistory"
                 @retry="handleRetry"
                 @approve="handleApprove"
                 @stop="handleStop"
-                @operatorDrop="handleOperatorDrop"
-                @provideInput="handleProvideInput"
+                @operator-drop="handleOperatorDrop"
+                @provide-input="handleProvideInput"
             />
         </div>
 
@@ -319,6 +356,22 @@ onUnmounted(() => {
 .status-icon.blocked {
     background: linear-gradient(135deg, #ef4444, #f87171);
     color: white;
+}
+
+.status-icon.waiting-input {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    color: white;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
 }
 
 .animate-spin {

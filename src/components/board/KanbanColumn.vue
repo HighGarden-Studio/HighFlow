@@ -198,6 +198,7 @@ const parentTasks = computed(() => {
                 <TaskCard
                     :task="task"
                     :subtasks="getSubtasksForTask(task.id)"
+                    :hide-prompt-actions="true"
                     class="group cursor-move"
                     @click="emit('taskClick', task)"
                     @edit="emit('taskEdit', task)"

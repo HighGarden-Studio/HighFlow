@@ -67,4 +67,49 @@ export function registerLocalProviderHandlers(): void {
             }
         }
     );
+
+    // Fetch models from any AI provider
+    ipcMain.handle(
+        'ai:fetchModels',
+        async (_event, providerId: string, apiKey?: string): Promise<any[]> => {
+            try {
+                // Dynamically import AIServiceManager to ensure singleton usage
+                const importedManager =
+                    await import('../../../src/services/workflow/AIServiceManager');
+                const AIServiceManagerClass =
+                    importedManager.AIServiceManager ||
+                    (importedManager as any).default?.AIServiceManager;
+
+                if (
+                    !AIServiceManagerClass ||
+                    typeof AIServiceManagerClass.getInstance !== 'function'
+                ) {
+                    throw new Error('Failed to import AIServiceManager or find getInstance method');
+                }
+
+                const manager = AIServiceManagerClass.getInstance();
+
+                // Inject API key if provided
+                if (apiKey) {
+                    const importedFactory =
+                        await import('../../../src/services/ai/providers/ProviderFactory');
+                    const ProviderFactoryClass =
+                        importedFactory.ProviderFactory ||
+                        (importedFactory as any).default?.ProviderFactory;
+
+                    // We need to access the provider factory instance used by the manager.
+                    // Since it's private in Manager, we have to settle for updating the config via Manager's public methods if available.
+                    // Manager has setApiKeys({ [providerId]: apiKey }).
+
+                    manager.setApiKeys({ [providerId]: apiKey });
+                }
+
+                const models = await manager.refreshProviderModels(providerId as any);
+                return models;
+            } catch (error) {
+                console.error(`[AI] Failed to fetch models for ${providerId}:`, error);
+                throw error;
+            }
+        }
+    );
 }

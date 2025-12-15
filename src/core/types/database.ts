@@ -210,6 +210,7 @@ export interface TaskHistoryMetadata {
     userId?: number;
     userName?: string;
     score?: number; // AI 검토 점수 (1-10)
+    [key: string]: any;
 }
 
 export type NotificationType =
@@ -471,6 +472,7 @@ export interface Project extends BaseEntity {
     teamId: number | null;
     gitRepository: string | null;
     aiGuidelines?: string | null;
+    autoReview?: boolean; // 자동 AI 검토 활성화 여부
 
     // AI Context Management (Memory)
     goal?: string | null;
@@ -579,6 +581,7 @@ export interface Task extends BaseEntity {
     inputConfig?: InputTaskConfig | null;
     inputSubStatus?: InputSubStatus | null; // Input task specific sub-status
     output?: TaskOutput | null; // Standardized output for all task types
+    notificationConfig?: unknown; // Notification settings for this task
 }
 
 export interface TaskExecutionResult {

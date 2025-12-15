@@ -560,6 +560,10 @@ export interface AuthAPI {
     }>;
 }
 
+export interface AiAPI {
+    fetchModels: (providerId: string, apiKey?: string) => Promise<any[]>;
+}
+
 export interface ElectronAPI {
     projects: ProjectsAPI;
     tasks: TasksAPI;
@@ -579,7 +583,9 @@ export interface ElectronAPI {
     taskHistory: TaskHistoryAPI;
     operators: OperatorsAPI;
     auth: AuthAPI;
+    ai: AiAPI;
     store?: StoreAPI;
+    http?: any;
 }
 
 // Extend Window interface

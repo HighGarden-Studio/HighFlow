@@ -25,7 +25,7 @@ export class GeminiProvider extends BaseAIProvider {
     readonly name: AIProvider = 'google';
     private readonly IMAGE_MODEL = 'gemini-3-pro-image-preview'; // Premium model with 4K support
 
-    readonly models: ModelInfo[] = [
+    readonly defaultModels: ModelInfo[] = [
         {
             name: 'gemini-3-pro-image-preview',
             provider: 'google',
@@ -97,17 +97,7 @@ export class GeminiProvider extends BaseAIProvider {
             features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
             bestFor: ['Fast responses', 'High volume', 'Cost-effective', 'Long context'],
         },
-        {
-            name: 'gemini-2.0-flash-exp',
-            provider: 'google',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0.0,
-            costPerOutputToken: 0.0,
-            averageLatency: 600,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Experimental', 'Fastest', 'Free preview', 'Multimodal'],
-        },
+
         {
             name: 'gemini-pro',
             provider: 'google',
@@ -130,6 +120,63 @@ export class GeminiProvider extends BaseAIProvider {
     setApiKey(apiKey: string): void {
         this.injectedApiKey = apiKey;
         this.client = null; // Reset client to use new key
+    }
+
+    /**
+     * Fetch available models from Gemini API
+     */
+    async fetchModels(): Promise<ModelInfo[]> {
+        try {
+            const apiKey = this.injectedApiKey || process.env.GOOGLE_API_KEY;
+            if (!apiKey) {
+                console.warn('[GeminiProvider] No API key, using default models');
+                return this.defaultModels;
+            }
+
+            // Fetch from Gemini API
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+            );
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch models: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const models = (data.models || [])
+                .map((m: any) => {
+                    const modelName = m.name?.replace('models/', '') || m.name;
+                    const defaultModel = this.defaultModels.find((dm) => dm.name === modelName);
+                    return {
+                        name: modelName,
+                        provider: 'google' as const,
+                        displayName: m.displayName || modelName,
+                        contextWindow: m.inputTokenLimit || defaultModel?.contextWindow || 32000,
+                        maxOutputTokens:
+                            m.outputTokenLimit || defaultModel?.maxOutputTokens || 8192,
+                        costPerInputToken: defaultModel?.costPerInputToken || 0,
+                        costPerOutputToken: defaultModel?.costPerOutputToken || 0,
+                        averageLatency: defaultModel?.averageLatency || 1000,
+                        features: defaultModel?.features || ['streaming'],
+                        bestFor: defaultModel?.bestFor || [],
+                        supportedActions: m.supportedGenerationMethods || [],
+                    };
+                })
+                .filter(
+                    (m: any) =>
+                        m.supportedActions?.includes('generateContent') ||
+                        m.name?.includes('gemini')
+                );
+
+            console.log(
+                '[GeminiProvider] Fetched models from API:',
+                models.map((m: any) => m.name)
+            );
+            return models;
+        } catch (error) {
+            console.error('[GeminiProvider] Failed to fetch models from API:', error);
+            return this.defaultModels;
+        }
     }
 
     /**
@@ -292,7 +339,8 @@ export class GeminiProvider extends BaseAIProvider {
         prompt: string,
         config: AIConfig,
         onToken: (token: string) => void,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): AsyncGenerator<StreamChunk> {
         this.validateConfig(config);
 
@@ -315,6 +363,11 @@ export class GeminiProvider extends BaseAIProvider {
         let accumulated = '';
 
         for await (const chunk of result) {
+            // Check if aborted
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
+
             const delta = chunk.text || '';
             accumulated += delta;
             onToken(delta);

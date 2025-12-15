@@ -130,9 +130,10 @@ export class LocalAgentSession extends EventEmitter {
     private transcript: TranscriptItem[] = [];
     private responseBuffer: string = '';
     private currentResolve: ((response: AgentResponse) => void) | null = null;
-    private currentReject: ((error: Error) => void) | null = null;
+    private currentReject: ((reason?: any) => void) | null = null;
     private currentOnChunk: ((chunk: string) => void) | null = null;
     private responseTimeout: NodeJS.Timeout | null = null;
+    private isClosing: boolean = false; // Track intentional shutdown
 
     constructor(
         agentType: 'claude' | 'codex' | 'antigravity',
@@ -227,6 +228,8 @@ export class LocalAgentSession extends EventEmitter {
      * Close the session
      */
     async close(): Promise<void> {
+        this.isClosing = true; // Mark as intentional shutdown
+
         if (this.responseTimeout) {
             clearTimeout(this.responseTimeout);
             this.responseTimeout = null;
@@ -238,7 +241,8 @@ export class LocalAgentSession extends EventEmitter {
 
             // Force kill after 5 seconds
             setTimeout(() => {
-                if (this.process) {
+                if (this.process && !this.process.killed) {
+                    // Check if process is still alive
                     this.process.kill('SIGKILL');
                 }
             }, 5000);
@@ -346,10 +350,17 @@ export class LocalAgentSession extends EventEmitter {
             this.status = 'closed';
             this.process = null;
 
-            if (this.currentReject) {
+            // Only reject if not intentionally closing
+            // Exit code 143 = 128 + 15 = SIGTERM (normal termination)
+            if (this.currentReject && !this.isClosing) {
                 this.currentReject(new Error(`Process exited unexpectedly with code ${code}`));
                 this.currentReject = null;
                 this.currentResolve = null;
+            } else if (this.isClosing) {
+                // Clean up on intentional close
+                this.currentReject = null;
+                this.currentResolve = null;
+                this.currentOnChunk = null;
             }
 
             this.emit('exit', { code, signal });
@@ -490,13 +501,28 @@ export class LocalAgentSession extends EventEmitter {
             this.responseTimeout = null;
         }
 
+        // Check for error conditions
+        const subtype = String(message.subtype || '');
+        const isError =
+            subtype === 'error_during_execution' ||
+            subtype === 'error' ||
+            message.is_error === true ||
+            (Array.isArray(message.errors) && message.errors.length > 0);
+
         const response: AgentResponse = {
-            success: true,
+            success: !isError,
             content: String(message.content || message.text || message.result || ''),
             duration: Date.now() - this.lastActivityAt.getTime(),
             tokenUsage: message.usage as AgentResponse['tokenUsage'],
             transcript: this.transcript,
         };
+
+        // Add error information if present
+        if (isError) {
+            const errors = Array.isArray(message.errors) ? message.errors : [];
+            const errorMessages = errors.map((e: any) => e.message || String(e)).join('; ');
+            response.error = errorMessages || `Execution error: ${subtype}`;
+        }
 
         this.status = 'idle';
         this.lastActivityAt = new Date();
@@ -542,6 +568,7 @@ export class LocalAgentSession extends EventEmitter {
  */
 export class LocalAgentSessionManager {
     private sessions: Map<string, LocalAgentSession> = new Map();
+    private taskSessions: Map<number, string> = new Map(); // taskId → sessionId
     private static instance: LocalAgentSessionManager;
 
     static getInstance(): LocalAgentSessionManager {
@@ -557,7 +584,8 @@ export class LocalAgentSessionManager {
     async createSession(
         agentType: 'claude' | 'codex' | 'antigravity',
         workingDirectory: string,
-        sessionId?: string
+        sessionId?: string,
+        taskId?: number
     ): Promise<SessionInfo> {
         const session = new LocalAgentSession(agentType, workingDirectory, sessionId);
 
@@ -568,10 +596,20 @@ export class LocalAgentSessionManager {
 
         session.on('closed', () => {
             this.sessions.delete(session.id);
+            // Clean up task mapping if exists
+            if (taskId !== undefined) {
+                this.taskSessions.delete(taskId);
+            }
         });
 
         await session.start();
         this.sessions.set(session.id, session);
+
+        // Register task-session mapping
+        if (taskId !== undefined) {
+            this.taskSessions.set(taskId, session.id);
+            console.log(`[SessionManager] Registered session ${session.id} for task ${taskId}`);
+        }
 
         return session.getInfo();
     }
@@ -615,6 +653,21 @@ export class LocalAgentSessionManager {
             await session.close();
             this.sessions.delete(sessionId);
         }
+    }
+
+    /**
+     * Terminate session for a specific task
+     * Used when task is stopped/cancelled
+     */
+    async terminateTaskSession(taskId: number): Promise<boolean> {
+        const sessionId = this.taskSessions.get(taskId);
+        if (sessionId) {
+            console.log(`[SessionManager] Terminating session ${sessionId} for task ${taskId}`);
+            await this.closeSession(sessionId);
+            this.taskSessions.delete(taskId);
+            return true;
+        }
+        return false;
     }
 
     /**

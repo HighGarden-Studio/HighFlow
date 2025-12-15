@@ -7,58 +7,58 @@
 
 // Browser-compatible EventEmitter implementation
 class BrowserEventEmitter {
-  private listeners: Map<string, Set<(...args: any[]) => void>> = new Map();
-  private maxListeners: number = 10;
+    private listeners: Map<string, Set<(...args: any[]) => void>> = new Map();
+    private maxListeners: number = 10;
 
-  setMaxListeners(n: number): this {
-    this.maxListeners = n;
-    return this;
-  }
-
-  on(event: string, listener: (...args: any[]) => void): this {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
+    setMaxListeners(n: number): this {
+        this.maxListeners = n;
+        return this;
     }
-    const listeners = this.listeners.get(event)!;
-    if (listeners.size >= this.maxListeners) {
-      console.warn(
-        `[EventEmitter] Listener count for "${event}" (${listeners.size}) exceeded max of ${this.maxListeners}`
-      );
+
+    on(event: string, listener: (...args: any[]) => void): this {
+        if (!this.listeners.has(event)) {
+            this.listeners.set(event, new Set());
+        }
+        const listeners = this.listeners.get(event)!;
+        if (listeners.size >= this.maxListeners) {
+            console.warn(
+                `[EventEmitter] Listener count for "${event}" (${listeners.size}) exceeded max of ${this.maxListeners}`
+            );
+        }
+        listeners.add(listener);
+        return this;
     }
-    listeners.add(listener);
-    return this;
-  }
 
-  off(event: string, listener: (...args: any[]) => void): this {
-    this.listeners.get(event)?.delete(listener);
-    return this;
-  }
-
-  emit(event: string, ...args: any[]): boolean {
-    const listeners = this.listeners.get(event);
-    if (!listeners || listeners.size === 0) return false;
-    listeners.forEach(listener => {
-      try {
-        listener(...args);
-      } catch (error) {
-        console.error(`[EventEmitter] Error in listener for "${event}":`, error);
-      }
-    });
-    return true;
-  }
-
-  removeAllListeners(event?: string): this {
-    if (event) {
-      this.listeners.delete(event);
-    } else {
-      this.listeners.clear();
+    off(event: string, listener: (...args: any[]) => void): this {
+        this.listeners.get(event)?.delete(listener);
+        return this;
     }
-    return this;
-  }
 
-  listenerCount(event: string): number {
-    return this.listeners.get(event)?.size || 0;
-  }
+    emit(event: string, ...args: any[]): boolean {
+        const listeners = this.listeners.get(event);
+        if (!listeners || listeners.size === 0) return false;
+        listeners.forEach((listener) => {
+            try {
+                listener(...args);
+            } catch (error) {
+                console.error(`[EventEmitter] Error in listener for "${event}":`, error);
+            }
+        });
+        return true;
+    }
+
+    removeAllListeners(event?: string): this {
+        if (event) {
+            this.listeners.delete(event);
+        } else {
+            this.listeners.clear();
+        }
+        return this;
+    }
+
+    listenerCount(event: string): number {
+        return this.listeners.get(event)?.size || 0;
+    }
 }
 
 // ========================================
@@ -66,344 +66,379 @@ class BrowserEventEmitter {
 // ========================================
 
 export type EventCategory =
-  | 'task'
-  | 'project'
-  | 'workflow'
-  | 'automation'
-  | 'ai'
-  | 'user'
-  | 'system';
+    | 'task'
+    | 'project'
+    | 'workflow'
+    | 'automation'
+    | 'ai'
+    | 'user'
+    | 'system';
 
 const EVENT_CATEGORY_SET = new Set<EventCategory>([
-  'task',
-  'project',
-  'workflow',
-  'automation',
-  'ai',
-  'user',
-  'system',
+    'task',
+    'project',
+    'workflow',
+    'automation',
+    'ai',
+    'user',
+    'system',
 ]);
 
 export interface BaseEvent {
-  id: string;
-  timestamp: Date;
-  category: EventCategory;
-  type: string;
-  source: string;
-  metadata?: Record<string, any>;
-  payload?: Record<string, any>;
+    id: string;
+    timestamp: Date;
+    category: EventCategory;
+    type: string;
+    source: string;
+    metadata?: Record<string, any>;
+    payload?: Record<string, any>;
 }
 
 // Task Events
 export interface TaskCreatedEvent extends BaseEvent {
-  category: 'task';
-  type: 'task.created';
-  payload: {
-    taskId: number;
-    projectId: number;
-    title: string;
-    status: string;
-    priority: string;
-    createdBy: number;
-  };
+    category: 'task';
+    type: 'task.created';
+    payload: {
+        taskId: number;
+        projectId: number;
+        title: string;
+        status: string;
+        priority: string;
+        createdBy: number;
+    };
 }
 
 export interface TaskUpdatedEvent extends BaseEvent {
-  category: 'task';
-  type: 'task.updated';
-  payload: {
-    taskId: number;
-    projectId: number;
-    changes: Record<string, { old: any; new: any }>;
-    updatedBy: number;
-  };
+    category: 'task';
+    type: 'task.updated';
+    payload: {
+        taskId: number;
+        projectId: number;
+        changes: Record<string, { old: any; new: any }>;
+        updatedBy: number;
+    };
 }
 
 export interface TaskStatusChangedEvent extends BaseEvent {
-  category: 'task';
-  type: 'task.status_changed';
-  payload: {
-    taskId: number;
-    projectId: number;
-    previousStatus: string;
-    newStatus: string;
-    changedBy: number;
-  };
+    category: 'task';
+    type: 'task.status_changed';
+    payload: {
+        taskId: number;
+        projectId: number;
+        previousStatus: string;
+        newStatus: string;
+        changedBy: number;
+    };
 }
 
 export interface TaskAssignedEvent extends BaseEvent {
-  category: 'task';
-  type: 'task.assigned';
-  payload: {
-    taskId: number;
-    projectId: number;
-    previousAssignee?: number;
-    newAssignee: number;
-    assignedBy: number;
-  };
+    category: 'task';
+    type: 'task.assigned';
+    payload: {
+        taskId: number;
+        projectId: number;
+        previousAssignee?: number;
+        newAssignee: number;
+        assignedBy: number;
+    };
 }
 
 export interface TaskDeletedEvent extends BaseEvent {
-  category: 'task';
-  type: 'task.deleted';
-  payload: {
-    taskId: number;
-    projectId: number;
-    deletedBy: number;
-  };
+    category: 'task';
+    type: 'task.deleted';
+    payload: {
+        taskId: number;
+        projectId: number;
+        deletedBy: number;
+    };
 }
 
 // Project Events
 export interface ProjectCreatedEvent extends BaseEvent {
-  category: 'project';
-  type: 'project.created';
-  payload: {
-    projectId: number;
-    title: string;
-    ownerId: number;
-  };
+    category: 'project';
+    type: 'project.created';
+    payload: {
+        projectId: number;
+        title: string;
+        ownerId: number;
+    };
 }
 
 export interface ProjectUpdatedEvent extends BaseEvent {
-  category: 'project';
-  type: 'project.updated';
-  payload: {
-    projectId: number;
-    changes: Record<string, { old: any; new: any }>;
-    updatedBy: number;
-  };
+    category: 'project';
+    type: 'project.updated';
+    payload: {
+        projectId: number;
+        changes: Record<string, { old: any; new: any }>;
+        updatedBy: number;
+    };
 }
 
 // Workflow Events
 export interface WorkflowStartedEvent extends BaseEvent {
-  category: 'workflow';
-  type: 'workflow.started';
-  payload: {
-    workflowId: string;
-    projectId: number;
-    taskCount: number;
-    estimatedDuration: number;
-    startedBy: number;
-  };
+    category: 'workflow';
+    type: 'workflow.started';
+    payload: {
+        workflowId: string;
+        projectId: number;
+        taskCount: number;
+        estimatedDuration: number;
+        startedBy: number;
+    };
 }
 
 export interface WorkflowProgressEvent extends BaseEvent {
-  category: 'workflow';
-  type: 'workflow.progress';
-  payload: {
-    workflowId: string;
-    currentStage: number;
-    totalStages: number;
-    completedTasks: number;
-    totalTasks: number;
-    percentage: number;
-    eta?: number;
-  };
+    category: 'workflow';
+    type: 'workflow.progress';
+    payload: {
+        workflowId: string;
+        currentStage: number;
+        totalStages: number;
+        completedTasks: number;
+        totalTasks: number;
+        percentage: number;
+        eta?: number;
+    };
 }
 
 export interface WorkflowCompletedEvent extends BaseEvent {
-  category: 'workflow';
-  type: 'workflow.completed';
-  payload: {
-    workflowId: string;
-    status: 'completed' | 'failed' | 'partial' | 'cancelled';
-    duration: number;
-    totalCost: number;
-    successCount: number;
-    failureCount: number;
-  };
+    category: 'workflow';
+    type: 'workflow.completed';
+    payload: {
+        workflowId: string;
+        status: 'completed' | 'failed' | 'partial' | 'cancelled';
+        duration: number;
+        totalCost: number;
+        successCount: number;
+        failureCount: number;
+    };
 }
 
 export interface WorkflowTaskCompletedEvent extends BaseEvent {
-  category: 'workflow';
-  type: 'workflow.task_completed';
-  payload: {
-    workflowId: string;
-    taskId: number;
-    status: 'success' | 'failure';
-    duration: number;
-    cost?: number;
-    tokens?: number;
-  };
+    category: 'workflow';
+    type: 'workflow.task_completed';
+    payload: {
+        workflowId: string;
+        taskId: number;
+        status: 'success' | 'failure';
+        duration: number;
+        cost?: number;
+        tokens?: number;
+    };
 }
 
 // AI Events
 export interface AIExecutionStartedEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.execution_started';
-  payload: {
-    taskId: number;
-    provider: string;
-    model: string;
-  };
+    category: 'ai';
+    type: 'ai.execution_started';
+    payload: {
+        taskId: number;
+        provider: string;
+        model: string;
+    };
 }
 
 export interface AIExecutionCompletedEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.execution_completed';
-  payload: {
-    taskId: number;
-    provider: string;
-    model: string;
-    tokensUsed: number;
-    cost: number;
-    duration: number;
-    success: boolean;
-  };
+    category: 'ai';
+    type: 'ai.execution_completed';
+    payload: {
+        taskId: number;
+        provider: string;
+        model: string;
+        tokensUsed: number;
+        cost: number;
+        duration: number;
+        success: boolean;
+    };
 }
 
 export interface AITokenStreamEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.token_stream';
-  payload: {
-    taskId: number;
-    token: string;
-    accumulated: string;
-  };
+    category: 'ai';
+    type: 'ai.token_stream';
+    payload: {
+        taskId: number;
+        token: string;
+        accumulated: string;
+    };
 }
 
 export interface AIPromptGeneratedEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.prompt_generated';
-  payload: {
-    taskId?: number;
-    projectId?: number;
-    provider: string;
-    model: string;
-    prompt: string;
-    systemPrompt?: string;
-    requiredMCPs?: string[];
-    streaming?: boolean;
-    metadata?: Record<string, any>;
-  };
+    category: 'ai';
+    type: 'ai.prompt_generated';
+    payload: {
+        taskId?: number;
+        projectId?: number;
+        provider: string;
+        model: string;
+        prompt: string;
+        systemPrompt?: string;
+        requiredMCPs?: string[];
+        streaming?: boolean;
+        metadata?: Record<string, any>;
+    };
 }
 
 export interface MCPRequestEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.mcp_request';
-  payload: {
-    taskId?: number;
-    projectId?: number;
-    mcpId?: number;
-    mcpName?: string;
-    endpoint?: string;
-    toolName: string;
-    parameters: Record<string, any>;
-  };
+    category: 'ai';
+    type: 'ai.mcp_request';
+    payload: {
+        taskId?: number;
+        projectId?: number;
+        mcpId?: number;
+        mcpName?: string;
+        endpoint?: string;
+        toolName: string;
+        parameters: Record<string, any>;
+    };
 }
 
 export interface MCPResponseEvent extends BaseEvent {
-  category: 'ai';
-  type: 'ai.mcp_response';
-  payload: {
-    taskId?: number;
-    projectId?: number;
-    mcpId?: number;
-    mcpName?: string;
-    toolName: string;
-    success: boolean;
-    duration: number;
-    dataPreview?: string;
-    error?: string;
-  };
+    category: 'ai';
+    type: 'ai.mcp_response';
+    payload: {
+        taskId?: number;
+        projectId?: number;
+        mcpId?: number;
+        mcpName?: string;
+        toolName: string;
+        success: boolean;
+        duration: number;
+        dataPreview?: string;
+        error?: string;
+    };
+}
+
+export interface CuratorStartedEvent extends BaseEvent {
+    category: 'ai';
+    type: 'ai.curator_started';
+    payload: {
+        taskId: number;
+        projectId: number;
+        taskTitle: string;
+    };
+}
+
+export interface CuratorStepEvent extends BaseEvent {
+    category: 'ai';
+    type: 'ai.curator_step';
+    payload: {
+        taskId: number;
+        step: 'analyzing' | 'extracting' | 'updating' | 'saving';
+        detail: string;
+    };
+}
+
+export interface CuratorCompletedEvent extends BaseEvent {
+    category: 'ai';
+    type: 'ai.curator_completed';
+    payload: {
+        taskId: number;
+        summaryUpdate?: string;
+        newDecisionsCount: number;
+        glossaryUpdatesCount: number;
+        success: boolean;
+    };
 }
 
 // Automation Events
 export interface AutomationTriggeredEvent extends BaseEvent {
-  category: 'automation';
-  type: 'automation.triggered';
-  payload: {
-    ruleId: string;
-    triggerType: string;
-    triggerEvent: BaseEvent;
-  };
+    category: 'automation';
+    type: 'automation.triggered';
+    payload: {
+        ruleId: string;
+        triggerType: string;
+        triggerEvent: BaseEvent;
+    };
 }
 
 export interface AutomationActionExecutedEvent extends BaseEvent {
-  category: 'automation';
-  type: 'automation.action_executed';
-  payload: {
-    ruleId: string;
-    actionType: string;
-    success: boolean;
-    result?: any;
-    error?: string;
-  };
+    category: 'automation';
+    type: 'automation.action_executed';
+    payload: {
+        ruleId: string;
+        actionType: string;
+        success: boolean;
+        result?: any;
+        error?: string;
+    };
 }
 
 // Comment Events
 export interface CommentCreatedEvent extends BaseEvent {
-  category: 'task';
-  type: 'comment.created';
-  payload: {
-    commentId: number;
-    taskId: number;
-    projectId: number;
-    userId: number;
-    content: string;
-    mentions: number[];
-  };
+    category: 'task';
+    type: 'comment.created';
+    payload: {
+        commentId: number;
+        taskId: number;
+        projectId: number;
+        userId: number;
+        content: string;
+        mentions: number[];
+    };
 }
 
 // System Events
 export interface SystemErrorEvent extends BaseEvent {
-  category: 'system';
-  type: 'system.error';
-  payload: {
-    error: string;
-    stack?: string;
-    context?: Record<string, any>;
-  };
+    category: 'system';
+    type: 'system.error';
+    payload: {
+        error: string;
+        stack?: string;
+        context?: Record<string, any>;
+    };
 }
 
 export interface WebhookReceivedEvent extends BaseEvent {
-  category: 'system';
-  type: 'webhook.received';
-  payload: {
-    webhookId: string;
-    method: string;
-    headers: Record<string, string>;
-    body: any;
-  };
+    category: 'system';
+    type: 'webhook.received';
+    payload: {
+        webhookId: string;
+        method: string;
+        headers: Record<string, string>;
+        body: any;
+    };
 }
 
 // Cost Events
 export interface CostExceededEvent extends BaseEvent {
-  category: 'system';
-  type: 'cost.exceeded';
-  payload: {
-    currentCost: number;
-    limit: number;
-    projectId?: number;
-    workflowId?: string;
-  };
+    category: 'system';
+    type: 'cost.exceeded';
+    payload: {
+        currentCost: number;
+        limit: number;
+        projectId?: number;
+        workflowId?: string;
+    };
 }
 
 // Union type for all events
 export type AppEvent =
-  | TaskCreatedEvent
-  | TaskUpdatedEvent
-  | TaskStatusChangedEvent
-  | TaskAssignedEvent
-  | TaskDeletedEvent
-  | ProjectCreatedEvent
-  | ProjectUpdatedEvent
-  | WorkflowStartedEvent
-  | WorkflowProgressEvent
-  | WorkflowCompletedEvent
-  | WorkflowTaskCompletedEvent
-  | AIExecutionStartedEvent
-  | AIExecutionCompletedEvent
-  | AITokenStreamEvent
-  | AIPromptGeneratedEvent
-  | MCPRequestEvent
-  | MCPResponseEvent
-  | AutomationTriggeredEvent
-  | AutomationActionExecutedEvent
-  | CommentCreatedEvent
-  | SystemErrorEvent
-  | WebhookReceivedEvent
-  | CostExceededEvent;
+    | TaskCreatedEvent
+    | TaskUpdatedEvent
+    | TaskStatusChangedEvent
+    | TaskAssignedEvent
+    | TaskDeletedEvent
+    | ProjectCreatedEvent
+    | ProjectUpdatedEvent
+    | WorkflowStartedEvent
+    | WorkflowProgressEvent
+    | WorkflowCompletedEvent
+    | WorkflowTaskCompletedEvent
+    | AIExecutionStartedEvent
+    | AIExecutionCompletedEvent
+    | AITokenStreamEvent
+    | AIPromptGeneratedEvent
+    | MCPRequestEvent
+    | MCPResponseEvent
+    | CuratorStartedEvent
+    | CuratorStepEvent
+    | CuratorCompletedEvent
+    | AutomationTriggeredEvent
+    | AutomationActionExecutedEvent
+    | CommentCreatedEvent
+    | SystemErrorEvent
+    | WebhookReceivedEvent
+    | CostExceededEvent;
 
 // Event handler types
 export type EventHandler<T extends BaseEvent = BaseEvent> = (event: T) => void | Promise<void>;
@@ -414,248 +449,248 @@ export type AsyncEventHandler<T extends BaseEvent = BaseEvent> = (event: T) => P
 // ========================================
 
 export class EventBus {
-  private emitter: BrowserEventEmitter;
-  private eventHistory: BaseEvent[] = [];
-  private maxHistorySize: number = 1000;
-  private handlers: Map<string, Set<EventHandler>> = new Map();
-  private wildcardHandlers: Set<EventHandler> = new Set();
+    private emitter: BrowserEventEmitter;
+    private eventHistory: BaseEvent[] = [];
+    private maxHistorySize: number = 1000;
+    private handlers: Map<string, Set<EventHandler>> = new Map();
+    private wildcardHandlers: Set<EventHandler> = new Set();
 
-  constructor() {
-    this.emitter = new BrowserEventEmitter();
-    this.emitter.setMaxListeners(100);
-  }
-
-  /**
-   * Generate unique event ID
-   */
-  private generateEventId(): string {
-    return `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  }
-
-  private inferCategoryFromType(type: string): EventCategory {
-    const key = type.split(/\.|:/)[0] as EventCategory;
-    return EVENT_CATEGORY_SET.has(key) ? key : 'system';
-  }
-
-  /**
-   * Emit an event
-   */
-  emit<T extends AppEvent>(
-    type: T['type'],
-    payload: T['payload'],
-    source?: string,
-    metadata?: Record<string, any>
-  ): T;
-  emit(
-    type: string,
-    payload: Record<string, any>,
-    source?: string,
-    metadata?: Record<string, any>
-  ): BaseEvent;
-  emit(
-    type: string,
-    payload: Record<string, any>,
-    source: string = 'system',
-    metadata?: Record<string, any>
-  ): BaseEvent {
-    const category = this.inferCategoryFromType(type);
-
-    const event: BaseEvent = {
-      id: this.generateEventId(),
-      timestamp: new Date(),
-      category,
-      type,
-      source,
-      payload,
-      metadata,
-    };
-
-    // Store in history
-    this.eventHistory.push(event);
-    if (this.eventHistory.length > this.maxHistorySize) {
-      this.eventHistory.shift();
+    constructor() {
+        this.emitter = new BrowserEventEmitter();
+        this.emitter.setMaxListeners(100);
     }
 
-    // Emit to specific handlers
-    this.emitter.emit(type, event);
-
-    // Emit to category handlers (e.g., 'task.*')
-    this.emitter.emit(`${category}.*`, event);
-
-    // Emit to wildcard handlers
-    this.emitter.emit('*', event);
-
-    console.log(`[EventBus] Emitted: ${type}`, { id: event.id, source });
-
-    return event;
-  }
-
-  /**
-   * Subscribe to an event type
-   */
-  on<T extends AppEvent>(
-    type: T['type'] | `${EventCategory}.*` | '*',
-    handler: EventHandler<T>
-  ): () => void;
-  on(type: string, handler: EventHandler): () => void;
-  on(type: string, handler: EventHandler): () => void {
-    this.emitter.on(type, handler as any);
-
-    // Track handler for cleanup
-    if (type === '*') {
-      this.wildcardHandlers.add(handler as EventHandler);
-    } else {
-      if (!this.handlers.has(type)) {
-        this.handlers.set(type, new Set());
-      }
-      this.handlers.get(type)!.add(handler as EventHandler);
+    /**
+     * Generate unique event ID
+     */
+    private generateEventId(): string {
+        return `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
 
-    // Return unsubscribe function
-    return () => this.off(type, handler);
-  }
-
-  /**
-   * Subscribe to an event type (one-time)
-   */
-  once<T extends AppEvent>(
-    type: T['type'] | `${EventCategory}.*` | '*',
-    handler: EventHandler<T>
-  ): () => void;
-  once(type: string, handler: EventHandler): () => void;
-  once(type: string, handler: EventHandler): () => void {
-    const wrappedHandler = (event: BaseEvent) => {
-      this.off(type, wrappedHandler as EventHandler);
-      handler(event);
-    };
-
-    return this.on(type, wrappedHandler);
-  }
-
-  /**
-   * Unsubscribe from an event type
-   */
-  off<T extends AppEvent>(
-    type: T['type'] | `${EventCategory}.*` | '*',
-    handler: EventHandler<T>
-  ): void;
-  off(type: string, handler: EventHandler): void;
-  off(type: string, handler: EventHandler): void {
-    this.emitter.off(type, handler as any);
-
-    if (type === '*') {
-      this.wildcardHandlers.delete(handler as EventHandler);
-    } else {
-      this.handlers.get(type)?.delete(handler as EventHandler);
+    private inferCategoryFromType(type: string): EventCategory {
+        const key = type.split(/\.|:/)[0] as EventCategory;
+        return EVENT_CATEGORY_SET.has(key) ? key : 'system';
     }
-  }
 
-  /**
-   * Wait for an event (Promise-based)
-   */
-  waitFor<T extends AppEvent>(
-    type: T['type'],
-    timeout?: number,
-    predicate?: (event: T) => boolean
-  ): Promise<T>;
-  waitFor(
-    type: string,
-    timeout?: number,
-    predicate?: (event: BaseEvent) => boolean
-  ): Promise<BaseEvent>;
-  waitFor(
-    type: string,
-    timeout?: number,
-    predicate?: (event: BaseEvent) => boolean
-  ): Promise<BaseEvent> {
-    return new Promise((resolve, reject) => {
-      let timeoutId: NodeJS.Timeout | undefined;
+    /**
+     * Emit an event
+     */
+    emit<T extends AppEvent>(
+        type: T['type'],
+        payload: T['payload'],
+        source?: string,
+        metadata?: Record<string, any>
+    ): T;
+    emit(
+        type: string,
+        payload: Record<string, any>,
+        source?: string,
+        metadata?: Record<string, any>
+    ): BaseEvent;
+    emit(
+        type: string,
+        payload: Record<string, any>,
+        source: string = 'system',
+        metadata?: Record<string, any>
+    ): BaseEvent {
+        const category = this.inferCategoryFromType(type);
 
-      const handler = (event: BaseEvent) => {
-        if (!predicate || predicate(event)) {
-          if (timeoutId) clearTimeout(timeoutId);
-          this.off(type, handler);
-          resolve(event);
+        const event: BaseEvent = {
+            id: this.generateEventId(),
+            timestamp: new Date(),
+            category,
+            type,
+            source,
+            payload,
+            metadata,
+        };
+
+        // Store in history
+        this.eventHistory.push(event);
+        if (this.eventHistory.length > this.maxHistorySize) {
+            this.eventHistory.shift();
         }
-      };
 
-      this.on(type, handler);
+        // Emit to specific handlers
+        this.emitter.emit(type, event);
 
-      if (timeout) {
-        timeoutId = setTimeout(() => {
-          this.off(type, handler);
-          reject(new Error(`Timeout waiting for event: ${type}`));
-        }, timeout);
-      }
-    });
-  }
+        // Emit to category handlers (e.g., 'task.*')
+        this.emitter.emit(`${category}.*`, event);
 
-  /**
-   * Get event history
-   */
-  getHistory(filter?: {
-    type?: string;
-    category?: EventCategory;
-    since?: Date;
-    limit?: number;
-  }): BaseEvent[] {
-    let events = [...this.eventHistory];
+        // Emit to wildcard handlers
+        this.emitter.emit('*', event);
 
-    if (filter?.type) {
-      events = events.filter((e) => e.type === filter.type);
+        console.log(`[EventBus] Emitted: ${type}`, { id: event.id, source });
+
+        return event;
     }
 
-    if (filter?.category) {
-      events = events.filter((e) => e.category === filter.category);
+    /**
+     * Subscribe to an event type
+     */
+    on<T extends AppEvent>(
+        type: T['type'] | `${EventCategory}.*` | '*',
+        handler: EventHandler<T>
+    ): () => void;
+    on(type: string, handler: EventHandler): () => void;
+    on(type: string, handler: EventHandler): () => void {
+        this.emitter.on(type, handler as any);
+
+        // Track handler for cleanup
+        if (type === '*') {
+            this.wildcardHandlers.add(handler as EventHandler);
+        } else {
+            if (!this.handlers.has(type)) {
+                this.handlers.set(type, new Set());
+            }
+            this.handlers.get(type)!.add(handler as EventHandler);
+        }
+
+        // Return unsubscribe function
+        return () => this.off(type, handler);
     }
 
-    if (filter?.since) {
-      events = events.filter((e) => e.timestamp >= filter.since!);
+    /**
+     * Subscribe to an event type (one-time)
+     */
+    once<T extends AppEvent>(
+        type: T['type'] | `${EventCategory}.*` | '*',
+        handler: EventHandler<T>
+    ): () => void;
+    once(type: string, handler: EventHandler): () => void;
+    once(type: string, handler: EventHandler): () => void {
+        const wrappedHandler = (event: BaseEvent) => {
+            this.off(type, wrappedHandler as EventHandler);
+            handler(event);
+        };
+
+        return this.on(type, wrappedHandler);
     }
 
-    if (filter?.limit) {
-      events = events.slice(-filter.limit);
+    /**
+     * Unsubscribe from an event type
+     */
+    off<T extends AppEvent>(
+        type: T['type'] | `${EventCategory}.*` | '*',
+        handler: EventHandler<T>
+    ): void;
+    off(type: string, handler: EventHandler): void;
+    off(type: string, handler: EventHandler): void {
+        this.emitter.off(type, handler as any);
+
+        if (type === '*') {
+            this.wildcardHandlers.delete(handler as EventHandler);
+        } else {
+            this.handlers.get(type)?.delete(handler as EventHandler);
+        }
     }
 
-    return events;
-  }
+    /**
+     * Wait for an event (Promise-based)
+     */
+    waitFor<T extends AppEvent>(
+        type: T['type'],
+        timeout?: number,
+        predicate?: (event: T) => boolean
+    ): Promise<T>;
+    waitFor(
+        type: string,
+        timeout?: number,
+        predicate?: (event: BaseEvent) => boolean
+    ): Promise<BaseEvent>;
+    waitFor(
+        type: string,
+        timeout?: number,
+        predicate?: (event: BaseEvent) => boolean
+    ): Promise<BaseEvent> {
+        return new Promise((resolve, reject) => {
+            let timeoutId: NodeJS.Timeout | undefined;
 
-  /**
-   * Clear event history
-   */
-  clearHistory(): void {
-    this.eventHistory = [];
-  }
+            const handler = (event: BaseEvent) => {
+                if (!predicate || predicate(event)) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    this.off(type, handler);
+                    resolve(event);
+                }
+            };
 
-  /**
-   * Get listener count for an event type
-   */
-  listenerCount(type: string): number {
-    return this.emitter.listenerCount(type);
-  }
+            this.on(type, handler);
 
-  /**
-   * Remove all listeners
-   */
-  removeAllListeners(type?: string): void {
-    if (type) {
-      this.emitter.removeAllListeners(type);
-      this.handlers.delete(type);
-    } else {
-      this.emitter.removeAllListeners();
-      this.handlers.clear();
-      this.wildcardHandlers.clear();
+            if (timeout) {
+                timeoutId = setTimeout(() => {
+                    this.off(type, handler);
+                    reject(new Error(`Timeout waiting for event: ${type}`));
+                }, timeout);
+            }
+        });
     }
-  }
 
-  /**
-   * Create typed emitter helpers
-   */
-  createEmitter<T extends AppEvent>(type: T['type'], source: string) {
-    return (payload: T['payload'], metadata?: Record<string, any>) => {
-      return this.emit<T>(type, payload, source, metadata);
-    };
-  }
+    /**
+     * Get event history
+     */
+    getHistory(filter?: {
+        type?: string;
+        category?: EventCategory;
+        since?: Date;
+        limit?: number;
+    }): BaseEvent[] {
+        let events = [...this.eventHistory];
+
+        if (filter?.type) {
+            events = events.filter((e) => e.type === filter.type);
+        }
+
+        if (filter?.category) {
+            events = events.filter((e) => e.category === filter.category);
+        }
+
+        if (filter?.since) {
+            events = events.filter((e) => e.timestamp >= filter.since!);
+        }
+
+        if (filter?.limit) {
+            events = events.slice(-filter.limit);
+        }
+
+        return events;
+    }
+
+    /**
+     * Clear event history
+     */
+    clearHistory(): void {
+        this.eventHistory = [];
+    }
+
+    /**
+     * Get listener count for an event type
+     */
+    listenerCount(type: string): number {
+        return this.emitter.listenerCount(type);
+    }
+
+    /**
+     * Remove all listeners
+     */
+    removeAllListeners(type?: string): void {
+        if (type) {
+            this.emitter.removeAllListeners(type);
+            this.handlers.delete(type);
+        } else {
+            this.emitter.removeAllListeners();
+            this.handlers.clear();
+            this.wildcardHandlers.clear();
+        }
+    }
+
+    /**
+     * Create typed emitter helpers
+     */
+    createEmitter<T extends AppEvent>(type: T['type'], source: string) {
+        return (payload: T['payload'], metadata?: Record<string, any>) => {
+            return this.emit<T>(type, payload, source, metadata);
+        };
+    }
 }
 
 // Export singleton instance
@@ -663,64 +698,64 @@ export const eventBus = new EventBus();
 
 // Export helper functions
 export function emitTaskCreated(
-  payload: TaskCreatedEvent['payload'],
-  source: string = 'task-service'
+    payload: TaskCreatedEvent['payload'],
+    source: string = 'task-service'
 ): TaskCreatedEvent {
-  return eventBus.emit<TaskCreatedEvent>('task.created', payload, source);
+    return eventBus.emit<TaskCreatedEvent>('task.created', payload, source);
 }
 
 export function emitTaskStatusChanged(
-  payload: TaskStatusChangedEvent['payload'],
-  source: string = 'task-service'
+    payload: TaskStatusChangedEvent['payload'],
+    source: string = 'task-service'
 ): TaskStatusChangedEvent {
-  return eventBus.emit<TaskStatusChangedEvent>('task.status_changed', payload, source);
+    return eventBus.emit<TaskStatusChangedEvent>('task.status_changed', payload, source);
 }
 
 export function emitTaskAssigned(
-  payload: TaskAssignedEvent['payload'],
-  source: string = 'task-service'
+    payload: TaskAssignedEvent['payload'],
+    source: string = 'task-service'
 ): TaskAssignedEvent {
-  return eventBus.emit<TaskAssignedEvent>('task.assigned', payload, source);
+    return eventBus.emit<TaskAssignedEvent>('task.assigned', payload, source);
 }
 
 export function emitWorkflowStarted(
-  payload: WorkflowStartedEvent['payload'],
-  source: string = 'workflow-service'
+    payload: WorkflowStartedEvent['payload'],
+    source: string = 'workflow-service'
 ): WorkflowStartedEvent {
-  return eventBus.emit<WorkflowStartedEvent>('workflow.started', payload, source);
+    return eventBus.emit<WorkflowStartedEvent>('workflow.started', payload, source);
 }
 
 export function emitWorkflowProgress(
-  payload: WorkflowProgressEvent['payload'],
-  source: string = 'workflow-service'
+    payload: WorkflowProgressEvent['payload'],
+    source: string = 'workflow-service'
 ): WorkflowProgressEvent {
-  return eventBus.emit<WorkflowProgressEvent>('workflow.progress', payload, source);
+    return eventBus.emit<WorkflowProgressEvent>('workflow.progress', payload, source);
 }
 
 export function emitWorkflowCompleted(
-  payload: WorkflowCompletedEvent['payload'],
-  source: string = 'workflow-service'
+    payload: WorkflowCompletedEvent['payload'],
+    source: string = 'workflow-service'
 ): WorkflowCompletedEvent {
-  return eventBus.emit<WorkflowCompletedEvent>('workflow.completed', payload, source);
+    return eventBus.emit<WorkflowCompletedEvent>('workflow.completed', payload, source);
 }
 
 export function emitCommentCreated(
-  payload: CommentCreatedEvent['payload'],
-  source: string = 'comment-service'
+    payload: CommentCreatedEvent['payload'],
+    source: string = 'comment-service'
 ): CommentCreatedEvent {
-  return eventBus.emit<CommentCreatedEvent>('comment.created', payload, source);
+    return eventBus.emit<CommentCreatedEvent>('comment.created', payload, source);
 }
 
 export function emitCostExceeded(
-  payload: CostExceededEvent['payload'],
-  source: string = 'budget-service'
+    payload: CostExceededEvent['payload'],
+    source: string = 'budget-service'
 ): CostExceededEvent {
-  return eventBus.emit<CostExceededEvent>('cost.exceeded', payload, source);
+    return eventBus.emit<CostExceededEvent>('cost.exceeded', payload, source);
 }
 
 export function emitWebhookReceived(
-  payload: WebhookReceivedEvent['payload'],
-  source: string = 'webhook-service'
+    payload: WebhookReceivedEvent['payload'],
+    source: string = 'webhook-service'
 ): WebhookReceivedEvent {
-  return eventBus.emit<WebhookReceivedEvent>('webhook.received', payload, source);
+    return eventBus.emit<WebhookReceivedEvent>('webhook.received', payload, source);
 }

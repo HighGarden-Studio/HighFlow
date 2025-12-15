@@ -1,5 +1,12 @@
 import { Project, ProjectMemory, DecisionLog } from '../../core/types/database';
 import { CURATOR_SYSTEM_PROMPT } from './templates/ContextTemplates';
+import { eventBus } from '../events/EventBus';
+import type { ProviderApiKeys } from './providers/ProviderFactory';
+import type {
+    CuratorStartedEvent,
+    CuratorStepEvent,
+    CuratorCompletedEvent,
+} from '../events/EventBus';
 
 /**
  * Curator Service
@@ -13,6 +20,12 @@ export class CuratorService {
 
     private constructor() {
         // Initialize dependencies
+    }
+
+    private apiKeys: ProviderApiKeys = {};
+
+    setApiKeys(keys: ProviderApiKeys): void {
+        this.apiKeys = keys;
     }
 
     static getInstance(): CuratorService {
@@ -36,6 +49,16 @@ export class CuratorService {
     ): Promise<void> {
         console.log(`[Curator] Starting memory update for task ${taskId}...`);
 
+        eventBus.emit<CuratorStartedEvent>(
+            'ai.curator_started',
+            {
+                taskId,
+                projectId: project.id,
+                taskTitle,
+            },
+            'curator-service'
+        );
+
         // Prevent unused variable compilation errors
         void executionService;
 
@@ -47,6 +70,11 @@ export class CuratorService {
             }
 
             // 1. Construct Prompt
+            eventBus.emit<CuratorStepEvent>(
+                'ai.curator_step',
+                { taskId, step: 'analyzing', detail: 'Constructing context from project memory' },
+                'curator-service'
+            );
             const currentMemory = project.memory || {
                 summary: '',
                 recentDecisions: [],
@@ -82,16 +110,34 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
 }
 `;
 
-            // 2. Execute AI using cost-effective model
+            // 2. Execute AI using cost-effective model from configured providers
+            eventBus.emit<CuratorStepEvent>(
+                'ai.curator_step',
+                { taskId, step: 'extracting', detail: 'Running AI analysis on task output' },
+                'curator-service'
+            );
             let aiResponse: string | null = null;
 
             try {
-                // Try to use GPT-4o-mini via dynamic import
-                const { GPTProvider } = await import('./providers/GPTProvider');
-                const gptProvider = new GPTProvider();
+                // Use ProviderFactory to get a configured provider
+                const { ProviderFactory } = await import('./providers/ProviderFactory');
+                const providerFactory = new ProviderFactory();
 
-                const response = await gptProvider.execute(prompt, {
-                    model: 'gpt-4o-mini',
+                // Get the best available provider for text summarization
+                // Priority: 1. gemini-flash (cheap, fast) 2. gpt-4o-mini 3. claude-haiku 4. any available
+                const providerResult = await this.selectCostEffectiveProvider(providerFactory);
+
+                if (!providerResult) {
+                    throw new Error(
+                        'No configured AI provider available. Please configure at least one AI provider in Settings.'
+                    );
+                }
+
+                const { provider, model } = providerResult;
+                console.log(`[Curator] Using provider: ${provider.name}, model: ${model}`);
+
+                const response = await provider.execute(prompt, {
+                    model: model,
                     temperature: 0.3,
                     maxTokens: 1000,
                 });
@@ -126,6 +172,11 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             }
 
             // 4. Update Project Memory
+            eventBus.emit<CuratorStepEvent>(
+                'ai.curator_step',
+                { taskId, step: 'updating', detail: 'Merging new insights into project memory' },
+                'curator-service'
+            );
             const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => ({
                 date: d.date || new Date().toISOString().split('T')[0],
                 summary: d.summary,
@@ -149,7 +200,24 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             }
 
             // 5. Save to DB
+            eventBus.emit<CuratorStepEvent>(
+                'ai.curator_step',
+                { taskId, step: 'saving', detail: 'Persisting updates to database' },
+                'curator-service'
+            );
             await repo.update(project.id, { memory: updatedMemory });
+
+            eventBus.emit<CuratorCompletedEvent>(
+                'ai.curator_completed',
+                {
+                    taskId,
+                    summaryUpdate: parsed.summaryUpdate,
+                    newDecisionsCount: newDecisions.length,
+                    glossaryUpdatesCount: Object.keys(parsed.glossaryUpdates || {}).length,
+                    success: true,
+                },
+                'curator-service'
+            );
             console.log(
                 `[Curator] Memory updated for project ${project.id} - ${newDecisions.length} new decisions`
             );
@@ -192,5 +260,75 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
         };
 
         return JSON.stringify(result);
+    }
+
+    /**
+     * Select a cost-effective AI provider for text summarization
+     * Priority: gemini-flash (cheap, multimodal) > gpt-4o-mini > claude-haiku > default-highflow > any available
+     */
+    private async selectCostEffectiveProvider(
+        providerFactory: any
+    ): Promise<{ provider: any; model: string } | null> {
+        // Cost-effective models in priority order (prioritize multimodal support)
+        const preferredModels = [
+            { provider: 'google', model: 'gemini-2.0-flash' },
+            { provider: 'google', model: 'gemini-1.5-flash' },
+            { provider: 'default-highflow', model: 'gemini-2.5-flash' },
+            { provider: 'openai', model: 'gpt-4o-mini' },
+            { provider: 'anthropic', model: 'claude-3-haiku-20240307' },
+            { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
+        ];
+
+        // Try preferred models first
+        for (const { provider: providerId, model } of preferredModels) {
+            try {
+                const provider = await providerFactory.getProvider(providerId);
+                // Inject API keys if available
+                if (this.apiKeys) {
+                    providerFactory.setApiKeys(this.apiKeys);
+                }
+
+                if (provider) {
+                    // Check if the model is available
+                    const modelInfo = provider.models.find(
+                        (m: any) => m.name === model || m.name.includes(model.replace(/-/g, ''))
+                    );
+                    if (modelInfo) {
+                        console.log(
+                            `[Curator] Selected cost-effective provider: ${providerId} with model: ${model}`
+                        );
+                        return { provider, model };
+                    }
+                    // If specific model not found, use the provider's first available model
+                    if (provider.models.length > 0) {
+                        const firstModel = provider.models[0].name;
+                        console.log(`[Curator] Model ${model} not found, using: ${firstModel}`);
+                        return { provider, model: firstModel };
+                    }
+                }
+            } catch (error) {
+                // Provider not configured or error, try next
+                console.debug(`[Curator] Provider ${providerId} not available:`, error);
+            }
+        }
+
+        // Fallback: Try any available provider
+        const fallbackProviders = ['google', 'openai', 'anthropic', 'default-highflow'];
+        for (const providerId of fallbackProviders) {
+            try {
+                const provider = await providerFactory.getProvider(providerId);
+                if (provider && provider.models.length > 0) {
+                    const model = provider.models[0].name;
+                    console.log(
+                        `[Curator] Using fallback provider: ${providerId} with model: ${model}`
+                    );
+                    return { provider, model };
+                }
+            } catch {
+                // Continue to next provider
+            }
+        }
+
+        return null;
     }
 }

@@ -17,6 +17,7 @@ import type {
     EnabledProviderInfo,
     MCPServerRuntimeConfig,
     AiResult,
+    ModelInfo,
 } from '@core/types/ai';
 import { ProviderFactory, type ProviderApiKeys } from '../ai/providers/ProviderFactory';
 import { buildPlainTextResult } from '../ai/utils/aiResultUtils';
@@ -120,6 +121,14 @@ export class AIServiceManager {
     private static readonly MAX_TOOL_ITERATIONS = 5;
     private static readonly TOOL_RESULT_CHAR_LIMIT = 6000;
     private autoDetectMCPsEnabled = false;
+    private static instance: AIServiceManager;
+
+    public static getInstance(): AIServiceManager {
+        if (!AIServiceManager.instance) {
+            AIServiceManager.instance = new AIServiceManager();
+        }
+        return AIServiceManager.instance;
+    }
 
     constructor() {
         this.providerFactory = new ProviderFactory();
@@ -160,6 +169,105 @@ export class AIServiceManager {
     setEnabledProviders(providers: EnabledProviderInfo[]): void {
         this.enabledProviders = providers;
         this.applyProviderConfigurations();
+
+        // Fetch models for all enabled providers asynchronously
+        this.fetchModelsForEnabledProviders();
+    }
+
+    /**
+     * Fetch models for all enabled providers
+     * Called when providers are configured or on manual refresh request
+     */
+    async fetchModelsForEnabledProviders(): Promise<void> {
+        if (this.enabledProviders.length === 0) {
+            console.log('[AIServiceManager] No enabled providers to fetch models for');
+            return;
+        }
+
+        console.log(
+            '[AIServiceManager] Fetching models for enabled providers:',
+            this.enabledProviders.map((p) => p.id)
+        );
+
+        // Import model cache service
+        const { modelCache } = await import('../ai/AIModelCacheService');
+
+        for (const provider of this.enabledProviders) {
+            if (!provider.id || !provider.apiKey) continue;
+
+            try {
+                const providerInstance = await this.providerFactory.getProvider(
+                    provider.id as AIProvider
+                );
+                if (providerInstance && typeof providerInstance.fetchModels === 'function') {
+                    // Register provider's fetch function with cache
+                    modelCache.registerProvider(provider.id as AIProvider, () =>
+                        providerInstance.fetchModels()
+                    );
+
+                    // Fetch models (will cache automatically)
+                    const models = await modelCache.refreshModels(provider.id as AIProvider);
+
+                    // Update provider's dynamic models
+                    if (models.length > 0) {
+                        providerInstance.setDynamicModels(models);
+                        console.log(
+                            `[AIServiceManager] Fetched ${models.length} models for ${provider.id}`
+                        );
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    `[AIServiceManager] Failed to fetch models for ${provider.id}:`,
+                    error
+                );
+            }
+        }
+    }
+
+    /**
+     * Get available models for a specific provider (with caching)
+     */
+    async getModelsForProvider(providerId: AIProvider): Promise<ModelInfo[]> {
+        const { modelCache } = await import('../ai/AIModelCacheService');
+        return modelCache.getModels(providerId);
+    }
+
+    /**
+     * Manually refresh models for a provider
+     * Called when user requests model refresh from UI
+     */
+    async refreshProviderModels(providerId: AIProvider): Promise<ModelInfo[]> {
+        const { modelCache } = await import('../ai/AIModelCacheService');
+
+        // Ensure provider is registered before refreshing
+        // This handles cases where initial registration failed or hasn't happened yet
+        try {
+            const providerInstance = await this.providerFactory.getProvider(providerId);
+            if (providerInstance && typeof providerInstance.fetchModels === 'function') {
+                modelCache.registerProvider(providerId, () => providerInstance.fetchModels());
+            } else {
+                console.warn(
+                    `[AIServiceManager] Cannot refresh models for ${providerId}: Provider instance or fetchModels not found`
+                );
+            }
+        } catch (err) {
+            console.error(
+                `[AIServiceManager] Error retrieving provider instance for ${providerId}:`,
+                err
+            );
+        }
+
+        return modelCache.refreshModels(providerId);
+    }
+
+    /**
+     * Refresh models for all providers
+     * Called when user requests full refresh from UI
+     */
+    async refreshAllProviderModels(): Promise<void> {
+        const { modelCache } = await import('../ai/AIModelCacheService');
+        await modelCache.refreshAllProviders();
     }
 
     private applyProviderConfigurations(): void {
@@ -240,7 +348,15 @@ export class AIServiceManager {
         try {
             // Determine provider and model
             const provider = this.resolveProvider(task.aiProvider as AIProvider | null);
-            const model = this.resolveModel(provider, task.aiModel as AIModel | null);
+
+            // If we fell back to a different provider, we must reset the model to the new provider's default
+            // to avoid sending an incompatible model (e.g. Claude) to the fallback provider (e.g. OpenAI).
+            // We only use the task's model if the resolved provider matches what was requested.
+            const shouldUseRequestedModel = task.aiProvider === provider;
+            const model = this.resolveModel(
+                provider,
+                shouldUseRequestedModel ? (task.aiModel as AIModel | null) : null
+            );
             const explicitMCPs = this.normalizeExplicitRequiredMCPs(task.requiredMCPs);
             const shouldAutoDetect = this.autoDetectMCPsEnabled && explicitMCPs.length === 0;
             const detectedMCPs = shouldAutoDetect
@@ -537,7 +653,8 @@ export class AIServiceManager {
                     currentContent: token, // Send the latest token for streaming display
                 });
             },
-            context
+            context,
+            signal // Pass abort signal to provider
         );
 
         for await (const chunk of stream) {
@@ -1341,7 +1458,23 @@ export class AIServiceManager {
 
     private resolveModel(provider: AIProvider, taskModel: AIModel | null): AIModel {
         if (taskModel) {
-            return taskModel;
+            // Check for obvious mismatches (heuristic)
+            const isClaude = taskModel.includes('claude');
+            const isGPT = taskModel.includes('gpt') || taskModel.includes('o1-');
+            const isGemini = taskModel.includes('gemini');
+
+            let isValid = true;
+            if (provider === 'openai' && (isClaude || isGemini)) isValid = false;
+            if (provider === 'anthropic' && (isGPT || isGemini)) isValid = false;
+            if (provider === 'google' && (isClaude || isGPT)) isValid = false;
+
+            if (isValid) {
+                return taskModel;
+            } else {
+                console.warn(
+                    `[AIServiceManager] Model mismatch detected: ${taskModel} is not valid for ${provider}. Using default.`
+                );
+            }
         }
 
         // 연동된 Provider에서 defaultModel 찾기

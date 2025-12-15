@@ -177,12 +177,12 @@ export class AdvancedTaskExecutor {
                     break;
                 }
 
-                // 폴백 제공자 시도
                 if (options.fallbackProviders && options.fallbackProviders.length > retries) {
                     console.log(`Trying fallback provider: ${options.fallbackProviders[retries]}`);
                     task = {
                         ...task,
                         aiProvider: options.fallbackProviders[retries] as Task['aiProvider'],
+                        aiModel: null, // Reset model to allow default resolution for new provider
                     };
                 }
 

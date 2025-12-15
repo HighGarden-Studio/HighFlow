@@ -17,8 +17,10 @@ import { useTaskStore } from '../../renderer/stores/taskStore';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
 import CodeEditor from '../common/CodeEditor.vue';
+import TaskExecutionLog from './TaskExecutionLog.vue';
 import type { ScriptLanguage } from '@core/types/database';
 import NotificationSettings from '../common/NotificationSettings.vue';
+import { getAPI } from '../../utils/electron';
 
 // Helper to check if a provider is a local agent
 function isLocalAgentProvider(provider: string | null): {
@@ -74,15 +76,45 @@ onMounted(async () => {
     await settingsStore.loadSettings();
     // Check installed local agents
     await localAgentExecution.checkInstalledAgents();
+
+    // Register curator event listeners
+    const api = getAPI();
+    const cleanupCuratorStarted = api.events.on('curator:started', (data: any) => {
+        if (localTask.value?.id === data.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+        }
+    });
+
+    const cleanupCuratorStep = api.events.on('curator:step', (data: any) => {
+        if (localTask.value?.id === data.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+        }
+    });
+
+    const cleanupCuratorCompleted = api.events.on('curator:completed', (data: any) => {
+        if (localTask.value?.id === data.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+        }
+    });
+
+    curatorListeners.push(cleanupCuratorStarted, cleanupCuratorStep, cleanupCuratorCompleted);
 });
 
 // Cleanup on unmount
 onUnmounted(() => {
     localAgentExecution.closeSession();
+    curatorListeners.forEach((cleanup) => cleanup());
 });
 
 // Local state
+const curatorEvents = ref<any[]>([]);
+const curatorListeners: (() => void)[] = [];
 const localTask = ref<Task | null>(null);
+
+// SAFELY access transcript to avoid TS errors during development
+const localAgentTranscript = computed(() => {
+    return (localAgentExecution as any).transcript?.value || [];
+});
 const activeTab = ref<'prompt' | 'settings' | 'details' | 'notifications' | 'comments' | 'history'>(
     'prompt'
 );
@@ -454,7 +486,9 @@ watch(
             taskMCPConfig.value = {};
             aiModel.value = null;
             reviewAiProvider.value = null;
+            reviewAiProvider.value = null;
             reviewAiModel.value = null;
+            curatorEvents.value = []; // Reset events
         }
     },
     { immediate: true }
@@ -1512,7 +1546,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
         <div
             class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
             @click="handleClose"
-        />
+        ></div>
 
         <!-- Modal Container -->
         <div class="flex min-h-full items-center justify-center p-4">
@@ -1678,11 +1712,13 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                         </div>
                     </div>
 
-                    <!-- Execution Progress -->
+                    <!-- Execution Progress (Standard) -->
                     <div
                         v-if="
                             localTask &&
-                            (localTask.status === 'in_progress' || isExecuting || streamingResult)
+                            localTask.status === 'in_progress' &&
+                            executionMode !== 'local' &&
+                            (isExecuting || streamingResult)
                         "
                         class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
                     >
@@ -1692,6 +1728,27 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                             @failed="handleExecutionFailed"
                             @stopped="handleExecutionStopped"
                             @approval-required="handleApprovalRequired"
+                        />
+                    </div>
+
+                    <!-- Local Agent Execution Log (Antigravity Style) -->
+                    <div
+                        v-if="
+                            executionMode === 'local' &&
+                            (isExecuting || localAgentExecution.hasResults.value)
+                        "
+                        class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 h-[600px]"
+                    >
+                        <TaskExecutionLog
+                            :transcript="localAgentTranscript"
+                            :curator-events="curatorEvents"
+                            :is-executing="isExecuting"
+                            :title="
+                                selectedLocalAgent
+                                    ? `${selectedLocalAgent} Execution`
+                                    : 'Agent Execution'
+                            "
+                            @stop="handleExecutionStopped"
                         />
                     </div>
 
@@ -2902,7 +2959,10 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
 
                             <!-- 자동 승인 옵션 -->
                             <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <label
+                                    v-if="localTask"
+                                    class="flex items-center gap-3 cursor-pointer"
+                                >
                                     <input
                                         v-model="localTask.autoApprove"
                                         type="checkbox"
@@ -2923,7 +2983,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 <!-- Warning if project has auto-review enabled -->
                                 <div
                                     v-if="
-                                        localTask.autoApprove &&
+                                        localTask?.autoApprove &&
                                         projectStore.currentProject?.autoReview
                                     "
                                     class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
@@ -2950,6 +3010,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 <!-- Info if neither is enabled -->
                                 <div
                                     v-if="
+                                        localTask &&
                                         !localTask.autoApprove &&
                                         !projectStore.currentProject?.autoReview
                                     "
@@ -3706,95 +3767,95 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Footer Actions -->
-                    <div
-                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4"
-                    >
-                        <div class="flex items-center justify-between gap-4">
-                            <div class="flex gap-2 items-center">
-                                <!-- Execute button or Provider connection required message -->
-                                <template v-if="aiProvider && !isSelectedProviderConnected">
-                                    <div
-                                        class="flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-lg font-medium"
-                                    >
-                                        <svg
-                                            class="w-5 h-5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                            />
-                                        </svg>
-                                        Provider 연동 필요
-                                    </div>
-                                </template>
-                                <template v-else>
-                                    <button
-                                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                        :disabled="!canExecute"
-                                        @click="handleExecute"
-                                    >
-                                        <template
-                                            v-if="
-                                                isGloballyExecuting ||
-                                                localTask?.status === 'in_progress'
-                                            "
+                        <!-- Footer Actions -->
+                        <div
+                            class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4"
+                        >
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="flex gap-2 items-center">
+                                    <!-- Execute button or Provider connection required message -->
+                                    <template v-if="aiProvider && !isSelectedProviderConnected">
+                                        <div
+                                            class="flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-lg font-medium"
                                         >
                                             <svg
-                                                class="w-4 h-4 animate-spin"
+                                                class="w-5 h-5"
                                                 fill="none"
+                                                stroke="currentColor"
                                                 viewBox="0 0 24 24"
                                             >
-                                                <circle
-                                                    class="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    stroke-width="4"
-                                                ></circle>
                                                 <path
-                                                    class="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                ></path>
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                                />
                                             </svg>
-                                            <span>실행 중...</span>
-                                        </template>
-                                        <template v-else>
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="currentColor"
-                                                viewBox="0 0 24 24"
+                                            Provider 연동 필요
+                                        </div>
+                                    </template>
+                                    <template v-else>
+                                        <button
+                                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                            :disabled="!canExecute"
+                                            @click="handleExecute"
+                                        >
+                                            <template
+                                                v-if="
+                                                    isGloballyExecuting ||
+                                                    localTask?.status === 'in_progress'
+                                                "
                                             >
-                                                <path d="M8 5v14l11-7z" />
-                                            </svg>
-                                            <span>실행</span>
-                                        </template>
+                                                <svg
+                                                    class="w-4 h-4 animate-spin"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <circle
+                                                        class="opacity-25"
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="10"
+                                                        stroke="currentColor"
+                                                        stroke-width="4"
+                                                    ></circle>
+                                                    <path
+                                                        class="opacity-75"
+                                                        fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                    ></path>
+                                                </svg>
+                                                <span>실행 중...</span>
+                                            </template>
+                                            <template v-else>
+                                                <svg
+                                                    class="w-4 h-4"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path d="M8 5v14l11-7z" />
+                                                </svg>
+                                                <span>실행</span>
+                                            </template>
+                                        </button>
+                                    </template>
+
+                                    <button
+                                        class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                                        @click="handleSave"
+                                    >
+                                        저장
                                     </button>
-                                </template>
+                                </div>
 
                                 <button
-                                    class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
-                                    @click="handleSave"
+                                    class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                    @click="handleClose"
                                 >
-                                    저장
+                                    닫기
                                 </button>
                             </div>
-
-                            <button
-                                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                @click="handleClose"
-                            >
-                                닫기
-                            </button>
                         </div>
                     </div>
                 </div>

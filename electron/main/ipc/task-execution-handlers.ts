@@ -667,7 +667,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     const { CuratorService } =
                         await import('../../../src/services/ai/CuratorService');
 
-                    const triggerCurator = (
+                    const triggerCurator = async (
                         taskId: number,
                         task: any,
                         output: string,
@@ -676,18 +676,65 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         // Only trigger if task is marked as done (fully completed)
                         // If it goes to in_review, we wait until review is approved
                         if (task.status === 'done' || task.autoApprove) {
-                            CuratorService.getInstance()
-                                .runCurator(
+                            try {
+                                // Fetch API keys from renderer localStorage to inject into Curator
+                                const win = getMainWindow();
+                                let apiKeys: any = {};
+
+                                if (win) {
+                                    try {
+                                        // Read settings from localStorage in renderer context
+                                        const storedProviders =
+                                            await win.webContents.executeJavaScript(
+                                                'localStorage.getItem("workflow_settings_aiProviders")'
+                                            );
+
+                                        if (storedProviders) {
+                                            const providers = JSON.parse(storedProviders);
+                                            apiKeys = {
+                                                anthropic: providers.find(
+                                                    (p: any) => p.id === 'anthropic' && p.apiKey
+                                                )?.apiKey,
+                                                openai: providers.find(
+                                                    (p: any) => p.id === 'openai' && p.apiKey
+                                                )?.apiKey,
+                                                google: providers.find(
+                                                    (p: any) => p.id === 'google' && p.apiKey
+                                                )?.apiKey,
+                                                groq: providers.find(
+                                                    (p: any) => p.id === 'groq' && p.apiKey
+                                                )?.apiKey,
+                                                lmstudio: providers.find(
+                                                    (p: any) => p.id === 'lmstudio' && p.apiKey
+                                                )?.apiKey,
+                                            };
+                                            console.log(
+                                                '[CuratorTrigger] Injected API keys for providers:',
+                                                Object.keys(apiKeys).filter((k) => !!apiKeys[k])
+                                            );
+                                        }
+                                    } catch (e) {
+                                        console.warn(
+                                            '[CuratorTrigger] Failed to fetch API keys from renderer:',
+                                            e
+                                        );
+                                    }
+                                }
+
+                                const curator = CuratorService.getInstance();
+                                curator.setApiKeys(apiKeys);
+
+                                await curator.runCurator(
                                     taskId,
                                     task.title,
                                     output,
                                     project,
                                     null,
                                     projectRepository
-                                )
-                                .catch((err: any) =>
-                                    console.error('[CuratorTrigger] Failed:', err)
                                 );
+                            } catch (err: any) {
+                                console.error('[CuratorTrigger] Failed:', err);
+                            }
                         }
                     };
 
@@ -804,7 +851,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                         const sessionInfo = await sessionManager.createSession(
                             agentType,
-                            workingDir
+                            workingDir,
+                            undefined,
+                            taskId // Pass taskId for session tracking
                         );
 
                         // Re-fetch execution state safely
@@ -1245,6 +1294,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             } else {
                 console.warn(
                     `[TaskExecution] No active AI execution found to cancel for task ${taskId}`
+                );
+            }
+
+            // Terminate Local Agent session if exists
+            try {
+                const { sessionManager } = await import('../services/local-agent-session');
+                const sessionTerminated = await sessionManager.terminateTaskSession(taskId);
+                if (sessionTerminated) {
+                    console.log(
+                        `[TaskExecution] Terminated Local Agent session for task ${taskId}`
+                    );
+                }
+            } catch (error) {
+                // Session manager might not be available or session doesn't exist
+                console.debug(
+                    `[TaskExecution] No Local Agent session to terminate for task ${taskId}`
                 );
             }
 
