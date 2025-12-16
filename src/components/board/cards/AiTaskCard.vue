@@ -131,6 +131,11 @@ const dependencySequences = computed(() => {
         .join(', ');
 });
 
+const hasPreviousResult = computed(() => {
+    const t = props.task as any;
+    return !!(t.executionResult?.content || t.result);
+});
+
 // Action handlers
 function handleExecute(event: Event) {
     event.stopPropagation();
@@ -545,7 +550,7 @@ function handleDelete(event: Event) {
                 v-if="!hideExtraActions"
                 class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-1.5"
             >
-                <!-- 1. TODO Status: EXECUTE / CONNECT / PREVIEW -->
+                <!-- 1. TODO Status: EXECUTE / CONNECT / PREVIEW / VIEW PREVIOUS -->
                 <template v-if="task.status === 'todo'">
                     <button
                         v-if="hasMissingProvider && !assignedOperator"
@@ -573,6 +578,14 @@ function handleDelete(event: Event) {
                             @click="handleEnhancePrompt"
                         >
                             고도화
+                        </button>
+                        <!-- Previous Result Button (Only if result exists) -->
+                        <button
+                            v-if="hasPreviousResult"
+                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center gap-1 shadow-sm"
+                            @click="handlePreviewResult"
+                        >
+                            이전 결과보기
                         </button>
                         <button
                             v-if="!task.triggerConfig?.dependsOn?.taskIds?.length"

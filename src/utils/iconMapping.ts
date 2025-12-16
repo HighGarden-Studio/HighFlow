@@ -58,9 +58,9 @@ export function getProviderIcon(providerId: string): string {
         // Local Agents
         'claude-code': 'logos:claude-icon',
         codex: 'logos:openai-icon',
-        antigravity: 'logos:google-icon',
+        antigravity: 'custom:highflow-logo',
         // Default HighFlow
-        'default-highflow': 'simple-icons:hexo',
+        'default-highflow': 'custom:highflow-logo',
     };
 
     // If the providerId already looks like an icon string (has colon), return it as is

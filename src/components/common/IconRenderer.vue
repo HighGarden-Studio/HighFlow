@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import HighFlowLogo from '../../assets/logo/highflow_logo.svg';
 
 /**
  * IconRenderer - Emoji to Iconify SVG Icon Mapper
@@ -13,6 +14,11 @@ const props = defineProps<{
     emoji?: string;
     icon?: string; // Direct Iconify icon name (e.g., 'si:openai', 'ph:robot')
 }>();
+
+// Custom icons map
+const CUSTOM_ICONS: Record<string, string> = {
+    'custom:highflow-logo': HighFlowLogo,
+};
 
 // Emoji to Iconify icon mapping (Phosphor Icons + Logos for brands)
 const ICON_MAP: Record<string, string> = {
@@ -27,7 +33,7 @@ const ICON_MAP: Record<string, string> = {
     '🔵': 'logos:google-icon', // Google/Gemini (blue circle → Google logo)
     '⚪': 'ph:circle', // Generic/None
     '💻': 'logos:visual-studio-code', // VS Code / Code editors
-    '🚀': 'ph:rocket', // Antigravity (keep rocket)
+    '🚀': 'custom:highflow-logo', // Antigravity (Rocket -> HighFlow Logo)
     '🏠': 'ph:house', // Local
 
     // File Types & Documents
@@ -86,13 +92,22 @@ const ICON_MAP: Record<string, string> = {
 };
 
 // If icon prop is provided directly, use it; otherwise map from emoji
-const iconName = computed(() => {
+const iconName = computed<string>(() => {
     if (props.icon) return props.icon;
-    if (props.emoji) return ICON_MAP[props.emoji] || ICON_MAP['❓'];
-    return ICON_MAP['❓'];
+    if (props.emoji) return ICON_MAP[props.emoji] || ICON_MAP['❓'] || 'ph:question';
+    return ICON_MAP['❓'] || 'ph:question';
+});
+
+const isCustomIcon = computed(() => {
+    return iconName.value.startsWith('custom:');
+});
+
+const customIconSrc = computed(() => {
+    return CUSTOM_ICONS[iconName.value] || '';
 });
 </script>
 
 <template>
-    <Icon :icon="iconName" />
+    <img v-if="isCustomIcon" :src="customIconSrc" alt="icon" />
+    <Icon v-else :icon="iconName" />
 </template>

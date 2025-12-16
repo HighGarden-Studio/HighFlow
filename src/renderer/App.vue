@@ -15,6 +15,7 @@ import AssistantChat from '../components/assistant/AssistantChat.vue';
 import InitialSetupWizard from '../components/setup/InitialSetupWizard.vue';
 import ActivityConsole from '../components/common/ActivityConsole.vue';
 import UpdateModal from '../components/common/UpdateModal.vue';
+import IconRenderer from '../components/common/IconRenderer.vue';
 import { indexManager } from '../services/search/IndexManager';
 import { useActivityLogStore } from './stores/activityLogStore';
 import { versionAPI } from './api/version';
@@ -303,7 +304,7 @@ onUnmounted(() => {
             <!-- Logo -->
             <div class="h-14 flex items-center justify-between px-4 border-b border-gray-800">
                 <div v-if="sidebarOpen" class="flex items-center gap-2">
-                    <span class="text-xl">🤖</span>
+                    <IconRenderer icon="custom:highflow-logo" class="w-8 h-8" />
                     <!-- App name removed as per user request (duplicated in header) -->
                 </div>
                 <button

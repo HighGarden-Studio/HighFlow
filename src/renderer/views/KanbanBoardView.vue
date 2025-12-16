@@ -136,6 +136,15 @@ watch(
     { deep: true, immediate: true }
 );
 
+// Watch for project ID changes (routing)
+watch(projectId, async (newId) => {
+    if (newId) {
+        console.log('[KanbanBoard] Project ID changed:', newId);
+        await projectStore.fetchProject(newId);
+        await taskStore.fetchTasks(newId);
+    }
+});
+
 // Actions
 function openCreateModal(status: TaskStatus) {
     createInColumn.value = status;
@@ -526,7 +535,7 @@ async function handleDeleteTask(task: Task) {
 
         for (const dependent of dependentTasks) {
             const updatedDependencies = (dependent.dependencies || []).filter(
-                (depId) => depId !== task.id
+                (depId: number) => depId !== task.id
             );
             await taskStore.updateTask(dependent.id, {
                 dependencies: updatedDependencies,
@@ -866,6 +875,10 @@ async function handleInputSubmit(data: any) {
 
 // Lifecycle
 onMounted(async () => {
+    // Fetch current project details first to ensure header info is correct
+    if (projectId.value) {
+        await projectStore.fetchProject(projectId.value);
+    }
     await projectStore.fetchProjects();
     await taskStore.fetchTasks(projectId.value);
     const cleanup = taskStore.initEventListeners();

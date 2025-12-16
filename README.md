@@ -35,6 +35,14 @@
 
 _Coming soon_
 
+### Recent Updates (v0.2.0)
+
+- **🎨 HighFlow Branding**: Updated application UI with official branding and custom iconography.
+- **🧠 Dynamic AI Models**: Real-time fetching of latest models from OpenAI, Anthropic, and Gemini.
+- **📊 Enhanced Kanban**: improved task management with "View Previous Result" functionality and UX fixes.
+- **⚡ Performance**: Optimized model caching and reduced API latency.
+- **🛠️ Local Agent Support**: Seamless integration with local AI agents.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
