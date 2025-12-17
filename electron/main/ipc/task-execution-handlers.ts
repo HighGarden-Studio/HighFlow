@@ -76,10 +76,13 @@ interface ReviewState {
     error?: string;
 }
 
-// Active executions map
-const activeExecutions: Map<number, ExecutionState> = new Map();
-// Active reviews map
-const activeReviews: Map<number, ReviewState> = new Map();
+// Store active execution states
+const activeExecutions = new Map<number, ExecutionState>();
+// Store active review states
+const activeReviews = new Map<number, ReviewState>();
+// Store pending execution requests for busy tasks (TargetTaskId -> SourceTriggerId)
+// This implements a "Latest Request Only" (Debounce) queue for Repeat/Always tasks.
+const executionQueue = new Map<number, number>();
 const executor = new AdvancedTaskExecutor();
 
 /**
@@ -343,27 +346,46 @@ export async function checkAndExecuteDependentTasks(
 
             if (!hasIdInList && !hasIdInExpr) return false;
 
-            // Check execution policy
+            // Execution Policy Logic
             const policy = triggerConfig.dependsOn.executionPolicy || 'once';
 
-            // If policy is 'once', we usually checking if it's 'todo'.
-            // BUT for "Reactive" behavior, if the inputs have changed (novelty), we might want to re-run it.
-            // So we RELAX this check here and let 'areTaskDependenciesMet' handle the novelty check.
-            // Old strict check:
-            // if (policy === 'once' && task.status !== 'todo') { return false; }
-
-            // New Reactive Logic:
-            // We allow 'done' tasks to proceed to the check.
-            // 'areTaskDependenciesMet' will return true ONLY if there is a NEW completion event.
-            if (policy === 'once' && task.status !== 'todo' && task.status !== 'done') {
-                // Still prevent re-running if it's 'in_progress' or something else weird,
-                // but 'done' is now allowed to be re-evaluated.
-                return false;
+            // 1. REPEAT/ALWAYS Policy Handling
+            if (policy === 'repeat' || (policy as string) === 'always') {
+                if (task.status === 'in_progress' || task.status === 'getting_input') {
+                    // Task is busy. Queue this request (Debounce: overwrite with latest trigger)
+                    console.log(
+                        `[TaskExecution] Task ${task.id} is busy. Queueing re-execution request from ${completedTaskId}`
+                    );
+                    executionQueue.set(task.id, completedTaskId);
+                    return false; // Do not execute immediately
+                }
+                return true; // Allowed to run
             }
 
-            // If policy is 'repeat', allowed to run again (unless currently running)
-            if (policy === 'repeat' && task.status === 'in_progress') {
-                return false;
+            // 2. ONCE Policy Handling (Strict Novelty Check)
+            if (policy === 'once') {
+                // strict check: If it's done, ONLY allow if novelty is guaranteed.
+                if (task.status === 'done' || task.status === 'in_progress') {
+                    // Check if we have already run for this specific update??
+                    // Actually, 'areTaskDependenciesMet' does the broad check.
+                    // Here we just need to ensure we don't loop.
+                    // If the task has a lastRunAt, and the Triggering Task completed BEFORE that,
+                    // then this trigger is STALE and should be ignored.
+
+                    if (task.lastRunAt && completedTask.completedAt) {
+                        const lastRun = new Date(task.lastRunAt).getTime();
+                        const triggerTime = new Date(completedTask.completedAt).getTime();
+
+                        if (triggerTime <= lastRun) {
+                            // This update is older than our last run. Ignore it.
+                            // This prevents infinite loops where A -> B -> A and A sees B's old completion.
+                            return false;
+                        }
+                    }
+                }
+                // If it's 'todo', always allow.
+                // If it's 'done' but the trigger is NEW, allow (Reactive).
+                return true;
             }
 
             // Also prevent blocked tasks from auto-running
@@ -1398,6 +1420,38 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         }
 
                         activeExecutions.delete(taskId);
+
+                        // CHECK QUEUE: If there's a pending request for this task, execute it now.
+                        if (executionQueue.has(taskId)) {
+                            const triggerId = executionQueue.get(taskId)!;
+                            executionQueue.delete(taskId);
+                            console.log(
+                                `[TaskExecution] 🔄 Processing queued execution for task ${taskId} (Triggered by ${triggerId})`
+                            );
+
+                            // Small delay to ensure DB writes settle?
+                            setTimeout(() => {
+                                // We strictly re-trigger the dependency check or just execute?
+                                // Since we queued it, we know it WAS requested.
+                                // But we still need to check validty?
+                                // Easier to just "simulate" a trigger from the source.
+
+                                // Actually better: Calling checkAndExecuteDependentTasks is for DOWNSTREAM.
+                                // We need to execute THIS task.
+                                // We can emit the auto-execution event to frontend just like checkResult would.
+
+                                const win = getMainWindow();
+                                win?.webContents.send('task:autoExecutionStarting', {
+                                    taskId: taskId,
+                                    triggeredBy: triggerId,
+                                });
+                                win?.webContents.send('task:triggerAutoExecution', {
+                                    taskId: taskId,
+                                    triggeredBy: triggerId,
+                                });
+                            }, 500);
+                        }
+
                         return { success: true, result };
                     } else {
                         // Failed

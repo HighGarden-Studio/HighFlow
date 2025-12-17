@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "sqlite",
-  "id": "a2877f7a-3123-4663-9e72-e8c10be7af58",
-  "prevId": "6c3000bc-559c-4ba3-a551-6000faef1e8e",
+  "id": "eda0f71d-c66d-41c1-a712-21c5222e8058",
+  "prevId": "a2877f7a-3123-4663-9e72-e8c10be7af58",
   "tables": {
     "activities": {
       "name": "activities",
@@ -1363,6 +1363,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "is_curator": {
+          "name": "is_curator",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "specialty": {
           "name": "specialty",
           "type": "text",
@@ -1775,6 +1783,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "curator_operator_id": {
+          "name": "curator_operator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1860,6 +1875,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "projects_curator_operator_id_operators_id_fk": {
+          "name": "projects_curator_operator_id_operators_id_fk",
+          "tableFrom": "projects",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "curator_operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
