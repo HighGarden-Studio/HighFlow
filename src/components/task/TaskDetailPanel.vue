@@ -17,6 +17,7 @@ import { useTaskStore } from '../../renderer/stores/taskStore';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
 import CodeEditor from '../common/CodeEditor.vue';
+import OutputTaskConfigPanel from './OutputTaskConfigPanel.vue';
 import TaskExecutionLog from './TaskExecutionLog.vue';
 import type { ScriptLanguage } from '@core/types/database';
 import NotificationSettings from '../common/NotificationSettings.vue';
@@ -315,6 +316,7 @@ const autoReview = ref(false);
 const triggerType = ref<'none' | 'dependency' | 'time'>('none');
 const dependencyTaskIds = ref<string>(''); // Comma-separated task IDs
 const dependencyOperator = ref<'all' | 'any'>('all');
+const dependencyExpression = ref<string>(''); // Complex boolean expression
 const dependencyExecutionPolicy = ref<'once' | 'repeat'>('once'); // 자동 실행 정책
 const scheduleType = ref<'once' | 'recurring'>('once');
 const scheduledDatetime = ref('');
@@ -443,6 +445,8 @@ watch(
                             newTask.triggerConfig.dependsOn.taskIds
                         );
                         dependencyOperator.value = newTask.triggerConfig.dependsOn.operator;
+                        dependencyExpression.value =
+                            newTask.triggerConfig.dependsOn.expression || '';
                         dependencyExecutionPolicy.value =
                             newTask.triggerConfig.dependsOn.executionPolicy || 'once';
                     } else if (newTask.triggerConfig.scheduledAt) {
@@ -658,6 +662,67 @@ watch(
     { deep: true }
 );
 
+// Watch for trigger setting changes
+watch(
+    [
+        triggerType,
+        dependencyTaskIds,
+        dependencyOperator,
+        dependencyExpression,
+        dependencyExecutionPolicy,
+        scheduleType,
+        scheduledDatetime,
+        cronExpression,
+        timezone,
+    ],
+    () => {
+        if (isInitializing.value) return;
+        persistExecutionSettings();
+    }
+);
+
+/**
+ * Build trigger config from local state
+ */
+function buildTriggerConfig(): any {
+    if (triggerType.value === 'dependency') {
+        // Convert project sequences to task IDs
+        // Even if empty, we might return config if expression is present?
+        // But usually we need taskIds as reference.
+        // Assuming user enters something.
+        const taskIds = sequencesToTaskIds(dependencyTaskIds.value);
+        if (taskIds.length > 0 || dependencyExpression.value.trim()) {
+            return {
+                dependsOn: {
+                    taskIds,
+                    operator: dependencyOperator.value,
+                    expression: dependencyExpression.value.trim() || undefined,
+                    executionPolicy: dependencyExecutionPolicy.value,
+                },
+            };
+        }
+    } else if (triggerType.value === 'time') {
+        if (scheduleType.value === 'once' && scheduledDatetime.value) {
+            return {
+                scheduledAt: {
+                    type: 'once' as const,
+                    datetime: scheduledDatetime.value,
+                    timezone: timezone.value,
+                },
+            };
+        } else if (scheduleType.value === 'recurring' && cronExpression.value) {
+            return {
+                scheduledAt: {
+                    type: 'recurring' as const,
+                    cron: cronExpression.value,
+                    timezone: timezone.value,
+                },
+            };
+        }
+    }
+    return null;
+}
+
 /**
  * Get estimated cost based on tokens
  */
@@ -837,6 +902,7 @@ function persistExecutionSettings() {
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: buildMCPConfigPayload(),
         expectedOutputFormat: localTask.value.expectedOutputFormat,
+        triggerConfig: buildTriggerConfig(),
     } as Task);
 
     // Reset flag after save completes (use timeout to ensure task prop update happens first)
@@ -964,6 +1030,12 @@ function getInputConfig(): InputTaskConfig {
     return localTask.value.inputConfig as InputTaskConfig;
 }
 
+function updateTaskProperty(key: string, value: any) {
+    if (!localTask.value) return;
+    // @ts-ignore
+    localTask.value[key] = value;
+}
+
 function updateInputConfig(key: keyof InputTaskConfig, value: any) {
     if (!localTask.value) return;
     const current = getInputConfig();
@@ -989,7 +1061,7 @@ function toggleFileExtension(ext: string, checked: boolean) {
 }
 
 async function handleSelectLocalFile() {
-    if (!localStorage.value && !localTask.value) return;
+    if (!localTask.value) return;
 
     try {
         const config = getInputConfig();
@@ -998,8 +1070,8 @@ async function handleSelectLocalFile() {
         // Prepare filters based on accepted extensions
         const filters = extensions.length > 0 ? [{ name: 'Allowed Files', extensions }] : undefined;
 
-        // @ts-ignore - fs API exists in preload
-        const filePath = await window.electron.fs.selectFile(filters);
+        console.log('[TaskDetailPanel] Opening file dialog with filters:', filters);
+        const filePath = await getAPI().fs.selectFile(filters);
 
         if (filePath) {
             updateInputConfig('localFile', {
@@ -1020,40 +1092,6 @@ async function handleSelectLocalFile() {
 function handleSave() {
     if (!localTask.value) return;
 
-    // 트리거 설정 구성
-    let triggerConfig = null;
-    if (triggerType.value === 'dependency' && dependencyTaskIds.value.trim()) {
-        // Convert project sequences to task IDs
-        const taskIds = sequencesToTaskIds(dependencyTaskIds.value);
-        if (taskIds.length > 0) {
-            triggerConfig = {
-                dependsOn: {
-                    taskIds,
-                    operator: dependencyOperator.value,
-                    executionPolicy: dependencyExecutionPolicy.value,
-                },
-            };
-        }
-    } else if (triggerType.value === 'time') {
-        if (scheduleType.value === 'once' && scheduledDatetime.value) {
-            triggerConfig = {
-                scheduledAt: {
-                    type: 'once' as const,
-                    datetime: scheduledDatetime.value,
-                    timezone: timezone.value,
-                },
-            };
-        } else if (scheduleType.value === 'recurring' && cronExpression.value) {
-            triggerConfig = {
-                scheduledAt: {
-                    type: 'recurring' as const,
-                    cron: cronExpression.value,
-                    timezone: timezone.value,
-                },
-            };
-        }
-    }
-
     const updatedTask = {
         ...localTask.value,
         description: promptText.value,
@@ -1062,7 +1100,7 @@ function handleSave() {
         reviewAiProvider: reviewAiProvider.value,
         reviewAiModel: reviewAiModel.value,
         autoReview: autoReview.value,
-        triggerConfig,
+        triggerConfig: buildTriggerConfig(), // Use the shared helper
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: buildMCPConfigPayload(),
         expectedOutputFormat: localTask.value.expectedOutputFormat,
@@ -2079,6 +2117,65 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         />
                                     </div>
 
+                                    <!-- Options Configuration (Selection Mode) -->
+                                    <div v-if="getInputConfig().userInput?.mode !== 'confirm'">
+                                        <label
+                                            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                                        >
+                                            선택 옵션 목록 (콤마 분리)
+                                        </label>
+                                        <input
+                                            :value="
+                                                getInputConfig().userInput?.options?.join(', ') ||
+                                                ''
+                                            "
+                                            @input="
+                                                updateInputConfig('userInput', {
+                                                    ...getInputConfig().userInput,
+                                                    options: ($event.target as HTMLInputElement)
+                                                        .value
+                                                        ? ($event.target as HTMLInputElement).value
+                                                              .split(',')
+                                                              .map((s) => s.trim())
+                                                              .filter((s) => s.length > 0)
+                                                        : undefined,
+                                                })
+                                            "
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            placeholder="예: 옵션A, 옵션B, 옵션C"
+                                        />
+                                    </div>
+
+                                    <div
+                                        v-if="
+                                            getInputConfig().userInput?.mode !== 'confirm' &&
+                                            (getInputConfig().userInput?.options?.length ?? 0) > 0
+                                        "
+                                        class="flex items-center gap-2"
+                                    >
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                :checked="
+                                                    getInputConfig().userInput?.allowCustom || false
+                                                "
+                                                @change="
+                                                    updateInputConfig('userInput', {
+                                                        ...getInputConfig().userInput,
+                                                        allowCustom: (
+                                                            $event.target as HTMLInputElement
+                                                        ).checked,
+                                                    })
+                                                "
+                                                class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
+                                            />
+                                            <span class="text-sm text-gray-700 dark:text-gray-300"
+                                                >사용자 직접 입력 허용</span
+                                            >
+                                        </label>
+                                    </div>
+
                                     <label class="flex items-center gap-2 cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -2228,6 +2325,16 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            <!-- Output Task Config -->
+                            <div v-else-if="localTask?.taskType === 'output'" class="space-y-3">
+                                <OutputTaskConfigPanel
+                                    :model-value="localTask.outputConfig"
+                                    @update:model-value="
+                                        (val) => updateTaskProperty('outputConfig', val)
+                                    "
+                                />
                             </div>
 
                             <!-- 매크로 가이드 -->
@@ -3265,7 +3372,33 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         </p>
                                     </div>
 
+                                    <!-- Advanced Condition -->
                                     <div>
+                                        <label
+                                            class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
+                                        >
+                                            고급 조건 설정 (선택사항)
+                                        </label>
+                                        <input
+                                            v-model="dependencyExpression"
+                                            type="text"
+                                            class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                                            placeholder="예: (1 && 2) || 3"
+                                        />
+                                        <p
+                                            class="text-xs text-indigo-600 dark:text-indigo-400 mt-1"
+                                        >
+                                            복잡한 논리 조건을 설정합니다. 설정 시 위의 '실행
+                                            조건'보다 우선합니다.
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        :class="{
+                                            'opacity-50 pointer-events-none':
+                                                !!dependencyExpression,
+                                        }"
+                                    >
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >

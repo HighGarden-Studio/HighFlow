@@ -53,14 +53,59 @@ export class LocalFileProvider implements InputProvider {
     async submit(task: Task, payload: any): Promise<TaskOutput> {
         const filePath = payload.filePath;
         const config = task.inputConfig?.localFile;
+        // Prioritize explicit parser type, then fall back to readMode
+        const parserType = config?.parser?.type;
         const readMode = config?.readMode || 'text';
 
         const stats = await fs.stat(filePath);
         const fileName = path.basename(filePath);
         const ext = path.extname(filePath).toLowerCase();
 
-        // 1. Text Mode (Simple read for txt, md, json, csv, etc.)
-        if (readMode === 'text') {
+        // 0. Explicit Document Parsing (DOCX, PDF)
+        if (
+            parserType === 'docx' ||
+            parserType === 'pdf' ||
+            (!parserType && (ext === '.docx' || ext === '.pdf'))
+        ) {
+            try {
+                // Determine type from parserType or extension fallback
+                const type = parserType === 'docx' || ext === '.docx' ? 'docx' : 'pdf';
+                const { DocumentParser } = await import('../../../data/DocumentParser');
+                const parsed = await DocumentParser.parse(filePath, type);
+
+                return {
+                    kind: 'text', // Treated as text (extracted content)
+                    text: parsed.content,
+                    mimeType:
+                        type === 'docx'
+                            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                            : 'application/pdf',
+                    file: {
+                        name: fileName,
+                        path: filePath,
+                        size: stats.size,
+                    },
+                    metadata: {
+                        source: 'local_file',
+                        parser: type,
+                        ...parsed.metadata,
+                    },
+                };
+            } catch (e: any) {
+                return {
+                    kind: 'error',
+                    text: `Failed to parse document: ${e.message}`,
+                    metadata: { error: e.message },
+                };
+            }
+        }
+
+        // 1. Text Mode (Simple read for txt, md, json, csv, etc.) - or parserType='text'/'markdown'
+        if (
+            parserType === 'text' ||
+            parserType === 'markdown' ||
+            (!parserType && readMode === 'text')
+        ) {
             try {
                 const content = await fs.readFile(filePath, 'utf-8');
                 return {
@@ -83,34 +128,36 @@ export class LocalFileProvider implements InputProvider {
             }
         }
 
-        // 2. Table Mode (CSV parsing for MVP)
-        if (readMode === 'table') {
-            // TODO: Integrate a CSV parser library. For now, basic fallback or error.
-            // Assuming CSV for MVP
-            if (ext === '.csv') {
-                const content = await fs.readFile(filePath, 'utf-8');
-                // Very basic CSV parser (MVP)
-                const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-                const columns = lines[0].split(',');
-                const rows = lines.slice(1).map((line) => line.split(','));
+        // 2. Table Mode (CSV, Excel) - or parserType='csv'/'xlsx'
+        if (
+            parserType === 'csv' ||
+            parserType === 'xlsx' ||
+            (!parserType && readMode === 'table')
+        ) {
+            try {
+                const { TableParser } = await import('../../../data/TableParser'); // Dynamic import to avoid loading heavy libs if not needed
+                const tableData = await TableParser.parseFile(filePath);
 
                 return {
                     kind: 'table',
-                    table: { columns, rows },
+                    table: {
+                        columns: tableData.columns,
+                        rows: tableData.rows,
+                    },
                     file: { name: fileName, path: filePath, size: stats.size },
-                    metadata: { source: 'local_file', readMode: 'table' },
+                    metadata: {
+                        source: 'local_file',
+                        readMode: 'table',
+                        ...tableData.metadata,
+                    },
+                };
+            } catch (e: any) {
+                return {
+                    kind: 'error',
+                    text: `Failed to parse table file: ${e.message}`,
+                    metadata: { error: e.message },
                 };
             }
-            // Fallback to text if not supported
-            const content = await fs.readFile(filePath, 'utf-8');
-            return {
-                kind: 'text',
-                text: content,
-                metadata: {
-                    warning:
-                        'Table parsing not supported for this file type yet, fell back to text.',
-                },
-            };
         }
 
         // 3. Binary (Just return file metadata)
@@ -143,6 +190,10 @@ export class LocalFileProvider implements InputProvider {
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
             '.pdf': 'application/pdf',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.xls': 'application/vnd.ms-excel',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         };
         return map[ext] || 'application/octet-stream';
     }

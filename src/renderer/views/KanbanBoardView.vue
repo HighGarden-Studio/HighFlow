@@ -8,13 +8,13 @@
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
-import { useTaskStore, type TaskStatus, type TaskPriority, type Task } from '../stores/taskStore';
+import { useTaskStore, type TaskStatus, type Task } from '../stores/taskStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
 import { getAPI } from '../../utils/electron';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import TaskCard from '../../components/board/TaskCard.vue';
-import TaskEditModal from '../../components/task/TaskEditModal.vue';
+import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import InlineEdit from '../../components/common/InlineEdit.vue';
@@ -49,12 +49,6 @@ const projectId = computed(() => Number(route.params.id));
 // Local state
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
-const newTaskTitle = ref('');
-const newTaskDescription = ref('');
-const newTaskPriority = ref<TaskPriority>('medium');
-const newTaskType = ref<'ai' | 'script' | 'input'>('ai');
-const newTaskScriptLanguage = ref<'javascript' | 'typescript' | 'python'>('javascript');
-const creating = ref(false);
 const draggedTask = ref<number | null>(null);
 const selectedTaskId = ref<number | null>(null);
 const selectedTask = computed(() => {
@@ -82,8 +76,32 @@ const showEditModal = ref(false);
 const editingTask = ref<Task | null>(null);
 
 // Result preview state
+// Result preview state
 const showResultPreview = ref(false);
-const resultPreviewTask = ref<Task | null>(null);
+const previewTaskId = ref<number | null>(null);
+const resultPreviewTask = computed(() => {
+    if (!previewTaskId.value) return null;
+    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
+    if (!task) return null;
+
+    // Augment with execution progress if available
+    const progress = taskStore.executionProgress.get(task.id);
+    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
+
+    return {
+        ...task,
+        result:
+            (task as any).result ||
+            (task as any).executionResult?.content ||
+            progress?.content ||
+            reviewProgressEntry?.content ||
+            '',
+        outputFormat:
+            (task as any).outputFormat ||
+            (task as any).executionResult?.contentType ||
+            (task as any).expectedOutputFormat,
+    } as Task;
+});
 const showLivePreview = ref(false);
 const livePreviewTask = ref<Task | null>(null);
 
@@ -148,73 +166,18 @@ watch(projectId, async (newId) => {
 // Actions
 function openCreateModal(status: TaskStatus) {
     createInColumn.value = status;
-    newTaskTitle.value = '';
-    newTaskDescription.value = '';
-    newTaskPriority.value = 'medium';
-    newTaskType.value = 'ai';
-    newTaskScriptLanguage.value = 'javascript';
     showCreateModal.value = true;
 }
 
-async function handleCreateTask() {
-    if (!newTaskTitle.value.trim()) return;
-
-    creating.value = true;
-    try {
-        const basePrompt = `${newTaskTitle.value}\n\n${newTaskDescription.value}`;
-        const autoTags = tagService.generatePromptTags(basePrompt);
-
-        const taskData: any = {
-            projectId: projectId.value,
-            title: newTaskTitle.value.trim(),
-            description: newTaskDescription.value.trim(),
-            priority: newTaskPriority.value,
-            tags: autoTags,
-            taskType: newTaskType.value,
-        };
-
-        // Add script-specific fields
-        if (newTaskType.value === 'script') {
-            taskData.scriptLanguage = newTaskScriptLanguage.value;
-            taskData.scriptCode = getScriptTemplate(newTaskScriptLanguage.value);
-        } else if (newTaskType.value === 'input') {
-            // Set default input config
-            taskData.inputConfig = JSON.stringify({
-                sourceType: 'USER_INPUT',
-                userInput: {
-                    message: '필요한 정보를 입력해주세요',
-                    required: true,
-                    mode: 'short',
-                },
-            });
-        }
-
-        console.log('[KanbanBoard] Creating task:', taskData);
-        const task = await taskStore.createTask(taskData);
-        console.log('[KanbanBoard] Task created:', task);
-
-        if (task) {
-            // Track tag usage for better suggestions
-            autoTags.forEach((tag) => tagService.incrementUsage(tag));
-
-            // Update status to match column
-            if (createInColumn.value !== 'todo') {
-                await taskStore.updateTask(task.id, { status: createInColumn.value });
-            }
-            showCreateModal.value = false;
-        }
-    } finally {
-        creating.value = false;
-    }
-}
-
-function getScriptTemplate(language: 'javascript' | 'typescript' | 'python'): string {
-    const templates = {
-        javascript: `// JavaScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
-        typescript: `// TypeScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
-        python: `# Python Script\n# 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nprint('Script started')\n\n# Your code here\n\nprint('Script completed')\n`,
-    };
-    return templates[language];
+function handleTaskSaved() {
+    showCreateModal.value = false;
+    // TaskStore updates are reactive, so list should update automatically
+    // But we might want to refresh to be sure?
+    // taskStore.fetchTasks(projectId.value); // The component already fetches? No, store does.
+    // The component emits saved after creating. Store refresh might be needed if optimistic update isn't enough?
+    // taskStore.createTask already updates state.
+    // Ensure we refresh just in case
+    taskStore.fetchTasks(projectId.value);
 }
 
 function handleDragStart(taskId: number) {
@@ -388,8 +351,9 @@ function handlePreviewResult(task: Task) {
 async function handleRetry(task: Task) {
     // Retry task execution
     await taskStore.updateTask(task.id, { status: 'todo' });
-    // TODO: Re-run with modifications
-    console.log('Retry task:', task.id);
+    // Immediately execute the task after resetting to todo
+    await taskStore.executeTask(task.id);
+    console.log('Retry task executed:', task.id);
 }
 
 function handleViewHistory(task: Task) {
@@ -455,39 +419,20 @@ async function handleEditModalDelete(taskId: number) {
 
 // Result Preview handlers
 async function openResultPreview(task: Task) {
-    // 최신 상세 데이터를 가져와 결과가 사라지지 않도록 보강
-    let fullTask: any = task;
-    try {
-        const fetched = await getAPI().tasks.get(task.id);
-        if (fetched) {
-            fullTask = { ...task, ...fetched };
-        }
-    } catch (error) {
-        console.error('Failed to fetch task for preview:', error);
-    }
-
-    const progress = taskStore.executionProgress.get(task.id);
-    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
-    const enriched = {
-        ...fullTask,
-        result:
-            (fullTask as any).result ||
-            (fullTask as any).executionResult?.content ||
-            progress?.content ||
-            reviewProgressEntry?.content ||
-            '',
-        outputFormat:
-            (fullTask as any).outputFormat ||
-            (fullTask as any).executionResult?.contentType ||
-            (fullTask as any).expectedOutputFormat,
-    } as Task;
-    resultPreviewTask.value = enriched;
+    previewTaskId.value = task.id;
     showResultPreview.value = true;
+
+    // Attempt to fetch latest details to ensure we have the result
+    try {
+        await taskStore.fetchTasks(projectId.value); // Or specific task get
+    } catch (e) {
+        console.error('Failed to refresh task for preview:', e);
+    }
 }
 
 function closeResultPreview() {
     showResultPreview.value = false;
-    resultPreviewTask.value = null;
+    previewTaskId.value = null;
 }
 
 // Live Streaming Preview handlers
@@ -1139,167 +1084,14 @@ onMounted(async () => {
         </main>
 
         <!-- Create Task Modal -->
-        <Teleport to="body">
-            <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center">
-                <div class="absolute inset-0 bg-black/60" @click="showCreateModal = false"></div>
-                <div
-                    class="relative bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-xl"
-                >
-                    <h2 class="text-xl font-bold text-white mb-4">Create New Task</h2>
-
-                    <form @submit.prevent="handleCreateTask" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1">
-                                Task Title
-                            </label>
-                            <input
-                                v-model="newTaskTitle"
-                                type="text"
-                                placeholder="What needs to be done?"
-                                class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                autofocus
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1">
-                                Description (optional)
-                            </label>
-                            <textarea
-                                v-model="newTaskDescription"
-                                rows="3"
-                                placeholder="Add more details..."
-                                class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            ></textarea>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1">
-                                Priority
-                            </label>
-                            <div class="flex gap-2">
-                                <button
-                                    v-for="priority in [
-                                        'low',
-                                        'medium',
-                                        'high',
-                                        'urgent',
-                                    ] as TaskPriority[]"
-                                    :key="priority"
-                                    type="button"
-                                    @click="newTaskPriority = priority"
-                                    :class="[
-                                        'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
-                                        newTaskPriority === priority
-                                            ? priority === 'low'
-                                                ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500'
-                                                : priority === 'medium'
-                                                  ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500'
-                                                  : priority === 'high'
-                                                    ? 'bg-orange-500/20 text-orange-400 ring-1 ring-orange-500'
-                                                    : 'bg-red-500/20 text-red-400 ring-1 ring-red-500'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-                                    ]"
-                                >
-                                    {{ priority }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Task Type Selection -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-2">
-                                Task Type
-                            </label>
-                            <div class="flex gap-2">
-                                <button
-                                    type="button"
-                                    @click="newTaskType = 'ai'"
-                                    :class="[
-                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                                        newTaskType === 'ai'
-                                            ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-                                    ]"
-                                >
-                                    🤖 AI Task
-                                </button>
-                                <button
-                                    type="button"
-                                    @click="newTaskType = 'script'"
-                                    :class="[
-                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                                        newTaskType === 'script'
-                                            ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-500'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-                                    ]"
-                                >
-                                    ⚡ Script Task
-                                </button>
-                                <button
-                                    type="button"
-                                    @click="newTaskType = 'input'"
-                                    :class="[
-                                        'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                                        newTaskType === 'input'
-                                            ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-                                    ]"
-                                >
-                                    ⌨️ Input Task
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Script Language Selection (shown only for script tasks) -->
-                        <div v-if="newTaskType === 'script'">
-                            <label class="block text-sm font-medium text-gray-300 mb-2">
-                                Script Language
-                            </label>
-                            <div class="flex gap-2">
-                                <button
-                                    v-for="lang in ['javascript', 'typescript', 'python']"
-                                    :key="lang"
-                                    type="button"
-                                    @click="newTaskScriptLanguage = lang as any"
-                                    :class="[
-                                        'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
-                                        newTaskScriptLanguage === lang
-                                            ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-                                    ]"
-                                >
-                                    {{
-                                        lang === 'javascript'
-                                            ? '🟨 JS'
-                                            : lang === 'typescript'
-                                              ? '🔷 TS'
-                                              : '🐍 PY'
-                                    }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="flex gap-3 pt-2">
-                            <button
-                                type="button"
-                                @click="showCreateModal = false"
-                                class="flex-1 px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                :disabled="!newTaskTitle.trim() || creating"
-                                class="flex-1 px-4 py-2 bg-blue-600 rounded-lg text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                {{ creating ? 'Creating...' : 'Create Task' }}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </Teleport>
+        <TaskCreateModal
+            v-if="showCreateModal"
+            :open="showCreateModal"
+            :project-id="projectId"
+            :initial-status="createInColumn"
+            @close="showCreateModal = false"
+            @saved="handleTaskSaved"
+        />
 
         <!-- Task Detail Panel -->
         <Teleport to="body">

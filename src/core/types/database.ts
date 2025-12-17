@@ -76,7 +76,7 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type ExecutionType = 'serial' | 'parallel';
 
-export type TaskType = 'ai' | 'script' | 'input';
+export type TaskType = 'ai' | 'script' | 'input' | 'output';
 
 export type ScriptLanguage = 'javascript' | 'typescript' | 'python';
 
@@ -381,8 +381,9 @@ export interface GitCommit {
 export interface TaskTriggerConfig {
     // 의존성 기반 트리거
     dependsOn?: {
-        taskIds: number[]; // 이 태스크들이 모두 DONE일 때 트리거
-        operator: 'all' | 'any'; // all: 모두 완료, any: 하나라도 완료
+        taskIds: number[]; // 이 태스크들이 모두 DONE일 때 트리거 (expression이 있으면 인덱싱 용도로만 사용)
+        operator: 'all' | 'any'; // all: 모두 완료, any: 하나라도 완료 (expression 우선)
+        expression?: string; // 복잡한 조건식 (예: "(1 && 2) || 3")
         executionPolicy?: 'once' | 'repeat'; // 실행 정책 (기본값: 'once')
         // once: TODO 상태일 때만 1회 자동 실행 (기본 동작)
         // repeat: 조건 충족 시 매번 자동 실행 (상태 무관)
@@ -580,6 +581,10 @@ export interface Task extends BaseEntity {
     // Input Task Type
     inputConfig?: InputTaskConfig | null;
     inputSubStatus?: InputSubStatus | null; // Input task specific sub-status
+
+    // Output Task Type
+    outputConfig?: OutputTaskConfig | null;
+
     output?: TaskOutput | null; // Standardized output for all task types
     notificationConfig?: unknown; // Notification settings for this task
 }
@@ -671,15 +676,60 @@ export interface InputTaskConfig {
         message: string;
         placeholder?: string;
         required?: boolean;
+        options?: string[]; // For select/radio input
+        allowCustom?: boolean; // Allow custom value if options provided
     };
     localFile?: {
         filePath?: string;
         acceptedExtensions: string[];
         readMode: 'text' | 'table' | 'binary';
+        parser?: {
+            type: 'csv' | 'xlsx' | 'markdown' | 'text' | 'docx' | 'pptx' | 'pdf';
+            options?: any;
+        };
     };
     remoteResource?: {
         url?: string;
         authType: 'none' | 'google_oauth';
+        accountId?: string; // ID of the specific account to use
+        fetch?: {
+            method?: string;
+            headers?: Record<string, string>;
+            timeoutMs?: number;
+        };
+        parser?: {
+            type: 'html' | 'google_doc' | 'google_sheet' | 'google_slide' | 'file';
+            options?: any;
+        };
+    };
+}
+
+// Output Task Configuration
+export type OutputDestinationType = 'local_file' | 'slack' | 'google_docs';
+export type OutputAggregationType = 'single' | 'concat' | 'template';
+
+export interface OutputTaskConfig {
+    destination: OutputDestinationType;
+    aggregation: OutputAggregationType;
+
+    // Template for 'template' aggregation
+    templateConfig?: {
+        template: string; // Handlebars-like template source
+    };
+
+    // Destination-specific configs
+    localFile?: {
+        pathTemplate: string; // e.g. "output/{{date}}-{{title}}.md"
+        overwrite: boolean;
+        format: 'text' | 'json';
+    };
+    slack?: {
+        channelId: string;
+        threadTs?: string; // Optional, for threading
+    };
+    googleDocs?: {
+        documentName: string;
+        folderId?: string;
     };
 }
 

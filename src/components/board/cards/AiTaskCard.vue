@@ -98,10 +98,6 @@ const streamedContent = computed(() => {
     return progress?.content || '';
 });
 
-const isTaskCurrentlyExecuting = computed(() => {
-    return taskStore.isTaskExecuting(props.task.id);
-});
-
 const reviewStreamedContent = computed(() => {
     const progress = taskStore.reviewProgress.get(props.task.id);
     return progress?.content || '';
@@ -147,16 +143,6 @@ function handleStop(event: Event) {
     emit('stop', props.task);
 }
 
-function handlePause(event: Event) {
-    event.stopPropagation();
-    emit('pause', props.task);
-}
-
-function handleResume(event: Event) {
-    event.stopPropagation();
-    emit('resume', props.task);
-}
-
 function handleRetry(event: Event) {
     event.stopPropagation();
     emit('retry', props.task);
@@ -192,11 +178,6 @@ function handleConnectProviderClick() {
         emit('connectProvider', props.missingProvider.id);
     }
 }
-
-function handleDelete(event: Event) {
-    event.stopPropagation();
-    emit('delete', props.task);
-}
 </script>
 
 <template>
@@ -210,6 +191,7 @@ function handleDelete(event: Event) {
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"
         @operator-drop="(tid, oid) => emit('operatorDrop', tid, oid)"
+        @delete="(t) => emit('delete', t)"
     >
         <template #header>
             <div class="flex flex-col gap-2">
@@ -661,6 +643,12 @@ function handleDelete(event: Event) {
                         {{ task.isPaused ? '재개' : '진행중' }}
                     </button>
                     <button
+                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-1 shadow-sm"
+                        @click="handlePreviewResult"
+                    >
+                        결과보기
+                    </button>
+                    <button
                         class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                         @click="handleStop"
                     >
@@ -692,7 +680,7 @@ function handleDelete(event: Event) {
                         <button
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
                             @click.stop="
-                                (e) => {
+                                () => {
                                     console.log('🟢 [AiTaskCard] Approve button clicked', task.id);
                                     emit('approve', task);
                                 }

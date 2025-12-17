@@ -257,6 +257,7 @@ onUnmounted(() => {
                 :is-dragging="false"
                 :hide-prompt="true"
                 :hide-prompt-actions="true"
+                :hide-extra-actions="false"
                 :hide-connection-handles="true"
                 @click="handleClick"
                 @execute="handleExecute"

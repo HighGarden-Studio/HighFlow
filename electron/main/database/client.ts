@@ -42,6 +42,9 @@ sqlite.pragma('synchronous = NORMAL');
 sqlite.pragma('cache_size = -64000'); // 64MB cache
 
 // Run database migrations
+// Note: Auto-migrations are disabled due to conflict with db:push and migration history state.
+// Enable this only if using strict db:migrate workflow.
+/*
 try {
     console.log('Running database migrations...');
     runMigrations(sqlite);
@@ -49,6 +52,7 @@ try {
     console.error('Migration error:', error);
     throw error;
 }
+*/
 
 // Initialize Drizzle with schema and relations
 export const db = drizzle(sqlite, {

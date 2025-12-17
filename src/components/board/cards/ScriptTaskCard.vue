@@ -109,16 +109,6 @@ function handleViewScript(event: Event) {
     event.stopPropagation();
     emit('previewPrompt', props.task); // reuse previewPrompt event for viewing script code
 }
-
-function handleViewHistory(event: Event) {
-    event.stopPropagation();
-    emit('viewHistory', props.task);
-}
-
-function handleDelete(event: Event) {
-    event.stopPropagation();
-    emit('delete', props.task);
-}
 </script>
 
 <template>
@@ -132,6 +122,7 @@ function handleDelete(event: Event) {
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"
         @operator-drop="(tid, oid) => emit('operatorDrop', tid, oid)"
+        @delete="(t) => emit('delete', t)"
     >
         <template #header>
             <div class="flex flex-col gap-2">
@@ -204,24 +195,6 @@ function handleDelete(event: Event) {
                         <span class="text-[10px] text-gray-400 font-mono mt-0.5 whitespace-nowrap">
                             #{{ task.projectSequence }}
                         </span>
-                        <button
-                            @click="handleDelete"
-                            class="text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                            <svg
-                                class="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12"
-                                />
-                            </svg>
-                        </button>
                     </div>
                 </div>
 

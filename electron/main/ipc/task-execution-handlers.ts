@@ -7,6 +7,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
+import { DependencyEvaluator } from '../services/DependencyEvaluator';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai';
 import { taskRepository } from '../database/repositories/task-repository';
 import { taskHistoryRepository } from '../database/repositories/task-history-repository';
@@ -23,6 +24,7 @@ import type {
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
+import { GlobalExecutionService } from '../services/GlobalExecutionService';
 
 /**
  * Get the main window for sending IPC messages
@@ -82,71 +84,219 @@ const executor = new AdvancedTaskExecutor();
 
 /**
  * Extract dependency task IDs and their execution results for macro substitution/context passing
+ * recursively (up to depth 5) to support deep history macros like {{prev-1}}
  */
 async function buildDependencyContext(
     task: Task
 ): Promise<{ dependencyTaskIds: number[]; previousResults: TaskResult[] }> {
-    const dependencyTaskIds: number[] = [];
-    const triggerConfig = task.triggerConfig as TaskTriggerConfig | null;
-    const dependsOn = triggerConfig?.dependsOn;
+    const visitedIds = new Set<number>();
+    const resultsMap = new Map<number, TaskResult>();
+    const queue: { id: number; depth: number }[] = [];
 
-    if (dependsOn) {
-        if (Array.isArray(dependsOn.passResultsFrom) && dependsOn.passResultsFrom.length > 0) {
-            dependencyTaskIds.push(...dependsOn.passResultsFrom);
-        } else if (Array.isArray(dependsOn.taskIds) && dependsOn.taskIds.length > 0) {
-            dependencyTaskIds.push(...dependsOn.taskIds);
+    // 1. Identify direct dependencies
+    const triggerConfig = task.triggerConfig as any;
+    const directDeps = new Set<number>();
+
+    if (triggerConfig?.dependsOn) {
+        if (
+            Array.isArray(triggerConfig.dependsOn.passResultsFrom) &&
+            triggerConfig.dependsOn.passResultsFrom.length > 0
+        ) {
+            triggerConfig.dependsOn.passResultsFrom.forEach((id: number) => directDeps.add(id));
+        }
+        if (
+            Array.isArray(triggerConfig.dependsOn.taskIds) &&
+            triggerConfig.dependsOn.taskIds.length > 0
+        ) {
+            triggerConfig.dependsOn.taskIds.forEach((id: number) => directDeps.add(id));
         }
     }
 
-    if (dependencyTaskIds.length === 0) {
+    if (directDeps.size === 0) {
         return { dependencyTaskIds: [], previousResults: [] };
     }
 
+    // 2. Initialize BFS Queue
+    directDeps.forEach((id) => {
+        queue.push({ id, depth: 1 });
+        visitedIds.add(id);
+    });
+
     console.log(
-        `[TaskExecution] Fetching results from ${dependencyTaskIds.length} dependent tasks`
+        `[TaskExecution] Building specific dependency context starting from ${directDeps.size} direct deps`
     );
 
-    const previousResults: TaskResult[] = [];
+    // 3. Recursive Fetch (BFS)
+    while (queue.length > 0) {
+        const { id, depth } = queue.shift()!;
 
-    for (const depTaskId of dependencyTaskIds) {
-        const depTask = await taskRepository.findById(depTaskId);
-        if (depTask && depTask.executionResult) {
-            try {
-                const execResult =
-                    typeof depTask.executionResult === 'string'
-                        ? JSON.parse(depTask.executionResult)
-                        : depTask.executionResult;
+        try {
+            const depTask = await taskRepository.findById(id);
+            if (!depTask) continue;
 
-                const now = new Date();
-                previousResults.push({
-                    taskId: depTaskId,
-                    taskTitle: depTask.title,
-                    status: 'success',
-                    output: execResult.content || execResult,
-                    startTime: depTask.startedAt || now,
-                    endTime: depTask.completedAt || now,
-                    duration: execResult.duration || 0,
-                    retries: 0,
-                    metadata: {
-                        provider: execResult.provider,
-                        model: execResult.model,
-                        files: execResult.files, // Preserve created files
-                    },
-                });
+            // Process Execution Result
+            if (depTask.status === 'done' && depTask.executionResult) {
+                try {
+                    const execResult =
+                        typeof depTask.executionResult === 'string'
+                            ? JSON.parse(depTask.executionResult)
+                            : depTask.executionResult;
 
-                console.log(
-                    `[TaskExecution] Loaded result from task ${depTaskId}: ${depTask.title}`
-                );
-            } catch (error) {
-                console.error(
-                    `[TaskExecution] Failed to parse execution result from task ${depTaskId}:`,
-                    error
-                );
+                    const now = new Date();
+                    resultsMap.set(id, {
+                        taskId: depTask.id,
+                        taskTitle: depTask.title,
+                        status: 'success',
+                        output: execResult.content || execResult,
+                        startTime: depTask.startedAt || now,
+                        endTime: depTask.completedAt || now, // Crucial for sorting
+                        duration: execResult.duration || 0,
+                        retries: 0,
+                        metadata: {
+                            provider: execResult.provider,
+                            model: execResult.model,
+                            files: execResult.files,
+                        },
+                    });
+                } catch (parseErr) {
+                    console.error(
+                        `[TaskExecution] Failed to parse result for task ${id}`,
+                        parseErr
+                    );
+                }
             }
+
+            // Recurse if depth allows
+            if (depth < 5) {
+                const depConfig = depTask.triggerConfig as any;
+                const parentIds = depConfig?.dependsOn?.taskIds || [];
+                for (const pid of parentIds) {
+                    if (typeof pid === 'number' && !visitedIds.has(pid)) {
+                        visitedIds.add(pid);
+                        queue.push({ id: pid, depth: depth + 1 });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`[TaskExecution] Failed to fetch dependency ${id}`, err);
         }
     }
 
-    return { dependencyTaskIds, previousResults };
+    // 4. Sort results chronologically (Oldest -> Newest)
+    // This ensures {{prev}} is the last item, {{prev-1}} is second last, etc.
+    const previousResults = Array.from(resultsMap.values()).sort((a, b) => {
+        const timeA = new Date(a.endTime).getTime();
+        const timeB = new Date(b.endTime).getTime();
+        return timeA - timeB; // Ascending
+    });
+
+    console.log(
+        `[TaskExecution] Built dependency context with ${previousResults.length} tasks (Depth reached)`
+    );
+
+    return { dependencyTaskIds: Array.from(visitedIds), previousResults };
+}
+
+/**
+ * Helper: Check if task dependencies are met (Robust Logic with Novelty Check)
+ * @param ignoreNovelty If true, bypasses the "New Event" check (used for manual execution)
+ */
+function areTaskDependenciesMet(
+    task: any,
+    allTasks: any[],
+    ignoreNovelty: boolean = false
+): { met: boolean; reason?: string; details?: string } {
+    const triggerConfig = task.triggerConfig;
+    if (!triggerConfig?.dependsOn?.taskIds || triggerConfig.dependsOn.taskIds.length === 0) {
+        return { met: true };
+    }
+
+    const dependsOn = triggerConfig.dependsOn;
+    const expression = dependsOn.expression;
+    const operator = dependsOn.operator || 'all';
+    const dependencyTaskIds = dependsOn.taskIds as number[];
+
+    // 1. Prepare Dependency Data for Evaluator
+    const dependencyInfo = allTasks
+        .filter(
+            (t) =>
+                dependencyTaskIds.includes(t.id) ||
+                (expression && expression.includes(String(t.id)))
+        )
+        .map((t) => ({
+            id: t.id,
+            status: t.status,
+            completedAt: t.completedAt,
+        }));
+
+    // 2. Identify Last Run Time for Novelty Check
+    // If ignoreNovelty is true, we set lastRunAt to undefined so the evaluators act as if it's the first run.
+    let lastRunAt: string | undefined = undefined;
+    if (!ignoreNovelty && (task.executionPolicy === 'repeat' || task.status === 'done')) {
+        // Use completedAt of the *dependent* task (task) to establish the baseline
+        lastRunAt = task.completedAt;
+    }
+
+    // 3. Evaluate
+    if (expression && expression.trim().length > 0) {
+        // Advanced Mode: Use DependencyEvaluator
+        const evaluator = new DependencyEvaluator(dependencyInfo, lastRunAt);
+        const result = evaluator.evaluate(expression);
+
+        return {
+            met: result.met,
+            reason: result.met ? undefined : result.reason,
+            details: `Expression "${expression}" -> ${result.met}. Reason: ${result.reason || 'Met'}`,
+        };
+    } else if (operator === 'any') {
+        // Any one dependency completed
+        // Novelty Check: Has ANY dependency completed AFTER lastRunAt?
+        const completedDeps = dependencyInfo.filter((d) => d.status === 'done');
+        let met = false;
+
+        if (completedDeps.length > 0) {
+            if (lastRunAt) {
+                const lastRunTime = new Date(lastRunAt).getTime();
+                // Check if ANY completed dep is new
+                const hasNew = completedDeps.some(
+                    (d) => d.completedAt && new Date(d.completedAt).getTime() > lastRunTime
+                );
+                met = hasNew;
+            } else {
+                met = true; // First run, and we have completions
+            }
+        }
+
+        return {
+            met,
+            reason: met ? undefined : 'No new dependency completion',
+            details: `Operator 'any': ${completedDeps.length}/${dependencyInfo.length} done. Met=${met}`,
+        };
+    } else {
+        // All dependencies must be completed (Default)
+        // Novelty Check: Are ALL done? AND is at least ONE new?
+        const incomplete = dependencyInfo.filter((d) => d.status !== 'done');
+        const allDone = incomplete.length === 0;
+
+        let met = allDone;
+        if (allDone && lastRunAt) {
+            const lastRunTime = new Date(lastRunAt).getTime();
+            const hasNew = dependencyInfo.some(
+                (d) => d.completedAt && new Date(d.completedAt).getTime() > lastRunTime
+            );
+            if (!hasNew) {
+                met = false; // Stale
+            }
+        }
+
+        let details = '';
+        if (!met) {
+            if (!allDone) details = `Waiting for: ${incomplete.map((t: any) => t.id).join(', ')}`;
+            else details = 'All done but no new events (stale)';
+        }
+
+        return { met, reason: met ? undefined : 'Conditions not met', details };
+    }
 }
 
 /**
@@ -163,6 +313,17 @@ export async function checkAndExecuteDependentTasks(
             `[TaskExecution] Checking dependent tasks for completed task ${completedTaskId}`
         );
 
+        // Global Pause Check
+        if (GlobalExecutionService.getInstance().isGlobalPaused()) {
+            console.log(
+                `[TaskExecution] Global execution is PAUSED. Skipping auto-execution for task ${completedTaskId}'s dependents.`
+            );
+            // We do NOT queue them here for MVP. They just don't run.
+            // User must manually resume or re-run tasks.
+            // To make it better, we could perhaps Log a warning.
+            return;
+        }
+
         // Get all tasks in the same project
         const allTasks = await taskRepository.findByProject(completedTask.projectId);
 
@@ -172,13 +333,31 @@ export async function checkAndExecuteDependentTasks(
 
             if (!triggerConfig?.dependsOn?.taskIds) return false;
 
-            if (!triggerConfig.dependsOn.taskIds.includes(completedTaskId)) return false;
+            // Check if completed task is in taskIds OR in expression
+            const hasIdInList =
+                triggerConfig.dependsOn.taskIds &&
+                triggerConfig.dependsOn.taskIds.includes(completedTaskId);
+            const hasIdInExpr = triggerConfig.dependsOn.expression
+                ? new RegExp(`\\b${completedTaskId}\\b`).test(triggerConfig.dependsOn.expression)
+                : false;
+
+            if (!hasIdInList && !hasIdInExpr) return false;
 
             // Check execution policy
             const policy = triggerConfig.dependsOn.executionPolicy || 'once';
 
-            // If policy is 'once', only execute if task is in 'todo' status
-            if (policy === 'once' && task.status !== 'todo') {
+            // If policy is 'once', we usually checking if it's 'todo'.
+            // BUT for "Reactive" behavior, if the inputs have changed (novelty), we might want to re-run it.
+            // So we RELAX this check here and let 'areTaskDependenciesMet' handle the novelty check.
+            // Old strict check:
+            // if (policy === 'once' && task.status !== 'todo') { return false; }
+
+            // New Reactive Logic:
+            // We allow 'done' tasks to proceed to the check.
+            // 'areTaskDependenciesMet' will return true ONLY if there is a NEW completion event.
+            if (policy === 'once' && task.status !== 'todo' && task.status !== 'done') {
+                // Still prevent re-running if it's 'in_progress' or something else weird,
+                // but 'done' is now allowed to be re-evaluated.
                 return false;
             }
 
@@ -209,21 +388,9 @@ export async function checkAndExecuteDependentTasks(
             const dependsOn = triggerConfig?.dependsOn;
             if (!dependsOn?.taskIds) continue;
 
-            const operator = dependsOn.operator || 'all';
-            const dependencyTaskIds = dependsOn.taskIds;
-
-            // Check if dependencies are satisfied
-            let shouldExecute = false;
-
-            if (operator === 'any') {
-                // Any one dependency completed is enough
-                shouldExecute = true;
-            } else {
-                // All dependencies must be completed
-                const dependencyTasks = allTasks.filter((t) => dependencyTaskIds.includes(t.id));
-                const allCompleted = dependencyTasks.every((t) => t.status === 'done');
-                shouldExecute = allCompleted;
-            }
+            // Use shared helper - unused vars removed
+            const checkResult = areTaskDependenciesMet(dependentTask, allTasks);
+            const shouldExecute = checkResult.met;
 
             if (shouldExecute) {
                 console.log(
@@ -325,6 +492,21 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 mcpServers?: MCPServerRuntimeConfig[];
             }
         ) => {
+            // Global Pause Check for manual execution
+            if (GlobalExecutionService.getInstance().isGlobalPaused()) {
+                const errorMsg = 'Global execution is currently PAUSED. Resume to execute tasks.';
+                console.warn(`[TaskExecution] Blocked execution of task ${taskId}: ${errorMsg}`);
+
+                // Notify frontend
+                getMainWindow()?.webContents.send('taskExecution:failed', {
+                    taskId,
+                    error: errorMsg,
+                });
+
+                // Return failure or throw
+                throw new Error(errorMsg);
+            }
+
             try {
                 // Set API keys if provided
                 if (options?.apiKeys) {
@@ -345,44 +527,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskId} not found`);
                 }
 
-                // Validate dependencies
+                // Validate dependencies (Robust Check)
                 const triggerConfig = task.triggerConfig as any;
                 if (
                     triggerConfig?.dependsOn?.taskIds &&
                     triggerConfig.dependsOn.taskIds.length > 0
                 ) {
-                    const dependencyIds = triggerConfig.dependsOn.taskIds as number[];
-                    console.log(
-                        `[TaskExecution] Checking dependencies for task ${taskId}:`,
-                        dependencyIds
-                    );
+                    // Fetch all project tasks for context
+                    const allProjectTasks = await taskRepository.findByProject(task.projectId);
 
-                    const incompleteDependencies: {
-                        id: number;
-                        title: string;
-                        status: string;
-                    }[] = [];
-
-                    for (const depId of dependencyIds) {
-                        const depTask = await taskRepository.findById(depId);
-                        if (!depTask) {
-                            console.warn(`[TaskExecution] Dependency task ${depId} not found`);
-                            continue;
-                        }
-
-                        // Check if dependency is done
-                        if (depTask.status !== 'done') {
-                            incompleteDependencies.push({
-                                id: depTask.id,
-                                title: depTask.title,
-                                status: depTask.status,
-                            });
-                        }
-                    }
-
-                    if (incompleteDependencies.length > 0) {
-                        const errorMsg = `Cannot execute task: Waiting for ${incompleteDependencies.length} dependencies to complete`;
-                        const details = `Incomplete dependencies:\n${incompleteDependencies.map((d) => `- ${d.title} (${d.status})`).join('\n')}`;
+                    // 2. Validate Dependencies
+                    // For Manual Run (direct execute call), we generally want to IGNORE strict novelty checks
+                    // The user is saying "Run this now!". As long as dependencies are met (status=done), we should run.
+                    const dependencyCheck = areTaskDependenciesMet(task, allProjectTasks, true); // ignoreNovelty = true
+                    if (!dependencyCheck.met) {
+                        const errorMsg = `Cannot execute task: ${dependencyCheck.reason || 'Conditions not met'}`;
+                        const details = dependencyCheck.details || 'Dependencies not satisfied';
 
                         console.error(`[TaskExecution] ${errorMsg}`);
                         console.error(details);
@@ -390,7 +550,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         // Log failure to history
                         await taskHistoryRepository.logExecutionFailed(taskId, errorMsg, {
                             reason: 'dependency_validation_failed',
-                            incompleteDependencies,
+                            details: dependencyCheck.details,
                         });
 
                         throw new Error(`${errorMsg}\n${details}`);
@@ -559,7 +719,75 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     return; // Or throw an error if it's an unexpected task type
                 }
 
-                // 3. AI Task Execution (Default)
+                // 3. Handle Output Tasks
+                if (task.taskType === 'output') {
+                    console.log(`[TaskExecution] Executing output task ${taskId}`);
+
+                    // Initialize execution state for Output Tasks to track status/errors locally
+                    const executionState: ExecutionState = {
+                        taskId,
+                        status: 'running',
+                        startedAt: new Date(),
+                        progress: 0,
+                        currentPhase: 'executing',
+                        streamContent: '',
+                    };
+                    activeExecutions.set(taskId, executionState);
+
+                    try {
+                        const { OutputTaskRunner } = await import('../services/output'); // Ensure this imports correctly or use full path
+                        const runner = new OutputTaskRunner();
+
+                        // Execute output logic
+                        const result = await runner.execute(taskId);
+
+                        if (result.success) {
+                            executionState.status = 'completed';
+
+                            // Task status update is handled inside runner, but we ensure notification
+                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                                taskId,
+                                result: {
+                                    content: 'Output execution completed',
+                                    provider: 'output',
+                                    model: 'connector',
+                                    metadata: result.data || result.metadata || {},
+                                },
+                            });
+
+                            // Trigger dependent tasks
+                            const updatedTask = await taskRepository.findById(taskId);
+                            if (updatedTask && updatedTask.status === 'done') {
+                                await checkAndExecuteDependentTasks(taskId, updatedTask);
+                            }
+
+                            activeExecutions.delete(taskId);
+                            return; // Exit here
+                        } else {
+                            throw new Error(result.error || 'Output execution failed');
+                        }
+                    } catch (error) {
+                        executionState.status = 'failed';
+                        executionState.error =
+                            error instanceof Error ? error.message : String(error);
+
+                        await taskRepository.update(taskId, { status: 'todo' });
+
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: 'todo',
+                        });
+
+                        getMainWindow()?.webContents.send('taskExecution:failed', {
+                            taskId,
+                            error: executionState.error,
+                        });
+                        activeExecutions.delete(taskId); // Clean up
+                        throw error;
+                    }
+                } // End Output Task block
+
+                // 4. AI Task Execution (Default)
                 // Initialize execution state for AI tasks
                 let executionState: ExecutionState = {
                     taskId,
@@ -653,16 +881,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         return pkg;
                     };
 
-                    const getOutputContract = () => {
-                        let contract = `\n\n[HighFlow Task Output]\n`;
-                        contract += `## 1. Summary (3–5 lines)\nBriefly explain what was done and why.\n\n`;
-                        contract += `## 2. Key Decisions\nList any decisions made in this task. If no decisions were made, explicitly say "None".\n\n`;
-                        contract += `## 3. Assumptions\nList assumptions you relied on. If none, say "None".\n\n`;
-                        contract += `## 4. Artifacts\nList files or resources created or modified. If none, say "None".\nExample:\n- docs/api-spec.md (created)\n- design/architecture.mmd (updated)\n\n`;
-                        contract += `## 5. Open Questions / Risks\nList unresolved issues, risks, or things to confirm. If none, say "None".\n\n`;
-                        contract += `## 6. Handoff Notes (For Next Task)\nImportant notes for the next task or operator. If none, say "None".\n`;
-                        return contract;
-                    };
+                    // getOutputContract removed to prevent pollution of task results with summary headers
+                    // The CuratorService extracts this information independently.
 
                     const { CuratorService } =
                         await import('../../../src/services/ai/CuratorService');
@@ -772,18 +992,39 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         const { previousResults } = await buildDependencyContext(task as Task);
 
                         // Build task prompt inline
+
+                        // Build prompt with Macro Resolution
                         const buildTaskPrompt = (
                             task: any,
                             contextResults: any[],
                             project: any
                         ) => {
+                            // Resolve macros in description and generatedPrompt
+                            const macroContext = {
+                                previousResults: contextResults,
+                                variables: {},
+                                projectName: project?.title,
+                                projectDescription: project?.description || undefined,
+                                currentTaskId: task.id,
+                            };
+
+                            const resolvedDescription = PromptMacroService.replaceMacros(
+                                task.description || '',
+                                macroContext
+                            );
+                            const resolvedGeneratedPrompt = PromptMacroService.replaceMacros(
+                                task.generatedPrompt || '',
+                                macroContext
+                            );
+
                             let prompt = '';
 
                             // 1. Context Package Injection
                             prompt += buildContextPackage(project, task);
 
                             if (task.title) prompt += `# Task: ${task.title}\n\n`;
-                            if (task.description) prompt += `${task.description}\n\n`;
+                            // Use resolved description
+                            if (resolvedDescription) prompt += `${resolvedDescription}\n\n`;
 
                             if (contextResults && contextResults.length > 0) {
                                 prompt += `## Context from Previous Tasks:\n`;
@@ -814,8 +1055,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 });
                             }
 
-                            if (task.generatedPrompt)
-                                prompt += `## Instructions:\n${task.generatedPrompt}\n\n`;
+                            // Use resolved Generated Prompt
+                            if (resolvedGeneratedPrompt)
+                                prompt += `## Instructions:\n${resolvedGeneratedPrompt}\n\n`;
 
                             if (task.expectedOutputFormat) {
                                 const format = task.expectedOutputFormat;
@@ -843,8 +1085,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 }
                             }
 
-                            // Output Contract Injection
-                            prompt += getOutputContract();
+                            // Output Contract Injection Removed (Curator handles memory updates)
+                            // prompt += getOutputContract();
 
                             return prompt;
                         };
@@ -865,8 +1107,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             throw new Error('Execution state was cleared before completion');
                         }
                         executionState = tempState;
-
-                        // Note: We use onChunk callback in sendMessage for streaming, so no need for explicit .on listener here.
 
                         const prompt = buildTaskPrompt(task, previousResults, project);
                         const response = await sessionManager.sendMessage(sessionInfo.id, prompt, {
@@ -894,7 +1134,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         if (response.success) {
                             await taskHistoryRepository.logExecutionStarted(
                                 taskId,
-                                task.description || '',
+                                prompt, // Log the Resolved Prompt
                                 task.aiProvider || 'local',
                                 'local-model'
                             );
@@ -983,9 +1223,40 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // Fetch dependent task results
                     const { previousResults } = await buildDependencyContext(task as Task);
 
+                    // Context Injection & Prompt Construction (Consolidated)
+                    const contextPackage = buildContextPackage(project, task);
+                    let basePrompt = task.generatedPrompt || task.description || '';
+                    task.description = `${contextPackage}\n${basePrompt}`;
+
+                    // Ensure generatedPrompt matches description for consistency, though Executor uses description
+                    task.generatedPrompt = task.description;
+
+                    // Build Execution Context
+                    const context = executor.buildExecutionContext(task as Task, previousResults);
+
+                    // Resolve Macros via PromptMacroService
+                    // (Note: Executor execution logic also calls substituteVariables, but we do it here to log the resolved version)
+                    const macroContext = {
+                        previousResults: context.previousResults || [],
+                        variables: context.variables || {},
+                        projectName: project?.title,
+                        projectDescription: project?.description || undefined,
+                        currentTaskId: taskId,
+                    };
+
+                    const resolvedDescription = PromptMacroService.replaceMacros(
+                        task.description,
+                        macroContext
+                    );
+
+                    // Update task description with resolved version so Executor uses it without needing to resolve again
+                    task.description = resolvedDescription;
+                    task.generatedPrompt = resolvedDescription;
+
+                    // Log Execution Started with RESOLVED Prompt
                     await taskHistoryRepository.logExecutionStarted(
                         taskId,
-                        task.description || '',
+                        resolvedDescription,
                         task.aiProvider || undefined,
                         undefined
                     );
@@ -999,21 +1270,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         throw new Error('Execution state was cleared before AI execution');
                     }
                     executionState = tempState;
-
-                    // Context Injection for Default Providers
-                    // We modify the task description/prompt directly before passing to executor
-                    const contextPackage = buildContextPackage(project, task);
-                    const outputContract = getOutputContract();
-
-                    if (task.generatedPrompt) {
-                        task.generatedPrompt = `${contextPackage}\n${task.generatedPrompt}\n${outputContract}`;
-                    } else {
-                        task.description = `${contextPackage}\n${task.description || ''}\n${outputContract}`;
-                        // Ensure generatedPrompt is populated as a fallback
-                        task.generatedPrompt = task.description;
-                    }
-
-                    const context = executor.buildExecutionContext(task as Task, previousResults);
 
                     const onToken = (token: string) => {
                         const state = activeExecutions.get(taskId);
@@ -1386,6 +1642,33 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
         });
 
         return executions;
+    });
+
+    /**
+     * Pause All Executions (Global)
+     */
+    ipcMain.handle('taskExecution:pauseAll', async () => {
+        GlobalExecutionService.getInstance().setGlobalPause(true);
+        // Note: This prevents NEW executions.
+        // It does NOT pause currently running tasks (existing behavior).
+        // If we wanted to pause running tasks, we would need to iterate activeExecutions and pause them.
+        // For now, "Pause" means "Stop processing the queue/prevent new runs".
+        return true;
+    });
+
+    /**
+     * Resume All Executions (Global)
+     */
+    ipcMain.handle('taskExecution:resumeAll', async () => {
+        GlobalExecutionService.getInstance().setGlobalPause(false);
+        return true;
+    });
+
+    /**
+     * Get Global Pause Status
+     */
+    ipcMain.handle('taskExecution:getGlobalPauseStatus', async () => {
+        return GlobalExecutionService.getInstance().isGlobalPaused();
     });
 
     // ========================================

@@ -198,7 +198,8 @@ export class GeminiProvider extends BaseAIProvider {
     async chat(
         messages: AIMessage[],
         config: AIConfig,
-        _context?: ExecutionContext
+        _context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AIResponse> {
         this.validateConfig(config);
 
@@ -206,6 +207,9 @@ export class GeminiProvider extends BaseAIProvider {
         const client = this.getClient();
 
         return this.executeWithRetry(async () => {
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
             const { systemInstruction, contents } = this.buildGeminiConversation(messages, config);
             const toolDeclarations = this.mapTools(config.tools);
 
@@ -271,7 +275,8 @@ export class GeminiProvider extends BaseAIProvider {
     async execute(
         prompt: string,
         config: AIConfig,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AIResponse> {
         this.validateConfig(config);
 
@@ -279,6 +284,9 @@ export class GeminiProvider extends BaseAIProvider {
         const client = this.getClient();
 
         return this.executeWithRetry(async () => {
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
             const systemPrompt = config.systemPrompt
                 ? this.buildSystemPrompt(config, context)
                 : undefined;
@@ -393,9 +401,13 @@ export class GeminiProvider extends BaseAIProvider {
         prompt: string,
         config: AIConfig,
         _context?: ExecutionContext,
-        options: Record<string, any> = {}
+        options: Record<string, any> = {},
+        signal?: AbortSignal
     ): Promise<AiResult> {
         try {
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
             const client = this.getClient();
             // Use gemini-3-pro-image-preview unless explicitly overridden
             const modelName =
@@ -544,9 +556,13 @@ export class GeminiProvider extends BaseAIProvider {
         prompt: string,
         config: AIConfig,
         _context?: ExecutionContext,
-        options: Record<string, any> = {}
+        options: Record<string, any> = {},
+        signal?: AbortSignal
     ): Promise<AiResult> {
         try {
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
             const client = this.getClient();
             const modelName = config.model || 'veo-3.1-generate-preview';
 
@@ -635,7 +651,8 @@ export class GeminiProvider extends BaseAIProvider {
     async generateText(
         messages: AIMessage[],
         config: AIConfig,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AiResult> {
         const prompt = messages.map((msg) => msg.content).join('\n');
 
@@ -648,7 +665,9 @@ export class GeminiProvider extends BaseAIProvider {
                 return await this.generateImage(
                     prompt,
                     { ...config, model: this.IMAGE_MODEL },
-                    context
+                    context,
+                    {},
+                    signal
                 );
             } catch (error) {
                 console.warn(
@@ -659,7 +678,8 @@ export class GeminiProvider extends BaseAIProvider {
             }
         }
 
-        const response = await this.execute(prompt, config, context);
+        // Pass signal to execute
+        const response = await this.execute(prompt, config, context, signal);
         let parsed: unknown;
         try {
             parsed = JSON.parse(response.content);

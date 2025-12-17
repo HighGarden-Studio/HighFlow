@@ -9,6 +9,7 @@
  * - {{task:ID.output}} - 특정 태스크의 output 객체
  * - {{task:ID.summary}} - 특정 태스크 결과의 요약 (처음 500자)
  * - {{prev}} - 바로 이전 태스크의 결과
+ * - {{prev - 1}} - 2단계 전 태스크의 결과
  * - {{prev.content}} - 바로 이전 태스크의 content
  * - {{all_results}} - 모든 이전 결과를 JSON 배열로
  * - {{all_results.summary}} - 모든 이전 결과의 요약
@@ -38,6 +39,7 @@ export interface ParsedMacro {
     taskId?: number;
     field?: string;
     varName?: string;
+    offset?: number; // For recursive prev (0 = last, 1 = second last)
 }
 
 export type MacroType = 'task' | 'prev' | 'all_results' | 'var' | 'date' | 'datetime' | 'project';
@@ -101,14 +103,22 @@ export class PromptMacroService {
             }
         }
 
-        // {{prev}} 또는 {{prev.field}}
-        if (trimmed === 'prev' || trimmed.startsWith('prev.')) {
-            const parts = trimmed.split('.');
-            return {
-                fullMatch,
-                type: 'prev',
-                field: parts[1] ?? 'content',
-            };
+        // {{prev}} or {{prev - N}} handling
+        if (trimmed.startsWith('prev')) {
+            // Regex to match: prev, prev-1, prev - 1, prev.field, prev-1.field
+            const prevMatch = trimmed.match(/^prev\s*(?:-\s*(\d+))?(?:\.(.+))?$/);
+            if (prevMatch) {
+                const offsetStr = prevMatch[1];
+                const field = prevMatch[2] ?? 'content';
+                const offset = offsetStr ? parseInt(offsetStr, 10) : 0;
+
+                return {
+                    fullMatch,
+                    type: 'prev',
+                    field,
+                    offset,
+                };
+            }
         }
 
         // {{all_results}} 또는 {{all_results.summary}}
@@ -192,7 +202,7 @@ export class PromptMacroService {
                 return this.getTaskResult(macro.taskId!, macro.field!, context);
 
             case 'prev':
-                return this.getPreviousResult(macro.field!, context);
+                return this.getPreviousResult(macro.field!, context, macro.offset);
 
             case 'all_results':
                 return this.getAllResults(macro.field!, context);
@@ -228,18 +238,30 @@ export class PromptMacroService {
     }
 
     /**
-     * 이전 태스크 결과 가져오기
+     * 이전 태스크 결과 가져오기 (Recursive support)
      */
-    private static getPreviousResult(field: string, context: MacroContext): string {
+    private static getPreviousResult(
+        field: string,
+        context: MacroContext,
+        offset: number = 0
+    ): string {
         if (context.previousResults.length === 0) {
             return '[이전 태스크 결과 없음]';
         }
 
-        const lastResult = context.previousResults[context.previousResults.length - 1];
-        if (!lastResult) {
-            return '[이전 태스크 결과 없음]';
+        // 0 means last item (index = length - 1)
+        // 1 means second last (index = length - 2)
+        const index = context.previousResults.length - 1 - offset;
+
+        if (index < 0) {
+            return `[Prev - ${offset}: 결과 없음 (범위 초과)]`;
         }
-        return this.extractField(lastResult, field);
+
+        const result = context.previousResults[index];
+        if (!result) {
+            return `[Prev - ${offset}: 결과 없음]`;
+        }
+        return this.extractField(result, field);
     }
 
     /**

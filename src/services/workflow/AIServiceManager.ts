@@ -521,7 +521,8 @@ export class AIServiceManager {
                     aiContext,
                     provider,
                     options,
-                    startTime
+                    startTime,
+                    abortController.signal
                 );
             } else if (options.streaming && options.onToken) {
                 result = await this.executeWithStreaming(
@@ -542,7 +543,8 @@ export class AIServiceManager {
                     aiContext,
                     provider,
                     options,
-                    startTime
+                    startTime,
+                    abortController.signal
                 );
             }
 
@@ -709,7 +711,8 @@ export class AIServiceManager {
         context: AIExecutionContext,
         providerName: AIProvider,
         options: AIExecutionOptions,
-        startTime: number
+        startTime: number,
+        signal: AbortSignal
     ): Promise<AIExecutionResult> {
         const provider = await this.providerFactory.getProvider(providerName);
         const chatConfig = { ...config, systemPrompt: undefined };
@@ -726,6 +729,7 @@ export class AIServiceManager {
                 messages: [...messages],
                 config: chatConfig,
                 context,
+                signal,
             },
             providerName,
             provider
@@ -760,7 +764,8 @@ export class AIServiceManager {
         context: AIExecutionContext,
         providerName: AIProvider,
         options: AIExecutionOptions,
-        startTime: number
+        startTime: number,
+        signal: AbortSignal
     ): Promise<AIExecutionResult> {
         const provider = await this.providerFactory.getProvider(providerName);
         const chatConfig = { ...config, systemPrompt: undefined };
@@ -784,6 +789,7 @@ export class AIServiceManager {
                     messages: [...conversation],
                     config: chatConfig,
                     context,
+                    signal,
                 },
                 providerName,
                 provider

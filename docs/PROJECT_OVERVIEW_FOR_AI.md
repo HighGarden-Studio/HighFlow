@@ -1,4 +1,4 @@
-# AI Workflow Manager - Complete Project Overview
+# HighFlow - Complete Project Overview
 
 > **Version**: 0.1.0  
 > **Last Updated**: 2025-12-11  
@@ -28,7 +28,7 @@
 
 ### Project Name
 
-**AI Workflow Manager** (also known as "HighAIManager")
+**HighFlow** (also known as "HighAIManager")
 
 ### Purpose
 
@@ -89,14 +89,14 @@ Unlike traditional task managers or pure AI tools:
 
 - 📁 **Project Creation**: Manual or AI-generated from prompts
 - 🔗 **Local Repository Detection**: Auto-detect Git projects
-- 📊 **Multiple Views**: Kanban, Timeline (Gantt), List
+- 📊 **Multiple Views**: Kanban, Timeline (Gantt), DAG
 - 🎯 **Goal Tracking**: Link tasks to project objectives
 
 ### 2. Task Management
 
 #### AI Tasks
 
-- 🤖 **Multi-Provider Support**: GPT-4, Claude 3.5, Gemini 2.0
+- 🤖 **Multi-Provider Support**: GPT-5, Claude 4.5, Gemini 3.0
 - 💬 **Prompt Engineering**: Generate and enhance prompts
 - 🎭 **Operator Override**: Use predefined AI personalities
 - 📊 **Result Tracking**: Store and version AI outputs
@@ -108,6 +108,13 @@ Unlike traditional task managers or pure AI tools:
 - 🔧 **Monaco Editor**: Full-featured code editor
 - 📝 **Macro Support**: Template variables (project.name, task:N)
 - 🔐 **Sandboxed**: Isolated execution environment (vm2)
+
+#### Input Tasks
+
+- 📥 **User Input**: Request structured input from the user (text, confirmation)
+- 📄 **File Reading**: Read local files (Validation, Parsing)
+- 🌐 **Remote Assets**: Fetch data from URLs (Authentication support)
+- ⏸️ **Workflow Pause**: Pauses execution until input is provided
 
 #### Task Features
 
@@ -124,9 +131,9 @@ Unlike traditional task managers or pure AI tools:
 
 #### Supported Providers
 
-- **OpenAI**: GPT-4, GPT-3.5 Turbo
-- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus/Haiku
-- **Google**: Gemini 2.0 Flash, Gemini 1.5 Pro
+- **OpenAI**: GPT-5, GPT-4, GPT-3.5 Turbo
+- **Anthropic**: Claude 4.5, Claude 3.5 Sonnet, Claude 3 Opus/Haiku
+- **Google**: Gemini 3.0 Flash, Gemini 2.0 Flash, Gemini 1.5 Pro
 - **Local Agents**: Antigravity, Codex, Claude Code (via MCP)
 - **LM Studio**: Local model inference
 
@@ -146,6 +153,7 @@ Unlike traditional task managers or pure AI tools:
 - 🌐 **HTTP Requests**: Make API calls
 - 🗄️ **Database Access**: Query databases
 - ⚙️ **Custom Servers**: Write your own MCP servers
+- 🛠️ **Local Agent Integration**: Connect local agents as MCP servers
 
 ### 4. Operator System
 
@@ -158,11 +166,11 @@ Unlike traditional task managers or pure AI tools:
 
 When assigned to a task, operator settings **override** task-level AI settings.
 
-### 5. Collaboration (Planned)
+### 5. Collaboration (Beta)
 
-- 👥 **Multi-User**: Real-time editing
-- 🔄 **CRDT Sync**: Yjs-based conflict resolution
-- 🔌 **Backends**: Liveblocks, Supabase, self-hosted
+- 👥 **Multi-User**: Real-time editing with Presence detection
+- 🔄 **CRDT Sync**: Yjs-based conflict resolution for robust offline support
+- 🔌 **Socket.IO**: Real-time event propagation
 - 💬 **Comments**: Threaded discussions
 - 🏷️ **Mentions**: @user notifications
 
@@ -181,6 +189,28 @@ When assigned to a task, operator settings **override** task-level AI settings.
 - 🎮 **Discord**: Bot integration
 - 🌐 **Webhooks**: Generic HTTP callbacks
 - 📊 **Export**: JSON, CSV, Markdown
+
+### 8. Marketplace (Templates & Skills)
+
+- 📦 **Templates**: Reusable project structures with pre-defined tasks and prompts
+- 🧩 **Skills**: Atomic, sharable AI capabilities (Prompts + MCP Tools)
+- 🌍 **Community**: Share and discover workflows
+- ⭐ **Versioning**: Track changes and fork capability
+
+### 9. Project Memory (Context Management)
+
+- 🧠 **Context Awareness**: Maintains project goals, constraints, and phase info
+- 📝 **Decision Logging**: Tracks key architectural and policy decisions
+- 📚 **Glossary**: Maintains project-specific terminology
+- 🔄 **Continuous Learning**: Updates memory based on task outcomes
+
+#### The Curator (Auto-Analysis System)
+
+- 🕵️ **Auto-Analysis**: Automatically analyzes task outputs after completion
+- 📉 **Cost-Effective**: Uses smaller, faster models (Gemini Flash, GPT-4o-mini) to minimize overhead
+- 🔍 **Insight Extraction**: Intelligently identifies new decisions, glossary terms, and conflicts
+- 🛡️ **Conflict Detection**: Warns if new output contradicts established project memory
+- 💾 **DB Integration**: Persists insights directly to the project's memory field
 
 ---
 
@@ -395,160 +425,213 @@ Update Task Status
 #### 1. Projects
 
 ```typescript
-interface Project {
-    id: number; // Primary key
-    name: string; // Project name
-    description: string; // Project description
-    status: 'active' | 'archived'; // Project status
-    baseDevFolder: string | null; // Local repository path
-    aiProvider: string | null; // Default AI provider
-    aiModel: string | null; // Default AI model
-    autoReview: boolean; // Enable AI auto-review
-    autoReviewProvider: string | null;
-    createdAt: string; // ISO timestamp
-    updatedAt: string; // ISO timestamp
+interface Project extends BaseEntity {
+    title: string;
+    description: string | null;
+    status: ProjectStatus; // 'active' | 'completed' | 'archived' | 'on_hold'
+
+    // AI Configuration
+    aiProvider: AIProvider | null;
+    aiModel: string | null;
+    autoReview: boolean;
+    aiGuidelines?: string | null;
+    projectGuidelines?: string | null;
+
+    // Development Context
+    baseDevFolder?: string | null;
+    gitRepository: string | null;
+    technicalStack: string[];
+
+    // Context & Memory
+    goal?: string | null;
+    constraints?: string | null;
+    phase?: string | null;
+    memory?: ProjectMemory | null;
+
+    // Output
+    outputType?: string | null;
+    outputPath?: string | null;
+
+    // Metadata
+    isArchived: boolean;
+    isFavorite: boolean;
+    templateId: number | null;
+    teamId: number | null;
+    ownerId: number;
+}
+
+interface ProjectMemory {
+    summary: string;
+    recentDecisions: DecisionLog[];
+    glossary: Record<string, string>;
+    lastUpdatedTask?: number;
+    lastUpdatedAt?: string;
+}
+
+interface DecisionLog {
+    id: string; // UUID
+    date: string;
+    taskId: number;
+    summary: string;
+    details?: string;
+    category?: 'architecture' | 'policy' | 'tech-stack' | 'common' | 'other';
 }
 ```
 
 #### 2. Tasks
 
+````typescript
 ```typescript
-type TaskType = 'ai' | 'script';
-type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'needs_approval' | 'done';
-type ScriptLanguage = 'javascript' | 'python' | 'bash';
-
-interface Task {
-    id: number;
-    projectId: number; // Foreign key → projects
-    parentTaskId: number | null; // For subtasks
-    projectSequence: number; // #1, #2, #3 per project
-    executionOrder: number | null; // Global execution order
-
-    // Basic Info
+interface Task extends BaseEntity {
+    projectId: number;
+    projectSequence: number; // Project-scoped task number (1, 2, 3...)
     title: string;
-    description: string;
+    description: string | null;
     status: TaskStatus;
-    priority: 'urgent' | 'high' | 'medium' | 'low';
-    tags: string[]; // JSON array
+    priority: TaskPriority;
+    executionType: ExecutionType; // 'serial' | 'parallel'
 
-    // Task Type
-    taskType: TaskType; // 'ai' or 'script'
-
-    // AI Task Fields
-    generatedPrompt: string | null;
-    enhancedPrompt: string | null;
-    aiProvider: string | null;
+    // AI Configuration
+    taskType: 'ai' | 'script' | 'input';
+    aiProvider: AIProvider | null;
     aiModel: string | null;
-    temperature: number | null;
-    maxTokens: number | null;
-    expectedOutputFormat: string | null; // 'text', 'markdown', 'json', etc.
+    generatedPrompt: string | null;
 
-    // Script Task Fields
-    scriptLanguage: ScriptLanguage | null;
-    scriptContent: string | null;
-
-    // Execution
-    requiredMCPs: string[]; // JSON array of MCP server names
-    outputContent: string | null; // AI/script output
-    inputTokens: number | null; // AI token usage
-    outputTokens: number | null;
-    estimatedCost: number | null; // In USD
-    errorMessage: string | null;
-
-    // Operator Override
-    assignedOperatorId: number | null; // Foreign key → operators
-
-    // Dependencies & Triggers
-    dependencies: number[]; // JSON array of task IDs
-    triggerConfig: TriggerConfig | null;
-
-    // Review
-    autoReviewed: boolean;
-    reviewScore: number | null; // 1-10
-    reviewFeedback: string | null;
+    // Review & Quality
+    autoReview: boolean; // Auto AI Review Enabled
+    autoReviewed: boolean; // AI Review Completed
     reviewFailed: boolean;
+    reviewResult: string | null;
+    reviewScore: number | null;
 
-    // Approval Flow
-    confirmationRequest: ConfirmationRequest | null;
+    // Execution & Pausing
+    isPaused: boolean;
+    pausedAt: Date | null;
 
-    // Notifications
-    notificationConfig: NotificationConfig | null;
+    // Automation & Triggers
+    dependencies: number[];
+    triggerConfig: TaskTriggerConfig | null;
 
     // Subdivision
-    isSubdivided: boolean; // If split into subtasks
-    subtaskCount: number; // Number of children
+    isSubdivided: boolean;
+    subtaskCount: number;
 
-    // Scheduling
-    dueDate: string | null; // ISO timestamp
-    estimatedMinutes: number | null;
-    actualMinutes: number | null;
-
-    // User Assignment
-    assigneeId: number | null;
+    // AI Optimization (Interview-based)
+    executionOrder: number | null;
+    recommendedProviders: string[];
+    requiredMCPs: string[];
+    aiOptimizedPrompt: string | null;
 
     // Metadata
-    isPaused: boolean;
-    createdAt: string;
-    updatedAt: string;
-    completedAt: string | null;
+    tags: string[];
+    gitCommits: GitCommit[];
+    dueDate: Date | null;
+    assigneeId: number | null;
+    assignedOperatorId: number | null;
 }
-```
+````
 
 #### 3. Operators
 
 ```typescript
-interface Operator {
-    id: number;
-    name: string; // e.g., "Senior Software Engineer"
-    avatar: string; // Emoji or icon
-    role: string; // Job role classification
-    description: string;
-    systemPrompt: string; // Pre-configured instructions
+interface Operator extends BaseEntity {
+    projectId: number | null; // NULL for global operators
+    name: string;
+    role: string;
+    description: string | null;
+    avatar: string | null;
+    color: string | null;
 
     // AI Configuration
     aiProvider: string;
     aiModel: string;
-    temperature: number;
-    maxTokens: number;
-    expectedOutputFormat: string;
+    systemPrompt: string | null;
 
+    // Auto Review Config
+    autoReview?: boolean | null;
+    autoReviewProvider?: string | null;
+    autoReviewModel?: string | null;
+
+    // Script Task Capability
+    taskType?: TaskType | null;
+    scriptCode?: string | null;
+    scriptLanguage?: ScriptLanguage | null;
+
+    // Metadata
     isActive: boolean;
-    createdAt: string;
-    updatedAt: string;
+    specialty: string[];
+    usageCount: number;
+    successRate: number | null;
 }
 ```
 
-#### 4. MCP Servers
+#### 5. Input Task & Marketplace
 
 ```typescript
-interface MCPServer {
-    id: number;
-    name: string; // Unique name
-    type: 'stdio' | 'sse'; // Communication protocol
-    command: string; // Executable path
-    args: string[]; // Command arguments (JSON)
-    env: Record<string, string>; // Environment variables (JSON)
-    isActive: boolean;
-    installed: boolean; // Auto-installed flag
-    createdAt: string;
-    updatedAt: string;
+type InputSourceType = 'USER_INPUT' | 'LOCAL_FILE' | 'REMOTE_RESOURCE';
+
+interface InputTaskConfig {
+    sourceType: InputSourceType;
+    userInput?: {
+        mode: 'short' | 'long' | 'confirm';
+        message: string;
+        placeholder?: string;
+        required?: boolean;
+    };
+    localFile?: {
+        filePath?: string;
+        acceptedExtensions: string[];
+        readMode: 'text' | 'table' | 'binary';
+    };
+    remoteResource?: {
+        url?: string;
+        authType: 'none' | 'google_oauth';
+    };
+}
+
+interface Template extends BaseEntity {
+    name: string;
+    description: string;
+    category: string;
+    projectStructure: ProjectStructure;
+    isPublic: boolean;
+    usageCount: number;
+    rating: number | null;
+}
+
+interface Skill extends BaseEntity, Versioned {
+    name: string;
+    description: string;
+    prompt: string;
+    category: string;
+    aiProvider: AIProvider | null;
+    mcpRequirements: string[];
+    isPublic: boolean;
+    forkCount: number;
+    usageCount: number;
 }
 ```
 
-#### 5. Providers
+#### 6. Helper Types
 
 ```typescript
-interface Provider {
-    id: number;
-    name: string; // 'openai', 'anthropic', etc.
-    displayName: string; // 'OpenAI'
-    apiKey: string; // Stored in keychain, not DB
-    baseUrl: string | null; // For custom endpoints
-    isActive: boolean;
-    models: string[]; // JSON array of available models
-    settings: Record<string, any>; // JSON provider-specific settings
-    createdAt: string;
-    updatedAt: string;
+type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
+type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+type ExecutionType = 'serial' | 'parallel';
+type AIProvider = 'openai' | 'anthropic' | 'google' | 'local' | ...;
+
+interface TokenUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
+interface MCPConfig {
+    [serverName: string]: {
+        env?: Record<string, string>;
+        params?: Record<string, string>;
+        config?: Record<string, unknown>;
+    };
 }
 ```
 
@@ -837,19 +920,68 @@ class LocalAgentSession {
 }
 ```
 
+#### 5. Integration Services
+
+**Directory**: `src/services/integrations/`
+
+**Modules**:
+
+- **GitIntegration**: Repository detection, status check, commit logging
+- **SlackIntegration**: Channel listing, message posting, webhook handling
+- **DiscordIntegration**: Webhook-based notifications and bot interactions
+- **GoogleDriveIntegration**: File upload/download (OAuth2 flow)
+
+#### 6. AutomationEngine
+
+**File**: `src/services/automation/AutomationEngine.ts`
+
+**Purpose**: Event-driven automation system
+
+**Capabilities**:
+
+- **Triggers**: `task.status_changed`, `webhook.received`, `cost.exceeded`
+- **Actions**: `task.create`, `notification.send`, `ai.execute`, `integration.slack`
+- **Logic**: Conditional execution with operators (`==`, `contains`, etc.)
+
+#### 7. CuratorService
+
+**File**: `src/services/ai/CuratorService.ts`
+
+**Purpose**: Project Memory auto-analysis and maintenance
+
+**Key Methods**:
+
+- `runCurator(taskId, output)`: Analyzes task results
+- `selectCostEffectiveProvider()`: Optimizes model selection for maintenance tasks
+
+---
+
 ### Renderer Services
 
-#### 1. AIServiceManager
+#### 1. CollaborationClient
+
+**File**: `src/services/collaboration/CollaborationClient.ts`
+
+**Purpose**: Client-side real-time synchronization
+
+**Components**:
+
+- `CRDTSync`: Yjs-based data consistency
+- `PresenceManager`: User cursor and status tracking
+- `SyncEngine`: Optimistic updates and conflict handling
+
+#### 2. AIServiceManager
 
 **File**: `src/services/workflow/AIServiceManager.ts`
 
-**Purpose**: Orchestrate AI provider instances
+**Purpose**: Orchestrate AI provider instances and model management
 
 **Key Methods**:
 
 ```typescript
 class AIServiceManager {
     async executeTask(task: Task, project: Project): Promise<string>;
+    async getModels(): Promise<Model[]>;
     async streamResponse(task: Task, onChunk: (chunk: string) => void): Promise<void>;
     private createProviderInstance(type: string): BaseAIProvider;
 }
@@ -1098,7 +1230,25 @@ Break a large task into subtasks:
 
 ---
 
-## Development Workflow
+### ⚡ Development Workflow
+
+#### 1. TDD First Strategy (CRITICAL)
+
+To ensure stability and reduce regressions, we strictly follow a TDD (Test Driven Development) approach:
+
+1.  **Design Interface**: Based on domain models, design the component/service interface first.
+2.  **Design Test Cases**: Create a test plan covering happy paths, edge cases, and error states.
+3.  **Write Test Code**: Implement the test cases using Vitest/Playwright _before_ implementation.
+4.  **Implement Feature**: Write the actual code to pass the tests.
+5.  **Refactor**: Optimize code while ensuring tests still pass.
+
+#### 2. General Workflow
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
 ### Getting Started
 

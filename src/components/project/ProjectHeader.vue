@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 interface Props {
@@ -26,6 +26,7 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const isGlobalPaused = ref(false);
 
 const viewLabel = computed(() => {
     switch (props.currentView) {
@@ -39,6 +40,30 @@ const viewLabel = computed(() => {
             return 'DAG View';
         default:
             return 'Project';
+    }
+});
+
+async function togglePause() {
+    try {
+        const api = (window as any).electron;
+        if (isGlobalPaused.value) {
+            await api.taskExecution.resumeAll();
+            isGlobalPaused.value = false;
+        } else {
+            await api.taskExecution.pauseAll();
+            isGlobalPaused.value = true;
+        }
+    } catch (err) {
+        console.error('Failed to toggle pause:', err);
+    }
+}
+
+onMounted(async () => {
+    try {
+        const api = (window as any).electron;
+        isGlobalPaused.value = await api.taskExecution.getGlobalPauseStatus();
+    } catch (err) {
+        console.warn('Failed to get global pause status:', err);
     }
 });
 </script>
@@ -83,6 +108,42 @@ const viewLabel = computed(() => {
         </div>
 
         <div class="flex items-center gap-4">
+            <!-- Global Pause Toggle -->
+            <button
+                @click="togglePause"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                :class="
+                    isGlobalPaused
+                        ? 'bg-amber-600 text-white hover:bg-amber-700'
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                "
+                :title="isGlobalPaused ? 'Resume All Tasks' : 'Pause All Tasks'"
+            >
+                <svg
+                    v-if="!isGlobalPaused"
+                    class="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                </svg>
+                <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                    />
+                </svg>
+                {{ isGlobalPaused ? 'Resume All' : 'Pause All' }}
+            </button>
+
             <!-- View Switcher -->
             <div class="flex bg-gray-800 rounded-lg p-1">
                 <button

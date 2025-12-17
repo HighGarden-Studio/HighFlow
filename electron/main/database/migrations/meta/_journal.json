@@ -47,15 +47,8 @@
         {
             "idx": 6,
             "version": "5",
-            "when": 1732800000000,
-            "tag": "0006_review_ai_settings",
-            "breakpoints": true
-        },
-        {
-            "idx": 7,
-            "version": "5",
-            "when": 1764578677000,
-            "tag": "0008_image_task_provider_alignment",
+            "when": 1765884866736,
+            "tag": "0008_talented_blue_marvel",
             "breakpoints": true
         }
     ]

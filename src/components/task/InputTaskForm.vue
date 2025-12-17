@@ -34,6 +34,8 @@ const config = computed<InputTaskConfig | null>(() => {
 const formData = reactive({
     value: '',
     confirmed: false,
+    selectedOptionType: '', // 'option' or '__custom__' (for radio)
+    customValue: '',
 });
 
 const error = reactive({ message: '' });
@@ -42,7 +44,7 @@ const validate = (): boolean => {
     error.message = '';
 
     if (config.value?.sourceType === 'USER_INPUT' && config.value.userInput) {
-        const { required, mode } = config.value.userInput;
+        const { required, mode, options, allowCustom } = config.value.userInput;
 
         if (mode === 'confirm') {
             if (required && !formData.confirmed) {
@@ -50,9 +52,30 @@ const validate = (): boolean => {
                 return false;
             }
         } else {
-            if (required && !formData.value.trim()) {
-                error.message = 'Input is required';
-                return false;
+            // Check options logic
+            if (options && options.length > 0) {
+                let actualValue = formData.value;
+
+                // Handle custom value logic
+                if (allowCustom) {
+                    if (
+                        formData.selectedOptionType === '__custom__' ||
+                        formData.value === '__custom__'
+                    ) {
+                        actualValue = formData.customValue;
+                    }
+                }
+
+                if (required && !actualValue?.trim()) {
+                    error.message = 'Selection or input is required';
+                    return false;
+                }
+            } else {
+                // Standard text input logic
+                if (required && !formData.value.trim()) {
+                    error.message = 'Input is required';
+                    return false;
+                }
             }
         }
     }
@@ -61,10 +84,23 @@ const validate = (): boolean => {
 
 const handleSubmit = () => {
     if (validate()) {
-        const submission =
-            config.value?.userInput?.mode === 'confirm'
-                ? { confirmed: formData.confirmed }
-                : { value: formData.value };
+        let submission: any;
+
+        if (config.value?.userInput?.mode === 'confirm') {
+            submission = { confirmed: formData.confirmed };
+        } else {
+            // Determine final value
+            let finalValue = formData.value;
+            if (config.value?.userInput?.allowCustom) {
+                if (
+                    formData.selectedOptionType === '__custom__' ||
+                    formData.value === '__custom__'
+                ) {
+                    finalValue = formData.customValue;
+                }
+            }
+            submission = { value: finalValue };
+        }
 
         emit('submit', submission);
     }
@@ -97,15 +133,94 @@ const handleSubmit = () => {
                     </label>
 
                     <!-- Short Text Input -->
+                    <!-- Options Selection (Radio <= 3, Select > 3) -->
+                    <div
+                        v-if="config.userInput.options && config.userInput.options.length > 0"
+                        class="space-y-3"
+                    >
+                        <!-- Radio Buttons for few options -->
+                        <div
+                            v-if="config.userInput.options.length <= 3"
+                            class="flex flex-col gap-2"
+                        >
+                            <label
+                                v-for="option in config.userInput.options"
+                                :key="option"
+                                class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all"
+                            >
+                                <input
+                                    type="radio"
+                                    :name="'option-' + task.id"
+                                    :value="option"
+                                    v-model="formData.value"
+                                    class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">{{
+                                    option
+                                }}</span>
+                            </label>
+
+                            <!-- Custom Option Radio -->
+                            <label
+                                v-if="config.userInput.allowCustom"
+                                class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all"
+                            >
+                                <input
+                                    type="radio"
+                                    :name="'option-' + task.id"
+                                    value="__custom__"
+                                    v-model="formData.selectedOptionType"
+                                    class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                />
+                                <span class="text-sm text-gray-700 dark:text-gray-300"
+                                    >직접 입력</span
+                                >
+                            </label>
+                        </div>
+
+                        <!-- Select Dropdown for many options -->
+                        <select
+                            v-else
+                            v-model="formData.value"
+                            class="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                        >
+                            <option value="" disabled selected>옵션을 선택하세요</option>
+                            <option
+                                v-for="option in config.userInput.options"
+                                :key="option"
+                                :value="option"
+                            >
+                                {{ option }}
+                            </option>
+                            <option v-if="config.userInput.allowCustom" value="__custom__">
+                                직접 입력...
+                            </option>
+                        </select>
+
+                        <!-- Custom Input Field -->
+                        <input
+                            v-if="
+                                config.userInput.allowCustom &&
+                                (formData.selectedOptionType === '__custom__' ||
+                                    formData.value === '__custom__')
+                            "
+                            type="text"
+                            v-model="formData.customValue"
+                            class="w-full px-4 py-2 mt-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                            placeholder="직접 입력하세요..."
+                        />
+                    </div>
+
+                    <!-- Short Text Input (only if no options) -->
                     <input
-                        v-if="config.userInput.mode === 'short'"
+                        v-else-if="config.userInput.mode === 'short'"
                         type="text"
                         v-model="formData.value"
                         class="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                         :placeholder="config.userInput.placeholder || 'Enter text...'"
                     />
 
-                    <!-- Long Text Input -->
+                    <!-- Long Text Input (only if no options) -->
                     <textarea
                         v-else-if="config.userInput.mode === 'long'"
                         v-model="formData.value"

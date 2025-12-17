@@ -5,7 +5,7 @@
  * Multi-format result preview with syntax highlighting and optimal viewer per output format
  * Supports: text, markdown, html, pdf, json, yaml, csv, sql, shell, mermaid, svg, png, mp4, mp3, diff, log, code
  */
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import type { Task, TaskHistoryEntry } from '@core/types/database';
 import type { AiResult, AiSubType } from '@core/types/ai';
 import { extractTaskResult } from '../../renderer/utils/aiResultHelpers';
@@ -585,49 +585,94 @@ watch(
 const selectedFile = ref<ResultFile | null>(null);
 
 // Get task result content
-const content = computed(() => {
-    if (selectedFile.value) {
-        // If content is already loaded, use it
-        if (selectedFile.value.content) {
-            return selectedFile.value.content;
+const contentRefreshTrigger = ref(0);
+let pollInterval: NodeJS.Timeout | null = null;
+
+// Clean up polling
+onUnmounted(() => {
+    if (pollInterval) clearInterval(pollInterval);
+});
+
+// Watch for file selection to start/stop polling
+watch(
+    () => [selectedFile.value, props.task?.status],
+    ([file, status]) => {
+        // Stop existing poll
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
         }
 
-        // For images and other files without preloaded content, load from file
+        // Start polling if we have a file and checking for updates (in_progress or just always for local files to be safe?)
+        // User requested "real-time check", so we poll if it's a file.
+        if (file && (file as ResultFile).absolutePath) {
+            console.log(
+                '[EnhancedResultPreview] Starting file poll for:',
+                (file as ResultFile).path
+            );
+            pollInterval = setInterval(() => {
+                contentRefreshTrigger.value++;
+            }, 1000); // Poll every second
+        }
+    },
+    { immediate: true }
+);
+
+// Get task result content w/ polling dependency
+const content = computed(() => {
+    // Dependency on trigger to force re-evaluation
+    const _ = contentRefreshTrigger.value;
+
+    if (selectedFile.value) {
+        // If content is already loaded (and not from file system poll), use it?
+        // But for live update, we prefer reading from disk if absolutePath exists.
+        // If selectedFile.value.content is set from "transcript", it's static.
+        // If we have absolutePath, we read from disk.
+
         const filePath = selectedFile.value.absolutePath;
         if (filePath) {
             try {
+                // Use window.require for Electron fs if regular require fails/is mocked in some envs
+                // But require('fs') works in this context usually.
                 const fs = require('fs');
+                // Check if file exists first
+                if (!fs.existsSync(filePath)) {
+                    if (selectedFile.value.content) return selectedFile.value.content;
+                    return ''; // Waiting for file creation
+                }
+
                 const ext = selectedFile.value.extension.toLowerCase();
 
                 // For images, load as base64
                 if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
                     const buffer = fs.readFileSync(filePath);
                     const base64 = buffer.toString('base64');
-                    console.log(
-                        `[EnhancedResultPreview] Loaded image file: ${filePath} (${Math.round(buffer.length / 1024)}KB)`
-                    );
+                    // Only log occasionally or if size changes significantly? Reduce log noise.
+                    // console.log(`[EnhancedResultPreview] Loaded image: ${filePath}`);
                     return base64;
                 }
 
                 // For text files, load as text
                 return fs.readFileSync(filePath, 'utf-8');
             } catch (e) {
-                console.error(`[EnhancedResultPreview] Failed to load file: ${filePath}`, e);
-                return '';
+                // console.error(`[EnhancedResultPreview] Failed to load file: ${filePath}`, e);
+                // Return existing static content if read fails
+                return selectedFile.value.content || '';
             }
+        }
+
+        // No absolute path, return static content
+        if (selectedFile.value.content) {
+            return selectedFile.value.content;
         }
         return '';
     }
     const result = aiValue.value || fallbackResultContent.value || '';
-    console.log('[EnhancedResultPreview] content computed:', {
-        hasAiValue: !!aiValue.value,
-        hasFallback: !!fallbackResultContent.value,
-        contentLength: result.length,
-        contentPreview: result.substring(0, 100),
-        aiResultKind: aiResult.value?.kind,
-        aiResultSubType: aiResult.value?.subType,
-        aiResultFormat: aiResult.value?.format,
-    });
+    /* console.log('[EnhancedResultPreview] content computed:', {
+         hasAiValue: !!aiValue.value,
+         hasFallback: !!fallbackResultContent.value,
+         contentLength: result.length
+    }); */
     return result;
 });
 
@@ -750,6 +795,36 @@ const formatDisplayName = computed(() => {
         code: codeLanguage.value.charAt(0).toUpperCase() + codeLanguage.value.slice(1),
     };
     return names[outputFormat.value] || 'Text';
+});
+
+// Dynamic Label for "AI Response" button
+const resultLabel = computed(() => {
+    if ((props.task as any)?.type === 'output') {
+        const config = props.task.outputConfig;
+        if (config?.destination === 'local_file') {
+            // Try to extract filename from pathTemplate
+            const path = config.localFile?.pathTemplate;
+            if (path) {
+                // Get filename part
+                return path.split(/[/\\]/).pop() || 'Local File';
+            }
+            return 'Local File';
+        }
+        return 'Output Result';
+    }
+    return 'AI Response';
+});
+
+const resultSubLabel = computed(() => {
+    if (props.task?.type === 'output') {
+        return props.task.outputConfig?.destination || '';
+    }
+    if (taskResult.value.provider) {
+        return `${taskResult.value.provider}${
+            taskResult.value.model ? ' · ' + taskResult.value.model : ''
+        }`;
+    }
+    return '';
 });
 
 // Format icon
@@ -1540,7 +1615,7 @@ onMounted(() => {
                             <div class="flex-1 overflow-y-auto px-2 pb-2">
                                 <!-- Tree View -->
                                 <div v-if="isTreeView" class="space-y-0.5">
-                                    <!-- AI Response Button -->
+                                    <!-- AI Response / Output Result Button -->
                                     <button
                                         class="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2.5 transition-all mb-2 border border-transparent"
                                         :class="
@@ -1550,7 +1625,7 @@ onMounted(() => {
                                         "
                                         @click="selectedFile = null"
                                     >
-                                        <!-- AI Sparkle Icon -->
+                                        <!-- Icon -->
                                         <svg
                                             class="w-5 h-5 flex-shrink-0"
                                             :class="
@@ -1563,22 +1638,29 @@ onMounted(() => {
                                             viewBox="0 0 24 24"
                                         >
                                             <path
+                                                v-if="(props.task as any)?.type === 'output'"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                            />
+                                            <path
+                                                v-else
                                                 stroke-linecap="round"
                                                 stroke-linejoin="round"
                                                 stroke-width="2"
                                                 d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                                             />
                                         </svg>
-                                        <div class="flex-1">
-                                            <div class="font-medium">AI Response</div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium truncate">
+                                                {{ resultLabel }}
+                                            </div>
                                             <div
-                                                class="text-xs opacity-70"
-                                                v-if="taskResult.provider"
+                                                class="text-xs opacity-70 truncate"
+                                                v-if="resultSubLabel"
                                             >
-                                                {{ taskResult.provider }}
-                                                <span v-if="taskResult.model">
-                                                    · {{ taskResult.model }}
-                                                </span>
+                                                {{ resultSubLabel }}
                                             </div>
                                         </div>
                                         <!-- Selected Indicator -->
@@ -1600,7 +1682,7 @@ onMounted(() => {
 
                                 <!-- List View -->
                                 <div v-else class="space-y-1">
-                                    <!-- AI Response Button -->
+                                    <!-- AI Response / Output Result Button -->
                                     <button
                                         class="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2.5 transition-all mb-2 border border-transparent"
                                         :class="
@@ -1610,7 +1692,7 @@ onMounted(() => {
                                         "
                                         @click="selectedFile = null"
                                     >
-                                        <!-- AI Sparkle Icon -->
+                                        <!-- Icon -->
                                         <svg
                                             class="w-5 h-5 flex-shrink-0"
                                             :class="
@@ -1623,22 +1705,29 @@ onMounted(() => {
                                             viewBox="0 0 24 24"
                                         >
                                             <path
+                                                v-if="(props.task as any)?.type === 'output'"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                            />
+                                            <path
+                                                v-else
                                                 stroke-linecap="round"
                                                 stroke-linejoin="round"
                                                 stroke-width="2"
                                                 d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                                             />
                                         </svg>
-                                        <div class="flex-1">
-                                            <div class="font-medium">AI Response</div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium truncate">
+                                                {{ resultLabel }}
+                                            </div>
                                             <div
-                                                class="text-xs opacity-70"
-                                                v-if="taskResult.provider"
+                                                class="text-xs opacity-70 truncate"
+                                                v-if="resultSubLabel"
                                             >
-                                                {{ taskResult.provider }}
-                                                <span v-if="taskResult.model">
-                                                    · {{ taskResult.model }}
-                                                </span>
+                                                {{ resultSubLabel }}
                                             </div>
                                         </div>
                                         <!-- Selected Indicator -->

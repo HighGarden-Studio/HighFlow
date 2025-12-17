@@ -642,6 +642,12 @@ const taskExecutionAPI = {
     stop: (taskId: number): Promise<{ success: boolean }> =>
         ipcRenderer.invoke('taskExecution:stop', taskId),
 
+    // Global Execution Control
+    pauseAll: (): Promise<boolean> => ipcRenderer.invoke('taskExecution:pauseAll'),
+    resumeAll: (): Promise<boolean> => ipcRenderer.invoke('taskExecution:resumeAll'),
+    getGlobalPauseStatus: (): Promise<boolean> =>
+        ipcRenderer.invoke('taskExecution:getGlobalPauseStatus'),
+
     // Status queries
     getStatus: (taskId: number): Promise<ExecutionStatus | null> =>
         ipcRenderer.invoke('taskExecution:getStatus', taskId),

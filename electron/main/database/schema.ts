@@ -247,6 +247,8 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         // Input Task 필드
         inputConfig: text('input_config', { mode: 'json' }), // Input task configuration (sourceType, userInput, localFile, remoteResource)
         inputSubStatus: text('input_sub_status'), // 'WAITING_USER' | 'PROCESSING' | null
+        // Output Task 필드
+        outputConfig: text('output_config', { mode: 'json' }), // Output task configuration
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),

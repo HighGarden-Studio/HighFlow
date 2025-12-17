@@ -61,6 +61,23 @@ export class UserInputProvider implements InputProvider {
             return { valid: false, error: 'Input is required' };
         }
 
+        // Check options if configured
+        if (config.options && config.options.length > 0) {
+            const strValue = String(value).trim();
+            // If custom input is allowed, any non-empty value (if required) is valid
+            // If custom is NOT allowed, value must form one of the options
+
+            // Note: simple exact match for MVP. Can be loose (case-insensitive) if needed.
+            const isOption = config.options.includes(strValue);
+
+            if (!isOption && !config.allowCustom) {
+                return {
+                    valid: false,
+                    error: `Invalid selection. Allowed options: ${config.options.join(', ')}`,
+                };
+            }
+        }
+
         return { valid: true };
     }
 

@@ -116,7 +116,9 @@ function handleRemove(event: MouseEvent) {
 }
 
 .custom-edge:hover .edge-path {
-    stroke-width: 3px;
+    /* stroke-width: 3px; // Removed to prevent shift */
+    stroke: #60a5fa; /* Make sure it highlights with color */
+    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.5));
 }
 
 .edge-hover-area {
@@ -154,6 +156,7 @@ function handleRemove(event: MouseEvent) {
     background: #374151;
     border-color: #4b5563;
     opacity: 1;
+    z-index: 100; /* Ensure label stays on top */
 }
 
 .label-text {

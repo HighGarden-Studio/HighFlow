@@ -29,6 +29,7 @@ import type { ProjectStatus, ProjectExportData } from '@core/types/database';
 import log from 'electron-log'; // Added for logging
 import { taskScheduler } from './services/task-scheduler';
 import { taskNotificationService } from './services/task-notification-service';
+import { initializeOutputSystem } from './services/output';
 
 // Configure logging
 log.initialize();
@@ -573,6 +574,9 @@ app.whenReady().then(async () => {
     try {
         // Initialize database
         await initializeDatabase();
+
+        // Initialize Output System
+        initializeOutputSystem();
 
         // Register IPC handlers
         await registerIpcHandlers();

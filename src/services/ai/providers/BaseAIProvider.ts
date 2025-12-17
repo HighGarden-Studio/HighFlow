@@ -59,7 +59,8 @@ export abstract class BaseAIProvider {
     abstract execute(
         prompt: string,
         config: AIConfig,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AIResponse>;
 
     /**
@@ -80,7 +81,8 @@ export abstract class BaseAIProvider {
     async chat(
         messages: AIMessage[],
         config: AIConfig,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AIResponse> {
         const systemPrompts = messages
             .filter((msg) => msg.role === 'system')
@@ -107,15 +109,16 @@ export abstract class BaseAIProvider {
                 config.systemPrompt,
         };
 
-        return this.execute(prompt, mergedConfig, context);
+        return this.execute(prompt, mergedConfig, context, signal);
     }
 
     async generateText(
         messages: AIMessage[],
         config: AIConfig,
-        context?: ExecutionContext
+        context?: ExecutionContext,
+        signal?: AbortSignal
     ): Promise<AiResult> {
-        const response = await this.chat(messages, config, context);
+        const response = await this.chat(messages, config, context, signal);
         const meta = {
             ...(response.metadata || {}),
             toolCalls: response.toolCalls,
@@ -129,7 +132,8 @@ export abstract class BaseAIProvider {
         _prompt: string,
         _config: AIConfig,
         _context?: ExecutionContext,
-        _options?: Record<string, any>
+        _options?: Record<string, any>,
+        _signal?: AbortSignal
     ): Promise<AiResult> {
         throw new Error(`${this.name} provider does not support image generation yet.`);
     }
@@ -138,7 +142,8 @@ export abstract class BaseAIProvider {
         _prompt: string,
         _config: AIConfig,
         _context?: ExecutionContext,
-        _options?: Record<string, any>
+        _options?: Record<string, any>,
+        _signal?: AbortSignal
     ): Promise<AiResult> {
         throw new Error(`${this.name} provider does not support video generation yet.`);
     }

@@ -22,7 +22,7 @@ import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
-import TaskEditModal from '../../components/task/TaskEditModal.vue';
+import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import InputTaskForm from '../../components/task/InputTaskForm.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import { getAPI } from '../../utils/electron';
@@ -64,7 +64,30 @@ const inputTask = ref<Task | null>(null);
 
 // Result Preview State
 const showResultPreview = ref(false);
-const resultPreviewTask = ref<Task | null>(null);
+const previewTaskId = ref<number | null>(null);
+const resultPreviewTask = computed(() => {
+    if (!previewTaskId.value) return null;
+    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
+    if (!task) return null;
+
+    // Augment with execution progress if available
+    const progress = taskStore.executionProgress.get(task.id);
+    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
+
+    return {
+        ...task,
+        result:
+            (task as any).result ||
+            (task as any).executionResult?.content ||
+            progress?.content ||
+            reviewProgressEntry?.content ||
+            '',
+        outputFormat:
+            (task as any).outputFormat ||
+            (task as any).executionResult?.contentType ||
+            (task as any).expectedOutputFormat,
+    } as Task;
+});
 
 // Key to force VueFlow remount when nodes need refresh (disabled - too disruptive)
 // const vueFlowKey = ref(0);
@@ -128,14 +151,14 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
  * Build graph from tasks
  */
 let isBuilding = false;
-function buildGraph() {
+function buildGraph(shouldFit = false) {
     if (isBuilding) {
         console.log('⏸️ buildGraph already running, skipping...');
         return;
     }
 
     isBuilding = true;
-    console.log('🔄 Building graph with', tasks.value.length, 'tasks');
+    console.log('🔄 Building graph with', tasks.value.length, 'tasks. Should fit:', shouldFit);
 
     const taskNodes: Node[] = [];
     const taskEdges: Edge[] = [];
@@ -156,7 +179,21 @@ function buildGraph() {
 
     // Create edges from dependencies
     tasks.value.forEach((task) => {
-        const dependencies = task.triggerConfig?.dependsOn?.taskIds || [];
+        const dependencies = new Set<number>(task.triggerConfig?.dependsOn?.taskIds || []);
+
+        // Also parse IDs from expression if present to ensure all dependencies are visualized
+        const expression = task.triggerConfig?.dependsOn?.expression;
+        let isComplexDependency = false;
+
+        if (expression && expression.trim().length > 0) {
+            isComplexDependency = true;
+            const idPattern = /\b\d+\b/g;
+            const idsInExpression = [...new Set(expression.match(idPattern) || [])];
+            idsInExpression.forEach((idStr) => {
+                dependencies.add(parseInt(idStr, 10));
+            });
+        }
+
         dependencies.forEach((depId: number) => {
             // Only create edge if dependency task exists
             const sourceTask = tasks.value.find((t) => t.id === depId);
@@ -171,20 +208,37 @@ function buildGraph() {
                     formatInfo
                 );
 
-                // Determine edge color based on SOURCE task status
-                let edgeColor: string;
-                switch (sourceTask.status) {
-                    case 'done':
-                        edgeColor = '#10b981'; // Green - completed
-                        break;
-                    case 'in_progress':
-                        edgeColor = '#3b82f6'; // Blue - in progress
-                        break;
-                    case 'in_review':
-                        edgeColor = '#f59e0b'; // Amber - in review
-                        break;
-                    default:
-                        edgeColor = getEdgeColor(task); // Default gray
+                // Determine if this specific dependency is part of an "Active Path"
+                // For direct dependencies (no expression), it's always active if it exists.
+                // For complex dependencies, we check if it contributes to a satisfied condition group.
+                let isActivePath = true;
+                if (isComplexDependency && expression) {
+                    isActivePath = isDependencyActive(expression, depId, tasks.value);
+                }
+
+                // Determine edge color based on SOURCE task status and active state
+                let edgeColor = '#9CA3AF'; // Default Gray (Inactive)
+
+                // If path is active, use status color. If inactive, keep gray.
+                if (isActivePath) {
+                    switch (sourceTask.status) {
+                        case 'done':
+                            edgeColor = '#10b981'; // Green - completed
+                            break;
+                        case 'in_progress':
+                            edgeColor = '#3b82f6'; // Blue - in progress
+                            break;
+                        case 'in_review':
+                            edgeColor = '#f59e0b'; // Amber - in review
+                            break;
+                        case 'failed':
+                            edgeColor = '#ef4444'; // Red - failed
+                            break;
+                        default:
+                            if (sourceTask.status === 'todo') {
+                                edgeColor = '#9CA3AF'; // Gray for todo
+                            }
+                    }
                 }
 
                 taskEdges.push({
@@ -192,10 +246,12 @@ function buildGraph() {
                     source: String(depId),
                     target: String(task.id),
                     type: 'custom', // Use custom edge with delete button
-                    animated: task.status === 'in_progress',
+                    animated: task.status === 'in_progress' && isActivePath, // Only animate active paths
                     style: {
                         stroke: edgeColor,
-                        strokeWidth: 2,
+                        strokeWidth: isComplexDependency ? 3 : 2,
+                        strokeDasharray: isComplexDependency ? '5,5' : undefined,
+                        opacity: isActivePath ? 1 : 0.4, // Dim inactive paths slightly
                     },
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
@@ -231,22 +287,26 @@ function buildGraph() {
     nodes.value = layoutedNodes;
     edges.value = layoutedEdges;
 
-    // Fit view after layout
+    // Fit view after layout - Only if requested
     nextTick(() => {
-        fitView({ padding: 0.2, duration: 200 });
+        if (shouldFit) {
+            fitView({ padding: 0.2, duration: 200 });
+        }
         isBuilding = false;
     });
 }
 
 /**
  * Rebuild graph with debouncing to avoid excessive rebuilds
+ * Only fits view if we are transitioning from 0 nodes to > 0 nodes (initial load)
  */
 function rebuildGraphDebounced() {
     if (buildGraphTimer) {
         clearTimeout(buildGraphTimer);
     }
     buildGraphTimer = setTimeout(() => {
-        buildGraph();
+        const shouldFit = nodes.value.length === 0 && tasks.value.length > 0;
+        buildGraph(shouldFit);
         buildGraphTimer = null;
     }, DEBOUNCE_MS);
 }
@@ -254,12 +314,12 @@ function rebuildGraphDebounced() {
 /**
  * Force immediate graph rebuild (no debounce)
  */
-function rebuildGraphImmediate() {
+function rebuildGraphImmediate(shouldFit = false) {
     if (buildGraphTimer) {
         clearTimeout(buildGraphTimer);
         buildGraphTimer = null;
     }
-    buildGraph();
+    buildGraph(shouldFit);
 }
 
 /**
@@ -287,8 +347,6 @@ function getEdgeColor(task: Task): string {
             return '#10B981'; // Green
         case 'in_progress':
             return '#3B82F6'; // Blue
-        case 'needs_approval':
-            return '#F59E0B'; // Orange
         case 'blocked':
             return '#EF4444'; // Red
         default:
@@ -459,8 +517,67 @@ function getOutputFormatInfo(
 }
 
 /**
- * Handle node click - open task detail panel
+ * Determine if a specific dependency ID is part of an active path in a complex expression
+ * Logic:
+ * 1. Split by '||' (OR groups).
+ * 2. Find ALL valid groups (where all tasks are DONE).
+ * 3. Among valid groups, find the "Winning Group": the one that completed MOST RECENTLY.
+ *    - Logic: Max(completionTime of tasks in group).
+ * 4. Only highlight IDs in the Winning Group.
  */
+function isDependencyActive(expression: string, targetId: number, allTasks: Task[]): boolean {
+    if (!expression) return true;
+
+    const segments = expression.split('||');
+    let validGroups: { segment: string; completionTime: number }[] = [];
+
+    // 1. Identify all valid groups and their completion times
+    for (const segment of segments) {
+        const stats = getSegmentStats(segment, allTasks);
+        if (stats.isValid) {
+            validGroups.push({ segment, completionTime: stats.completionTime });
+        }
+    }
+
+    if (validGroups.length === 0) return false;
+
+    // 2. Find the "Winning Group" (Latest completion time)
+    // Sort descending by completion time
+    validGroups.sort((a, b) => b.completionTime - a.completionTime);
+    const winningGroup = validGroups[0];
+
+    // 3. Is our targetId in the winning group?
+    return winningGroup.segment.includes(String(targetId));
+}
+
+function getSegmentStats(
+    segment: string,
+    allTasks: Task[]
+): { isValid: boolean; completionTime: number } {
+    const idPattern = /\b\d+\b/g;
+    const matches = segment.match(idPattern) || [];
+    let maxTime = 0;
+
+    for (const idStr of matches) {
+        const id = parseInt(idStr, 10);
+        const task = allTasks.find((t) => t.id === id);
+
+        // If any task in an AND group is NOT done, the group is False.
+        // (Ignoring !NOT logic for visualization simplicity for now)
+        if (!task || task.status !== 'done') {
+            return { isValid: false, completionTime: 0 };
+        }
+
+        // Track max completion time
+        if (task.completedAt) {
+            const time = new Date(task.completedAt).getTime();
+            if (time > maxTime) maxTime = time;
+        }
+    }
+
+    return { isValid: true, completionTime: maxTime };
+}
+
 function handleNodeClick(task: Task) {
     console.log('🖱️ [DAGView] handleNodeClick called', task.id);
     selectedTaskId.value = task.id;
@@ -488,6 +605,16 @@ onConnect(async (params) => {
     // Update task dependencies
     const targetTask = tasks.value.find((t) => t.id === targetId);
     if (!targetTask) return;
+
+    // SAFEGUARD: Block DnD if expression logic is used
+    if (targetTask.triggerConfig?.dependsOn?.expression) {
+        uiStore.showToast({
+            message:
+                '복잡한 조건식이 설정된 태스크는 드래그로 의존성을 수정할 수 없습니다. 상세 패널을 이용해주세요.',
+            type: 'warning',
+        });
+        return;
+    }
 
     const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
     if (existingDeps.includes(sourceId)) {
@@ -521,6 +648,16 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
 
         const targetTask = tasks.value.find((t) => t.id === targetId);
         if (!targetTask) continue;
+
+        // SAFEGUARD: Block removal if expression logic is used
+        if (targetTask.triggerConfig?.dependsOn?.expression) {
+            uiStore.showToast({
+                message:
+                    '복잡한 조건식이 설정된 태스크는 의존성을 삭제할 수 없습니다. 상세 패널을 이용해주세요.',
+                type: 'warning',
+            });
+            continue; // Skip this edge
+        }
 
         const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
         const updatedDeps = existingDeps.filter((depId: number) => depId !== sourceId);
@@ -582,7 +719,10 @@ function openCreateModal(status: TaskStatus = 'todo') {
 /**
  * Handle task created
  */
-async function handleTaskCreated(task: Partial<Task>) {
+/**
+ * Handle task created (saved from modal)
+ */
+async function handleTaskSaved() {
     showCreateModal.value = false;
     await taskStore.fetchTasks(projectId.value);
     buildGraph();
@@ -654,23 +794,48 @@ async function openResultPreview(task: Task) {
         console.error('Failed to fetch task for preview:', error);
     }
 
+    // Try to get result from task current state
+    let result = (fullTask as any).result || (fullTask as any).executionResult?.content;
+
     const progress = taskStore.executionProgress.get(task.id);
     const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
-    const enriched = {
-        ...fullTask,
-        result:
-            (fullTask as any).result ||
-            (fullTask as any).executionResult?.content ||
-            progress?.content ||
-            reviewProgressEntry?.content ||
-            '',
-        outputFormat:
-            (fullTask as any).outputFormat ||
-            (fullTask as any).executionResult?.contentType ||
-            (fullTask as any).expectedOutputFormat,
-    } as Task;
-    resultPreviewTask.value = enriched;
+
+    // If result is empty and task is in TODO, try to fetch from history
+    if (!result && !progress && !reviewProgressEntry && fullTask.status === 'todo') {
+        try {
+            console.log('📜 [DAGView] No current result, fetching history for:', task.id);
+            // Fetch execution history
+            const history = await window.electron.taskHistory.getByEventType(
+                task.id,
+                'execution_completed'
+            );
+            if (history && history.length > 0) {
+                // Get latest entry
+                const latest = history[0]; // Assuming sorted by desc (repo default) or need to sort?
+                // Repo usually returns sorted desc? Let's assume standard sort or sort it manually
+                // The handler logic: findByTaskIdAndEventType calls repo.findByTaskIdAndEventType
+                // Repo implementation usually sorts by created_at desc.
+
+                if (latest.eventData && latest.eventData.response) {
+                    result = latest.eventData.response;
+                    console.log('📜 [DAGView] Found result from history');
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch task history:', err);
+        }
+    }
+
+    // Set preview ID to enable reactive updates
+    previewTaskId.value = task.id;
     showResultPreview.value = true;
+
+    // Attempt to fetch latest details to ensure we have the result
+    try {
+        await taskStore.fetchTasks(projectId.value);
+    } catch (e) {
+        console.error('Failed to refresh task for preview:', e);
+    }
 }
 
 /**
@@ -678,7 +843,7 @@ async function openResultPreview(task: Task) {
  */
 function closeResultPreview() {
     showResultPreview.value = false;
-    resultPreviewTask.value = null;
+    previewTaskId.value = null;
 }
 
 /**
@@ -767,16 +932,35 @@ async function handleStop(task: Task) {
     }
 }
 
-// Watch for task changes and rebuild graph
-// Use deep watch to detect both array changes AND individual task property changes
-// Use debouncing to avoid excessive rebuilds when multiple properties change
+// Generate unique structure key to detect layout changes
+const structureKey = computed(() => {
+    return tasks.value
+        .map((t) => {
+            const deps = (t.triggerConfig?.dependsOn?.taskIds || []).slice().sort().join(',');
+            return `${t.id}:${deps}`;
+        })
+        .sort()
+        .join('|');
+});
+
+// Watch for structure changes -> Rebuild Graph
+watch(structureKey, () => {
+    console.log('📐 Graph structure changed, rebuilding...');
+    rebuildGraphDebounced();
+});
+
+// Watch for data changes -> Update Nodes (no layout)
 watch(
     tasks,
     () => {
-        console.log('🔄 Tasks changed, scheduling graph rebuild');
-        rebuildGraphDebounced();
+        // If structure didn't change, just update data
+        // This prevents layout thrashing/zooming during execution
+        updateNodesDataSmooth();
+
+        // Note: Don't clear selectedTaskId here - let the user close the panel explicitly
+        // This prevents the panel from closing when auto-saves occur from persistExecutionSettings()
     },
-    { deep: true, flush: 'post' } // Deep watch to detect task property changes
+    { deep: true }
 );
 
 /**
@@ -788,9 +972,6 @@ async function handleTaskSave(task: Task) {
 
     // Generate graph after store update (optimistic update handles the data)
     buildGraph(); // Rebuild graph after fetching updated tasks
-
-    // Note: Don't clear selectedTaskId here - let the user close the panel explicitly
-    // This prevents the panel from closing when auto-saves occur from persistExecutionSettings()
 }
 
 /**
@@ -986,14 +1167,14 @@ onMounted(async () => {
             @save="handleTaskSave"
         />
 
-        <!-- Task Edit Modal (for creating new tasks) -->
-        <TaskEditModal
+        <!-- Task Create Modal -->
+        <TaskCreateModal
             v-if="showCreateModal"
             :open="showCreateModal"
-            :task="null"
-            :defaults="{ status: createInColumn }"
+            :project-id="projectId"
+            :initial-status="createInColumn"
             @close="showCreateModal = false"
-            @save="handleTaskCreated"
+            @saved="handleTaskSaved"
         />
 
         <!-- Input Modal -->

@@ -4,6 +4,7 @@ import type { Task } from '@core/types/database';
 import AiTaskCard from './cards/AiTaskCard.vue';
 import InputTaskCard from './cards/InputTaskCard.vue';
 import ScriptTaskCard from './cards/ScriptTaskCard.vue';
+import OutputTaskCard from './cards/OutputTaskCard.vue';
 
 // 미연동 Provider 정보 타입
 interface MissingProviderInfo {
@@ -72,6 +73,8 @@ const cardComponent = computed(() => {
             return InputTaskCard;
         case 'script':
             return ScriptTaskCard;
+        case 'output':
+            return OutputTaskCard;
         default:
             return AiTaskCard;
     }

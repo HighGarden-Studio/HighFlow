@@ -277,13 +277,25 @@ export interface KeyboardShortcut {
     category: string;
 }
 
+export interface IntegrationAccount {
+    id: string; // unique account ID (e.g. email or provider-sub)
+    name: string;
+    email: string;
+    avatar?: string;
+    authData?: any; // Token, refresh token, etc. (Store securely in main process ideally, but for UI ref)
+    connectedAt: Date;
+}
+
 export interface IntegrationConfig {
     id: string;
     name: string;
     enabled: boolean;
     connected: boolean;
     config?: Record<string, any>;
-    lastSync?: string;
+    lastSync?: Date;
+    icon?: string;
+    category?: string;
+    accounts?: IntegrationAccount[];
 }
 
 // MCP Server capability tags
@@ -1255,8 +1267,15 @@ export const useSettingsStore = defineStore('settings', () => {
     ]);
 
     const integrations = ref<IntegrationConfig[]>([
-        { id: 'slack', name: 'Slack', enabled: false, connected: false },
-        { id: 'discord', name: 'Discord', enabled: false, connected: false },
+        { id: 'slack', name: 'Slack', enabled: false, connected: false, accounts: [] },
+        {
+            id: 'google_drive',
+            name: 'Google Drive',
+            enabled: false,
+            connected: false,
+            accounts: [],
+        },
+        { id: 'discord', name: 'Discord', enabled: false, connected: false, accounts: [] },
         { id: 'github', name: 'GitHub', enabled: false, connected: false },
         { id: 'gitlab', name: 'GitLab', enabled: false, connected: false },
         { id: 'google-drive', name: 'Google Drive', enabled: false, connected: false },
