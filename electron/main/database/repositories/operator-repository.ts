@@ -211,6 +211,25 @@ export class OperatorRepository {
             )
             .orderBy(desc(operators.usageCount));
     }
+
+    /**
+     * Find global curator operator
+     */
+    async findGlobalCurator(): Promise<Operator | undefined> {
+        const [curator] = await db
+            .select()
+            .from(operators)
+            .where(
+                and(
+                    eq(operators.isCurator, true),
+                    isNull(operators.projectId), // Global operator only
+                    eq(operators.isActive, true)
+                )
+            )
+            .limit(1);
+
+        return curator;
+    }
 }
 
 // Export singleton instance

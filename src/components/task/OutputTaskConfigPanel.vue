@@ -55,9 +55,13 @@
                     @input="
                         (e) => updateLocalFile('pathTemplate', (e.target as HTMLInputElement).value)
                     "
-                    placeholder="e.g., output/{{project.name}}/report.md"
+                    placeholder="e.g., reports/{{date}}_{{task.title}}.md"
                     class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                 />
+                <p class="mt-1 text-xs text-gray-500">
+                    Path relative to project's <strong>Base Dev Folder</strong>. Supports:
+                    {{ date }}, {{ time }}, {{ taskId }}, {{ task.title }}, {{ project.name }}
+                </p>
             </div>
 
             <div class="flex items-center gap-2">

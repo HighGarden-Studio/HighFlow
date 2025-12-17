@@ -484,6 +484,7 @@ export interface Project extends BaseEntity {
     outputPath?: string | null;
     totalTokens: number;
     metadata?: any;
+    curatorOperatorId?: number | null; // Override global curator with project-specific operator
 }
 
 export interface ProjectMemory {
@@ -854,10 +855,13 @@ export interface Operator extends BaseEntity {
     aiModel: string;
     systemPrompt: string | null;
 
-    // Review Configuration
+    // Review Configuration (for QA operators)
     isReviewer: boolean;
-    reviewAiProvider: AIProvider | null;
-    reviewAiModel: string | null;
+    reviewAiProvider?: string | null;
+    reviewAiModel?: string | null;
+
+    // Curator Configuration (for memory management)
+    isCurator?: boolean | null;
 
     // Metadata
     specialty: string[]; // Array of specialties

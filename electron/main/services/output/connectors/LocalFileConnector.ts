@@ -83,22 +83,16 @@ export class LocalFileConnector implements OutputConnector {
                 }
             }
 
-            // 4. Check overwrite logic
-            if (!config.localFile.overwrite) {
-                try {
-                    await fs.access(filePath);
-                    // File exists, and overwrite is false
-                    return {
-                        success: false,
-                        error: `File already exists and overwrite is disabled: ${filePath}`,
-                    };
-                } catch {
-                    // File does not exist, safe to write
-                }
+            // 4. Write File (Overwrite or Append)
+            if (config.localFile.overwrite) {
+                // Overwrite mode: replace file completely
+                await fs.writeFile(filePath, finalContent, 'utf-8');
+                console.log(`[LocalFileConnector] File overwritten: ${filePath}`);
+            } else {
+                // Append mode: add to existing file or create if new
+                await fs.appendFile(filePath, finalContent, 'utf-8');
+                console.log(`[LocalFileConnector] Content appended to: ${filePath}`);
             }
-
-            // 5. Write File
-            await fs.writeFile(filePath, finalContent, 'utf-8');
             console.log(`[LocalFileConnector] File successfully written to: ${filePath}`);
 
             return {

@@ -7,14 +7,58 @@
  * - Project Memory (Summary, Recent Decisions, Glossary)
  */
 
-import { computed } from 'vue';
-import type { Project, ProjectMemory, DecisionLog } from '@core/types/database';
+import { computed, ref, onMounted } from 'vue';
+import type { Project, ProjectMemory, DecisionLog, Operator } from '@core/types/database';
 
 interface Props {
     project: Project;
 }
 
 const props = defineProps<Props>();
+
+// Curator operator management
+const operators = ref<Operator[]>([]);
+const selectedCuratorId = ref<number | null>(props.project.curatorOperatorId || null);
+const isLoadingOperators = ref(false);
+
+// Load available operators on mount
+onMounted(async () => {
+    isLoadingOperators.value = true;
+    try {
+        const result = await window.api.operators.list(props.project.id);
+        operators.value = result;
+    } catch (error) {
+        console.error('Failed to load operators:', error);
+    } finally {
+        isLoadingOperators.value = false;
+    }
+});
+
+// Get global curator and other operators
+const globalCurator = computed(() => operators.value.find((op) => op.isCurator && !op.projectId));
+
+const availableOperators = computed(() => operators.value.filter((op) => op.isActive));
+
+const selectedOperatorName = computed(() => {
+    if (!selectedCuratorId.value) {
+        return globalCurator.value?.name || '기본 큐레이터';
+    }
+    const selected = operators.value.find((op) => op.id === selectedCuratorId.value);
+    return selected?.name || '알 수 없음';
+});
+
+// Update project curator
+async function updateCurator(operatorId: number | null) {
+    try {
+        await window.api.projects.update(props.project.id, {
+            curatorOperatorId: operatorId,
+        });
+        selectedCuratorId.value = operatorId;
+        console.log(`[ProjectMemoryPanel] Updated curator to: ${operatorId || 'default'}`);
+    } catch (error) {
+        console.error('Failed to update curator:', error);
+    }
+}
 
 // Computed properties for template
 const hasContextInfo = computed(() => {
@@ -70,6 +114,42 @@ const lastUpdatedFormatted = computed(() => {
 
 <template>
     <div class="project-memory-panel">
+        <!-- Curator Settings Section -->
+        <section class="memory-section curator-section">
+            <h3 class="section-title">
+                <span class="icon">🤖</span>
+                큐레이터 설정
+            </h3>
+            <div class="curator-config">
+                <div class="config-row">
+                    <label class="config-label">메모리 큐레이터</label>
+                    <select
+                        v-model="selectedCuratorId"
+                        @change="updateCurator(selectedCuratorId)"
+                        class="curator-select"
+                        :disabled="isLoadingOperators"
+                    >
+                        <option :value="null">
+                            {{ globalCurator?.name || '기본 큐레이터' }} (전역 기본값)
+                        </option>
+                        <option
+                            v-for="operator in availableOperators.filter(
+                                (op) => !op.isCurator || op.projectId
+                            )"
+                            :key="operator.id"
+                            :value="operator.id"
+                        >
+                            {{ operator.name }} ({{ operator.role }})
+                        </option>
+                    </select>
+                </div>
+                <p class="config-hint">
+                    <span class="hint-icon">ℹ️</span>
+                    태스크 완료 시 선택된 큐레이터가 프로젝트 메모리를 자동으로 업데이트합니다.
+                </p>
+            </div>
+        </section>
+
         <!-- Empty State -->
         <div v-if="!hasContextInfo && !hasMemory" class="empty-state">
             <div class="empty-icon">🧠</div>
@@ -194,6 +274,71 @@ const lastUpdatedFormatted = computed(() => {
 
 .memory-section {
     margin-bottom: 2rem;
+}
+
+.curator-section {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.curator-config {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.config-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.config-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.curator-select {
+    padding: 0.625rem 0.875rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.curator-select:hover:not(:disabled) {
+    border-color: var(--primary-color);
+}
+
+.curator-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.curator-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.config-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.hint-icon {
+    flex-shrink: 0;
 }
 
 .section-title {

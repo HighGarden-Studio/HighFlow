@@ -119,13 +119,54 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             let aiResponse: string | null = null;
 
             try {
+                // ===============================
+                // CURATOR OPERATOR HIERARCHY
+                // ===============================
+                // 1. Check project curator setting
+                // 2. Fallback to global curator
+                // 3. Fallback to cost-effective provider
+
+                const { operatorRepository } =
+                    await import('../../../electron/main/database/repositories/operator-repository');
+                let curatorOperator = null;
+
+                // Priority 1: Project curator
+                if (project.curatorOperatorId) {
+                    curatorOperator = await operatorRepository.findById(project.curatorOperatorId);
+                    if (curatorOperator) {
+                        console.log(`[Curator] Using project curator: ${curatorOperator.name}`);
+                    }
+                }
+
+                // Priority 2: Global curator
+                if (!curatorOperator) {
+                    curatorOperator = await operatorRepository.findGlobalCurator();
+                    if (curatorOperator) {
+                        console.log(`[Curator] Using global curator: ${curatorOperator.name}`);
+                    }
+                }
+
                 // Use ProviderFactory to get a configured provider
                 const { ProviderFactory } = await import('./providers/ProviderFactory');
                 const providerFactory = new ProviderFactory();
 
-                // Get the best available provider for text summarization
-                // Priority: 1. gemini-flash (cheap, fast) 2. gpt-4o-mini 3. claude-haiku 4. any available
-                const providerResult = await this.selectCostEffectiveProvider(providerFactory);
+                let providerResult = null;
+
+                // Priority 3: Use curator operator's AI settings if found
+                if (curatorOperator) {
+                    providerFactory.setApiKeys(this.apiKeys);
+                    const provider = await providerFactory.getProvider(curatorOperator.aiProvider);
+                    providerResult = {
+                        provider,
+                        model: curatorOperator.aiModel,
+                    };
+                } else {
+                    // Priority 4: Fallback to cost-effective provider
+                    console.log(
+                        '[Curator] No curator operator found, using cost-effective provider'
+                    );
+                    providerResult = await this.selectCostEffectiveProvider(providerFactory);
+                }
 
                 if (!providerResult) {
                     throw new Error(

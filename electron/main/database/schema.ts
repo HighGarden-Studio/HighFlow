@@ -132,6 +132,9 @@ export const projects = sqliteTable(
         phase: text('phase'), // Current project phase
         memory: text('memory', { mode: 'json' }), // Project memory (summary, decisions, glossary)
         notificationConfig: text('notification_config', { mode: 'json' }), // Project notification settings
+        curatorOperatorId: integer('curator_operator_id').references(() => operators.id, {
+            onDelete: 'set null',
+        }), // Override global curator with project-specific operator
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
@@ -624,6 +627,9 @@ export const operators = sqliteTable(
         isReviewer: integer('is_reviewer', { mode: 'boolean' }).notNull().default(false),
         reviewAiProvider: text('review_ai_provider'),
         reviewAiModel: text('review_ai_model'),
+
+        // Curator Configuration (for memory management)
+        isCurator: integer('is_curator', { mode: 'boolean' }).notNull().default(false),
 
         // Metadata
         specialty: text('specialty', { mode: 'json' }).notNull().default('[]'), // Array of specialties
