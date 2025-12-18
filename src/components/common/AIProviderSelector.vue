@@ -2,6 +2,12 @@
 import { computed } from 'vue';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
+import {
+    getModelCharacteristics,
+    formatContextWindow,
+    getSpeedEmoji,
+    getCostTierEmoji,
+} from '../../utils/modelCharacteristics';
 
 interface Props {
     provider: AIProvider | null;
@@ -49,10 +55,14 @@ const providerModelOptions = computed(() => {
         return [];
     }
     const models = provider.models && provider.models.length > 0 ? provider.models : [];
-    return models.map((modelId) => ({
-        id: modelId,
-        label: modelId === provider.defaultModel ? `${modelId} (기본)` : modelId,
-    }));
+    return models.map((modelId) => {
+        const characteristics = getModelCharacteristics(modelId);
+        return {
+            id: modelId,
+            label: modelId === provider.defaultModel ? `${modelId} (기본)` : modelId,
+            characteristics,
+        };
+    });
 });
 
 function handleProviderChange(event: Event) {
@@ -137,6 +147,13 @@ function handleModelChange(event: Event) {
                 >
                     <option v-for="m in providerModelOptions" :key="m.id" :value="m.id">
                         {{ m.label }}
+                        <template v-if="m.characteristics">
+                            {{ getSpeedEmoji(m.characteristics.speed) }}
+                            {{ getCostTierEmoji(m.characteristics.costTier) }}
+                            <template v-if="m.characteristics.contextWindow">
+                                {{ formatContextWindow(m.characteristics.contextWindow) }}
+                            </template>
+                        </template>
                     </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">

@@ -125,7 +125,7 @@ const effectiveAI = computed(() => {
 const aiProviderDisplay = computed(() => {
     const providers: Record<string, { name: string; color: string; icon: string }> = {
         openai: { name: 'OpenAI', color: 'text-green-400', icon: '🤖' },
-        anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '🧠' },
+        anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '✨' },
         google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
         local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
     };

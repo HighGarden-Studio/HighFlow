@@ -60,6 +60,14 @@ const routes: RouteRecordRaw[] = [
         },
     },
     {
+        path: '/marketplace',
+        name: 'marketplace',
+        component: () => import('../views/MarketplaceView.vue'),
+        meta: {
+            title: 'Marketplace',
+        },
+    },
+    {
         path: '/settings',
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),

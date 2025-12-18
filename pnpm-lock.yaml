@@ -151,6 +151,9 @@ dependencies:
   fuse.js:
     specifier: ^7.0.0
     version: 7.1.0
+  groq-sdk:
+    specifier: ^0.37.0
+    version: 0.37.0
   humanize-ms:
     specifier: ^1.2.1
     version: 1.2.1
@@ -7115,6 +7118,20 @@ packages:
     resolution: {integrity: sha512-jcLLfkpoVGmH7/InMC/1hIvOPSUh38oJtGhvrOFGzioE1DZ+0YW16RgmOJhHiuWTvGiJQ9Z1Ik43JvkRPRvE+A==}
     dependencies:
       lodash: 4.17.21
+    dev: false
+
+  /groq-sdk@0.37.0:
+    resolution: {integrity: sha512-lT72pcT8b/X5XrzdKf+rWVzUGW1OQSKESmL8fFN5cTbsf02gq6oFam4SVeNtzELt9cYE2Pt3pdGgSImuTbHFDg==}
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.13
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0(patch_hash=svr6z2n4zjg7ccbvg2hpzroelu)
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0
+    transitivePeerDependencies:
+      - encoding
     dev: false
 
   /gtoken@8.0.0:

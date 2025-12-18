@@ -91,7 +91,12 @@ function toggleExpand(event: Event) {
                     ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600 hover:shadow-md'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md',
         ]"
-        @click="emit('click', task)"
+        @click="
+            () => {
+                console.log('[BaseTaskCard] Card clicked:', task.id, task.title, task.taskType);
+                emit('click', task);
+            }
+        "
         @mouseenter="isHovered = true"
         @mouseleave="isHovered = false"
         @dragover.prevent="

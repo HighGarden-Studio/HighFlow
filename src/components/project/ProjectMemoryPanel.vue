@@ -9,6 +9,7 @@
 
 import { computed, ref, onMounted } from 'vue';
 import type { Project, ProjectMemory, DecisionLog, Operator } from '@core/types/database';
+import { getAPI } from '../../utils/electron';
 
 interface Props {
     project: Project;
@@ -29,7 +30,8 @@ const isLoadingOperators = ref(false);
 onMounted(async () => {
     isLoadingOperators.value = true;
     try {
-        const result = await window.api.operators.list(props.project.id);
+        const api = getAPI();
+        const result = await api.operators.list(props.project.id);
         operators.value = result;
     } catch (error) {
         console.error('Failed to load operators:', error);
@@ -54,7 +56,8 @@ const selectedOperatorName = computed(() => {
 // Update project curator
 async function updateCurator(operatorId: number | null) {
     try {
-        await window.api.projects.update(props.project.id, {
+        const api = getAPI();
+        await api.projects.update(props.project.id, {
             curatorOperatorId: operatorId,
         });
         selectedCuratorId.value = operatorId;
@@ -68,7 +71,8 @@ async function updateCurator(operatorId: number | null) {
 async function resetMemory() {
     isResetting.value = true;
     try {
-        await window.api.projects.update(props.project.id, {
+        const api = getAPI();
+        await api.projects.update(props.project.id, {
             memory: JSON.stringify({
                 summary: '',
                 recentDecisions: [],
@@ -180,7 +184,7 @@ const lastUpdatedFormatted = computed(() => {
 
         <!-- Empty State -->
         <div v-if="!hasContextInfo && !hasMemory" class="empty-state">
-            <div class="empty-icon">🧠</div>
+            <div class="empty-icon">✨</div>
             <h3>AI 컨텍스트가 없습니다</h3>
             <p>
                 태스크가 완료되면 AI가 자동으로 프로젝트 메모리를 업데이트합니다.<br />
@@ -215,7 +219,7 @@ const lastUpdatedFormatted = computed(() => {
         <section v-if="hasMemory" class="memory-section">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="section-title mb-0">
-                    <span class="icon">🧠</span>
+                    <span class="icon">✨</span>
                     프로젝트 메모리
                     <span v-if="lastUpdatedFormatted" class="last-updated">
                         마지막 업데이트: {{ lastUpdatedFormatted }}

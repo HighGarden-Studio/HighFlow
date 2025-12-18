@@ -85,7 +85,12 @@ const cardComponent = computed(() => {
     <component
         :is="cardComponent"
         v-bind="props"
-        @click="(t: Task) => emit('click', t)"
+        @click="
+            (t: Task) => {
+                console.log('[TaskCard] Click event received for task:', t.id, t.title, t.taskType);
+                emit('click', t);
+            }
+        "
         @previewStream="(t: Task) => emit('previewStream', t)"
         @edit="(t: Task) => emit('edit', t)"
         @delete="(t: Task) => emit('delete', t)"

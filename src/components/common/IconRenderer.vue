@@ -24,7 +24,7 @@ const CUSTOM_ICONS: Record<string, string> = {
 const ICON_MAP: Record<string, string> = {
     // AI & Tech - Generic (used in general context, not brand-specific)
     '🤖': 'ph:robot', // Generic robot/AI icon
-    '🧠': 'ph:brain',
+    '✨': 'ph:sparkle',
     '🔷': 'ph:diamond',
 
     // AI Providers - Brand Icons (Logos) - use colored circles

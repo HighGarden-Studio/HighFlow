@@ -81,7 +81,7 @@ function getMCPIcon(serverId: string): string {
         sqlite: '🗄️',
         postgres: '🐘',
         'brave-search': '🔍',
-        memory: '🧠',
+        memory: '✨',
         puppeteer: '🎭',
         playwright: '🎬',
         'github-mcp': '🐙',

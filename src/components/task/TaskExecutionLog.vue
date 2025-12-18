@@ -74,7 +74,7 @@
                 <!-- Curator Update -->
                 <div v-else-if="event.type === 'curator'" class="message curator-message">
                     <div class="curator-header">
-                        <span class="icon">🧠</span>
+                        <span class="icon">✨</span>
                         <span class="title">Curator Update</span>
                     </div>
                     <div class="curator-content">

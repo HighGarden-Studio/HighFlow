@@ -3078,6 +3078,80 @@ export const useSettingsStore = defineStore('settings', () => {
     /**
      * Clear error
      */
+
+    // Model management state
+    const providerFetchTimes = ref<Record<string, number>>({});
+
+    // Model management functions
+    function getProviderModels(providerId: string): string[] {
+        const provider = aiProviders.value.find((p) => p.id === providerId);
+        return provider?.models || [];
+    }
+
+    function getProviderModelsFetchTime(providerId: string): Date | null {
+        const timestamp = providerFetchTimes.value[providerId];
+        return timestamp ? new Date(timestamp) : null;
+    }
+
+    async function refreshProviderModels(providerId: string): Promise<void> {
+        try {
+            console.log(`[SettingsStore] Refreshing models for ${providerId}`);
+
+            // Find provider config to get API key
+            const providerConfig = aiProviders.value.find((p) => p.id === providerId);
+            const apiKey = providerConfig?.apiKey;
+
+            // Use IPC to fetch models (consistent with validateApiKey) - avoids Browser environment issues
+            // and ensures we get the full list of models just like validation
+            console.log(`[SettingsStore] Fetching models via IPC for ${providerId}`);
+            const models = await window.electron.ai.fetchModels(
+                providerId,
+                providerConfig?.apiKey || ''
+            );
+
+            if (!models || !Array.isArray(models)) {
+                throw new Error('Failed to fetch models from provider');
+            }
+
+            // Manually update the client-side cache so AIServiceManager has access to it
+            const { modelCache } = await import('../../services/ai/AIModelCacheService');
+            await modelCache.setCachedModels(providerId as any, models as any[]);
+
+            console.log(
+                `[SettingsStore] Successfully fetched ${models.length} models for ${providerId}`
+            );
+
+            const modelNames = models.map((m) => m.name);
+
+            // Update aiProviders models array (ensure Vue reactivity)
+            const providerIndex = aiProviders.value.findIndex((p) => p.id === providerId);
+            if (providerIndex >= 0 && aiProviders.value[providerIndex]) {
+                const updatedProviders = [...aiProviders.value];
+                updatedProviders[providerIndex] = {
+                    ...updatedProviders[providerIndex]!,
+                    models: modelNames,
+                };
+                aiProviders.value = updatedProviders;
+            }
+
+            // Update fetch time
+            providerFetchTimes.value = {
+                ...providerFetchTimes.value,
+                [providerId]: Date.now(),
+            };
+
+            console.log(
+                `[SettingsStore] Successfully refreshed ${models.length} models for ${providerId}`
+            );
+        } catch (error) {
+            console.error(`[SettingsStore] Failed to refresh models for ${providerId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Clear the current error state
+     */
     function clearError(): void {
         error.value = null;
     }
@@ -3152,5 +3226,10 @@ export const useSettingsStore = defineStore('settings', () => {
         skipSetupWizard,
         resetSetupWizard,
         clearError,
+
+        // Model management
+        getProviderModels,
+        getProviderModelsFetchTime,
+        refreshProviderModels,
     };
 });

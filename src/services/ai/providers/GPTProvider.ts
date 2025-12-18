@@ -152,15 +152,16 @@ export class GPTProvider extends BaseAIProvider {
         try {
             const client = this.getClient();
             const response = await client.models.list();
+            console.log('[GPTProvider] Fetched models:', response.data);
 
             // Filter to only GPT and DALL-E models
             const gptModels = response.data
-                .filter(
-                    (m) =>
-                        m.id.startsWith('gpt-') ||
-                        m.id.startsWith('o1') ||
-                        m.id.startsWith('dall-e')
-                )
+                // .filter(
+                //     (m) =>
+                //         m.id.startsWith('gpt-') ||
+                //         m.id.startsWith('o1') ||
+                //         m.id.startsWith('dall-e')
+                // )
                 .map((m) => {
                     // Check if model exists in default models for metadata
                     const defaultModel = this.defaultModels.find((dm) => dm.name === m.id);
@@ -202,7 +203,10 @@ export class GPTProvider extends BaseAIProvider {
                 );
             }
             console.log('[GPTProvider] Creating new OpenAI client with key length:', apiKey.length);
-            this.client = new OpenAI({ apiKey });
+            this.client = new OpenAI({
+                apiKey,
+                dangerouslyAllowBrowser: true,
+            });
         }
         return this.client;
     }

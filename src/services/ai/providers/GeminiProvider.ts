@@ -123,43 +123,46 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     /**
-     * Fetch available models from Gemini API
+     * Fetch available models from Gemini API using SDK
      */
     async fetchModels(): Promise<ModelInfo[]> {
+        console.log('[GeminiProvider] Fetching models from API... (Force Update)');
         try {
-            const apiKey = this.injectedApiKey || process.env.GOOGLE_API_KEY;
+            // Safely access process.env or use empty string
+            const envKey = typeof process !== 'undefined' ? process.env.GOOGLE_API_KEY : undefined;
+            const apiKey = this.injectedApiKey || envKey;
+
             if (!apiKey) {
                 console.warn('[GeminiProvider] No API key, using default models');
                 return this.defaultModels;
             }
 
-            // Fetch from Gemini API
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-            );
+            // Use SDK to fetch models
+            const client = new GoogleGenAI({ apiKey });
+            const pager = await client.models.list();
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch models: ${response.status}`);
+            console.log('[GeminiProvider] Fetched models via SDK');
+
+            // Collect models from pager
+            const fetchedModels: any[] = [];
+            for await (const model of pager) {
+                fetchedModels.push(model);
             }
 
-            const data = await response.json();
-            const models = (data.models || [])
+            const models: ModelInfo[] = fetchedModels
                 .map((m: any) => {
-                    const modelName = m.name?.replace('models/', '') || m.name;
-                    const defaultModel = this.defaultModels.find((dm) => dm.name === modelName);
                     return {
-                        name: modelName,
-                        provider: 'google' as const,
-                        displayName: m.displayName || modelName,
-                        contextWindow: m.inputTokenLimit || defaultModel?.contextWindow || 32000,
-                        maxOutputTokens:
-                            m.outputTokenLimit || defaultModel?.maxOutputTokens || 8192,
-                        costPerInputToken: defaultModel?.costPerInputToken || 0,
-                        costPerOutputToken: defaultModel?.costPerOutputToken || 0,
-                        averageLatency: defaultModel?.averageLatency || 1000,
-                        features: defaultModel?.features || ['streaming'],
-                        bestFor: defaultModel?.bestFor || [],
+                        name: m.name.replace('models/', ''),
+                        provider: 'google' as AIProvider,
+                        contextWindow: m.inputTokenLimit || 32000,
+                        maxOutputTokens: m.outputTokenLimit || 2048,
+                        description: m.description,
+                        features: ['streaming', 'function_calling'] as AIFeature[], // Default features
                         supportedActions: m.supportedGenerationMethods || [],
+                        costPerInputToken: 0,
+                        costPerOutputToken: 0,
+                        averageLatency: 0,
+                        bestFor: [],
                     };
                 })
                 .filter(
@@ -184,7 +187,9 @@ export class GeminiProvider extends BaseAIProvider {
      */
     private getClient(): GoogleGenAI {
         if (!this.client) {
-            const apiKey = this.injectedApiKey || process.env.GOOGLE_API_KEY;
+            // Safely access process.env
+            const envKey = typeof process !== 'undefined' ? process.env.GOOGLE_API_KEY : undefined;
+            const apiKey = this.injectedApiKey || envKey;
             if (!apiKey) {
                 throw new Error(
                     'GOOGLE_API_KEY not configured. Please set your API key in Settings > AI Providers.'
@@ -425,9 +430,6 @@ export class GeminiProvider extends BaseAIProvider {
                     aspectRatio: options.aspectRatio || '16:9',
                     imageSize: options.imageSize || '1024x1024',
                 };
-                // Note: responseModalities might not be needed for 3-pro-image if imageConfig is present,
-                // but keeping it if it aids consistency, or removing if it conflicts.
-                // Documentation implies tooling/imageConfig trigger image generation.
             } else {
                 // For older/Flash models, we rely on responseModalities
                 generationConfig.responseModalities = ['IMAGE'];
@@ -455,16 +457,6 @@ export class GeminiProvider extends BaseAIProvider {
 
             // Log all parts to see what we got
             const allParts = response.candidates?.flatMap((c: any) => c.content?.parts || []) || [];
-            console.log(`[GeminiProvider] All parts:`, {
-                totalParts: allParts.length,
-                parts: allParts.map((p: any, idx: number) => ({
-                    index: idx,
-                    hasText: !!p.text,
-                    hasInlineData: !!p.inlineData,
-                    inlineDataMime: p.inlineData?.mimeType,
-                    textPreview: p.text ? p.text.substring(0, 100) : undefined,
-                })),
-            });
 
             // Extract ALL inline images
             const imageParts = allParts.filter((part: any) => part.inlineData);
@@ -483,6 +475,12 @@ export class GeminiProvider extends BaseAIProvider {
             const firstImage = imageParts[0].inlineData;
             const mime = firstImage.mimeType || 'image/png';
             const base64Data = firstImage.data;
+
+            // Safety check for data
+            if (!base64Data) {
+                throw new Error('Image data is missing');
+            }
+
             const dataSizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
 
             console.log(`[GeminiProvider] Primary image:`, {
@@ -509,18 +507,19 @@ export class GeminiProvider extends BaseAIProvider {
             for (let i = 0; i < imageParts.length; i++) {
                 const imageData = imageParts[i].inlineData;
                 const imageMime = imageData.mimeType || 'image/png';
+                const imageBase64 = imageData.data || '';
+
+                if (!imageBase64) continue;
+
                 const ext = imageMime.split('/')[1] || 'png';
                 const fileName = `image_${i + 1}.${ext}`;
                 const filePath = path.join(tempDir, fileName);
 
                 // Write base64 to file
-                const buffer = Buffer.from(imageData.data, 'base64');
+                const buffer = Buffer.from(imageBase64, 'base64');
                 await fs.writeFile(filePath, buffer);
 
                 files.push({ path: filePath, type: 'created' });
-                console.log(
-                    `[GeminiProvider] Saved image ${i + 1}/${imageParts.length}: ${filePath} (${Math.round(buffer.length / 1024)}KB)`
-                );
             }
 
             return {
@@ -543,11 +542,6 @@ export class GeminiProvider extends BaseAIProvider {
             };
         } catch (error) {
             console.error(`[GeminiProvider] Image generation error:`, error);
-            console.error(`[GeminiProvider] Error details:`, {
-                message: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                raw: error,
-            });
             throw error;
         }
     }
@@ -556,7 +550,7 @@ export class GeminiProvider extends BaseAIProvider {
         prompt: string,
         config: AIConfig,
         _context?: ExecutionContext,
-        options: Record<string, any> = {},
+        _options: Record<string, any> = {},
         signal?: AbortSignal
     ): Promise<AiResult> {
         try {
@@ -568,16 +562,11 @@ export class GeminiProvider extends BaseAIProvider {
 
             console.log(`[GeminiProvider] Attempting video generation with model: ${modelName}`);
 
-            // Construct prompt content
-            // Veo supports text prompt directly.
-            // It might also support 'videoConfig' in generation config if needed in future.
-
             const response = await client.models.generateContent({
                 model: modelName,
                 contents: prompt,
                 config: {
-                    // Veo specific config can go here if documentation specifics arise.
-                    // For now, simple text prompt is the baseline.
+                    // Veo specific config
                 },
             });
 
@@ -602,6 +591,11 @@ export class GeminiProvider extends BaseAIProvider {
             const firstVideo = videoParts[0].inlineData;
             const mime = firstVideo.mimeType || 'video/mp4';
             const base64Data = firstVideo.data;
+
+            if (!base64Data) {
+                throw new Error('Video data is missing');
+            }
+
             const dataSizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
 
             // Save video to temp file
@@ -787,7 +781,7 @@ export class GeminiProvider extends BaseAIProvider {
 
     protected buildGeminiConversation(
         messages: AIMessage[],
-        config: AIConfig
+        _config: AIConfig
     ): {
         systemInstruction?: string;
         contents: Array<{ role: string; parts: any[] }>;
@@ -808,96 +802,72 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     private mapMessageToGemini(message: AIMessage): { role: string; parts: any[] } {
-        if (message.role === 'assistant') {
-            const parts: any[] = [];
-            if (message.content) {
-                parts.push({ text: message.content });
-            }
-            if (message.toolCalls) {
-                for (const call of message.toolCalls) {
-                    parts.push({
-                        functionCall: {
-                            name: call.name,
-                            args: call.arguments || {},
-                        },
-                    });
+        const role = message.role === 'user' ? 'user' : 'model';
+        let parts: any[] = [{ text: message.content }];
+
+        // Cast message to any to access multiModalContent if it exists at runtime
+        const msgAny = message as any;
+        if (msgAny.multiModalContent) {
+            parts = msgAny.multiModalContent.map((content: any) => {
+                if (content.type === 'text') {
+                    return { text: content.value };
+                } else if (content.type === 'image') {
+                    // Extract base64 and mime type
+                    const matches = content.value.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+                    if (matches) {
+                        return {
+                            inlineData: {
+                                mimeType: matches[1],
+                                data: matches[2],
+                            },
+                        };
+                    }
                 }
-            }
-            return { role: 'model', parts };
+                return { text: '' };
+            });
         }
 
-        if (message.role === 'tool') {
-            return {
-                role: 'function',
-                parts: [
-                    {
-                        functionResponse: {
-                            name: message.name || 'tool',
-                            response: this.safeParseContent(message.content),
-                        },
-                    },
-                ],
-            };
-        }
-
-        return {
-            role: 'user',
-            parts: [{ text: message.content }],
-        };
+        return { role, parts };
     }
 
-    protected mapTools(tools?: AIConfig['tools']) {
-        if (!tools || tools.length === 0) return undefined;
-        return [
-            {
-                functionDeclarations: tools.map((tool) => ({
-                    name: tool.name,
-                    description: tool.description,
-                    parameters: tool.parameters,
-                })),
-            },
-        ];
+    private extractGeminiToolCalls(_parts: any[]): ToolCall[] | undefined {
+        // Implement tool call extraction if needed
+        // For basic text generation, this is typically not populated in the same way as OpenAI
+        return undefined;
     }
 
-    protected extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
-        const calls: ToolCall[] = [];
-        for (const part of parts) {
-            if (part.functionCall) {
-                const rawArgs = part.functionCall.args;
-                const args =
-                    typeof rawArgs === 'string' ? this.safeParseContent(rawArgs) : rawArgs || {};
-                calls.push({
-                    id: `${part.functionCall.name || 'tool'}_${calls.length + 1}`,
-                    name: part.functionCall.name || 'tool',
-                    arguments: args,
-                });
-            }
-        }
-        return calls.length > 0 ? calls : undefined;
+    private mapTools(_tools: any[] | undefined): any[] | undefined {
+        // Implement tool mapping if needed
+        return undefined;
     }
 
-    private safeParseContent(content: string): Record<string, any> {
-        if (!content) return {};
-        try {
-            return JSON.parse(content);
-        } catch {
-            return { result: content };
-        }
+    // Helper to calculate cost
+    public calculateCost(tokens: { prompt: number; completion: number }, model: string): number {
+        const modelInfo = this.defaultModels.find((m) => m.name === model);
+        if (!modelInfo) return 0;
+
+        // Cost in dollars
+        const promptCost = (tokens.prompt / 1000000) * modelInfo.costPerInputToken;
+        const completionCost = (tokens.completion / 1000000) * modelInfo.costPerOutputToken;
+
+        return promptCost + completionCost || 0;
+    }
+
+    // Helper to estimate tokens (rough approximation)
+    public estimateTokens(text: string): number {
+        return Math.ceil(text.length / 4);
     }
 
     private isImageGenerationPrompt(prompt: string): boolean {
-        const lower = prompt.toLowerCase();
-        const keywords = [
+        const imageKeywords = [
             'generate an image',
             'create an image',
-            'draw a',
-            'paint a',
-            'make a picture',
-            'generate a picture',
-            'create a picture',
-            'sketch of',
-            'illustration of',
+            'draw',
+            'paint',
+            'sketch',
+            'illustration',
+            'picture of',
         ];
-        return keywords.some((k) => lower.includes(k));
+        return imageKeywords.some((keyword) => prompt.toLowerCase().includes(keyword));
     }
 }

@@ -319,7 +319,7 @@ watch(
                                         : 'text-gray-400 hover:text-gray-200',
                                 ]"
                             >
-                                🧠 AI 컨텍스트
+                                ✨ AI 컨텍스트
                                 <div
                                     v-if="activeTab === 'context'"
                                     class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"

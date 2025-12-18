@@ -5,6 +5,11 @@
  * Integrates with AdvancedTaskExecutor for workflow execution.
  */
 
+// Polyfill process for browser environment to prevent Slack SDK crash
+if (typeof window !== 'undefined' && !window.process) {
+    (window as any).process = { env: {}, version: '' };
+}
+
 import type { Task, MCPIntegration, MCPConfig, ImageGenerationConfig } from '@core/types/database';
 import type {
     AIProvider,
@@ -237,14 +242,22 @@ export class AIServiceManager {
      * Manually refresh models for a provider
      * Called when user requests model refresh from UI
      */
-    async refreshProviderModels(providerId: AIProvider): Promise<ModelInfo[]> {
+    async refreshProviderModels(providerId: AIProvider, apiKey?: string): Promise<ModelInfo[]> {
+        console.log(`[AIServiceManager] refreshProviderModels called for ${providerId}`);
         const { modelCache } = await import('../ai/AIModelCacheService');
 
         // Ensure provider is registered before refreshing
-        // This handles cases where initial registration failed or hasn't happened yet
         try {
+            console.log(`[AIServiceManager] Getting provider instance for ${providerId}`);
             const providerInstance = await this.providerFactory.getProvider(providerId);
+
             if (providerInstance && typeof providerInstance.fetchModels === 'function') {
+                // Update API key if provided
+                if (apiKey && 'setApiKey' in providerInstance) {
+                    (providerInstance as any).setApiKey(apiKey);
+                }
+
+                console.log(`[AIServiceManager] Registering provider ${providerId}`);
                 modelCache.registerProvider(providerId, () => providerInstance.fetchModels());
             } else {
                 console.warn(
@@ -258,6 +271,7 @@ export class AIServiceManager {
             );
         }
 
+        console.log(`[AIServiceManager] Calling modelCache.refreshModels for ${providerId}`);
         return modelCache.refreshModels(providerId);
     }
 

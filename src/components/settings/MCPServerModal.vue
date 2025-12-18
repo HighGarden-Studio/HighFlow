@@ -6,34 +6,34 @@
  */
 import { ref, computed, watch } from 'vue';
 import type {
-  MCPServerConfig,
-  MCPServerTag,
-  MCPPermissionId,
+    MCPServerConfig,
+    MCPServerTag,
+    MCPPermissionId,
 } from '../../renderer/stores/settingsStore';
 import { MCP_PERMISSION_DEFINITIONS } from '../../renderer/stores/settingsStore';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 
 interface Props {
-  server: MCPServerConfig | null;
-  open: boolean;
+    server: MCPServerConfig | null;
+    open: boolean;
 }
 
 const props = defineProps<Props>();
 const settingsStore = useSettingsStore();
 
 const emit = defineEmits<{
-  (e: 'close'): void;
-  (e: 'save', config: Partial<MCPServerConfig>): void;
+    (e: 'close'): void;
+    (e: 'save', config: Partial<MCPServerConfig>): void;
 }>();
 
 // Form State
 const form = ref({
-  enabled: false,
-  command: '',
-  args: [] as string[],
-  config: {} as Record<string, any>,
-  permissions: {} as Record<string, boolean>,
-  scopes: [] as string[],
+    enabled: false,
+    command: '',
+    args: [] as string[],
+    config: {} as Record<string, any>,
+    permissions: {} as Record<string, boolean>,
+    scopes: [] as string[],
 });
 
 const argsString = ref('');
@@ -47,750 +47,1066 @@ const installLog = ref('');
 const featureSelections = ref<Record<string, boolean>>({});
 const permissionDefinitions = MCP_PERMISSION_DEFINITIONS;
 const permissionCategoryLabels: Record<string, string> = {
-  filesystem: '파일 시스템',
-  system: '시스템',
-  network: '네트워크',
-  data: '데이터',
+    filesystem: '파일 시스템',
+    system: '시스템',
+    network: '네트워크',
+    data: '데이터',
 };
 
 const hasFeatureScopes = computed(() => (props.server?.featureScopes?.length || 0) > 0);
 
 const permissionGroups = computed(() => {
-  const groups: Record<string, typeof permissionDefinitions> = {};
-  for (const definition of permissionDefinitions) {
-    const category = definition.category;
-    if (!groups[category]) {
-      groups[category] = [];
+    const groups: Record<string, typeof permissionDefinitions> = {};
+    for (const definition of permissionDefinitions) {
+        const category = definition.category;
+        if (!groups[category]) {
+            groups[category] = [];
+        }
+        groups[category]!.push(definition);
     }
-    groups[category]!.push(definition);
-  }
-  return Object.entries(groups).map(([category, definitions]) => ({
-    category,
-    definitions,
-  }));
+    return Object.entries(groups).map(([category, definitions]) => ({
+        category,
+        definitions,
+    }));
 });
 
 // Watch for server changes
-watch(() => props.server, (newServer) => {
-  if (newServer) {
-    form.value = {
-      enabled: newServer.enabled,
-      command: newServer.command || '',
-      args: newServer.args ? [...newServer.args] : [],
-      config: newServer.config ? { ...newServer.config } : {},
-      permissions: settingsStore.buildMCPPermissionsFor(newServer),
-      scopes: newServer.scopes ? [...newServer.scopes] : [],
-    };
-    argsString.value = newServer.args?.join(' ') || '';
-    connectionResult.value = null;
-    connectionMessage.value = '';
-    installResult.value = null;
-    installMessage.value = '';
-    installLog.value = '';
-    initializeFeatureSelections(newServer);
-  }
-}, { immediate: true });
+watch(
+    () => props.server,
+    (newServer) => {
+        if (newServer) {
+            form.value = {
+                enabled: newServer.enabled,
+                command: newServer.command || '',
+                args: newServer.args ? [...newServer.args] : [],
+                config: newServer.config ? { ...newServer.config } : {},
+                permissions: settingsStore.buildMCPPermissionsFor(newServer),
+                scopes: newServer.scopes ? [...newServer.scopes] : [],
+            };
+            argsString.value = newServer.args?.join(' ') || '';
+            connectionResult.value = null;
+            connectionMessage.value = '';
+            installResult.value = null;
+            installMessage.value = '';
+            installLog.value = '';
+            initializeFeatureSelections(newServer);
+        }
+    },
+    { immediate: true }
+);
 
 // Server Info
 const serverInfo = computed(() => {
-  const info: Record<string, { color: string; iconBg: string }> = {
-    filesystem: { color: 'from-blue-400 to-cyan-500', iconBg: 'bg-blue-600' },
-    shell: { color: 'from-gray-600 to-gray-800', iconBg: 'bg-gray-700' },
-    git: { color: 'from-orange-400 to-red-500', iconBg: 'bg-orange-600' },
-    fetch: { color: 'from-green-400 to-teal-500', iconBg: 'bg-green-600' },
-    jira: { color: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-700' },
-    confluence: { color: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-700' },
-    aws: { color: 'from-orange-500 to-yellow-600', iconBg: 'bg-orange-600' },
-    kubernetes: { color: 'from-blue-400 to-blue-600', iconBg: 'bg-blue-600' },
-    sqlite: { color: 'from-blue-300 to-cyan-400', iconBg: 'bg-blue-500' },
-    postgres: { color: 'from-blue-400 to-indigo-500', iconBg: 'bg-blue-600' },
-    'brave-search': { color: 'from-orange-400 to-red-500', iconBg: 'bg-orange-600' },
-    memory: { color: 'from-purple-400 to-pink-500', iconBg: 'bg-purple-600' },
-    puppeteer: { color: 'from-green-400 to-teal-500', iconBg: 'bg-green-600' },
-    playwright: { color: 'from-green-500 to-emerald-600', iconBg: 'bg-green-600' },
-    'github-mcp': { color: 'from-gray-700 to-gray-900', iconBg: 'bg-gray-800' },
-    'gitlab-mcp': { color: 'from-orange-500 to-red-600', iconBg: 'bg-orange-600' },
-    'slack-mcp': { color: 'from-purple-500 to-pink-600', iconBg: 'bg-purple-600' },
-    'notion-mcp': { color: 'from-gray-800 to-black', iconBg: 'bg-gray-900' },
-    'google-drive': { color: 'from-yellow-400 to-green-500', iconBg: 'bg-yellow-500' },
-    'figma-mcp': { color: 'from-pink-400 to-purple-500', iconBg: 'bg-pink-600' },
-    'framer-mcp': { color: 'from-indigo-400 to-purple-500', iconBg: 'bg-indigo-600' },
-    'penpot-mcp': { color: 'from-green-400 to-emerald-500', iconBg: 'bg-emerald-600' },
-    'sequential-thinking': { color: 'from-purple-400 to-indigo-500', iconBg: 'bg-purple-600' },
-    sentry: { color: 'from-purple-500 to-pink-600', iconBg: 'bg-purple-600' },
-  };
-  return info[props.server?.id || ''] || {
-    color: 'from-gray-400 to-gray-500',
-    iconBg: 'bg-gray-600',
-  };
+    const info: Record<string, { color: string; iconBg: string }> = {
+        filesystem: { color: 'from-blue-400 to-cyan-500', iconBg: 'bg-blue-600' },
+        shell: { color: 'from-gray-600 to-gray-800', iconBg: 'bg-gray-700' },
+        git: { color: 'from-orange-400 to-red-500', iconBg: 'bg-orange-600' },
+        fetch: { color: 'from-green-400 to-teal-500', iconBg: 'bg-green-600' },
+        jira: { color: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-700' },
+        confluence: { color: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-700' },
+        aws: { color: 'from-orange-500 to-yellow-600', iconBg: 'bg-orange-600' },
+        kubernetes: { color: 'from-blue-400 to-blue-600', iconBg: 'bg-blue-600' },
+        sqlite: { color: 'from-blue-300 to-cyan-400', iconBg: 'bg-blue-500' },
+        postgres: { color: 'from-blue-400 to-indigo-500', iconBg: 'bg-blue-600' },
+        'brave-search': { color: 'from-orange-400 to-red-500', iconBg: 'bg-orange-600' },
+        memory: { color: 'from-purple-400 to-pink-500', iconBg: 'bg-purple-600' },
+        puppeteer: { color: 'from-green-400 to-teal-500', iconBg: 'bg-green-600' },
+        playwright: { color: 'from-green-500 to-emerald-600', iconBg: 'bg-green-600' },
+        'github-mcp': { color: 'from-gray-700 to-gray-900', iconBg: 'bg-gray-800' },
+        'gitlab-mcp': { color: 'from-orange-500 to-red-600', iconBg: 'bg-orange-600' },
+        'slack-mcp': { color: 'from-purple-500 to-pink-600', iconBg: 'bg-purple-600' },
+        'notion-mcp': { color: 'from-gray-800 to-black', iconBg: 'bg-gray-900' },
+        'google-drive': { color: 'from-yellow-400 to-green-500', iconBg: 'bg-yellow-500' },
+        'figma-mcp': { color: 'from-pink-400 to-purple-500', iconBg: 'bg-pink-600' },
+        'framer-mcp': { color: 'from-indigo-400 to-purple-500', iconBg: 'bg-indigo-600' },
+        'penpot-mcp': { color: 'from-green-400 to-emerald-500', iconBg: 'bg-emerald-600' },
+        'sequential-thinking': { color: 'from-purple-400 to-indigo-500', iconBg: 'bg-purple-600' },
+        sentry: { color: 'from-purple-500 to-pink-600', iconBg: 'bg-purple-600' },
+    };
+    return (
+        info[props.server?.id || ''] || {
+            color: 'from-gray-400 to-gray-500',
+            iconBg: 'bg-gray-600',
+        }
+    );
 });
 
 // Icon for server
 const serverIcon = computed(() => {
-  const icons: Record<string, string> = {
-    filesystem: '📁',
-    shell: '💻',
-    git: '🔀',
-    fetch: '🌐',
-    jira: '📋',
-    confluence: '📝',
-    aws: '☁️',
-    kubernetes: '🚢',
-    sqlite: '🗄️',
-    postgres: '🐘',
-    'brave-search': '🔍',
-    memory: '🧠',
-    puppeteer: '🎭',
-    playwright: '🎬',
-    'github-mcp': '🐙',
-    'gitlab-mcp': '🦊',
-    'slack-mcp': '💬',
-    'notion-mcp': '📓',
-    'google-drive': '📂',
-    'figma-mcp': '🎨',
-    'framer-mcp': '🧭',
-    'penpot-mcp': '✏️',
-    'sequential-thinking': '🧩',
-    sentry: '🐛',
-  };
-  return icons[props.server?.id || ''] || '🔧';
+    const icons: Record<string, string> = {
+        filesystem: '📁',
+        shell: '💻',
+        git: '🔀',
+        fetch: '🌐',
+        jira: '📋',
+        confluence: '📝',
+        aws: '☁️',
+        kubernetes: '🚢',
+        sqlite: '🗄️',
+        postgres: '🐘',
+        'brave-search': '🔍',
+        memory: '✨',
+        puppeteer: '🎭',
+        playwright: '🎬',
+        'github-mcp': '🐙',
+        'gitlab-mcp': '🦊',
+        'slack-mcp': '💬',
+        'notion-mcp': '📓',
+        'google-drive': '📂',
+        'figma-mcp': '🎨',
+        'framer-mcp': '🧭',
+        'penpot-mcp': '✏️',
+        'sequential-thinking': '🧩',
+        sentry: '🐛',
+    };
+    return icons[props.server?.id || ''] || '🔧';
 });
 
 // Get config fields based on server type
 const configFields = computed(() => {
-  if (!props.server) return [];
+    if (!props.server) return [];
 
-  const fields: Record<string, Array<{ key: string; label: string; type: 'text' | 'password' | 'url'; placeholder: string; required?: boolean }>> = {
-    filesystem: [
-      { key: 'allowedPaths', label: '허용된 경로 (콤마로 구분)', type: 'text', placeholder: '/path/to/dir1, /path/to/dir2' },
-    ],
-    git: [
-      { key: 'repository', label: '저장소 경로', type: 'text', placeholder: '/path/to/repository', required: true },
-    ],
-    jira: [
-      { key: 'baseUrl', label: 'Jira URL', type: 'url', placeholder: 'https://your-domain.atlassian.net', required: true },
-      { key: 'username', label: '사용자 이메일', type: 'text', placeholder: 'your@email.com', required: true },
-      { key: 'token', label: 'API Token', type: 'password', placeholder: 'Your Jira API token', required: true },
-    ],
-    confluence: [
-      { key: 'baseUrl', label: 'Confluence URL', type: 'url', placeholder: 'https://your-domain.atlassian.net', required: true },
-      { key: 'username', label: '사용자 이메일', type: 'text', placeholder: 'your@email.com', required: true },
-      { key: 'token', label: 'API Token', type: 'password', placeholder: 'Your Confluence API token', required: true },
-    ],
-    aws: [
-      { key: 'region', label: 'AWS Region', type: 'text', placeholder: 'us-east-1', required: true },
-      { key: 'accessKeyId', label: 'Access Key ID', type: 'text', placeholder: 'AKIA...', required: true },
-      { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', placeholder: 'Your secret key', required: true },
-    ],
-    kubernetes: [
-      { key: 'kubeconfig', label: 'Kubeconfig 경로', type: 'text', placeholder: '~/.kube/config' },
-      { key: 'context', label: 'Context (선택)', type: 'text', placeholder: 'default' },
-    ],
-    sqlite: [
-      { key: 'dbPath', label: '데이터베이스 경로', type: 'text', placeholder: '/path/to/database.db', required: true },
-    ],
-    postgres: [
-      { key: 'connectionString', label: 'Connection String', type: 'password', placeholder: 'postgresql://user:pass@host:5432/db', required: true },
-    ],
-    'brave-search': [
-      { key: 'apiKey', label: 'Brave Search API Key', type: 'password', placeholder: 'Your Brave Search API key', required: true },
-    ],
-    'github-mcp': [
-      { key: 'token', label: 'GitHub Personal Access Token', type: 'password', placeholder: 'ghp_...', required: true },
-    ],
-    'gitlab-mcp': [
-      { key: 'baseUrl', label: 'GitLab URL', type: 'url', placeholder: 'https://gitlab.com' },
-      { key: 'token', label: 'GitLab Access Token', type: 'password', placeholder: 'glpat-...', required: true },
-    ],
-    'slack-mcp': [
-      { key: 'token', label: 'Slack Bot Token', type: 'password', placeholder: 'xoxb-...', required: true },
-    ],
-    'notion-mcp': [
-      { key: 'token', label: 'Notion Integration Token', type: 'password', placeholder: 'secret_...', required: true },
-    ],
-    'google-drive': [
-      { key: 'clientId', label: 'Google Client ID', type: 'text', placeholder: 'Your Google OAuth Client ID', required: true },
-      { key: 'clientSecret', label: 'Google Client Secret', type: 'password', placeholder: 'Your Google OAuth Client Secret', required: true },
-    ],
-    sentry: [
-      { key: 'authToken', label: 'Sentry Auth Token', type: 'password', placeholder: 'Your Sentry auth token', required: true },
-      { key: 'organization', label: 'Organization Slug', type: 'text', placeholder: 'your-org', required: true },
-    ],
-  };
+    const fields: Record<
+        string,
+        Array<{
+            key: string;
+            label: string;
+            type: 'text' | 'password' | 'url';
+            placeholder: string;
+            required?: boolean;
+        }>
+    > = {
+        filesystem: [
+            {
+                key: 'allowedPaths',
+                label: '허용된 경로 (콤마로 구분)',
+                type: 'text',
+                placeholder: '/path/to/dir1, /path/to/dir2',
+            },
+        ],
+        git: [
+            {
+                key: 'repository',
+                label: '저장소 경로',
+                type: 'text',
+                placeholder: '/path/to/repository',
+                required: true,
+            },
+        ],
+        jira: [
+            {
+                key: 'baseUrl',
+                label: 'Jira URL',
+                type: 'url',
+                placeholder: 'https://your-domain.atlassian.net',
+                required: true,
+            },
+            {
+                key: 'username',
+                label: '사용자 이메일',
+                type: 'text',
+                placeholder: 'your@email.com',
+                required: true,
+            },
+            {
+                key: 'token',
+                label: 'API Token',
+                type: 'password',
+                placeholder: 'Your Jira API token',
+                required: true,
+            },
+        ],
+        confluence: [
+            {
+                key: 'baseUrl',
+                label: 'Confluence URL',
+                type: 'url',
+                placeholder: 'https://your-domain.atlassian.net',
+                required: true,
+            },
+            {
+                key: 'username',
+                label: '사용자 이메일',
+                type: 'text',
+                placeholder: 'your@email.com',
+                required: true,
+            },
+            {
+                key: 'token',
+                label: 'API Token',
+                type: 'password',
+                placeholder: 'Your Confluence API token',
+                required: true,
+            },
+        ],
+        aws: [
+            {
+                key: 'region',
+                label: 'AWS Region',
+                type: 'text',
+                placeholder: 'us-east-1',
+                required: true,
+            },
+            {
+                key: 'accessKeyId',
+                label: 'Access Key ID',
+                type: 'text',
+                placeholder: 'AKIA...',
+                required: true,
+            },
+            {
+                key: 'secretAccessKey',
+                label: 'Secret Access Key',
+                type: 'password',
+                placeholder: 'Your secret key',
+                required: true,
+            },
+        ],
+        kubernetes: [
+            {
+                key: 'kubeconfig',
+                label: 'Kubeconfig 경로',
+                type: 'text',
+                placeholder: '~/.kube/config',
+            },
+            { key: 'context', label: 'Context (선택)', type: 'text', placeholder: 'default' },
+        ],
+        sqlite: [
+            {
+                key: 'dbPath',
+                label: '데이터베이스 경로',
+                type: 'text',
+                placeholder: '/path/to/database.db',
+                required: true,
+            },
+        ],
+        postgres: [
+            {
+                key: 'connectionString',
+                label: 'Connection String',
+                type: 'password',
+                placeholder: 'postgresql://user:pass@host:5432/db',
+                required: true,
+            },
+        ],
+        'brave-search': [
+            {
+                key: 'apiKey',
+                label: 'Brave Search API Key',
+                type: 'password',
+                placeholder: 'Your Brave Search API key',
+                required: true,
+            },
+        ],
+        'github-mcp': [
+            {
+                key: 'token',
+                label: 'GitHub Personal Access Token',
+                type: 'password',
+                placeholder: 'ghp_...',
+                required: true,
+            },
+        ],
+        'gitlab-mcp': [
+            { key: 'baseUrl', label: 'GitLab URL', type: 'url', placeholder: 'https://gitlab.com' },
+            {
+                key: 'token',
+                label: 'GitLab Access Token',
+                type: 'password',
+                placeholder: 'glpat-...',
+                required: true,
+            },
+        ],
+        'slack-mcp': [
+            {
+                key: 'token',
+                label: 'Slack Bot Token',
+                type: 'password',
+                placeholder: 'xoxb-...',
+                required: true,
+            },
+        ],
+        'notion-mcp': [
+            {
+                key: 'token',
+                label: 'Notion Integration Token',
+                type: 'password',
+                placeholder: 'secret_...',
+                required: true,
+            },
+        ],
+        'google-drive': [
+            {
+                key: 'clientId',
+                label: 'Google Client ID',
+                type: 'text',
+                placeholder: 'Your Google OAuth Client ID',
+                required: true,
+            },
+            {
+                key: 'clientSecret',
+                label: 'Google Client Secret',
+                type: 'password',
+                placeholder: 'Your Google OAuth Client Secret',
+                required: true,
+            },
+        ],
+        sentry: [
+            {
+                key: 'authToken',
+                label: 'Sentry Auth Token',
+                type: 'password',
+                placeholder: 'Your Sentry auth token',
+                required: true,
+            },
+            {
+                key: 'organization',
+                label: 'Organization Slug',
+                type: 'text',
+                placeholder: 'your-org',
+                required: true,
+            },
+        ],
+    };
 
-  return fields[props.server.id] || [];
+    return fields[props.server.id] || [];
 });
 
 // Check if all required fields are filled
 const isConfigValid = computed(() => {
-  for (const field of configFields.value) {
-    if (field.required && !form.value.config[field.key]) {
-      return false;
+    for (const field of configFields.value) {
+        if (field.required && !form.value.config[field.key]) {
+            return false;
+        }
     }
-  }
-  return true;
+    return true;
 });
 
 const supportsInstall = computed(() => !!props.server?.installCommand);
 const installLogText = computed(() => installLog.value || props.server?.installLog || '');
 const lastInstalledAt = computed(() =>
-  props.server?.lastInstalledAt ? new Date(props.server.lastInstalledAt).toLocaleString() : null
+    props.server?.lastInstalledAt ? new Date(props.server.lastInstalledAt).toLocaleString() : null
 );
 
 // Actions
 function handleSave() {
-  // Parse args from string
-  const args = argsString.value.trim()
-    ? argsString.value.trim().split(/\s+/)
-    : props.server?.args || [];
+    // Parse args from string
+    const args = argsString.value.trim()
+        ? argsString.value.trim().split(/\s+/)
+        : props.server?.args || [];
 
-  emit('save', {
-    enabled: form.value.enabled,
-    command: form.value.command || props.server?.command,
-    args,
-    config: form.value.config,
-    permissions: { ...form.value.permissions },
-    scopes: [...form.value.scopes],
-  });
+    emit('save', {
+        enabled: form.value.enabled,
+        command: form.value.command || props.server?.command,
+        args,
+        config: form.value.config,
+        permissions: { ...form.value.permissions },
+        scopes: [...form.value.scopes],
+    });
 }
 
 async function handleConnect() {
-  if (!props.server) return;
+    if (!props.server) return;
 
-  isConnecting.value = true;
-  connectionResult.value = null;
-  connectionMessage.value = '';
+    isConnecting.value = true;
+    connectionResult.value = null;
+    connectionMessage.value = '';
 
-  try {
-    // First save the configuration
-    const args = argsString.value.trim()
-      ? argsString.value.trim().split(/\s+/)
-      : props.server?.args || [];
+    try {
+        // First save the configuration
+        const args = argsString.value.trim()
+            ? argsString.value.trim().split(/\s+/)
+            : props.server?.args || [];
 
-    await settingsStore.updateMCPServer(props.server.id, {
-      command: form.value.command || props.server.command,
-      args,
-      config: form.value.config,
-      permissions: { ...form.value.permissions },
-      scopes: [...form.value.scopes],
-    });
+        await settingsStore.updateMCPServer(props.server.id, {
+            command: form.value.command || props.server.command,
+            args,
+            config: form.value.config,
+            permissions: { ...form.value.permissions },
+            scopes: [...form.value.scopes],
+        });
 
-    // Try to connect
-    await settingsStore.connectMCPServer(props.server.id);
-    connectionResult.value = 'success';
-    connectionMessage.value = 'MCP 서버에 연결되었습니다!';
-    form.value.enabled = true;
-  } catch (error) {
-    connectionResult.value = 'error';
-    connectionMessage.value = error instanceof Error ? error.message : '연결 실패';
-  } finally {
-    isConnecting.value = false;
-  }
+        // Try to connect
+        await settingsStore.connectMCPServer(props.server.id);
+        connectionResult.value = 'success';
+        connectionMessage.value = 'MCP 서버에 연결되었습니다!';
+        form.value.enabled = true;
+    } catch (error) {
+        connectionResult.value = 'error';
+        connectionMessage.value = error instanceof Error ? error.message : '연결 실패';
+    } finally {
+        isConnecting.value = false;
+    }
 }
 
 async function handleDisconnect() {
-  if (!props.server) return;
+    if (!props.server) return;
 
-  await settingsStore.disconnectMCPServer(props.server.id);
-  form.value.enabled = false;
-  connectionResult.value = null;
-  connectionMessage.value = '';
+    await settingsStore.disconnectMCPServer(props.server.id);
+    form.value.enabled = false;
+    connectionResult.value = null;
+    connectionMessage.value = '';
 }
 
 async function handleInstall() {
-  if (!props.server || !props.server.installCommand) return;
+    if (!props.server || !props.server.installCommand) return;
 
-  isInstalling.value = true;
-  installResult.value = null;
-  installMessage.value = '';
-  installLog.value = '';
-
-  try {
-    const result = await settingsStore.installMCPServer(props.server.id);
-    installResult.value = 'success';
-    installMessage.value = '설치가 완료되었습니다.';
-    installLog.value = result.stdout || result.stderr || '';
-  } catch (error) {
-    installResult.value = 'error';
-    installMessage.value = error instanceof Error ? error.message : '설치에 실패했습니다.';
+    isInstalling.value = true;
+    installResult.value = null;
+    installMessage.value = '';
     installLog.value = '';
-  } finally {
-    isInstalling.value = false;
-  }
+
+    try {
+        const result = await settingsStore.installMCPServer(props.server.id);
+        installResult.value = 'success';
+        installMessage.value = '설치가 완료되었습니다.';
+        installLog.value = result.stdout || result.stderr || '';
+    } catch (error) {
+        installResult.value = 'error';
+        installMessage.value = error instanceof Error ? error.message : '설치에 실패했습니다.';
+        installLog.value = '';
+    } finally {
+        isInstalling.value = false;
+    }
 }
 
 function handleClose() {
-  emit('close');
+    emit('close');
 }
 
 function updateConfigField(key: string, value: string) {
-  form.value.config = {
-    ...form.value.config,
-    [key]: value,
-  };
+    form.value.config = {
+        ...form.value.config,
+        [key]: value,
+    };
 }
 
 function togglePermission(permissionId: MCPPermissionId, value: boolean) {
-  form.value.permissions = {
-    ...form.value.permissions,
-    [permissionId]: value,
-  };
+    form.value.permissions = {
+        ...form.value.permissions,
+        [permissionId]: value,
+    };
 }
 
 function isPermissionEnabled(permissionId: MCPPermissionId): boolean {
-  return Boolean(form.value.permissions?.[permissionId]);
+    return Boolean(form.value.permissions?.[permissionId]);
 }
 
 function resetPermissions() {
-  if (!props.server) return;
-  form.value.permissions = settingsStore.buildMCPPermissionsFor(props.server);
+    if (!props.server) return;
+    form.value.permissions = settingsStore.buildMCPPermissionsFor(props.server);
 }
 
 function initializeFeatureSelections(server: MCPServerConfig) {
-  if (!server.featureScopes || server.featureScopes.length === 0) {
-    featureSelections.value = {};
-    form.value.scopes = server.scopes ? [...server.scopes] : [];
-    return;
-  }
-  const currentScopes = new Set(server.scopes || []);
-  const selections: Record<string, boolean> = {};
-  for (const feature of server.featureScopes) {
-    const enabled = feature.requiredScopes.every((scope) => currentScopes.has(scope));
-    selections[feature.id] = enabled;
-  }
-  featureSelections.value = selections;
-  syncScopesWithSelections();
+    if (!server.featureScopes || server.featureScopes.length === 0) {
+        featureSelections.value = {};
+        form.value.scopes = server.scopes ? [...server.scopes] : [];
+        return;
+    }
+    const currentScopes = new Set(server.scopes || []);
+    const selections: Record<string, boolean> = {};
+    for (const feature of server.featureScopes) {
+        const enabled = feature.requiredScopes.every((scope) => currentScopes.has(scope));
+        selections[feature.id] = enabled;
+    }
+    featureSelections.value = selections;
+    syncScopesWithSelections();
 }
 
 function syncScopesWithSelections() {
-  if (!props.server?.featureScopes || props.server.featureScopes.length === 0) {
-    return;
-  }
-  const selected = new Set<string>();
-  for (const feature of props.server.featureScopes) {
-    if (featureSelections.value[feature.id]) {
-      feature.requiredScopes.forEach((scope) => {
-        if (scope) {
-          selected.add(scope);
-        }
-      });
+    if (!props.server?.featureScopes || props.server.featureScopes.length === 0) {
+        return;
     }
-  }
-  form.value.scopes = Array.from(selected);
+    const selected = new Set<string>();
+    for (const feature of props.server.featureScopes) {
+        if (featureSelections.value[feature.id]) {
+            feature.requiredScopes.forEach((scope) => {
+                if (scope) {
+                    selected.add(scope);
+                }
+            });
+        }
+    }
+    form.value.scopes = Array.from(selected);
 }
 
 function toggleFeatureScope(featureId: string, value: boolean) {
-  featureSelections.value = {
-    ...featureSelections.value,
-    [featureId]: value,
-  };
-  syncScopesWithSelections();
+    featureSelections.value = {
+        ...featureSelections.value,
+        [featureId]: value,
+    };
+    syncScopesWithSelections();
 }
 
 function isFeatureScopeEnabled(featureId: string): boolean {
-  return Boolean(featureSelections.value[featureId]);
+    return Boolean(featureSelections.value[featureId]);
 }
 
 function resetFeatureScopes() {
-  if (!props.server) return;
-  const defaults: Record<string, boolean> = {};
-  if (props.server.featureScopes) {
-    for (const feature of props.server.featureScopes) {
-      defaults[feature.id] = Boolean(feature.defaultEnabled);
+    if (!props.server) return;
+    const defaults: Record<string, boolean> = {};
+    if (props.server.featureScopes) {
+        for (const feature of props.server.featureScopes) {
+            defaults[feature.id] = Boolean(feature.defaultEnabled);
+        }
     }
-  }
-  featureSelections.value = defaults;
-  syncScopesWithSelections();
+    featureSelections.value = defaults;
+    syncScopesWithSelections();
 }
 
 // Helper to get tag display
 function getTagLabel(tag: MCPServerTag): string {
-  return settingsStore.getMCPTagDisplayName(tag);
+    return settingsStore.getMCPTagDisplayName(tag);
 }
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open && server"
-      class="fixed inset-0 z-50 overflow-y-auto"
-      @click.self="handleClose"
-    >
-      <!-- Backdrop -->
-      <div
-        class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-        @click="handleClose"
-      />
-
-      <!-- Modal -->
-      <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative w-full max-w-lg transform transition-all">
-          <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
-            <!-- Header -->
-            <div class="relative px-6 py-5 border-b border-gray-200 dark:border-gray-700">
-              <div :class="['absolute inset-0 opacity-10 bg-gradient-to-r', serverInfo.color]" />
-              <div class="relative flex items-center gap-4">
-                <div :class="['w-12 h-12 rounded-xl flex items-center justify-center text-2xl', serverInfo.iconBg]">
-                  {{ serverIcon }}
-                </div>
-                <div class="flex-1">
-                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-                    {{ server.name }}
-                  </h2>
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ server.description }}
-                  </p>
-                </div>
-                <!-- Server Links -->
-                <div class="flex items-center gap-2">
-                  <a
-                    v-if="server.website"
-                    :href="server.website"
-                    target="_blank"
-                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    title="문서 보기"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                  </a>
-                  <a
-                    v-if="server.repository"
-                    :href="server.repository"
-                    target="_blank"
-                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    title="소스 코드"
-                  >
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd" />
-                    </svg>
-                  </a>
-                </div>
-              </div>
-
-              <!-- Close button -->
-              <button
-                class="absolute top-4 right-4 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+    <Teleport to="body">
+        <div
+            v-if="open && server"
+            class="fixed inset-0 z-50 overflow-y-auto"
+            @click.self="handleClose"
+        >
+            <!-- Backdrop -->
+            <div
+                class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
                 @click="handleClose"
-              >
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            />
 
-            <!-- Body -->
-            <div class="px-6 py-4 space-y-6 max-h-[calc(100vh-280px)] overflow-y-auto">
-              <!-- Tags -->
-              <div class="flex flex-wrap gap-2">
-                <span
-                  v-for="tag in server.tags"
-                  :key="tag"
-                  class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                >
-                  {{ getTagLabel(tag) }}
-                </span>
-              </div>
+            <!-- Modal -->
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-lg transform transition-all">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
+                        <!-- Header -->
+                        <div
+                            class="relative px-6 py-5 border-b border-gray-200 dark:border-gray-700"
+                        >
+                            <div
+                                :class="[
+                                    'absolute inset-0 opacity-10 bg-gradient-to-r',
+                                    serverInfo.color,
+                                ]"
+                            />
+                            <div class="relative flex items-center gap-4">
+                                <div
+                                    :class="[
+                                        'w-12 h-12 rounded-xl flex items-center justify-center text-2xl',
+                                        serverInfo.iconBg,
+                                    ]"
+                                >
+                                    {{ serverIcon }}
+                                </div>
+                                <div class="flex-1">
+                                    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+                                        {{ server.name }}
+                                    </h2>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                                        {{ server.description }}
+                                    </p>
+                                </div>
+                                <!-- Server Links -->
+                                <div class="flex items-center gap-2">
+                                    <a
+                                        v-if="server.website"
+                                        :href="server.website"
+                                        target="_blank"
+                                        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        title="문서 보기"
+                                    >
+                                        <svg
+                                            class="w-5 h-5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                                            />
+                                        </svg>
+                                    </a>
+                                    <a
+                                        v-if="server.repository"
+                                        :href="server.repository"
+                                        target="_blank"
+                                        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        title="소스 코드"
+                                    >
+                                        <svg
+                                            class="w-5 h-5"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
 
-              <!-- Connection Status -->
-              <div v-if="server.isConnected" class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div class="flex items-center gap-2 text-green-700 dark:text-green-300">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span class="font-medium">연결됨</span>
-                  <span v-if="server.lastValidated" class="text-sm text-green-600 dark:text-green-400 ml-auto">
-                    {{ new Date(server.lastValidated).toLocaleDateString() }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Installation helper -->
-              <div
-                v-if="supportsInstall"
-                class="p-4 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg space-y-3"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">
-                      로컬 설치
-                    </p>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      필요한 CLI 도구를 자동으로 설치하고 버전을 최신으로 유지합니다.
-                    </p>
-                    <p v-if="lastInstalledAt" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      마지막 설치: {{ lastInstalledAt }}
-                    </p>
-                    <p
-                      v-else
-                      class="text-xs text-amber-600 dark:text-amber-400 mt-1"
-                    >
-                      설치 완료 후에만 연결 테스트가 가능합니다.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-                    :disabled="isInstalling"
-                    @click.stop="handleInstall"
-                  >
-                    {{ isInstalling ? '설치 중...' : server.installed ? '재설치' : '설치' }}
-                  </button>
-                </div>
-                <div v-if="installMessage" :class="['text-xs', installResult === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-500']">
-                  {{ installMessage }}
-                </div>
-                <pre
-                  v-if="installLogText"
-                  class="text-xs bg-black/10 dark:bg-black/30 text-gray-800 dark:text-gray-200 rounded-lg p-2 overflow-x-auto max-h-32"
-                >{{ installLogText }}</pre>
-              </div>
-
-              <!-- Command & Args (advanced) -->
-              <div class="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">실행 설정</h4>
-
-                <div>
-                  <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Command</label>
-                  <input
-                    v-model="form.command"
-                    type="text"
-                    :placeholder="server.command || 'npx'"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Arguments</label>
-                  <input
-                    v-model="argsString"
-                    type="text"
-                    :placeholder="server.args?.join(' ') || '-y @mcp/server'"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    공백으로 구분하여 입력
-                  </p>
-                </div>
-              </div>
-
-              <!-- Configuration Fields -->
-              <div v-if="configFields.length > 0" class="space-y-4">
-                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">설정</h4>
-
-                <div v-for="field in configFields" :key="field.key" class="space-y-1">
-                  <label class="block text-sm text-gray-600 dark:text-gray-400">
-                    {{ field.label }}
-                    <span v-if="field.required" class="text-red-500">*</span>
-                  </label>
-                  <input
-                    :type="field.type"
-                    :value="form.config[field.key] || ''"
-                    @input="updateConfigField(field.key, ($event.target as HTMLInputElement).value)"
-                    :placeholder="field.placeholder"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <!-- Permission Controls -->
-              <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                  <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">권한 설정</h4>
-                  <button
-                    type="button"
-                    class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    @click="resetPermissions"
-                  >
-                    기본값 복원
-                  </button>
-                </div>
-                <div class="space-y-3">
-                  <div
-                    v-for="group in permissionGroups"
-                    :key="group.category"
-                    class="space-y-2"
-                  >
-                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                      {{ permissionCategoryLabels[group.category] || group.category }}
-                    </p>
-                    <div class="grid grid-cols-1 gap-2">
-                      <label
-                        v-for="permission in group.definitions"
-                        :key="permission.id"
-                        class="flex items-start justify-between gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-400 dark:hover:border-blue-400"
-                      >
-                        <div>
-                          <div class="flex items-center gap-2">
-                            <span class="text-lg">{{ permission.icon }}</span>
-                            <span class="text-sm font-medium text-gray-900 dark:text-white">
-                              {{ permission.label }}
-                            </span>
-                          </div>
-                          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {{ permission.description }}
-                          </p>
+                            <!-- Close button -->
+                            <button
+                                class="absolute top-4 right-4 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                                @click="handleClose"
+                            >
+                                <svg
+                                    class="h-6 w-6"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            class="sr-only peer"
-                            :checked="isPermissionEnabled(permission.id as MCPPermissionId)"
-                            @change="togglePermission(permission.id as MCPPermissionId, ($event.target as HTMLInputElement).checked)"
-                          />
-                          <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"></div>
-                        </label>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Feature Scope Controls -->
-              <div v-if="hasFeatureScopes" class="space-y-4">
-                <div class="flex items-center justify-between">
-                  <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Slack 기능별 권한</h4>
-                  <button
-                    type="button"
-                    class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    @click="resetFeatureScopes"
-                  >
-                    기본값 복원
-                  </button>
-                </div>
-                <div class="space-y-3">
-                  <div
-                    v-for="feature in server.featureScopes"
-                    :key="feature.id"
-                    class="p-3 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg flex flex-col gap-2"
-                  >
-                    <div class="flex items-start justify-between gap-4">
-                      <div>
-                        <p class="text-sm font-medium text-gray-900 dark:text-white">
-                          {{ feature.label }}
-                        </p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {{ feature.description }}
-                        </p>
-                      </div>
-                      <label class="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          class="sr-only peer"
-                          :checked="isFeatureScopeEnabled(feature.id)"
-                          @change="toggleFeatureScope(feature.id, ($event.target as HTMLInputElement).checked)"
-                        />
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                      <span
-                        v-for="scope in feature.requiredScopes"
-                        :key="scope"
-                        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200"
-                      >
-                        {{ scope }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              <!-- Connection Result -->
-              <div
-                v-if="connectionResult"
-                :class="[
-                  'p-3 rounded-lg text-sm',
-                  connectionResult === 'success'
-                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                ]"
-              >
-                <div class="flex items-center gap-2">
-                  <svg
-                    v-if="connectionResult === 'success'"
-                    class="w-5 h-5 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <svg
-                    v-else
-                    class="w-5 h-5 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>{{ connectionMessage }}</span>
-                </div>
-              </div>
+                        <!-- Body -->
+                        <div class="px-6 py-4 space-y-6 max-h-[calc(100vh-280px)] overflow-y-auto">
+                            <!-- Tags -->
+                            <div class="flex flex-wrap gap-2">
+                                <span
+                                    v-for="tag in server.tags"
+                                    :key="tag"
+                                    class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                >
+                                    {{ getTagLabel(tag) }}
+                                </span>
+                            </div>
 
-              <!-- Enable Toggle -->
-              <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <div>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">
-                    {{ server.name }} 활성화
-                  </p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">
-                    이 MCP 서버를 태스크에서 사용할 수 있도록 활성화
-                  </p>
+                            <!-- Connection Status -->
+                            <div
+                                v-if="server.isConnected"
+                                class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-green-700 dark:text-green-300"
+                                >
+                                    <svg
+                                        class="w-5 h-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
+                                    </svg>
+                                    <span class="font-medium">연결됨</span>
+                                    <span
+                                        v-if="server.lastValidated"
+                                        class="text-sm text-green-600 dark:text-green-400 ml-auto"
+                                    >
+                                        {{ new Date(server.lastValidated).toLocaleDateString() }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Installation helper -->
+                            <div
+                                v-if="supportsInstall"
+                                class="p-4 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg space-y-3"
+                            >
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p
+                                            class="text-sm font-medium text-gray-900 dark:text-white"
+                                        >
+                                            로컬 설치
+                                        </p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                                            필요한 CLI 도구를 자동으로 설치하고 버전을 최신으로
+                                            유지합니다.
+                                        </p>
+                                        <p
+                                            v-if="lastInstalledAt"
+                                            class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                                        >
+                                            마지막 설치: {{ lastInstalledAt }}
+                                        </p>
+                                        <p
+                                            v-else
+                                            class="text-xs text-amber-600 dark:text-amber-400 mt-1"
+                                        >
+                                            설치 완료 후에만 연결 테스트가 가능합니다.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                                        :disabled="isInstalling"
+                                        @click.stop="handleInstall"
+                                    >
+                                        {{
+                                            isInstalling
+                                                ? '설치 중...'
+                                                : server.installed
+                                                  ? '재설치'
+                                                  : '설치'
+                                        }}
+                                    </button>
+                                </div>
+                                <div
+                                    v-if="installMessage"
+                                    :class="[
+                                        'text-xs',
+                                        installResult === 'success'
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : 'text-red-500',
+                                    ]"
+                                >
+                                    {{ installMessage }}
+                                </div>
+                                <pre
+                                    v-if="installLogText"
+                                    class="text-xs bg-black/10 dark:bg-black/30 text-gray-800 dark:text-gray-200 rounded-lg p-2 overflow-x-auto max-h-32"
+                                    >{{ installLogText }}</pre
+                                >
+                            </div>
+
+                            <!-- Command & Args (advanced) -->
+                            <div class="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    실행 설정
+                                </h4>
+
+                                <div>
+                                    <label
+                                        class="block text-sm text-gray-600 dark:text-gray-400 mb-1"
+                                        >Command</label
+                                    >
+                                    <input
+                                        v-model="form.command"
+                                        type="text"
+                                        :placeholder="server.command || 'npx'"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-sm text-gray-600 dark:text-gray-400 mb-1"
+                                        >Arguments</label
+                                    >
+                                    <input
+                                        v-model="argsString"
+                                        type="text"
+                                        :placeholder="server.args?.join(' ') || '-y @mcp/server'"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        공백으로 구분하여 입력
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Configuration Fields -->
+                            <div v-if="configFields.length > 0" class="space-y-4">
+                                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    설정
+                                </h4>
+
+                                <div
+                                    v-for="field in configFields"
+                                    :key="field.key"
+                                    class="space-y-1"
+                                >
+                                    <label class="block text-sm text-gray-600 dark:text-gray-400">
+                                        {{ field.label }}
+                                        <span v-if="field.required" class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :type="field.type"
+                                        :value="form.config[field.key] || ''"
+                                        @input="
+                                            updateConfigField(
+                                                field.key,
+                                                ($event.target as HTMLInputElement).value
+                                            )
+                                        "
+                                        :placeholder="field.placeholder"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Permission Controls -->
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <h4
+                                        class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                    >
+                                        권한 설정
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        @click="resetPermissions"
+                                    >
+                                        기본값 복원
+                                    </button>
+                                </div>
+                                <div class="space-y-3">
+                                    <div
+                                        v-for="group in permissionGroups"
+                                        :key="group.category"
+                                        class="space-y-2"
+                                    >
+                                        <p
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide"
+                                        >
+                                            {{
+                                                permissionCategoryLabels[group.category] ||
+                                                group.category
+                                            }}
+                                        </p>
+                                        <div class="grid grid-cols-1 gap-2">
+                                            <label
+                                                v-for="permission in group.definitions"
+                                                :key="permission.id"
+                                                class="flex items-start justify-between gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-400 dark:hover:border-blue-400"
+                                            >
+                                                <div>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-lg">{{
+                                                            permission.icon
+                                                        }}</span>
+                                                        <span
+                                                            class="text-sm font-medium text-gray-900 dark:text-white"
+                                                        >
+                                                            {{ permission.label }}
+                                                        </span>
+                                                    </div>
+                                                    <p
+                                                        class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                                                    >
+                                                        {{ permission.description }}
+                                                    </p>
+                                                </div>
+                                                <label
+                                                    class="relative inline-flex items-center cursor-pointer"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        class="sr-only peer"
+                                                        :checked="
+                                                            isPermissionEnabled(
+                                                                permission.id as MCPPermissionId
+                                                            )
+                                                        "
+                                                        @change="
+                                                            togglePermission(
+                                                                permission.id as MCPPermissionId,
+                                                                ($event.target as HTMLInputElement)
+                                                                    .checked
+                                                            )
+                                                        "
+                                                    />
+                                                    <div
+                                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                                    ></div>
+                                                </label>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Feature Scope Controls -->
+                            <div v-if="hasFeatureScopes" class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <h4
+                                        class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                    >
+                                        Slack 기능별 권한
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        @click="resetFeatureScopes"
+                                    >
+                                        기본값 복원
+                                    </button>
+                                </div>
+                                <div class="space-y-3">
+                                    <div
+                                        v-for="feature in server.featureScopes"
+                                        :key="feature.id"
+                                        class="p-3 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg flex flex-col gap-2"
+                                    >
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p
+                                                    class="text-sm font-medium text-gray-900 dark:text-white"
+                                                >
+                                                    {{ feature.label }}
+                                                </p>
+                                                <p
+                                                    class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                                                >
+                                                    {{ feature.description }}
+                                                </p>
+                                            </div>
+                                            <label
+                                                class="relative inline-flex items-center cursor-pointer"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    class="sr-only peer"
+                                                    :checked="isFeatureScopeEnabled(feature.id)"
+                                                    @change="
+                                                        toggleFeatureScope(
+                                                            feature.id,
+                                                            ($event.target as HTMLInputElement)
+                                                                .checked
+                                                        )
+                                                    "
+                                                />
+                                                <div
+                                                    class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                                ></div>
+                                            </label>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <span
+                                                v-for="scope in feature.requiredScopes"
+                                                :key="scope"
+                                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200"
+                                            >
+                                                {{ scope }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Connection Result -->
+                            <div
+                                v-if="connectionResult"
+                                :class="[
+                                    'p-3 rounded-lg text-sm',
+                                    connectionResult === 'success'
+                                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300',
+                                ]"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <svg
+                                        v-if="connectionResult === 'success'"
+                                        class="w-5 h-5 flex-shrink-0"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
+                                    </svg>
+                                    <svg
+                                        v-else
+                                        class="w-5 h-5 flex-shrink-0"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
+                                    </svg>
+                                    <span>{{ connectionMessage }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Enable Toggle -->
+                            <div
+                                class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                            >
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ server.name }} 활성화
+                                    </p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        이 MCP 서버를 태스크에서 사용할 수 있도록 활성화
+                                    </p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        v-model="form.enabled"
+                                        type="checkbox"
+                                        class="sr-only peer"
+                                        :disabled="!server.isConnected && !isConfigValid"
+                                    />
+                                    <div
+                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+                                    ></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Footer -->
+                        <div
+                            class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                        >
+                            <div>
+                                <button
+                                    v-if="server.isConnected"
+                                    type="button"
+                                    class="px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors text-sm"
+                                    @click="handleDisconnect"
+                                >
+                                    연결 해제
+                                </button>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
+                                    :disabled="
+                                        isConnecting ||
+                                        !isConfigValid ||
+                                        (supportsInstall && !server.installed)
+                                    "
+                                    @click="handleConnect"
+                                >
+                                    {{ isConnecting ? '연결 중...' : '연결 테스트' }}
+                                </button>
+                            </div>
+                            <div class="flex gap-2">
+                                <button
+                                    type="button"
+                                    class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                    @click="handleClose"
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                                    @click="handleSave"
+                                >
+                                    저장
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input
-                    v-model="form.enabled"
-                    type="checkbox"
-                    class="sr-only peer"
-                    :disabled="!server.isConnected && !isConfigValid"
-                  />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
-                </label>
-              </div>
             </div>
-
-            <!-- Footer -->
-            <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-              <div>
-                <button
-                  v-if="server.isConnected"
-                  type="button"
-                  class="px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors text-sm"
-                  @click="handleDisconnect"
-                >
-                  연결 해제
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
-                  :disabled="isConnecting || !isConfigValid || (supportsInstall && !server.installed)"
-                  @click="handleConnect"
-                >
-                  {{ isConnecting ? '연결 중...' : '연결 테스트' }}
-                </button>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  @click="handleClose"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  @click="handleSave"
-                >
-                  저장
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
-  </Teleport>
+    </Teleport>
 </template>

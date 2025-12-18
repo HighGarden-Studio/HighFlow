@@ -45,8 +45,9 @@
                     <label class="text-xs font-semibold text-gray-400 uppercase"
                         >File Path Template</label
                     >
-                    <span class="text-xs text-gray-500" v-pre
-                        >Supports {{ date }}, {{ task.title }}</span
+                    <span class="text-xs text-gray-500"
+                        >Supports &#123;&#123; date &#125;&#125;, &#123;&#123; task.title
+                        &#125;&#125;</span
                     >
                 </div>
                 <input
@@ -60,7 +61,9 @@
                 />
                 <p class="mt-1 text-xs text-gray-500">
                     Path relative to project's <strong>Base Dev Folder</strong>. Supports:
-                    {{ date }}, {{ time }}, {{ taskId }}, {{ task.title }}, {{ project.name }}
+                    &#123;&#123; date &#125;&#125;, &#123;&#123; time &#125;&#125;, &#123;&#123;
+                    taskId &#125;&#125;, &#123;&#123; task.title &#125;&#125;, &#123;&#123;
+                    project.name &#125;&#125;
                 </p>
             </div>
 

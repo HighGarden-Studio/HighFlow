@@ -15,6 +15,7 @@ import { getAPI } from '../../utils/electron';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import TaskCard from '../../components/board/TaskCard.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
+import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import InlineEdit from '../../components/common/InlineEdit.vue';
@@ -211,8 +212,21 @@ async function handleDrop(status: TaskStatus) {
 // };
 
 function openTaskDetail(task: Task) {
+    console.log('[KanbanBoardView] openTaskDetail called with task:', task.id, task.title);
+    console.log(
+        '[KanbanBoardView] Before - selectedTaskId:',
+        selectedTaskId.value,
+        'showDetailPanel:',
+        showDetailPanel.value
+    );
     selectedTaskId.value = task.id;
     showDetailPanel.value = true;
+    console.log(
+        '[KanbanBoardView] After - selectedTaskId:',
+        selectedTaskId.value,
+        'showDetailPanel:',
+        showDetailPanel.value
+    );
 }
 
 function closeDetailPanel() {
@@ -1031,7 +1045,7 @@ onMounted(async () => {
                                 :is-dragging="draggedTask === task.id"
                                 :missing-provider="getCachedMissingProvider(task.id)"
                                 :hide-prompt-actions="true"
-                                @click="openTaskDetail"
+                                @click="(t) => openTaskDetail(t)"
                                 @edit="handleEditTask"
                                 @delete="handleDeleteTask"
                                 @execute="handleTaskExecute"

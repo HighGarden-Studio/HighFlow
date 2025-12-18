@@ -51,6 +51,9 @@ const showSetupWizardFromSettings = ref(false);
 // Tag filtering state
 const selectedTags = ref<AIProviderTag[]>([]);
 
+// Model refreshing state
+const refreshingProviders = ref<Set<string>>(new Set());
+
 // Filtered providers based on selected tags
 const filteredProviders = computed(() => {
     if (selectedTags.value.length === 0) {
@@ -181,6 +184,40 @@ async function handleSetupWizardSkip() {
     showSetupWizardFromSettings.value = false;
 }
 
+// Model management functions
+function getModelCount(providerId: string): number {
+    return settingsStore.getProviderModels(providerId).length;
+}
+
+function getLastFetchTime(providerId: string): string {
+    const fetchTime = settingsStore.getProviderModelsFetchTime(providerId);
+    if (!fetchTime) return '미조회';
+
+    const now = Date.now();
+    const diff = now - fetchTime.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (minutes < 1) return '방금 전';
+    if (minutes < 60) return `${minutes}분 전`;
+    if (hours < 24) return `${hours}시간 전`;
+    return `${days}일 전`;
+}
+
+async function refreshProviderModels(providerId: string) {
+    console.log(`[SettingsView] Refreshing models for provider: ${providerId}`);
+    refreshingProviders.value.add(providerId);
+    try {
+        await settingsStore.refreshProviderModels(providerId);
+        console.log(`[SettingsView] Models refreshed successfully for ${providerId}`);
+    } catch (error) {
+        console.error(`[SettingsView] Failed to refresh models:`, error);
+    } finally {
+        refreshingProviders.value.delete(providerId);
+    }
+}
+
 // Helper to get provider gradient color
 function getProviderGradient(providerId: string): string {
     const gradients: Record<string, string> = {
@@ -223,6 +260,10 @@ function getProviderGradient(providerId: string): string {
 
 // Lifecycle
 onMounted(async () => {
+    console.log('========================================');
+    console.log('[SettingsView] Component MOUNTED');
+    console.log('[SettingsView] AI Providers:', settingsStore.aiProviders.length);
+    console.log('========================================');
     if (window.electron?.app) {
         appInfo.value = await window.electron.app.getInfo();
     }
@@ -704,12 +745,104 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                 </div>
                                             </div>
                                         </div>
-                                        <button
-                                            class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0"
-                                            @click="openProviderModal(provider.id)"
+                                        <div class="flex items-center gap-2">
+                                            <!-- Model Refresh Button -->
+                                            <button
+                                                v-if="provider.enabled"
+                                                @click.stop="
+                                                    () => {
+                                                        console.log(
+                                                            '[SettingsView] Button clicked for:',
+                                                            provider.id,
+                                                            'enabled:',
+                                                            provider.enabled
+                                                        );
+                                                        refreshProviderModels(provider.id);
+                                                    }
+                                                "
+                                                :disabled="refreshingProviders.has(provider.id)"
+                                                class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                                :title="`${provider.name} 모델 갱신`"
+                                            >
+                                                <svg
+                                                    v-if="!refreshingProviders.has(provider.id)"
+                                                    class="w-3.5 h-3.5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                    />
+                                                </svg>
+                                                <svg
+                                                    v-else
+                                                    class="w-3.5 h-3.5 animate-spin"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <circle
+                                                        class="opacity-25"
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="10"
+                                                        stroke="currentColor"
+                                                        stroke-width="4"
+                                                    ></circle>
+                                                    <path
+                                                        class="opacity-75"
+                                                        fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                    ></path>
+                                                </svg>
+                                                {{
+                                                    refreshingProviders.has(provider.id)
+                                                        ? '갱신 중'
+                                                        : '모델 갱신'
+                                                }}
+                                            </button>
+                                            <button
+                                                class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0"
+                                                @click="openProviderModal(provider.id)"
+                                            >
+                                                Configure
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Model Information -->
+                                    <div
+                                        v-if="provider.enabled && getModelCount(provider.id) > 0"
+                                        class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700"
+                                    >
+                                        <div
+                                            class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2"
                                         >
-                                            Configure
-                                        </button>
+                                            <span>모델: {{ getModelCount(provider.id) }}개</span>
+                                            <span
+                                                >마지막 갱신:
+                                                {{ getLastFetchTime(provider.id) }}</span
+                                            >
+                                        </div>
+                                        <div class="flex flex-wrap gap-1">
+                                            <span
+                                                v-for="(model, idx) in settingsStore
+                                                    .getProviderModels(provider.id)
+                                                    .slice(0, 4)"
+                                                :key="idx"
+                                                class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-[10px] text-gray-600 dark:text-gray-400 font-mono"
+                                            >
+                                                {{ model }}
+                                            </span>
+                                            <span
+                                                v-if="getModelCount(provider.id) > 4"
+                                                class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 rounded text-[10px] text-blue-600 dark:text-blue-400 font-medium"
+                                            >
+                                                +{{ getModelCount(provider.id) - 4 }} more
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

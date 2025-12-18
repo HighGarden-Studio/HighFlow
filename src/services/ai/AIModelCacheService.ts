@@ -18,12 +18,17 @@ interface ModelCacheConfig {
     cacheTTL: number;
     /** Whether to persist cache to database */
     persistToDb: boolean;
+    /** Whether to use localStorage for persistence */
+    useLocalStorage: boolean;
 }
 
 const DEFAULT_CONFIG: ModelCacheConfig = {
     cacheTTL: 24 * 60 * 60 * 1000, // 24 hours
     persistToDb: true,
+    useLocalStorage: true,
 };
+
+const CACHE_STORAGE_KEY = 'ai_model_cache_v1';
 
 export class AIModelCacheService {
     private static instance: AIModelCacheService;
@@ -33,6 +38,11 @@ export class AIModelCacheService {
 
     private constructor(config: Partial<ModelCacheConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
+
+        // Load from localStorage on initialization
+        if (this.config.useLocalStorage && typeof localStorage !== 'undefined') {
+            this.loadFromLocalStorage();
+        }
     }
 
     static getInstance(config?: Partial<ModelCacheConfig>): AIModelCacheService {
@@ -68,6 +78,8 @@ export class AIModelCacheService {
      * Force refresh models from provider API
      */
     async refreshModels(provider: AIProvider): Promise<ModelInfo[]> {
+        console.log(`[AIModelCache] FORCE REFRESH requested for provider: ${provider}`);
+
         const fetchFn = this.refreshCallbacks.get(provider);
 
         if (!fetchFn) {
@@ -76,27 +88,13 @@ export class AIModelCacheService {
         }
 
         try {
-            console.log(`[AIModelCache] Fetching models for provider: ${provider}`);
+            console.log(`[AIModelCache] Calling fetch function for provider: ${provider}`);
             const models = await fetchFn();
 
-            const now = new Date();
-            const entry: CacheEntry = {
-                models,
-                fetchedAt: now,
-                expiresAt: new Date(now.getTime() + this.config.cacheTTL),
-            };
-
-            this.cache.set(provider, entry);
-
-            // Persist to database if enabled
-            if (this.config.persistToDb) {
-                await this.persistToDatabase(provider, models);
-            }
-
-            console.log(`[AIModelCache] Cached ${models.length} models for ${provider}`);
+            await this.setCachedModels(provider, models);
             return models;
         } catch (error) {
-            console.error(`[AIModelCache] Failed to fetch models for ${provider}:`, error);
+            console.error(`[AIModelCache] Failed to refresh models for ${provider}:`, error);
 
             // Try to load from database as fallback
             if (this.config.persistToDb) {
@@ -111,6 +109,31 @@ export class AIModelCacheService {
 
             return this.cache.get(provider)?.models || [];
         }
+    }
+
+    /**
+     * Manually set cached models (e.g. from IPC fetch)
+     */
+    async setCachedModels(provider: AIProvider, models: ModelInfo[]): Promise<void> {
+        const now = new Date();
+        const entry: CacheEntry = {
+            models,
+            fetchedAt: now,
+            expiresAt: new Date(now.getTime() + this.config.cacheTTL),
+        };
+
+        this.cache.set(provider, entry);
+
+        if (this.config.useLocalStorage && typeof localStorage !== 'undefined') {
+            this.saveToLocalStorage();
+        }
+
+        // Persist to database if enabled
+        if (this.config.persistToDb) {
+            await this.persistToDatabase(provider, models);
+        }
+
+        console.log(`[AIModelCache] Cached ${models.length} models for ${provider}`);
     }
 
     /**
@@ -161,6 +184,78 @@ export class AIModelCacheService {
             this.cache.delete(provider);
         } else {
             this.cache.clear();
+        }
+
+        // Update localStorage
+        if (this.config.useLocalStorage && typeof localStorage !== 'undefined') {
+            this.saveToLocalStorage();
+        }
+    }
+
+    /**
+     * Check if a provider has cached models
+     */
+    isCached(provider: AIProvider): boolean {
+        return this.cache.has(provider);
+    }
+
+    /**
+     * Get last fetch time for a provider
+     */
+    getLastFetchTime(provider: AIProvider): Date | null {
+        const entry = this.cache.get(provider);
+        return entry ? entry.fetchedAt : null;
+    }
+
+    /**
+     * Load cache from localStorage
+     */
+    private loadFromLocalStorage(): void {
+        try {
+            const stored = localStorage.getItem(CACHE_STORAGE_KEY);
+            if (!stored) return;
+
+            const data = JSON.parse(stored);
+
+            // Reconstruct cache map with Date objects
+            for (const [provider, entry] of Object.entries(data)) {
+                const cacheEntry = entry as any;
+                this.cache.set(provider as AIProvider, {
+                    models: cacheEntry.models,
+                    fetchedAt: new Date(cacheEntry.fetchedAt),
+                    expiresAt: new Date(cacheEntry.expiresAt),
+                });
+            }
+
+            console.log(
+                `[AIModelCache] Loaded cache from localStorage for ${this.cache.size} providers`
+            );
+        } catch (error) {
+            console.error('[AIModelCache] Failed to load from localStorage:', error);
+        }
+    }
+
+    /**
+     * Save cache to localStorage
+     */
+    private saveToLocalStorage(): void {
+        try {
+            const data: Record<string, any> = {};
+
+            for (const [provider, entry] of this.cache.entries()) {
+                data[provider] = {
+                    models: entry.models,
+                    fetchedAt: entry.fetchedAt.toISOString(),
+                    expiresAt: entry.expiresAt.toISOString(),
+                };
+            }
+
+            localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(data));
+            console.log(
+                `[AIModelCache] Saved cache to localStorage for ${this.cache.size} providers`
+            );
+        } catch (error) {
+            console.error('[AIModelCache] Failed to save to localStorage:', error);
         }
     }
 
