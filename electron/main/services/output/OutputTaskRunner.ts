@@ -75,15 +75,23 @@ export class OutputTaskRunner {
 
             // 5. Save Result Metadata
             if (result.success) {
+                // For local files, store the path not the content
+                // This allows streaming and prevents DB bloat
+                const isLocalFile = config.destination === 'local_file';
+
                 await taskRepository.update(task.id, {
                     executionResult: {
-                        // Save the actual content that was written/sent
-                        content: contentToOutput,
+                        // For local files, store metadata with file path
+                        // For other outputs (Slack, etc.), store the content
+                        content: isLocalFile ? undefined : contentToOutput,
+                        filePath: isLocalFile ? result.metadata?.path : undefined,
                         metadata: result.metadata,
                         provider: connector.id,
                         status: 'success',
                     },
-                    result: contentToOutput, // Also save to result column for consistency
+                    // For local files, store path in result for preview to read file
+                    // For other outputs, store the actual content
+                    result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
                 });

@@ -16,6 +16,10 @@ interface Props {
 
 const props = defineProps<Props>();
 
+// Reset confirmation state
+const showResetConfirm = ref(false);
+const isResetting = ref(false);
+
 // Curator operator management
 const operators = ref<Operator[]>([]);
 const selectedCuratorId = ref<number | null>(props.project.curatorOperatorId || null);
@@ -57,6 +61,30 @@ async function updateCurator(operatorId: number | null) {
         console.log(`[ProjectMemoryPanel] Updated curator to: ${operatorId || 'default'}`);
     } catch (error) {
         console.error('Failed to update curator:', error);
+    }
+}
+
+// Reset project memory
+async function resetMemory() {
+    isResetting.value = true;
+    try {
+        await window.api.projects.update(props.project.id, {
+            memory: JSON.stringify({
+                summary: '',
+                recentDecisions: [],
+                glossary: {},
+                lastUpdatedAt: new Date().toISOString(),
+            }),
+        });
+        showResetConfirm.value = false;
+        console.log('[ProjectMemoryPanel] Memory reset successfully');
+        // Reload the page to show updated memory
+        window.location.reload();
+    } catch (error) {
+        console.error('Failed to reset memory:', error);
+        alert('메모리 리셋 실패: ' + error);
+    } finally {
+        isResetting.value = false;
     }
 }
 
@@ -185,13 +213,30 @@ const lastUpdatedFormatted = computed(() => {
 
         <!-- Project Memory Section -->
         <section v-if="hasMemory" class="memory-section">
-            <h3 class="section-title">
-                <span class="icon">🧠</span>
-                프로젝트 메모리
-                <span v-if="lastUpdatedFormatted" class="last-updated">
-                    마지막 업데이트: {{ lastUpdatedFormatted }}
-                </span>
-            </h3>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="section-title mb-0">
+                    <span class="icon">🧠</span>
+                    프로젝트 메모리
+                    <span v-if="lastUpdatedFormatted" class="last-updated">
+                        마지막 업데이트: {{ lastUpdatedFormatted }}
+                    </span>
+                </h3>
+                <button
+                    @click="showResetConfirm = true"
+                    class="px-3 py-1.5 text-xs font-medium rounded bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex items-center gap-1.5"
+                    title="프로젝트 메모리 초기화"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                    </svg>
+                    메모리 리셋
+                </button>
+            </div>
 
             <!-- Summary -->
             <div v-if="memory?.summary" class="memory-subsection">
@@ -240,6 +285,83 @@ const lastUpdatedFormatted = computed(() => {
             <span class="info-icon">ℹ️</span>
             이 메모리는 AI Curator가 태스크 완료 시 자동으로 업데이트합니다. 모든 AI 에이전트가 이
             컨텍스트를 공유하여 일관된 작업을 수행합니다.
+        </div>
+
+        <!-- Reset Confirmation Dialog -->
+        <div
+            v-if="showResetConfirm"
+            class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            @click.self="showResetConfirm = false"
+        >
+            <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+                @click.stop
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center"
+                    >
+                        <svg
+                            class="w-6 h-6 text-red-600 dark:text-red-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                            프로젝트 메모리를 리셋하시겠습니까?
+                        </h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                            모든 프로젝트 메모리(요약, 의사결정 로그, 용어집)가 삭제됩니다. 이
+                            작업은 되돌릴 수 없습니다.
+                        </p>
+                        <div class="flex gap-3 justify-end">
+                            <button
+                                @click="showResetConfirm = false"
+                                :disabled="isResetting"
+                                class="px-4 py-2 text-sm font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                            >
+                                취소
+                            </button>
+                            <button
+                                @click="resetMemory"
+                                :disabled="isResetting"
+                                class="px-4 py-2 text-sm font-medium rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <svg
+                                    v-if="isResetting"
+                                    class="animate-spin h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <circle
+                                        class="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                    ></circle>
+                                    <path
+                                        class="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                </svg>
+                                {{ isResetting ? '리셋 중...' : '리셋' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>

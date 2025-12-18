@@ -521,6 +521,34 @@ const resultFiles = computed<ResultFile[]>(() => {
         }
     });
 
+    // Add Output task local file if exists
+    const taskResultPath = (props.task as any)?.result;
+    if (
+        typeof taskResultPath === 'string' &&
+        taskResultPath.startsWith('/') &&
+        !filesMap.has(taskResultPath)
+    ) {
+        // This is an Output Local File task
+        try {
+            const fs = require('fs');
+            if (fs.existsSync(taskResultPath)) {
+                const stats = fs.statSync(taskResultPath);
+                filesMap.set(taskResultPath, {
+                    path: taskResultPath,
+                    absolutePath: taskResultPath,
+                    type: 'created',
+                    size: stats.size,
+                    extension: taskResultPath.split('.').pop() || 'txt',
+                });
+                console.log(
+                    `[EnhancedResultPreview] Added Output Local File to tree: ${taskResultPath}`
+                );
+            }
+        } catch (e) {
+            console.error('[EnhancedResultPreview] Failed to add Output file to tree:', e);
+        }
+    }
+
     const files = Array.from(filesMap.values());
     console.log('[EnhancedResultPreview] resultFiles computed:', {
         existingFilesCount: existingFiles.length,
@@ -596,20 +624,23 @@ onUnmounted(() => {
 // Watch for file selection to start/stop polling
 watch(
     () => [selectedFile.value, props.task?.status],
-    ([file, status]) => {
+    async (file) => {
         // Stop existing poll
         if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
         }
 
-        // Start polling if we have a file and checking for updates (in_progress or just always for local files to be safe?)
-        // User requested "real-time check", so we poll if it's a file.
-        if (file && (file as ResultFile).absolutePath) {
-            console.log(
-                '[EnhancedResultPreview] Starting file poll for:',
-                (file as ResultFile).path
-            );
+        // Start polling if we have a file path
+        const hasFilePath = file && (file as ResultFile).absolutePath;
+        const hasResultPath =
+            props.task?.result &&
+            typeof props.task.result === 'string' &&
+            props.task.result.startsWith('/');
+
+        if (hasFilePath || hasResultPath) {
+            const pathToWatch = hasFilePath ? (file as ResultFile).path : props.task?.result;
+            console.log('[EnhancedResultPreview] Starting file poll for:', pathToWatch);
             pollInterval = setInterval(() => {
                 contentRefreshTrigger.value++;
             }, 1000); // Poll every second
@@ -667,6 +698,26 @@ const content = computed(() => {
         }
         return '';
     }
+
+    // Check if task.result contains a file path (for Output local_file tasks)
+    const taskResultPath = props.task?.result;
+    if (typeof taskResultPath === 'string' && taskResultPath.startsWith('/')) {
+        // This looks like a file path, try to read it
+        try {
+            const fs = require('fs');
+            if (fs.existsSync(taskResultPath)) {
+                console.log(
+                    `[EnhancedResultPreview] Reading file from result path: ${taskResultPath}`
+                );
+                // Dependency on trigger for live updates
+                const _ = contentRefreshTrigger.value;
+                return fs.readFileSync(taskResultPath, 'utf-8');
+            }
+        } catch (e) {
+            console.error(`[EnhancedResultPreview] Failed to read file from result path:`, e);
+        }
+    }
+
     const result = aiValue.value || fallbackResultContent.value || '';
     /* console.log('[EnhancedResultPreview] content computed:', {
          hasAiValue: !!aiValue.value,

@@ -430,17 +430,23 @@ function handleConnectProviderClick() {
                 </div>
             </div>
 
-            <!-- Streaming Preview -->
+            <!-- Streaming Preview - ALWAYS VISIBLE -->
             <div
-                v-if="task.status === 'in_progress' && !task.isPaused"
                 class="mb-3 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800 cursor-pointer hover:border-blue-400 dark:hover:border-blue-600 transition-all shadow-sm group"
+                :class="{
+                    'border-blue-400 dark:border-blue-600':
+                        task.status === 'in_progress' && !task.isPaused,
+                }"
                 @click.stop="emit('previewStream', task)"
                 title="클릭하여 실시간 응답 크게 보기"
             >
                 <!-- Header with live indicator -->
                 <div class="flex items-center justify-between mb-1.5">
                     <div class="flex items-center gap-1.5">
-                        <span class="relative flex h-2 w-2">
+                        <span
+                            v-if="task.status === 'in_progress' && !task.isPaused"
+                            class="relative flex h-2 w-2"
+                        >
                             <span
                                 class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"
                             ></span>
@@ -449,9 +455,21 @@ function handleConnectProviderClick() {
                             ></span>
                         </span>
                         <span
-                            class="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide"
-                            >LIVE</span
+                            v-else
+                            class="relative inline-flex rounded-full h-2 w-2 bg-gray-400"
+                        ></span>
+                        <span
+                            class="text-[10px] font-semibold uppercase tracking-wide"
+                            :class="
+                                task.status === 'in_progress' && !task.isPaused
+                                    ? 'text-blue-600 dark:text-blue-400'
+                                    : 'text-gray-500 dark:text-gray-400'
+                            "
                         >
+                            {{
+                                task.status === 'in_progress' && !task.isPaused ? 'LIVE' : 'AI 응답'
+                            }}
+                        </span>
                     </div>
                     <span
                         class="text-[10px] text-gray-500 dark:text-gray-400 group-hover:text-blue-500 transition-colors"
@@ -460,9 +478,9 @@ function handleConnectProviderClick() {
                 </div>
 
                 <!-- Streaming content -->
-                <div class="relative overflow-hidden" style="min-height: 36px; max-height: 48px">
+                <div class="relative overflow-hidden" style="height: 40px">
                     <p
-                        v-if="streamedContent"
+                        v-if="streamedContent || hasPreviousResult"
                         class="text-gray-700 dark:text-gray-200 font-mono leading-tight overflow-hidden text-[10px]"
                         style="
                             display: -webkit-box;
@@ -470,13 +488,21 @@ function handleConnectProviderClick() {
                             -webkit-box-orient: vertical;
                         "
                     >
-                        {{ streamedContent.slice(-300) }}
+                        {{
+                            streamedContent ||
+                            (task as any).result?.slice(0, 300) ||
+                            '이전 결과 없음'
+                        }}
                     </p>
                     <p
                         v-else
-                        class="text-gray-400 dark:text-gray-500 italic animate-pulse text-[10px]"
+                        class="text-gray-400 dark:text-gray-500 italic text-[10px] flex items-center h-full"
                     >
-                        ⏳ 응답 대기중...
+                        {{
+                            task.status === 'in_progress'
+                                ? '⏳ 응답 대기중...'
+                                : '아직 실행되지 않음'
+                        }}
                     </p>
                 </div>
             </div>
