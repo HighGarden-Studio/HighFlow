@@ -26,8 +26,11 @@ export class AdvancedTaskExecutor {
         this.aiServiceManager = new AIServiceManager();
     }
 
-    setEnabledProviders(providers: EnabledProviderInfo[] = []): void {
-        this.aiServiceManager.setEnabledProviders(providers);
+    setEnabledProviders(
+        providers: EnabledProviderInfo[] = [],
+        shouldFetchModels: boolean = false
+    ): void {
+        this.aiServiceManager.setEnabledProviders(providers, shouldFetchModels);
     }
 
     setMCPServers(servers: MCPServerRuntimeConfig[] = []): void {

@@ -497,6 +497,34 @@ export interface Capability {
     limitations?: string[];
 }
 
+/**
+ * Model Characteristics - AI-generated tags describing model properties
+ */
+export type ModelCharacteristic =
+    | '안정적'
+    | '균형형'
+    | '창의적'
+    | '글 잘씀'
+    | '논리적'
+    | '구조중심'
+    | '비판적'
+    | '검증용'
+    | '빠름'
+    | '비용절약'
+    | '코딩'
+    | '설계강함'
+    | '실험용'
+    | '가벼움'
+    | '비쌈'
+    | '저렴'
+    | '무료'
+    // Output types
+    | '텍스트'
+    | '이미지'
+    | '비디오'
+    | '오디오'
+    | '멀티모달';
+
 export interface ModelInfo {
     name: AIModel;
     provider: AIProvider;
@@ -512,6 +540,9 @@ export interface ModelInfo {
     deprecatedSince?: string;
     replacementModel?: string;
     supportedActions?: string[];
+    // AI-generated characteristics
+    characteristics?: ModelCharacteristic[];
+    characteristicsUpdatedAt?: number; // timestamp
 }
 
 // ========================================

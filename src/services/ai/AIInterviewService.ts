@@ -26,14 +26,14 @@ export interface InterviewMessage {
     role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp: Date;
-        metadata?: {
-            questionType?: QuestionType;
-            questionId?: string;
-            extractedInfo?: Record<string, any>;
-            attachments?: AttachmentInfo[];
-            typing?: boolean;
-            streaming?: boolean;
-            options?: string[];
+    metadata?: {
+        questionType?: QuestionType;
+        questionId?: string;
+        extractedInfo?: Record<string, any>;
+        attachments?: AttachmentInfo[];
+        typing?: boolean;
+        streaming?: boolean;
+        options?: string[];
     };
 }
 
@@ -446,8 +446,7 @@ const QUESTION_TEMPLATES: Record<QuestionType, InterviewQuestion[]> = {
         {
             id: 'feature_priority',
             type: 'feature_suggestions',
-            question:
-                '추가로 고려해볼 만한 기능(예: 알림, 협업, 자동화)이 있다면 무엇이 있을까요?',
+            question: '추가로 고려해볼 만한 기능(예: 알림, 협업, 자동화)이 있다면 무엇이 있을까요?',
             priority: 2,
         },
     ],
@@ -503,8 +502,11 @@ export class AIInterviewService {
      * 연동된 Provider 목록 설정
      * settingsStore에서 연동된 Provider 목록을 받아 설정합니다.
      */
-    setEnabledProviders(providers: EnabledProviderInfo[]): void {
-        this.enabledProviders = providers;
+    setEnabledProviders(
+        providers: EnabledProviderInfo[],
+        shouldFetchModels: boolean = false
+    ): void {
+        this.aiServiceManager.setEnabledProviders(providers, shouldFetchModels);
     }
 
     /**
@@ -529,9 +531,7 @@ export class AIInterviewService {
         }
         if (context.priorities.length > 0) {
             parts.push(
-                `우선순위:\n${context.priorities
-                    .map((p) => `- ${p.item} (${p.level})`)
-                    .join('\n')}`
+                `우선순위:\n${context.priorities.map((p) => `- ${p.item} (${p.level})`).join('\n')}`
             );
         }
         return parts.join('\n');
@@ -565,7 +565,9 @@ export class AIInterviewService {
             });
             console.debug(`[AIInterviewService][${stage}] Prompt Body:\n${prompt}`);
             if (metadata?.systemPrompt) {
-                console.debug(`[AIInterviewService][${stage}] System Prompt:\n${metadata.systemPrompt}`);
+                console.debug(
+                    `[AIInterviewService][${stage}] System Prompt:\n${metadata.systemPrompt}`
+                );
             }
         } catch (error) {
             console.warn('[AIInterviewService] Failed to log prompt', error);
@@ -774,7 +776,12 @@ export class AIInterviewService {
                 maxTokens: 600,
                 preferredProvider,
             };
-            this.logPromptRequest('analyze-initial-idea', preferredProvider, userPrompt, promptMetadata);
+            this.logPromptRequest(
+                'analyze-initial-idea',
+                preferredProvider,
+                userPrompt,
+                promptMetadata
+            );
 
             // preferredProvider를 우선 시도하도록 옵션 설정
             const response = await aiClient.completeWithInfo(userPrompt, {
@@ -940,7 +947,9 @@ export class AIInterviewService {
     /**
      * AI를 사용한 동적 후속 질문 생성
      */
-    private async generateNextQuestionWithAI(session: InterviewSession): Promise<InterviewQuestion | null> {
+    private async generateNextQuestionWithAI(
+        session: InterviewSession
+    ): Promise<InterviewQuestion | null> {
         try {
             const { context, messages } = session;
             const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
@@ -983,10 +992,10 @@ export class AIInterviewService {
                 temperature: 0.4,
                 maxTokens: 200,
             });
-            const response = await aiClient.complete(prompt, {
+            const response = (await aiClient.complete(prompt, {
                 temperature: 0.4,
                 maxTokens: 200,
-            }) as any;
+            })) as any;
 
             const text = typeof response === 'string' ? response : (response?.content as string);
             if (!text) return null;
@@ -1013,7 +1022,10 @@ export class AIInterviewService {
 
             return question;
         } catch (error) {
-            console.error('[AIInterviewService] Failed to generate AI question, fallback to templates:', error);
+            console.error(
+                '[AIInterviewService] Failed to generate AI question, fallback to templates:',
+                error
+            );
             return null;
         }
     }
@@ -1136,15 +1148,16 @@ export class AIInterviewService {
         return assistantMsg;
     }
 
-    private async buildFeatureSuggestionQuestion(session: InterviewSession): Promise<InterviewQuestion> {
-        const baseTemplate =
-            QUESTION_TEMPLATES.feature_suggestions[0] || {
-                id: 'feature_suggestions_default',
-                type: 'feature_suggestions' as QuestionType,
-                question: '추가로 고려해볼 만한 기능이 있을까요?',
-                priority: 1,
-                options: ['알림 기능', '협업 기능', '자동화', '잘 모르겠어요'],
-            };
+    private async buildFeatureSuggestionQuestion(
+        session: InterviewSession
+    ): Promise<InterviewQuestion> {
+        const baseTemplate = QUESTION_TEMPLATES.feature_suggestions[0] || {
+            id: 'feature_suggestions_default',
+            type: 'feature_suggestions' as QuestionType,
+            question: '추가로 고려해볼 만한 기능이 있을까요?',
+            priority: 1,
+            options: ['알림 기능', '협업 기능', '자동화', '잘 모르겠어요'],
+        };
 
         const recentHighlights = session.context.clarifiedRequirements.slice(-2).join(', ');
         const questionText = recentHighlights
@@ -1418,10 +1431,10 @@ export class AIInterviewService {
 - 질문 유형: ${nextQuestion.type}
 - 기본 질문: ${nextQuestion.question}
 - 선택지: ${
-        nextQuestion.options && nextQuestion.options.length > 0
-            ? nextQuestion.options.map((opt, idx) => `${idx + 1}번. ${opt}`).join(' | ')
-            : '없음'
-    }
+                nextQuestion.options && nextQuestion.options.length > 0
+                    ? nextQuestion.options.map((opt, idx) => `${idx + 1}번. ${opt}`).join(' | ')
+                    : '없음'
+            }
 
 ## 응답 가이드라인
 1. **사용자 답변 인정**: 사용자가 말한 내용에서 핵심 포인트를 짧게 언급 (1문장)
@@ -2141,23 +2154,23 @@ ${attachmentsText}
                         const outputFormats = task.outputFormats || [defaultOutputFormat];
                         const primaryOutputFormat = task.primaryOutputFormat || defaultOutputFormat;
 
-                    const recommendedProviders = this.resolveRecommendedProviders(task);
-                    const suggestedProvider =
-                        recommendedProviders[0] ||
-                        this.selectBestProvider(task.description || task.title || '');
+                        const recommendedProviders = this.resolveRecommendedProviders(task);
+                        const suggestedProvider =
+                            recommendedProviders[0] ||
+                            this.selectBestProvider(task.description || task.title || '');
 
-                    return {
-                        title: task.title,
-                        description: task.description,
-                        category: task.category || 'feature',
-                        estimatedMinutes: task.estimatedMinutes || 60,
-                        dependencies: task.dependencies || [],
-                        suggestedAIProvider: suggestedProvider,
-                        suggestedModel: this.selectBestModel(task.description || task.title),
-                        complexity: task.complexity || 'medium',
-                        // 결과물 관련 필드
-                        outputFormats,
-                        primaryOutputFormat,
+                        return {
+                            title: task.title,
+                            description: task.description,
+                            category: task.category || 'feature',
+                            estimatedMinutes: task.estimatedMinutes || 60,
+                            dependencies: task.dependencies || [],
+                            suggestedAIProvider: suggestedProvider,
+                            suggestedModel: this.selectBestModel(task.description || task.title),
+                            complexity: task.complexity || 'medium',
+                            // 결과물 관련 필드
+                            outputFormats,
+                            primaryOutputFormat,
                             outputDescription:
                                 task.outputDescription ||
                                 this.generateOutputDescription(task, primaryOutputFormat),
@@ -2601,7 +2614,8 @@ ${formatInstructions}
             design: '프로덕트 디자이너',
             research: '리서처',
         };
-        const fallback = format === 'code' ? '시니어 소프트웨어 엔지니어' : '전문 컨텐츠 크리에이터';
+        const fallback =
+            format === 'code' ? '시니어 소프트웨어 엔지니어' : '전문 컨텐츠 크리에이터';
         return categoryPersonaMap[task.category] || fallback;
     }
 
@@ -2622,14 +2636,14 @@ ${formatInstructions}
     private formatStepBlueprint(steps: { title: string; details: string }[]): string {
         if (!steps.length) return '- 세부 단계 정보를 파악하여 순차적으로 진행하세요.';
         return steps
-            .map(
-                (step, index) =>
-                    `${index + 1}단계 — ${step.title}\n${step.details.trim()}`
-            )
+            .map((step, index) => `${index + 1}단계 — ${step.title}\n${step.details.trim()}`)
             .join('\n\n');
     }
 
-    private buildStepBlueprint(task: any, format: TaskOutputFormat): {
+    private buildStepBlueprint(
+        task: any,
+        format: TaskOutputFormat
+    ): {
         title: string;
         details: string;
     }[] {
@@ -2693,7 +2707,9 @@ ${formatInstructions}
             lines.push('- **우선 생성/갱신할 아티팩트**:');
             artifactCandidates.forEach((artifact) => lines.push(`  - ${artifact}`));
         } else {
-            lines.push('- **우선 생성/갱신할 아티팩트**: 요구사항을 분석해 파일/모듈 단위로 명시하세요.');
+            lines.push(
+                '- **우선 생성/갱신할 아티팩트**: 요구사항을 분석해 파일/모듈 단위로 명시하세요.'
+            );
         }
         lines.push(
             '- 필요 시 파일별 역할, 주요 함수, 노출 API를 정리하고 제출 시 파일 트리를 함께 제공하세요.'
@@ -3198,9 +3214,7 @@ ${formatInstructions}
             context
         );
         const codeLanguage =
-            expectedOutputFormat === 'code'
-                ? this.inferCodeLanguage(input, context)
-                : undefined;
+            expectedOutputFormat === 'code' ? this.inferCodeLanguage(input, context) : undefined;
 
         return {
             title: input.title,
@@ -3338,7 +3352,8 @@ ${formatInstructions}
             }
 
             // 데이터 검증 및 보완
-            const projectGuidelines = planData.projectGuidelines || this.buildProjectGuidelines(context);
+            const projectGuidelines =
+                planData.projectGuidelines || this.buildProjectGuidelines(context);
 
             const plan: EnhancedExecutionPlan = {
                 projectTitle: planData.projectTitle || this.generateTitle(context),

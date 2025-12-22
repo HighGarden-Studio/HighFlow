@@ -20,6 +20,7 @@ interface Props {
     open: boolean;
     tagSuggestions?: string[];
     dependentTaskIds?: number[]; // 의존성 태스크 ID 목록
+    project?: any; // Project info for defaults
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -125,7 +126,7 @@ watch(
                     autoModel = currentProject.aiModel || 'claude-3-5-sonnet-20240620';
                 } else if (localRepoTypes.includes('antigravity')) {
                     autoProvider = 'google';
-                    autoModel = currentProject.aiModel || 'gemini-1.5-pro';
+                    autoModel = currentProject.aiModel || 'gemini-2.5-pro';
                 } else if (localRepoTypes.includes('codex')) {
                     autoProvider = 'openai';
                     autoModel = currentProject.aiModel || 'gpt-4o';
@@ -178,27 +179,31 @@ const aiProviderOptions: Array<{
     { value: 'local', label: 'Local', icon: '🏠', description: 'Local LLM' },
 ];
 
-const providerModelOptions: Record<string, Array<{ value: string; label: string }>> = {
+// providers array removed as it was unused (duplicate of aiProviderOptions logic)
+
+// Fallback models if API fetch fails
+const providerModelOptions: Record<string, { value: string; label: string }[]> = {
     openai: [
         { value: 'gpt-4o', label: 'GPT-4o' },
         { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
         { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
     ],
     anthropic: [
-        { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' },
+        { value: 'claude-3-5-sonnet-20250219', label: 'Claude 3.5 Sonnet' },
         { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+        { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet' },
         { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
     ],
     google: [
-        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+        { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     ],
     groq: [
         { value: 'llama3-70b-8192', label: 'Llama 3 70B' },
-        { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+        { value: 'llama3-8b-8192', label: 'Llama 3 8B' },
     ],
     'claude-code': [{ value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' }],
-    antigravity: [{ value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Agent)' }],
+    antigravity: [{ value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Agent)' }],
     codex: [{ value: 'gpt-4o', label: 'GPT-4o (Codex)' }],
     local: [
         { value: 'llama3', label: 'Llama 3' },
@@ -222,7 +227,10 @@ watch(
                 models &&
                 (!form.value.aiModel || !models.some((m) => m.value === form.value.aiModel))
             ) {
-                form.value.aiModel = models[0].value;
+                const firstModel = models?.[0];
+                if (firstModel) {
+                    form.value.aiModel = firstModel.value;
+                }
             }
         } else {
             form.value.aiModel = null;

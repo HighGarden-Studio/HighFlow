@@ -112,4 +112,17 @@ export function registerLocalProviderHandlers(): void {
             }
         }
     );
+
+    // Get models from cache (DB)
+    ipcMain.handle('ai:getModelsFromCache', async (_event, providerId: string): Promise<any[]> => {
+        try {
+            const { providerModelsRepository } =
+                await import('../database/repositories/provider-models-repository');
+            const models = await providerModelsRepository.getModels(providerId);
+            return models;
+        } catch (error) {
+            console.error(`[AI] Failed to get cached models for ${providerId}:`, error);
+            return [];
+        }
+    });
 }

@@ -79,18 +79,22 @@ export const MODEL_PERFORMANCE_SCORES: Record<string, number> = {
     'gpt-4-turbo-preview': 94,
     'o1-preview': 99,
     'o1-mini': 93,
-    'gemini-1.5-pro': 92,
-    'gemini-1.5-pro-latest': 92,
+    'gemini-2.5-pro': 95,
+    'gemini-2.0-pro-exp': 94,
 
     // Tier 2: High performers (80-89)
     'claude-3-5-haiku-20241022': 88,
     'claude-3-haiku-20240307': 85,
     'gpt-4o-mini': 87,
     'gpt-4': 86,
-    'gemini-1.5-flash': 84,
-    'gemini-1.5-flash-latest': 84,
+    'gemini-2.5-flash': 86,
+    'gemini-2.0-flash': 85,
     'deepseek-chat': 83,
     'deepseek-coder': 85,
+
+    // Legacy mapping (to be removed)
+    'gemini-1.5-pro': 92,
+    'gemini-1.5-flash': 84,
 
     // Tier 3: Mid performers (70-79)
     'mistral-large-latest': 79,
@@ -131,7 +135,7 @@ export const MODEL_PERFORMANCE_SCORES: Record<string, number> = {
 export const PROVIDER_DEFAULT_SCORES: Record<AIProviderType, number> = {
     anthropic: 98, // Claude 3.5 Sonnet
     openai: 95, // GPT-4o
-    google: 92, // Gemini 1.5 Pro
+    google: 95, // Gemini 2.5 Pro
     'azure-openai': 94, // GPT-4 Turbo
     deepseek: 83, // DeepSeek Chat
     mistral: 79, // Mistral Large
@@ -203,12 +207,12 @@ class AIClient {
     }
 
     private getDefaultModel(provider: AIProviderType): string {
-        const models: Record<AIProviderType, string> = {
+        const models: Partial<Record<AIProviderType, string>> = {
             anthropic: 'claude-3-5-sonnet-20241022',
             openai: 'gpt-4o-mini',
-            google: 'gemini-1.5-pro',
+            google: 'gemini-2.5-pro',
         };
-        return models[provider];
+        return models[provider] || 'gpt-4o-mini';
     }
 
     private readonly openAIModelLimits: { name: string; limit: number }[] = [

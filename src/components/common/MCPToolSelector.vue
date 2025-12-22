@@ -8,6 +8,7 @@ interface Props {
     config: MCPConfig | null; // This is the final config object (Task.mcpConfig format)
     label?: string;
     recommendedIds?: string[];
+    baseConfig?: MCPConfig | null;
     disabled?: boolean;
 }
 
@@ -16,6 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
     recommendedIds: () => [],
     disabled: false,
     config: () => ({}),
+    baseConfig: null,
 });
 
 const emit = defineEmits<{
@@ -127,11 +129,32 @@ function pairsToRecord(pairs: KeyValuePair[]): Record<string, string> {
 
 function ensureConfigEntry(serverId: string): MCPConfigFormEntry {
     if (!localConfigForm.value[serverId]) {
-        localConfigForm.value[serverId] = {
+        // Default empty
+        let entry: MCPConfigFormEntry = {
             env: [createKeyValuePair()],
             params: [],
             notes: '',
         };
+
+        // Inheritance logic
+        if (props.baseConfig && props.baseConfig[serverId]) {
+            try {
+                const base = props.baseConfig[serverId];
+                entry = {
+                    env: mapToPairs(base.env as Record<string, string>),
+                    params: mapToPairs(base.params as Record<string, string>),
+                    notes:
+                        typeof base.context === 'object' && base.context
+                            ? String((base.context as any).notes || '')
+                            : '',
+                };
+                console.log(`[MCPToolSelector] Inherited config for ${serverId}`);
+            } catch (e) {
+                console.error(`[MCPToolSelector] Failed to inherit config for ${serverId}`, e);
+            }
+        }
+
+        localConfigForm.value[serverId] = entry;
     }
     return localConfigForm.value[serverId];
 }
@@ -175,8 +198,27 @@ function buildConfigPayload(): MCPConfig | null {
     return Object.keys(payload).length > 0 ? payload : null;
 }
 
+// Helper for stable JSON stringify to avoid infinite loops
+function stableStringify(obj: any): string {
+    if (obj === null || typeof obj !== 'object') {
+        return JSON.stringify(obj);
+    }
+    if (Array.isArray(obj)) {
+        return '[' + obj.map(stableStringify).join(',') + ']';
+    }
+    const keys = Object.keys(obj).sort();
+    const parts = keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k]));
+    return '{' + parts.join(',') + '}';
+}
+
 function emitChanges() {
-    emit('update:config', buildConfigPayload());
+    const newConfig = buildConfigPayload();
+    // Prevent infinite loop by checking deeply if the config actually changed
+    // We compare with the prop value using stable stringify (handling key order)
+    if (stableStringify(newConfig || {}) === stableStringify(props.config || {})) {
+        return;
+    }
+    emit('update:config', newConfig);
 }
 
 // --- Interaction Handlers ---
@@ -460,6 +502,7 @@ function removeParamRow(serverId: string, rowId: string) {
                         >추가 메모 / 컨텍스트</label
                     >
                     <textarea
+                        v-if="localConfigForm[serverId]"
                         v-model="localConfigForm[serverId].notes"
                         :disabled="disabled"
                         rows="2"

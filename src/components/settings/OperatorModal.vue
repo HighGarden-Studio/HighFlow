@@ -201,6 +201,49 @@
                                     Use as QA Reviewer
                                 </label>
                             </div>
+                            <!-- Tags -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2"
+                                    >Tags</label
+                                >
+                                <div class="flex flex-wrap gap-2 mb-2">
+                                    <div
+                                        v-for="tag in form.tags"
+                                        :key="tag"
+                                        class="flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full text-xs"
+                                    >
+                                        <span>{{ tag }}</span>
+                                        <button
+                                            @click="removeTag(tag)"
+                                            class="hover:text-white focus:outline-none"
+                                        >
+                                            <svg
+                                                class="w-3 h-3"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <input
+                                        v-model="tagInput"
+                                        @keydown.enter.prevent="addTag"
+                                        @keydown.comma.prevent="addTag"
+                                        @blur="addTag"
+                                        type="text"
+                                        placeholder="Add tag..."
+                                        class="flex-1 min-w-[100px] bg-transparent border-none text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm"
+                                    />
+                                </div>
+                                <div class="h-px bg-gray-700 w-full"></div>
+                            </div>
                         </div>
 
                         <!-- Modal Footer -->
@@ -260,7 +303,23 @@ const form = ref({
     specialty: [] as string[],
     isActive: true,
     projectId: null as number | null,
+    tags: [] as string[],
 });
+
+// Tag management
+const tagInput = ref('');
+
+function addTag() {
+    const tag = tagInput.value.trim();
+    if (tag && !form.value.tags.includes(tag)) {
+        form.value.tags.push(tag);
+    }
+    tagInput.value = '';
+}
+
+function removeTag(tag: string) {
+    form.value.tags = form.value.tags.filter((t) => t !== tag);
+}
 
 // Get selected preset data
 const selectedPresetData = computed(() => {
@@ -335,6 +394,7 @@ watch(
                 specialty: operator.specialty || [],
                 isActive: operator.isActive,
                 projectId: operator.projectId,
+                tags: operator.tags || [],
             };
 
             // Try to match with preset
@@ -359,6 +419,7 @@ function save() {
         specialty: JSON.stringify(form.value.specialty || []),
         isActive: form.value.isActive ? 1 : 0,
         projectId: form.value.projectId,
+        tags: JSON.stringify(form.value.tags || []),
     };
 
     emit('save', operatorData);

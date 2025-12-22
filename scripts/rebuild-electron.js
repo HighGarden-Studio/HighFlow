@@ -9,15 +9,10 @@ const fs = require('fs');
 console.log('🔨 Rebuilding better-sqlite3 for Electron...');
 
 try {
-    // Read electron version from package.json
-    const packageJson = JSON.parse(
-        fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8')
-    );
-    const electronVersion = packageJson.devDependencies.electron.replace(/^[\^~=]/, '');
+    // Use electron-builder install-app-deps as it is more robust
+    console.log('Running electron-builder install-app-deps...');
 
-    console.log(`Targeting Electron version: ${electronVersion}`);
-
-    execSync(`pnpm electron-rebuild -f -w better-sqlite3 -v ${electronVersion}`, {
+    execSync('pnpm electron-builder install-app-deps', {
         cwd: __dirname + '/..',
         stdio: 'inherit',
     });

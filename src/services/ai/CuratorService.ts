@@ -199,16 +199,26 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 3. Parse Output
             let parsed: any;
             try {
-                // Extract JSON from response (may include markdown code blocks)
-                const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    parsed = JSON.parse(jsonMatch[0]);
-                } else {
-                    console.error('[Curator] No valid JSON found in response');
-                    return;
-                }
+                // Clean cleanup function
+                const cleanJson = (str: string) => {
+                    // Remove markdown code blocks
+                    str = str.replace(/```json\s*|\s*```/g, '');
+                    // Remove other markdown code blocks
+                    str = str.replace(/```\s*|\s*```/g, '');
+                    // Remove leading/trailing non-json characters (find first { and last })
+                    const firstBrace = str.indexOf('{');
+                    const lastBrace = str.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1) {
+                        str = str.substring(firstBrace, lastBrace + 1);
+                    }
+                    return str;
+                };
+
+                const cleaned = cleanJson(aiResponse || '{}');
+                parsed = JSON.parse(cleaned);
             } catch (parseError) {
                 console.error('[Curator] Failed to parse AI response:', parseError);
+                console.debug('[Curator] Raw response:', aiResponse);
                 return;
             }
 
@@ -323,6 +333,9 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
         // Try preferred models first
         for (const { provider: providerId, model } of preferredModels) {
             try {
+                // Only use enabled providers
+                if (!providerFactory.isProviderEnabled(providerId)) continue;
+
                 const provider = await providerFactory.getProvider(providerId);
                 // Inject API keys if available
                 if (this.apiKeys) {
@@ -340,33 +353,11 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                         );
                         return { provider, model };
                     }
-                    // If specific model not found, use the provider's first available model
-                    if (provider.models.length > 0) {
-                        const firstModel = provider.models[0].name;
-                        console.log(`[Curator] Model ${model} not found, using: ${firstModel}`);
-                        return { provider, model: firstModel };
-                    }
                 }
             } catch (error) {
-                // Provider not configured or error, try next
-                console.debug(`[Curator] Provider ${providerId} not available:`, error);
-            }
-        }
-
-        // Fallback: Try any available provider
-        const fallbackProviders = ['google', 'openai', 'anthropic', 'default-highflow'];
-        for (const providerId of fallbackProviders) {
-            try {
-                const provider = await providerFactory.getProvider(providerId);
-                if (provider && provider.models.length > 0) {
-                    const model = provider.models[0].name;
-                    console.log(
-                        `[Curator] Using fallback provider: ${providerId} with model: ${model}`
-                    );
-                    return { provider, model };
-                }
-            } catch {
-                // Continue to next provider
+                // Provider not configured or error, try next PREFERRED model
+                // But do NOT fall back to generic provider list
+                console.debug(`[Curator] Preferred provider ${providerId} not available:`, error);
             }
         }
 

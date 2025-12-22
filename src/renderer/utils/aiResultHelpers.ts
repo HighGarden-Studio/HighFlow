@@ -16,6 +16,10 @@ type TaskLike = {
         model?: string;
         language?: string;
     } | null;
+    aiReviewResult?: {
+        content?: string;
+        aiResult?: unknown;
+    } | null;
     aiResult?: unknown;
     result?: string;
     codeLanguage?: string;
@@ -47,6 +51,7 @@ export function extractTaskResult(task?: TaskLike | null): TaskResultPayload {
     }
 
     let executionResult = task.executionResult || null;
+    let aiReviewResult = task.aiReviewResult || null;
 
     // Handle stringified execution result
     if (typeof executionResult === 'string') {
@@ -58,10 +63,23 @@ export function extractTaskResult(task?: TaskLike | null): TaskResultPayload {
         }
     }
 
-    const aiResult =
-        normalizeAiResult(executionResult?.aiResult) || normalizeAiResult(task.aiResult);
+    // Handle stringified review result
+    if (typeof aiReviewResult === 'string') {
+        try {
+            aiReviewResult = JSON.parse(aiReviewResult);
+        } catch (e) {
+            console.error('Failed to parse aiReviewResult in helper:', e);
+            aiReviewResult = null;
+        }
+    }
 
-    const content = aiResult?.value ?? executionResult?.content ?? task.result ?? '';
+    const aiResult =
+        normalizeAiResult(executionResult?.aiResult) ||
+        normalizeAiResult(aiReviewResult?.aiResult) ||
+        normalizeAiResult(task.aiResult);
+
+    const content =
+        aiResult?.value ?? executionResult?.content ?? aiReviewResult?.content ?? task.result ?? '';
 
     const provider = executionResult?.provider || aiResult?.meta?.provider;
     const model = executionResult?.model || aiResult?.meta?.model;

@@ -4,6 +4,7 @@ import { ConnectorRegistry } from './ConnectorRegistry';
 import { Task, projects } from '../../database/schema';
 import { db } from '../../database/client';
 import { eq } from 'drizzle-orm';
+import * as fs from 'fs/promises';
 
 import { OutputResult } from './OutputConnector';
 
@@ -52,12 +53,24 @@ export class OutputTaskRunner {
         // 4. Aggregate Content
         let contentToOutput = '';
         try {
+            console.log(`[OutputTaskRunner] Aggregating content for task ${taskId}...`);
             contentToOutput = await this.aggregateContent(task, config);
+            console.log(
+                `[OutputTaskRunner] Aggregation complete. Content length: ${contentToOutput.length}`
+            );
         } catch (err) {
+            console.error(`[OutputTaskRunner] Aggregation failed:`, err);
             return { success: false, error: `Aggregation failed: ${err}` };
         }
 
         if (!contentToOutput) {
+            console.error('[OutputTaskRunner] ERROR: Aggregated content is empty!');
+            console.error(`[OutputTaskRunner] Config:`, JSON.stringify(config, null, 2));
+            console.error(`[OutputTaskRunner] Task dependencies:`, task.dependencies);
+            console.error(
+                `[OutputTaskRunner] Task triggerConfig:`,
+                JSON.stringify(task.triggerConfig, null, 2)
+            );
             return { success: false, error: 'Aggregated content is empty' };
         }
 
@@ -95,6 +108,12 @@ export class OutputTaskRunner {
                     status: 'done',
                     completedAt: new Date(),
                 });
+
+                console.log('[OutputTaskRunner] Task updated with result:', {
+                    taskId: task.id,
+                    resultPath: isLocalFile ? result.metadata?.path : '[content]',
+                    filePathInExecutionResult: isLocalFile ? result.metadata?.path : undefined,
+                });
             } else {
                 await taskRepository.update(task.id, {
                     status: 'in_progress', // Or fail?
@@ -125,6 +144,9 @@ export class OutputTaskRunner {
             dependencies = task.dependencies;
         }
 
+        // Deduplicate dependencies to prevent content duplication
+        dependencies = [...new Set(dependencies)];
+
         if (dependencies.length === 0) {
             console.warn(
                 '[OutputTaskRunner] No dependencies found for output task. Using empty content.'
@@ -132,11 +154,61 @@ export class OutputTaskRunner {
             return '';
         }
 
-        // Fetch dependency tasks
+        // Fetch previous results first if accumulate mode is enabled
         const inputs: string[] = [];
+
+        // 1. Include previous output task result (for accumulation)
+        if (config.localFile?.accumulateResults) {
+            console.log('[OutputTaskRunner] Accumulate mode enabled, reading previous results...');
+            const previousResult =
+                (task as any).result || (task.executionResult as any)?.content || '';
+
+            if (previousResult) {
+                // If destination is local_file and result is a file path, read the file
+                if (config.destination === 'local_file' && typeof previousResult === 'string') {
+                    try {
+                        // Check if it's a file path (not actual content)
+                        if (previousResult.includes('/') || previousResult.includes('\\\\')) {
+                            const fileContent = await fs.readFile(previousResult, 'utf-8');
+                            console.log(
+                                `[OutputTaskRunner] Read previous result from file: ${previousResult} (${fileContent.length} bytes)`
+                            );
+                            inputs.push(fileContent);
+                        } else {
+                            // It's actual content, not a path
+                            console.log(
+                                `[OutputTaskRunner] Using previous result as content (${previousResult.length} bytes)`
+                            );
+                            inputs.push(previousResult);
+                        }
+                    } catch (err) {
+                        console.warn(
+                            '[OutputTaskRunner] Could not read previous result file:',
+                            err
+                        );
+                        // If file read fails, still try to use the raw value
+                        if (previousResult.length > 0) {
+                            inputs.push(previousResult);
+                        }
+                    }
+                } else {
+                    // For non-file destinations, use content directly
+                    console.log(
+                        `[OutputTaskRunner] Using previous result content (${previousResult.length} bytes)`
+                    );
+                    inputs.push(previousResult);
+                }
+            }
+        }
+
+        // 2. Fetch dependency tasks and add new results
+        console.log(`[OutputTaskRunner] Fetching ${dependencies.length} dependency task(s)...`);
         for (const depId of dependencies) {
             const depTask = await taskRepository.findById(depId);
             if (depTask) {
+                console.log(
+                    `[OutputTaskRunner] Dependency task ${depId}: status=${depTask.status}`
+                );
                 // Determine what content to use
                 // 1. Result field
                 // 2. ExecutionResult.content
@@ -147,11 +219,18 @@ export class OutputTaskRunner {
                     depTask.generatedPrompt || // Fallback?
                     '';
 
+                console.log(
+                    `[OutputTaskRunner] Dependency ${depId} content length: ${content?.length || 0}`
+                );
                 if (content) {
                     inputs.push(content);
                 }
             }
         }
+
+        console.log(
+            `[OutputTaskRunner] Aggregated ${inputs.length} content items (accumulate: ${config.localFile?.accumulateResults || false})`
+        );
 
         // Aggregation Strategy
         if (config.aggregation === 'concat' || config.aggregation === 'single') {

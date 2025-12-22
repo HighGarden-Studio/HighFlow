@@ -81,6 +81,8 @@ const tasksAPI = {
         ipcRenderer.invoke('tasks:reorder', projectId, taskIds),
 
     executeScript: (taskId: number) => ipcRenderer.invoke('tasks:execute-script', taskId),
+
+    stopTask: (taskId: number) => ipcRenderer.invoke('taskExecution:stop', taskId),
 };
 
 // ========================================
@@ -1056,6 +1058,8 @@ const httpAPI = {
 const aiAPI = {
     fetchModels: (providerId: string, apiKey?: string) =>
         ipcRenderer.invoke('ai:fetchModels', providerId, apiKey),
+    getModelsFromCache: (providerId: string) =>
+        ipcRenderer.invoke('ai:getModelsFromCache', providerId),
 };
 
 // ========================================

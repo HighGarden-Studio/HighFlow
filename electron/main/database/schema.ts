@@ -131,6 +131,7 @@ export const projects = sqliteTable(
         constraints: text('constraints'), // Non-goals and constraints
         phase: text('phase'), // Current project phase
         memory: text('memory', { mode: 'json' }), // Project memory (summary, decisions, glossary)
+        mcpConfig: text('mcp_config', { mode: 'json' }), // Project-specific MCP configuration
         notificationConfig: text('notification_config', { mode: 'json' }), // Project notification settings
         curatorOperatorId: integer('curator_operator_id').references(() => operators.id, {
             onDelete: 'set null',
@@ -601,6 +602,48 @@ export const aiProviderConfigs = sqliteTable(
     })
 );
 
+/**
+ * Provider Models Cache
+ * Stores dynamically fetched AI models from providers
+ */
+export const providerModels = sqliteTable(
+    'provider_models',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        provider: text('provider').notNull(), // 'openai', 'anthropic', 'google', 'groq', 'mistral', 'lmstudio'
+        modelId: text('model_id').notNull(), // 'gpt-4-turbo', 'claude-3-5-sonnet', etc.
+        modelName: text('model_name'), // Display name
+        displayName: text('display_name'), // Alternative display name
+        contextWindow: integer('context_window'),
+        maxOutputTokens: integer('max_output_tokens'),
+        inputCostPer1M: real('input_cost_per_1m'), // Cost per 1M input tokens
+        outputCostPer1M: real('output_cost_per_1m'), // Cost per 1M output tokens
+        features: text('features', { mode: 'json' }).notNull().default('[]'), // ['streaming', 'vision', 'function_calling']
+        bestFor: text('best_for', { mode: 'json' }).notNull().default('[]'), // ['coding', 'analysis', etc.]
+        supportedActions: text('supported_actions', { mode: 'json' }).notNull().default('[]'), // Provider-specific
+        description: text('description'),
+        metadata: text('metadata', { mode: 'json' }), // Additional provider-specific data
+        deprecated: integer('deprecated', { mode: 'boolean' }).notNull().default(false),
+        fetchedAt: integer('fetched_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+        updatedAt: integer('updated_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+        createdAt: integer('created_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => ({
+        providerIdx: index('provider_model_provider_idx').on(table.provider),
+        providerModelIdx: index('provider_model_provider_model_idx').on(
+            table.provider,
+            table.modelId
+        ),
+        fetchedAtIdx: index('provider_model_fetched_at_idx').on(table.fetchedAt),
+    })
+);
+
 // ========================================
 // AI Operators
 // ========================================
@@ -617,6 +660,7 @@ export const operators = sqliteTable(
         avatar: text('avatar'), // emoji or image URL
         color: text('color'), // hex color
         description: text('description'),
+        tags: text('tags', { mode: 'json' }).notNull().default('[]'),
 
         // AI Configuration
         aiProvider: text('ai_provider').notNull(),
@@ -688,6 +732,15 @@ export const mcpIntegrations = sqliteTable(
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
         settings: text('settings', { mode: 'json' }).notNull().default('{}'),
+
+        // OAuth 2.0 관련 필드 (선택적, Atlassian Cloud 등에 사용)
+        oauthClientId: text('oauth_client_id'),
+        oauthClientSecret: text('oauth_client_secret'),
+        oauthRedirectUri: text('oauth_redirect_uri'),
+        oauthScope: text('oauth_scope'),
+        oauthCloudId: text('oauth_cloud_id'),
+        oauthAccessToken: text('oauth_access_token'), // BYOT (Bring Your Own Token)용
+
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
@@ -1058,3 +1111,6 @@ export type NewAutomationRule = typeof automationRules.$inferInsert;
 
 export type TaskHistory = typeof taskHistory.$inferSelect;
 export type NewTaskHistory = typeof taskHistory.$inferInsert;
+
+export type ProviderModel = typeof providerModels.$inferSelect;
+export type NewProviderModel = typeof providerModels.$inferInsert;

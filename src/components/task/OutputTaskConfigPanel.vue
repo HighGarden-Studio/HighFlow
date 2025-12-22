@@ -50,15 +50,29 @@
                         &#125;&#125;</span
                     >
                 </div>
-                <input
-                    type="text"
-                    :value="config.localFile?.pathTemplate"
-                    @input="
-                        (e) => updateLocalFile('pathTemplate', (e.target as HTMLInputElement).value)
-                    "
-                    placeholder="e.g., reports/{{date}}_{{task.title}}.md"
-                    class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                />
+                <div class="flex gap-2 mt-1">
+                    <input
+                        type="text"
+                        :value="config.localFile?.pathTemplate"
+                        @input="
+                            (e) =>
+                                updateLocalFile(
+                                    'pathTemplate',
+                                    (e.target as HTMLInputElement).value
+                                )
+                        "
+                        placeholder="e.g., reports/{{date}}_{{task.title}}.md"
+                        class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                        @click="selectOutputFolder"
+                        type="button"
+                        class="px-3 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded text-gray-300 transition-colors"
+                        title="폴더 선택"
+                    >
+                        <FolderOpen class="w-4 h-4" />
+                    </button>
+                </div>
                 <p class="mt-1 text-xs text-gray-500">
                     Path relative to project's <strong>Base Dev Folder</strong>. Supports:
                     &#123;&#123; date &#125;&#125;, &#123;&#123; time &#125;&#125;, &#123;&#123;
@@ -78,6 +92,26 @@
                     class="rounded bg-gray-700 border-gray-600"
                 />
                 <label for="overwrite" class="text-sm text-gray-300">Overwrite if exists</label>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="accumulateResults"
+                    :checked="config.localFile?.accumulateResults"
+                    @change="
+                        (e) =>
+                            updateLocalFile(
+                                'accumulateResults',
+                                (e.target as HTMLInputElement).checked
+                            )
+                    "
+                    class="rounded bg-gray-700 border-gray-600"
+                />
+                <label for="accumulateResults" class="text-sm text-gray-300">
+                    Accumulate previous results
+                    <span class="text-xs text-gray-500">(for repeated execution)</span>
+                </label>
             </div>
         </div>
 
@@ -145,7 +179,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { LucideFileText, LucideHash, LucideFile } from 'lucide-vue-next';
+import { LucideFileText, LucideHash, LucideFile, FolderOpen } from 'lucide-vue-next';
 import type { OutputTaskConfig, OutputDestinationType } from '@/core/types/database';
 
 // Props & Emits
@@ -233,5 +267,19 @@ function updateGoogleDocs(key: string, val: any) {
             [key]: val,
         },
     };
+}
+
+// Folder Selection
+async function selectOutputFolder() {
+    try {
+        const selectedPath = await window.electron.fs.selectDirectory();
+
+        if (selectedPath) {
+            // Update the path template with selected folder
+            updateLocalFile('pathTemplate', selectedPath);
+        }
+    } catch (error) {
+        console.error('[OutputTaskConfigPanel] Failed to select folder:', error);
+    }
 }
 </script>

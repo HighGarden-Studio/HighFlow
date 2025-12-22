@@ -23,6 +23,7 @@ const emit = defineEmits<{
     (e: 'retry', task: Task): void;
     (e: 'approve', task: Task): void;
     (e: 'stop', task: Task): void;
+    (e: 'delete', task: Task): void;
     (e: 'operatorDrop', taskId: number, operatorId: number): void;
     (e: 'provideInput', task: Task): void;
 }>();
@@ -80,6 +81,10 @@ function handleProvideInput() {
 
 function handleStop() {
     emit('stop', props.data.task);
+}
+
+function handleDelete() {
+    emit('delete', props.data.task);
 }
 
 // Direct drag/drop handlers for wrapper
@@ -267,6 +272,7 @@ onUnmounted(() => {
                 @retry="handleRetry"
                 @approve="handleApprove"
                 @stop="handleStop"
+                @delete="handleDelete"
                 @operator-drop="handleOperatorDrop"
                 @provide-input="handleProvideInput"
             />
@@ -294,16 +300,36 @@ onUnmounted(() => {
 :deep(.handle-right) {
     width: 12px;
     height: 12px;
-    background: #3b82f6;
-    border: 2px solid white;
+    background: #374151; /* Match task card border color (gray-700) */
+    border: none; /* Remove white border */
     border-radius: 50%;
     cursor: crosshair;
+    transition: all 0.3s ease;
 }
 
 :deep(.handle-left):hover,
 :deep(.handle-right):hover {
-    background: #2563eb;
-    transform: scale(1.2);
+    background: #3b82f6; /* Blue on hover */
+    animation: handlePulse 1.5s ease-in-out infinite;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+}
+
+:deep(.handle-left):hover {
+    transform: scale(1.3) translate(-5px, -5px); /* Move left and up */
+}
+
+:deep(.handle-right):hover {
+    transform: scale(1.3) translate(5px, -5px); /* Move right and up */
+}
+
+@keyframes handlePulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.5);
+    }
 }
 
 :deep(.handle-left) {

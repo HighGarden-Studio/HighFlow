@@ -247,16 +247,8 @@ onMounted(async () => {
     // Initialize UI store
     await uiStore.initialize();
 
-    // Load settings
+    // Load settings (includes loading models from DB cache)
     await settingsStore.loadSettings();
-
-    // Initialize AI provider models - 앱 시작시 1회만 로딩
-    try {
-        await settingsStore.initialize();
-        console.log('[App] AI provider models initialized');
-    } catch (error) {
-        console.error('[App] Failed to initialize AI provider models:', error);
-    }
 
     // Auto-login attempt
     await userStore.autoLogin();

@@ -15,34 +15,50 @@ export class AIServiceConfig {
     /**
      * Default models per provider
      */
-    static readonly DEFAULT_MODELS: Record<AIProvider, AIModel> = {
+    static readonly DEFAULT_MODELS: Partial<Record<AIProvider, AIModel>> = {
         anthropic: 'claude-3-5-sonnet-20250219',
-        openai: 'gpt-4-turbo',
-        google: 'gemini-1.5-pro',
+        openai: 'gpt-4o-mini',
+        google: 'gemini-2.5-pro',
         'claude-code': 'claude-3-5-sonnet-20250219',
         antigravity: 'antigravity-pro',
         codex: 'codex-latest',
         local: 'gpt-3.5-turbo', // Placeholder
+        'default-highflow': 'gemini-2.5-flash',
+        groq: 'llama-3.3-70b-versatile',
+        mistral: 'mistral-large-latest',
+        lmstudio: 'local-model',
     };
 
     /**
-     * Model pricing (cost per 1M tokens)
+     * Model Pricing (USD per 1M tokens)
      */
-    static readonly MODEL_PRICING: Record<AIModel, { input: number; output: number }> = {
-        // Anthropic Claude
+    static readonly MODEL_PRICING: Partial<Record<AIModel, { input: number; output: number }>> = {
+        // Anthropic Claude 3.5 Sonnet
         'claude-3-5-sonnet-20250219': { input: 3.0, output: 15.0 },
+        'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
+        'claude-3-5-sonnet-20240620': { input: 3.0, output: 15.0 },
+
+        // Anthropic Claude 3 Opus
         'claude-3-opus-20240229': { input: 15.0, output: 75.0 },
+
+        // Anthropic Claude 3 Sonnet
         'claude-3-sonnet-20240229': { input: 3.0, output: 15.0 },
+
+        // Anthropic Claude 3 Haiku
         'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
 
-        // OpenAI GPT
+        // OpenAI GPT-4 Turbo
         'gpt-4-turbo': { input: 10.0, output: 30.0 },
-        'gpt-4': { input: 30.0, output: 60.0 },
+
+        // OpenAI GPT-4o
+        'gpt-4o': { input: 5.0, output: 15.0 },
+
+        // OpenAI GPT-3.5 Turbo
         'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
 
         // Google Gemini
-        'gemini-1.5-pro': { input: 3.5, output: 10.5 },
-        'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+        'gemini-2.5-pro': { input: 3.5, output: 10.5 },
+        'gemini-2.5-flash': { input: 0.075, output: 0.3 },
 
         'gemini-pro': { input: 0.5, output: 1.5 },
         'gemini-2.5-flash-image': { input: 0.1, output: 0.4 }, // Nano Banana (stable)
@@ -184,13 +200,16 @@ export class AIServiceConfig {
                     provider === 'anthropic' ? 'claude' : provider === 'openai' ? 'gpt' : 'gemini'
                 )
             )
-            .map(([model, pricing]) => ({
-                model: model as AIModel,
-                cost: ((estimatedTokens / 1000000) * (pricing.input + pricing.output)) / 2,
-            }))
-            .filter((m) => m.cost <= maxCost)
+            .map(([model, pricing]) => {
+                if (!pricing) return null;
+                return {
+                    model: model as AIModel,
+                    cost: ((estimatedTokens / 1000000) * (pricing.input + pricing.output)) / 2,
+                };
+            })
+            .filter((m): m is { model: AIModel; cost: number } => m !== null && m.cost <= maxCost)
             .sort((a, b) => b.cost - a.cost); // Prefer more expensive (better) models within budget
 
-        return models[0]?.model || this.DEFAULT_MODELS[provider];
+        return models[0]?.model || this.DEFAULT_MODELS[provider] || ('gpt-4o-mini' as AIModel);
     }
 }

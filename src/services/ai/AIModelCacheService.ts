@@ -61,16 +61,30 @@ export class AIModelCacheService {
 
     /**
      * Get cached models for a provider
-     * If cache is stale or empty, automatically refreshes
+     * Priority: Memory cache → Database → API refresh
      */
     async getModels(provider: AIProvider): Promise<ModelInfo[]> {
         const entry = this.cache.get(provider);
 
+        // If we have fresh cache, return it
         if (entry && !this.isStale(provider)) {
             return entry.models;
         }
 
-        // Try to refresh from API
+        // If no cache or stale, try loading from DB first
+        if (this.config.persistToDb) {
+            const dbModels = await this.loadFromDatabase(provider);
+            if (dbModels.length > 0) {
+                console.log(
+                    `[AIModelCache] Loaded ${dbModels.length} models from DB for ${provider}`
+                );
+                // Update memory cache with DB models
+                await this.setCachedModels(provider, dbModels);
+                return dbModels;
+            }
+        }
+
+        // No DB cache, try to refresh from API
         return this.refreshModels(provider);
     }
 

@@ -28,8 +28,16 @@ const dbPath = path.join(getUserDataPath(), 'workflow-manager.db');
 
 console.log(`Database path: ${dbPath}`);
 
-// Initialize SQLite
-const sqlite = new Database(dbPath);
+let sqlite;
+try {
+    console.log('Attempting to open database...');
+    // Initialize SQLite
+    sqlite = new Database(dbPath);
+    console.log('Database opened successfully');
+} catch (error) {
+    console.error('Failed to open database:', error);
+    process.exit(1);
+}
 
 // Enable WAL mode for better concurrency
 sqlite.pragma('journal_mode = WAL');

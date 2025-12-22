@@ -489,9 +489,14 @@ function handleConnectProviderClick() {
                         "
                     >
                         {{
-                            streamedContent ||
-                            (task as any).result?.slice(0, 300) ||
-                            '이전 결과 없음'
+                            task.status === 'in_progress'
+                                ? streamedContent
+                                : task.status === 'todo'
+                                  ? ''
+                                  : streamedContent ||
+                                    (task as any).executionResult?.content?.slice(0, 300) ||
+                                    (task as any).result?.slice(0, 300) ||
+                                    '이전 결과 없음'
                         }}
                     </p>
                     <p

@@ -430,6 +430,7 @@ export class MCPManager {
             name: mcpInfo?.name,
             slug: runtimeEntry?.slug || mcpInfo?.slug,
         });
+
         const mergedParams =
             override?.params && Object.keys(override.params).length > 0
                 ? { ...override.params, ...params }

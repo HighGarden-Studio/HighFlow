@@ -156,6 +156,7 @@ const markdownHtml = ref('');
 // History state
 const history = ref<TaskHistoryEntry[]>([]);
 const selectedVersionId = ref<number | null>(null);
+const selectedFile = ref<ResultFile | null>(null);
 
 const projectStore = useProjectStore();
 const currentProject = computed(() => projectStore.currentProject);
@@ -309,11 +310,48 @@ const onTreeSelect = (path: string) => {
 const fetchHistory = async () => {
     if (!props.task?.id) return;
     try {
+        console.log('[EnhancedResultPreview] Fetching history entries for task:', props.task.id);
         const entries = await (window as any).electron.taskHistory.getByTask(props.task.id);
+        console.log('[EnhancedResultPreview] Received history entries:', {
+            totalEntries: entries?.length || 0,
+            entries: entries?.map((e: any) => ({
+                id: e.id,
+                eventType: e.eventType,
+                createdAt: e.createdAt,
+            })),
+        });
         // Filter for execution completions
-        history.value = entries.filter(
-            (e: TaskHistoryEntry) => e.eventType === 'execution_completed'
+        // Filter for execution completions or failures
+        history.value = entries
+            .filter(
+                (e: TaskHistoryEntry) =>
+                    e.eventType === 'execution_completed' || e.eventType === 'execution_failed'
+            )
+            .sort(
+                (a: any, b: any) =>
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+        console.log(
+            '[EnhancedResultPreview] Filtered execution_completed entries:',
+            history.value.length
         );
+
+        // For Output tasks, log the first entry details
+        if (props.task.taskType === 'output' && history.value.length > 0) {
+            const firstEntry = history.value[0];
+            let eventData = firstEntry.eventData;
+            if (typeof eventData === 'string') {
+                try {
+                    eventData = JSON.parse(eventData);
+                } catch (e) {}
+            }
+            console.log('[EnhancedResultPreview] First history entry for Output task:', {
+                eventData: eventData,
+                hasExecutionResult: !!eventData?.executionResult,
+                hasFilePath: !!eventData?.executionResult?.filePath,
+                hasResult: !!eventData?.result,
+            });
+        }
     } catch (error: any) {
         console.error('Failed to fetch task history:', error);
     }
@@ -355,7 +393,34 @@ const aiValue = computed(() => {
     return result.value;
 });
 
-const fallbackResultContent = computed(() => taskResult.value.content || '');
+const fallbackResultContent = computed(() => {
+    // If task has content, use it
+    if (taskResult.value.content) {
+        return taskResult.value.content;
+    }
+
+    // Otherwise, try to get from latest history
+    if (history.value.length > 0) {
+        // history is already sorted in fetchHistory
+        const lastEntry = history.value[0];
+        if (lastEntry.eventData) {
+            // Handle parsing if string
+            let data = lastEntry.eventData;
+            if (typeof data === 'string') {
+                try {
+                    data = JSON.parse(data);
+                } catch (e) {
+                    console.error('Failed to parse history eventData:', e);
+                }
+            }
+
+            if (data.content) return data.content;
+            if (data.error) return `Error: ${data.error}`;
+        }
+    }
+
+    return '';
+});
 
 // Get output format from selected file or task
 const outputFormat = computed<OutputFormat>(() => {
@@ -459,109 +524,168 @@ const safeExecutionResult = computed(() => {
     return raw;
 });
 
-const resultFiles = computed<ResultFile[]>(() => {
-    const existingFiles = safeExecutionResult.value?.files || [];
-    const metadataFiles = safeExecutionResult.value?.metadata?.resultFiles || [];
-    const transcriptData = safeExecutionResult.value?.transcript || [];
+const resultFiles = ref<ResultFile[]>([]);
+const isResultFilesLoading = ref(false);
 
-    // Map existing files
-    const filesMap = new Map<string, ResultFile>();
-    existingFiles.forEach((f: any) => {
-        filesMap.set(f.absolutePath || f.path, f);
-    });
+const updateResultFiles = async () => {
+    isResultFilesLoading.value = true;
+    try {
+        const existingFiles = safeExecutionResult.value?.files || [];
+        const metadataFiles = safeExecutionResult.value?.metadata?.resultFiles || [];
+        const transcriptData = safeExecutionResult.value?.transcript || [];
 
-    // Add metadata files (from Gemini multi-image generation)
-    metadataFiles.forEach((f: any) => {
-        const filePath = f.path;
-        if (filePath && !filesMap.has(filePath)) {
-            const fs = require('fs');
-            let size = 0;
-            try {
-                const stats = fs.statSync(filePath);
-                size = stats.size;
-                // For images, we don't need to load content
-            } catch (e) {
-                console.warn(`Failed to stat file: ${filePath}`, e);
+        // Map existing files
+        const filesMap = new Map<string, ResultFile>();
+        existingFiles.forEach((f: any) => {
+            filesMap.set(f.absolutePath || f.path, f);
+        });
+
+        // Add metadata files (from Gemini multi-image generation)
+        for (const f of metadataFiles) {
+            const filePath = f.path;
+            if (filePath && !filesMap.has(filePath)) {
+                let size = 0;
+                try {
+                    const stats = await window.electron.fs.stat(filePath);
+                    size = stats.size;
+                } catch (e) {
+                    console.warn(`Failed to stat file: ${filePath}`, e);
+                }
+
+                filesMap.set(filePath, {
+                    path: filePath,
+                    absolutePath: filePath,
+                    type: f.type || 'created',
+                    size,
+                    extension: filePath.split('.').pop() || '',
+                });
             }
-
-            filesMap.set(filePath, {
-                path: filePath,
-                absolutePath: filePath,
-                type: f.type || 'created',
-                size,
-                extension: filePath.split('.').pop() || '',
-            });
         }
-    });
 
-    // Extract files from transcript tool results
-    transcriptData.forEach((item: any) => {
-        if (item.role === 'user' && item.type === 'tool_result' && item.metadata?.result) {
-            const result = item.metadata.result;
-            // Check for file object in result (Claude Code style)
-            if (result.file && result.file.filePath) {
-                const path = result.file.filePath;
-                if (!filesMap.has(path)) {
-                    filesMap.set(path, {
-                        path: path, // standardized in map
-                        absolutePath: path,
-                        type: 'created',
-                        content: result.file.content,
-                        size: result.file.content?.length || 0,
-                        extension: path.split('.').pop() || 'txt',
-                    } as ResultFile);
-                } else {
-                    // Update content if empty in existing (FS monitor might be faster but transcript has content guaranteed for write)
-                    const existing = filesMap.get(path)!;
-                    if (!existing.content && result.file.content) {
-                        existing.content = result.file.content;
+        // Extract files from transcript tool results
+        transcriptData.forEach((item: any) => {
+            if (item.role === 'user' && item.type === 'tool_result' && item.metadata?.result) {
+                const result = item.metadata.result;
+                // Check for file object in result (Claude Code style)
+                if (result.file && result.file.filePath) {
+                    const path = result.file.filePath;
+                    if (!filesMap.has(path)) {
+                        filesMap.set(path, {
+                            path: path, // standardized in map
+                            absolutePath: path,
+                            type: 'created',
+                            content: result.file.content,
+                            size: result.file.content?.length || 0,
+                            extension: path.split('.').pop() || 'txt',
+                        } as ResultFile);
+                    } else {
+                        // Update content if empty
+                        const existing = filesMap.get(path)!;
+                        if (!existing.content && result.file.content) {
+                            existing.content = result.file.content;
+                        }
                     }
                 }
             }
-        }
-    });
+        });
 
-    // Add Output task local file if exists
-    const taskResultPath = (props.task as any)?.result;
-    if (
-        typeof taskResultPath === 'string' &&
-        taskResultPath.startsWith('/') &&
-        !filesMap.has(taskResultPath)
-    ) {
-        // This is an Output Local File task
-        try {
-            const fs = require('fs');
-            if (fs.existsSync(taskResultPath)) {
-                const stats = fs.statSync(taskResultPath);
-                filesMap.set(taskResultPath, {
-                    path: taskResultPath,
-                    absolutePath: taskResultPath,
-                    type: 'created',
-                    size: stats.size,
-                    extension: taskResultPath.split('.').pop() || 'txt',
-                });
-                console.log(
-                    `[EnhancedResultPreview] Added Output Local File to tree: ${taskResultPath}`
-                );
+        // Add Output task local file if exists
+        let taskResultPath = (props.task as any)?.result;
+
+        // Fallback: If result is null/empty but this is an Output task, check history
+        if (
+            (!taskResultPath || taskResultPath === '') &&
+            props.task?.taskType === 'output' &&
+            history.value.length > 0
+        ) {
+            // Get the most recent history entry
+            const sortedHistory = [...history.value].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            const lastEntry = sortedHistory[0];
+
+            if (lastEntry?.eventData) {
+                let data = lastEntry.eventData;
+                if (typeof data === 'string') {
+                    try {
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        // Ignore parse errors
+                    }
+                }
+
+                // Try to get file path from executionResult.filePath or result
+                if (data.executionResult?.filePath) {
+                    taskResultPath = data.executionResult.filePath;
+                    console.log(
+                        `[EnhancedResultPreview] Using file path from history for tree: ${taskResultPath}`
+                    );
+                } else if (
+                    (data as any).result &&
+                    typeof (data as any).result === 'string' &&
+                    (data as any).result.startsWith('/')
+                ) {
+                    taskResultPath = (data as any).result;
+                    console.log(
+                        `[EnhancedResultPreview] Using result path from history for tree: ${taskResultPath}`
+                    );
+                }
             }
-        } catch (e) {
-            console.error('[EnhancedResultPreview] Failed to add Output file to tree:', e);
         }
-    }
 
-    const files = Array.from(filesMap.values());
-    console.log('[EnhancedResultPreview] resultFiles computed:', {
-        existingFilesCount: existingFiles.length,
-        metadataFilesCount: metadataFiles.length,
-        transcriptFilesCount: transcriptData.filter(
-            (item: any) =>
-                item.role === 'user' && item.type === 'tool_result' && item.metadata?.result?.file
-        ).length,
-        totalFiles: files.length,
-        files: files.map((f) => ({ path: f.path, size: f.size, extension: f.extension })),
-    });
-    return files;
-});
+        if (
+            typeof taskResultPath === 'string' &&
+            taskResultPath.startsWith('/') &&
+            !filesMap.has(taskResultPath)
+        ) {
+            // This is an Output Local File task
+            try {
+                const exists = await window.electron.fs.exists(taskResultPath);
+                if (exists) {
+                    const stats = await window.electron.fs.stat(taskResultPath);
+                    filesMap.set(taskResultPath, {
+                        path: taskResultPath,
+                        absolutePath: taskResultPath,
+                        type: 'created',
+                        size: stats.size,
+                        extension: taskResultPath.split('.').pop() || 'txt',
+                    });
+                    console.log(
+                        `[EnhancedResultPreview] Added Output Local File to tree: ${taskResultPath}`
+                    );
+                }
+            } catch (e) {
+                console.error('[EnhancedResultPreview] Failed to add Output file to tree:', e);
+            }
+        }
+
+        const files = Array.from(filesMap.values());
+        console.log('[EnhancedResultPreview] resultFiles computed:', {
+            existingFilesCount: existingFiles.length,
+            metadataFilesCount: metadataFiles.length,
+            totalFiles: files.length,
+            taskType: props.task?.taskType,
+        });
+
+        resultFiles.value = files;
+
+        // Auto-select first file for Output tasks if nothing selected
+        if (!selectedFile.value && files.length > 0 && props.task?.taskType === 'output') {
+            selectedFile.value = files[0]!;
+        }
+    } finally {
+        isResultFilesLoading.value = false;
+    }
+};
+
+// Watch for changes that affect file list
+watch(
+    () => [safeExecutionResult.value, (props.task as any)?.result, history.value.length],
+    () => {
+        updateResultFiles();
+    },
+    { immediate: true }
+);
 
 const transcript = computed(() => {
     return safeExecutionResult.value?.transcript || [];
@@ -583,6 +707,7 @@ watch(
             const rawExecResult = (props.task as any)?.executionResult;
             console.log('[EnhancedResultPreview] Task opened:', {
                 taskId: props.task?.id,
+                taskType: props.task?.taskType,
                 hasExecutionResult: !!rawExecResult,
                 executionResultType: typeof rawExecResult,
                 executionResultKeys:
@@ -593,24 +718,64 @@ watch(
                     typeof transcript.value === 'string'
                         ? 'string'
                         : (transcript.value as any[])?.length,
+                taskResult: (props.task as any)?.result,
             });
 
             // Load history
+            console.log('[EnhancedResultPreview] Fetching history for task:', props.task?.id);
             fetchHistory();
 
-            // Default to preview
-            if (content.value && outputFormat.value === 'html') {
-                viewMode.value = 'split';
-            } else {
+            // Default to preview (safely access content which may not be initialized yet)
+            try {
+                if (content?.value && outputFormat?.value === 'html') {
+                    viewMode.value = 'split';
+                } else {
+                    viewMode.value = 'preview';
+                }
+            } catch (e) {
+                // content not yet initialized, default to preview
                 viewMode.value = 'preview';
             }
         } else {
             selectedVersionId.value = null; // Reset version when closing
         }
-    }
+    },
+    { immediate: true } // Load history immediately on mount if panel is already open
 );
 
-const selectedFile = ref<ResultFile | null>(null);
+// Load history on mount as well (in case panel is already open)
+onMounted(() => {
+    if (props.open && props.task?.id) {
+        console.log(
+            '[EnhancedResultPreview] Component mounted, loading history for task:',
+            props.task.id
+        );
+        fetchHistory();
+    }
+});
+
+// Watch history changes to trigger file selection for Output tasks
+watch(
+    () => history.value.length,
+    (newLength, oldLength) => {
+        if (newLength > 0 && oldLength === 0 && props.task?.taskType === 'output') {
+            console.log(
+                '[EnhancedResultPreview] History loaded for Output task, triggering file refresh'
+            );
+            // Force re-computation by updating a trigger
+            nextTick(() => {
+                // Check if we now have files
+                if (resultFiles.value.length > 0 && !selectedFile.value) {
+                    selectedFile.value = resultFiles.value[0];
+                    console.log(
+                        '[EnhancedResultPreview] Auto-selected file after history load:',
+                        resultFiles.value[0].path
+                    );
+                }
+            });
+        }
+    }
+);
 
 // Get task result content
 const contentRefreshTrigger = ref(0);
@@ -621,111 +786,99 @@ onUnmounted(() => {
     if (pollInterval) clearInterval(pollInterval);
 });
 
-// Watch for file selection to start/stop polling
+// Content ref for loading file content asynchronously
+const content = ref('');
+const isContentLoading = ref(false);
+
+const loadContent = async () => {
+    if (!selectedFile.value) {
+        content.value = fallbackResultContent.value;
+        return;
+    }
+
+    const { absolutePath, content: staticContent, extension } = selectedFile.value;
+
+    // Use static content if available and no absolute path (e.g. from transcript tool result)
+    if (!absolutePath && staticContent) {
+        content.value = staticContent;
+        return;
+    }
+
+    if (absolutePath) {
+        // Do not set loading true for polling updates to prevent flickering?
+        if (!content.value) isContentLoading.value = true;
+
+        try {
+            const exists = await window.electron.fs.exists(absolutePath);
+            if (!exists) {
+                if (staticContent) {
+                    content.value = staticContent;
+                } else {
+                    content.value = ''; // Waiting for creation
+                }
+                return;
+            }
+
+            const ext = extension?.toLowerCase() || '';
+            // Check if image
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
+                const base64 = await window.electron.fs.readFileBase64(absolutePath);
+                const mime = `image/${ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext}`;
+                content.value = `data:${mime};base64,${base64}`;
+            } else {
+                content.value = await window.electron.fs.readFile(absolutePath);
+            }
+        } catch (e: any) {
+            console.error('[EnhancedResultPreview] Failed to load content:', e);
+            content.value = `Error loading file: ${e.message}`;
+        } finally {
+            isContentLoading.value = false;
+        }
+    }
+};
+
+// Watch for file selection to start/stop polling (legacy polling, kept for safety but reduced)
 watch(
     () => [selectedFile.value, props.task?.status],
     async (file) => {
-        // Stop existing poll
         if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
         }
-
-        // Start polling if we have a file path
-        const hasFilePath = file && (file as ResultFile).absolutePath;
-        const hasResultPath =
-            props.task?.result &&
-            typeof props.task.result === 'string' &&
-            props.task.result.startsWith('/');
-
-        if (hasFilePath || hasResultPath) {
-            const pathToWatch = hasFilePath ? (file as ResultFile).path : props.task?.result;
-            console.log('[EnhancedResultPreview] Starting file poll for:', pathToWatch);
-            pollInterval = setInterval(() => {
-                contentRefreshTrigger.value++;
-            }, 1000); // Poll every second
-        }
+        // Polling logic is largely replaced by explicit loadContent calls on triggers,
+        // but we keep minimal polling for active tasks if needed.
+        // For now, removing polling to rely on IPC and manual refreshes/IO events if we had them.
     },
     { immediate: true }
 );
 
-// Get task result content w/ polling dependency
-const content = computed(() => {
-    // Dependency on trigger to force re-evaluation
-    const _ = contentRefreshTrigger.value;
+// Update watch for selectedFile and refresh trigger
+watch(
+    () => [selectedFile.value, contentRefreshTrigger.value, fallbackResultContent.value],
+    () => {
+        loadContent();
+    },
+    { immediate: true }
+);
 
-    if (selectedFile.value) {
-        // If content is already loaded (and not from file system poll), use it?
-        // But for live update, we prefer reading from disk if absolutePath exists.
-        // If selectedFile.value.content is set from "transcript", it's static.
-        // If we have absolutePath, we read from disk.
+// Helper to determine if we should look for a file path in the result
+function getOutputFilePath(): string | null {
+    let taskResultPath = props.task?.result;
 
-        const filePath = selectedFile.value.absolutePath;
-        if (filePath) {
-            try {
-                // Use window.require for Electron fs if regular require fails/is mocked in some envs
-                // But require('fs') works in this context usually.
-                const fs = require('fs');
-                // Check if file exists first
-                if (!fs.existsSync(filePath)) {
-                    if (selectedFile.value.content) return selectedFile.value.content;
-                    return ''; // Waiting for file creation
-                }
-
-                const ext = selectedFile.value.extension.toLowerCase();
-
-                // For images, load as base64
-                if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
-                    const buffer = fs.readFileSync(filePath);
-                    const base64 = buffer.toString('base64');
-                    // Only log occasionally or if size changes significantly? Reduce log noise.
-                    // console.log(`[EnhancedResultPreview] Loaded image: ${filePath}`);
-                    return base64;
-                }
-
-                // For text files, load as text
-                return fs.readFileSync(filePath, 'utf-8');
-            } catch (e) {
-                // console.error(`[EnhancedResultPreview] Failed to load file: ${filePath}`, e);
-                // Return existing static content if read fails
-                return selectedFile.value.content || '';
-            }
-        }
-
-        // No absolute path, return static content
-        if (selectedFile.value.content) {
-            return selectedFile.value.content;
-        }
-        return '';
+    if (
+        (!taskResultPath || taskResultPath === '') &&
+        props.task?.taskType === 'output' &&
+        history.value.length > 0
+    ) {
+        // ... (existing history fallback logic if needed, but resultFiles usually handles this)
+        // For content loading, we mostly rely on selectedFile.
+        // But if no file is selected, we might want to default to something.
     }
 
-    // Check if task.result contains a file path (for Output local_file tasks)
-    const taskResultPath = props.task?.result;
-    if (typeof taskResultPath === 'string' && taskResultPath.startsWith('/')) {
-        // This looks like a file path, try to read it
-        try {
-            const fs = require('fs');
-            if (fs.existsSync(taskResultPath)) {
-                console.log(
-                    `[EnhancedResultPreview] Reading file from result path: ${taskResultPath}`
-                );
-                // Dependency on trigger for live updates
-                const _ = contentRefreshTrigger.value;
-                return fs.readFileSync(taskResultPath, 'utf-8');
-            }
-        } catch (e) {
-            console.error(`[EnhancedResultPreview] Failed to read file from result path:`, e);
-        }
-    }
-
-    const result = aiValue.value || fallbackResultContent.value || '';
-    /* console.log('[EnhancedResultPreview] content computed:', {
-         hasAiValue: !!aiValue.value,
-         hasFallback: !!fallbackResultContent.value,
-         contentLength: result.length
-    }); */
-    return result;
-});
+    return typeof taskResultPath === 'string' && taskResultPath.startsWith('/')
+        ? taskResultPath
+        : null;
+}
 
 // Get previous result for diff comparison
 const previousResult = computed(() => {
@@ -790,7 +943,15 @@ watch(
     () => resultFiles.value,
     (files) => {
         if (files && files.length > 0 && !selectedFile.value) {
-            // Optional: Auto-select criteria
+            // For Output tasks, auto-select the file to show content immediately
+            if (props.task?.taskType === 'output') {
+                selectedFile.value = files[0];
+                console.log(
+                    '[EnhancedResultPreview] Auto-selected Output task file:',
+                    files[0].path
+                );
+            }
+            // Optional: Auto-select criteria for other task types
         }
     },
     { immediate: true }
@@ -2103,7 +2264,7 @@ onMounted(() => {
 
                                         <!-- Content Viewer -->
                                         <div
-                                            class="flex-1 overflow-auto p-4"
+                                            class="flex-1 overflow-auto"
                                             :style="{ fontSize: `${zoomLevel}%` }"
                                         >
                                             <!-- No Content -->
@@ -2185,7 +2346,7 @@ onMounted(() => {
                                                                 <h3
                                                                     class="text-lg font-semibold text-gray-900 dark:text-gray-100"
                                                                 >
-                                                                    AI Response
+                                                                    {{ resultLabel }}
                                                                 </h3>
                                                                 <div
                                                                     class="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400"

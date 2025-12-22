@@ -38,12 +38,7 @@ export class LmStudioProvider extends BaseAIProvider {
     constructor(config: LmStudioProviderConfig = {}) {
         super();
         this.baseUrl = this.normalizeBaseUrl(config.baseUrl);
-        // Check if process exists (browser vs Node.js)
-        const envApiKey =
-            typeof process !== 'undefined' && process.env
-                ? process.env.LM_STUDIO_API_KEY
-                : undefined;
-        this.apiKey = config.apiKey || envApiKey || undefined;
+        this.apiKey = config.apiKey || undefined;
         this.defaultModel = this.normalizeModel(config.defaultModel);
         this.models = [
             {

@@ -723,6 +723,7 @@ export interface OutputTaskConfig {
         pathTemplate: string; // e.g. "output/{{date}}-{{title}}.md"
         overwrite: boolean;
         format: 'text' | 'json';
+        accumulateResults?: boolean;
     };
     slack?: {
         channelId: string;
@@ -849,6 +850,7 @@ export interface Operator extends BaseEntity {
     avatar: string | null; // emoji or image URL
     color: string | null; // hex color
     description: string | null;
+    tags: string[];
 
     // AI Configuration
     aiProvider: AIProvider;
@@ -1123,3 +1125,6 @@ export interface CreateSkillDTO {
     isPublic?: boolean;
     teamId?: number;
 }
+
+export type NewProject = Partial<Project>;
+export type NewTask = Partial<Task>;

@@ -24,107 +24,6 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class GPTProvider extends BaseAIProvider {
     readonly name: AIProvider = 'openai';
-    readonly defaultModels: ModelInfo[] = [
-        {
-            name: 'gpt-4o',
-            provider: 'openai',
-            contextWindow: 128000,
-            maxOutputTokens: 4096,
-            costPerInputToken: 5.0,
-            costPerOutputToken: 15.0,
-            averageLatency: 1000,
-            features: ['streaming', 'function_calling', 'vision', 'json_mode', 'system_prompt'],
-            bestFor: ['Complex tasks', 'Code generation', 'Analysis', 'Vision tasks', 'Multimodal'],
-        },
-        {
-            name: 'gpt-4o-mini',
-            provider: 'openai',
-            contextWindow: 128000,
-            maxOutputTokens: 16384,
-            costPerInputToken: 0.15,
-            costPerOutputToken: 0.6,
-            averageLatency: 500,
-            features: ['streaming', 'function_calling', 'vision', 'json_mode', 'system_prompt'],
-            bestFor: ['Fast responses', 'Simple tasks', 'High volume', 'Budget-friendly'],
-        },
-        {
-            name: 'o1-preview',
-            provider: 'openai',
-            contextWindow: 128000,
-            maxOutputTokens: 32768,
-            costPerInputToken: 15.0,
-            costPerOutputToken: 60.0,
-            averageLatency: 3000,
-            features: ['streaming', 'function_calling', 'system_prompt', 'reasoning'],
-            bestFor: ['Complex reasoning', 'Math', 'Science', 'Coding'],
-        },
-        {
-            name: 'o1-mini',
-            provider: 'openai',
-            contextWindow: 128000,
-            maxOutputTokens: 65536,
-            costPerInputToken: 3.0,
-            costPerOutputToken: 12.0,
-            averageLatency: 1500,
-            features: ['streaming', 'function_calling', 'system_prompt', 'reasoning'],
-            bestFor: ['Fast reasoning', 'Coding', 'Math'],
-        },
-        {
-            name: 'gpt-4-turbo',
-            provider: 'openai',
-            contextWindow: 128000,
-            maxOutputTokens: 4096,
-            costPerInputToken: 10.0,
-            costPerOutputToken: 30.0,
-            averageLatency: 1500,
-            features: ['streaming', 'function_calling', 'vision', 'json_mode', 'system_prompt'],
-            bestFor: ['Complex tasks', 'Code generation', 'Analysis', 'Vision tasks'],
-        },
-        {
-            name: 'gpt-4',
-            provider: 'openai',
-            contextWindow: 8192,
-            maxOutputTokens: 4096,
-            costPerInputToken: 30.0,
-            costPerOutputToken: 60.0,
-            averageLatency: 2000,
-            features: ['streaming', 'function_calling', 'system_prompt'],
-            bestFor: ['High-quality reasoning', 'Complex problem solving'],
-        },
-        {
-            name: 'gpt-3.5-turbo',
-            provider: 'openai',
-            contextWindow: 16385,
-            maxOutputTokens: 4096,
-            costPerInputToken: 0.5,
-            costPerOutputToken: 1.5,
-            averageLatency: 800,
-            features: ['streaming', 'function_calling', 'json_mode', 'system_prompt'],
-            bestFor: ['Fast responses', 'Simple tasks', 'High volume', 'Budget-friendly'],
-        },
-        {
-            name: 'dall-e-3',
-            provider: 'openai',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 3000,
-            features: [],
-            bestFor: ['High-quality image generation', 'Brand assets', 'Illustrations'],
-        },
-        {
-            name: 'dall-e-2',
-            provider: 'openai',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 2000,
-            features: [],
-            bestFor: ['Fast image generation', 'Simple illustrations'],
-        },
-    ];
 
     private client: OpenAI | null = null;
     private injectedApiKey: string | null = null;
@@ -139,10 +38,7 @@ export class GPTProvider extends BaseAIProvider {
 
     constructor() {
         super();
-        console.log(
-            '[GPTProvider] Initialized with default models:',
-            this.defaultModels.map((m) => m.name)
-        );
+        console.log('[GPTProvider] Initialized, models will be loaded from DB cache');
     }
 
     /**
@@ -150,44 +46,54 @@ export class GPTProvider extends BaseAIProvider {
      */
     async fetchModels(): Promise<ModelInfo[]> {
         try {
+            if (!this.injectedApiKey) {
+                console.warn('[GPTProvider] No API key configured, loading from DB cache');
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                return await providerModelsRepository.getModels('openai');
+            }
+
             const client = this.getClient();
             const response = await client.models.list();
             console.log('[GPTProvider] Fetched models:', response.data);
 
-            // Filter to only GPT and DALL-E models
+            // Map API models to ModelInfo
             const gptModels = response.data
-                // .filter(
-                //     (m) =>
-                //         m.id.startsWith('gpt-') ||
-                //         m.id.startsWith('o1') ||
-                //         m.id.startsWith('dall-e')
-                // )
                 .map((m) => {
-                    // Check if model exists in default models for metadata
-                    const defaultModel = this.defaultModels.find((dm) => dm.name === m.id);
                     return {
                         name: m.id,
                         provider: 'openai' as const,
-                        contextWindow: defaultModel?.contextWindow || 128000,
-                        maxOutputTokens: defaultModel?.maxOutputTokens || 4096,
-                        costPerInputToken: defaultModel?.costPerInputToken || 0,
-                        costPerOutputToken: defaultModel?.costPerOutputToken || 0,
-                        averageLatency: defaultModel?.averageLatency || 1000,
-                        features: defaultModel?.features || ['streaming'],
-                        bestFor: defaultModel?.bestFor || [],
+                        contextWindow: 128000,
+                        maxOutputTokens: 4096,
+                        costPerInputToken: 0,
+                        costPerOutputToken: 0,
+                        averageLatency: 1000,
+                        features: ['streaming'] as AIFeature[],
+                        bestFor: [],
                         deprecated: m.id.includes('0314') || m.id.includes('0613'),
                     };
                 })
                 .sort((a, b) => a.name.localeCompare(b.name));
 
-            console.log(
-                '[GPTProvider] Fetched models from API:',
-                gptModels.map((m) => m.name)
-            );
+            // Save to DB cache
+            const { providerModelsRepository: repo1 } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            await repo1.saveModels('openai', gptModels);
+            console.log(`[GPTProvider] Saved ${gptModels.length} models to DB cache`);
+
             return gptModels;
         } catch (error) {
             console.error('[GPTProvider] Failed to fetch models from API:', error);
-            return this.defaultModels;
+            // Fallback to DB cache
+            const { providerModelsRepository: repo2 } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            const cachedModels = await repo2.getModels('openai');
+            if (cachedModels.length > 0) {
+                console.log('[GPTProvider] Using cached models from DB');
+                return cachedModels;
+            }
+            console.warn('[GPTProvider] No cached models available');
+            return [];
         }
     }
 
@@ -196,15 +102,17 @@ export class GPTProvider extends BaseAIProvider {
      */
     private getClient(): OpenAI {
         if (!this.client) {
-            const apiKey = this.injectedApiKey || process.env.OPENAI_API_KEY;
-            if (!apiKey) {
+            if (!this.injectedApiKey) {
                 throw new Error(
-                    'OPENAI_API_KEY not configured. Please set your API key in Settings > AI Providers.'
+                    'API key not configured. Please set your API key in Settings > AI Providers.'
                 );
             }
-            console.log('[GPTProvider] Creating new OpenAI client with key length:', apiKey.length);
+            console.log(
+                '[GPTProvider] Creating new OpenAI client with key length:',
+                this.injectedApiKey.length
+            );
             this.client = new OpenAI({
-                apiKey,
+                apiKey: this.injectedApiKey,
                 dangerouslyAllowBrowser: true,
             });
         }
@@ -285,16 +193,40 @@ export class GPTProvider extends BaseAIProvider {
         const client = this.getClient();
         const convertedMessages = this.buildChatMessages(messages);
 
-        const response = await client.chat.completions.create({
-            model: config.model,
-            messages: convertedMessages,
-            temperature: config.temperature,
-            top_p: config.topP,
-            frequency_penalty: config.frequencyPenalty,
-            presence_penalty: config.presencePenalty,
-            max_tokens: config.maxTokens || 4096,
-            response_format: { type: 'json_object' },
-        });
+        let response;
+        try {
+            response = await client.chat.completions.create({
+                model: config.model,
+                messages: convertedMessages,
+                temperature: config.temperature,
+                top_p: config.topP,
+                frequency_penalty: config.frequencyPenalty,
+                presence_penalty: config.presencePenalty,
+                max_tokens: config.maxTokens || 4096,
+                response_format: { type: 'json_object' },
+            });
+        } catch (error: any) {
+            console.error('[GPTProvider] API Error:', error);
+            // Enhance error message with details if available from OpenAI library
+            const status = error.status || error.statusCode;
+            const code = error.code;
+            const type = error.type;
+            const message = error.message;
+
+            let detailedMessage = `OpenAI API Error: ${message}`;
+            if (status) detailedMessage += ` (Status: ${status})`;
+            if (code) detailedMessage += ` (Code: ${code})`;
+
+            // Add helpful hints for common errors
+            if (status === 401) detailedMessage += ' - Check your API Key.';
+            if (status === 403) detailedMessage += ' - Check your account permissions or quota.';
+            if (status === 429) detailedMessage += ' - Rate limit exceeded.';
+            if (code === 'model_not_found')
+                detailedMessage +=
+                    ' - The requested model does not exist or you do not have access.';
+
+            throw new Error(detailedMessage);
+        }
 
         const choice = response.choices[0];
         const toolCalls = this.parseToolCalls(choice?.message?.tool_calls);
@@ -540,14 +472,36 @@ export class GPTProvider extends BaseAIProvider {
             content: prompt,
         });
 
-        const stream = await client.chat.completions.create({
-            model: config.model,
-            messages,
-            max_tokens: config.maxTokens || 4096,
-            temperature: config.temperature,
-            top_p: config.topP,
-            stream: true,
-        });
+        let stream;
+        try {
+            stream = await client.chat.completions.create({
+                model: config.model,
+                messages,
+                max_tokens: config.maxTokens || 4096,
+                temperature: config.temperature,
+                top_p: config.topP,
+                stream: true,
+            });
+        } catch (error: any) {
+            console.error('[GPTProvider] Stream API Error:', error);
+            const status = error.status || error.statusCode;
+            const code = error.code;
+            const message = error.message;
+
+            let detailedMessage = `OpenAI API Error: ${message}`;
+            if (status) detailedMessage += ` (Status: ${status})`;
+            if (code) detailedMessage += ` (Code: ${code})`;
+
+            if (status === 401) detailedMessage += ' - Check your API Key.';
+            if (status === 403)
+                detailedMessage +=
+                    ' - Access denied. Check account permissions, billing status, or model availability (e.g., gpt-4 requires successful payment history).';
+            if (status === 429) detailedMessage += ' - Rate limit exceeded or quota check failed.';
+            if (code === 'model_not_found')
+                detailedMessage += ' - Model not found or not accessible.';
+
+            throw new Error(detailedMessage);
+        }
 
         let accumulated = '';
 

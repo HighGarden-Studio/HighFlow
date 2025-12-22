@@ -48,6 +48,7 @@ const uiStore = useUIStore();
 const projectId = computed(() => Number(route.params.id));
 
 // Local state
+const isMounted = ref(true);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
 const draggedTask = ref<number | null>(null);
@@ -146,6 +147,7 @@ const missingProviderCache = ref<Map<number, MissingProviderInfo | null>>(new Ma
 watch(
     () => taskStore.tasks,
     async () => {
+        if (!isMounted.value) return;
         const newCache = new Map<number, MissingProviderInfo | null>();
         for (const task of taskStore.tasks) {
             newCache.set(task.id, await getMissingProviderForTask(task));
@@ -524,6 +526,85 @@ const liveReviewContent = computed(() => {
     return progress?.content || '';
 });
 
+const liveResponseContent = computed(() => {
+    return (
+        liveStreamingContent.value ||
+        liveReviewContent.value ||
+        (livePreviewTask.value as any)?.executionResult?.content ||
+        (livePreviewTask.value as any)?.result ||
+        ''
+    );
+});
+
+const liveResponseType = computed(() => {
+    const task = livePreviewTask.value;
+    if (!task) return 'text';
+
+    const contentType =
+        (task as any)?.executionResult?.contentType ||
+        (task as any)?.expectedOutputFormat ||
+        (task as any)?.outputFormat;
+
+    if (contentType === 'markdown' || contentType === 'md') return 'markdown';
+    if (contentType === 'image' || contentType?.startsWith('image/')) return 'image';
+    if (contentType === 'code' || contentType?.includes('code')) return 'code';
+    if (contentType === 'json') return 'json';
+
+    // Auto-detect based on content
+    const content = liveResponseContent.value;
+    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+        try {
+            JSON.parse(content);
+            return 'json';
+        } catch {}
+    }
+    if (content.includes('```') || content.match(/^#\s/m)) return 'markdown';
+    if (content.match(/^(data:image|https?:\/\/.*\.(png|jpg|jpeg|gif|webp))/i)) return 'image';
+
+    return 'text';
+});
+
+// Helper: Convert markdown to HTML (simple implementation)
+function markdownToHtml(markdown: string): string {
+    if (!markdown) return '';
+
+    let html = markdown
+        // Code blocks
+        .replace(
+            /```(\w+)?\n([\s\S]*?)```/g,
+            '<pre class="bg-gray-950 p-3 rounded-lg overflow-x-auto"><code class="language-$1">$2</code></pre>'
+        )
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1 py-0.5 rounded text-sm">$1</code>')
+        // Headers
+        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-5 mb-3">$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-6 mb-4">$1</h1>')
+        // Bold and italic
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Links
+        .replace(
+            /\[([^\]]+)\]\(([^)]+)\)/g,
+            '<a href="$2" class="text-blue-400 hover:underline" target="_blank">$1</a>'
+        )
+        // Line breaks
+        .replace(/\n/g, '<br>');
+
+    return html;
+}
+
+// Helper: Format JSON with indentation
+function formatJson(json: string): string {
+    try {
+        const parsed = JSON.parse(json);
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return json;
+    }
+}
+
 /**
  * Get cached missing provider info for a task
  */
@@ -847,28 +928,27 @@ onMounted(async () => {
 
     // Store listener references for cleanup
     const statusChangedHandler = async (data: { id: number; status: string }) => {
+        if (!isMounted.value) return;
         console.log('[KanbanBoard] Task status changed:', data);
-        // Refresh tasks to get latest data
         await taskStore.fetchTasks(projectId.value);
     };
 
     const taskUpdatedHandler = async (taskId: number) => {
+        if (!isMounted.value) return;
         console.log('[KanbanBoard] Task updated:', taskId);
-        // Refresh tasks to get latest data
         await taskStore.fetchTasks(projectId.value);
     };
 
     // Register listeners
-    api.on('task:status-changed', statusChangedHandler);
-    api.on('task:updated', taskUpdatedHandler);
+    const cleanupStatusChanged = api.events.on('task:status-changed', statusChangedHandler);
+    const cleanupTaskUpdated = api.events.on('task:updated', taskUpdatedHandler);
 
     onUnmounted(() => {
+        isMounted.value = false;
         cleanup();
-        // Clean up IPC listeners using stored references
-        if (api && api.off) {
-            api.off('task:status-changed', statusChangedHandler);
-            api.off('task:updated', taskUpdatedHandler);
-        }
+        // Clean up IPC listeners using returned cleanup functions
+        cleanupStatusChanged();
+        cleanupTaskUpdated();
     });
 });
 </script>
@@ -1574,7 +1654,7 @@ onMounted(async () => {
                                 <h3 class="text-white font-semibold leading-tight">
                                     {{ livePreviewTask.title }}
                                 </h3>
-                                <p class="text-xs text-gray-400">실시간 AI 응답 스트리밍</p>
+                                <p class="text-xs text-gray-400">AI 응답</p>
                             </div>
                         </div>
                         <button class="text-gray-400 hover:text-white" @click="closeLivePreview">
@@ -1582,16 +1662,68 @@ onMounted(async () => {
                         </button>
                     </div>
 
-                    <div class="flex-1 overflow-y-auto bg-gray-950 p-4">
-                        <pre
-                            class="text-sm text-blue-100 whitespace-pre-wrap font-mono leading-snug"
-                            >{{
-                                liveStreamingContent ||
-                                liveReviewContent ||
-                                '스트리밍된 응답이 없습니다.'
-                            }}
-            </pre
-                        >
+                    <div class="flex-1 overflow-hidden flex flex-col bg-gray-950">
+                        <!-- Top: Prompt (Task Description) -->
+                        <div class="h-1/3 border-b border-gray-800 flex flex-col">
+                            <div class="px-4 py-2 bg-gray-900 border-b border-gray-800">
+                                <span
+                                    class="text-xs font-semibold text-gray-400 uppercase tracking-wider"
+                                    >Prompt</span
+                                >
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4 bg-gray-900/50">
+                                <pre
+                                    class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-snug"
+                                    >{{ livePreviewTask.description || 'No prompt provided.' }}</pre
+                                >
+                            </div>
+                        </div>
+
+                        <!-- Bottom: Response -->
+                        <div class="flex-1 flex flex-col min-h-0">
+                            <div class="px-4 py-2 bg-gray-900 border-b border-gray-800">
+                                <span
+                                    class="text-xs font-semibold text-blue-400 uppercase tracking-wider"
+                                    >Response</span
+                                >
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4">
+                                <!-- Markdown Viewer -->
+                                <div
+                                    v-if="liveResponseType === 'markdown' && liveResponseContent"
+                                    class="prose prose-invert prose-sm max-w-none"
+                                    v-html="markdownToHtml(liveResponseContent)"
+                                />
+
+                                <!-- Image Viewer -->
+                                <img
+                                    v-else-if="liveResponseType === 'image' && liveResponseContent"
+                                    :src="liveResponseContent"
+                                    alt="Result Image"
+                                    class="max-w-full h-auto rounded-lg shadow-lg"
+                                />
+
+                                <!-- JSON Viewer -->
+                                <pre
+                                    v-else-if="liveResponseType === 'json' && liveResponseContent"
+                                    class="text-sm text-green-100 whitespace-pre-wrap font-mono leading-snug bg-gray-950 p-4 rounded-lg overflow-x-auto"
+                                    >{{ formatJson(liveResponseContent) }}</pre
+                                >
+
+                                <!-- Code Viewer -->
+                                <pre
+                                    v-else-if="liveResponseType === 'code' && liveResponseContent"
+                                    class="text-sm text-amber-100 whitespace-pre-wrap font-mono leading-snug bg-gray-950 p-4 rounded-lg overflow-x-auto"
+                                ><code>{{ liveResponseContent }}</code></pre>
+
+                                <!-- Default Text Viewer -->
+                                <pre
+                                    v-else
+                                    class="text-sm text-blue-100 whitespace-pre-wrap font-mono leading-snug"
+                                    >{{ liveResponseContent || '스트리밍된 응답이 없습니다.' }}</pre
+                                >
+                            </div>
+                        </div>
                     </div>
 
                     <div

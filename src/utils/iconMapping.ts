@@ -68,7 +68,8 @@ export function getProviderIcon(providerId: string): string {
         return providerId;
     }
 
-    return providerIconMap[providerId] || 'ph:cube';
+    const normalizedId = providerId.toLowerCase();
+    return providerIconMap[normalizedId] || 'ph:cube';
 }
 
 /**

@@ -4,7 +4,7 @@
  * Type definitions for the Electron IPC bridge exposed via preload
  */
 
-import type { Project, Task, NewProject, NewTask } from '@electron/main/database/schema';
+import type { Project, Task, NewProject, NewTask } from '@core/types/database';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from './ai';
 
 export interface AppInfo {
@@ -160,6 +160,7 @@ export interface FileStat {
 export interface FsAPI {
     readDir: (dirPath: string) => Promise<FileInfo[]>;
     readFile: (filePath: string) => Promise<string>;
+    readFileBase64: (filePath: string) => Promise<string>;
     exists: (path: string) => Promise<boolean>;
     stat: (path: string) => Promise<FileStat>;
     selectDirectory: () => Promise<string | null>;

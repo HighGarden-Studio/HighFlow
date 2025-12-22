@@ -766,6 +766,27 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         if (result.success) {
                             executionState.status = 'completed';
 
+                            // Get the updated task to access result data
+                            const updatedTask = await taskRepository.findById(taskId);
+
+                            // Log execution completion to history for Output tasks
+                            if (updatedTask) {
+                                await taskHistoryRepository.logExecutionCompleted(
+                                    taskId,
+                                    'Output task completed',
+                                    {
+                                        provider: 'output',
+                                        model: 'connector',
+                                        cost: 0,
+                                        tokens: 0,
+                                        duration: Date.now() - executionState.startedAt.getTime(),
+                                    },
+                                    undefined,
+                                    updatedTask.executionResult as any
+                                );
+                                console.log(`[TaskExecution] Output task ${taskId} history logged`);
+                            }
+
                             // Task status update is handled inside runner, but we ensure notification
                             getMainWindow()?.webContents.send('taskExecution:completed', {
                                 taskId,
@@ -778,7 +799,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             });
 
                             // Trigger dependent tasks
-                            const updatedTask = await taskRepository.findById(taskId);
                             if (updatedTask && updatedTask.status === 'done') {
                                 await checkAndExecuteDependentTasks(taskId, updatedTask);
                             }
@@ -1325,6 +1345,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         fallbackProviders: options?.fallbackProviders || ['openai', 'google'],
                         onToken,
                         onProgress,
+                        projectMcpConfig: project?.mcpConfig || null,
                     };
 
                     const result = await executor.executeTask(task as Task, context, {
@@ -1492,7 +1513,47 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             return { success: false, error: permissionError.message };
                         }
 
-                        throw new Error(executionState.error);
+                        // Handle general execution failure by saving the error as a result
+                        const errorContent = `Execution Failed: ${executionState.error}`;
+                        const errorResult = {
+                            content: errorContent,
+                            error: executionState.error,
+                            metadata: { error: true, ...((result.error as any)?.details || {}) },
+                            provider: result.metadata?.provider,
+                            model: result.metadata?.model,
+                        };
+
+                        await taskRepository.update(taskId, {
+                            status: 'in_review',
+                            executionResult: errorResult,
+                        });
+
+                        console.log(
+                            `[Main IPC] ❌ Task ${taskId} failed but result saved - error: ${executionState.error}`
+                        );
+
+                        getMainWindow()?.webContents.send('task:status-changed', {
+                            id: taskId,
+                            status: 'in_review',
+                        });
+                        getMainWindow()?.webContents.send('taskExecution:completed', {
+                            taskId,
+                            result: errorResult,
+                        });
+
+                        await taskHistoryRepository.logExecutionCompleted(
+                            taskId,
+                            errorContent,
+                            {
+                                cost: result.cost,
+                                tokens: result.tokens,
+                                duration: result.duration,
+                            },
+                            undefined
+                        );
+
+                        activeExecutions.delete(taskId);
+                        return { success: false, error: executionState.error };
                     }
                 } catch (error) {
                     console.error('Error executing AI task:', error);

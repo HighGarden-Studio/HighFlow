@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Task } from '@electron/main/database/schema';
+import type { Task } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
 import type { ExecutionProgress } from '@core/types/electron.d';
 import { TASK_STATUS_TRANSITIONS, isValidStatusTransition } from '@core/types/database';
@@ -565,8 +565,8 @@ export const useTaskStore = defineStore('tasks', () => {
      * Returns null if valid, or error message if invalid
      */
     function validateTaskForExecution(task: Task): string | null {
-        // Input and Script tasks don't require AI provider/prompt validation
-        if (task.taskType === 'input' || task.taskType === 'script') {
+        // Input, Script, and Output tasks don't require AI provider/prompt validation
+        if (task.taskType === 'input' || task.taskType === 'script' || task.taskType === 'output') {
             return null;
         }
 

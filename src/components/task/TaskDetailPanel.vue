@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import type { Task, TaskHistoryEntry, MCPConfig, InputTaskConfig } from '@core/types/database';
+import type { Task, TaskHistoryEntry, InputTaskConfig } from '@core/types/database';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
 import PromptEnhancerPanel from '../prompt/PromptEnhancerPanel.vue';
 import PromptTemplatePicker from '../prompt/PromptTemplatePicker.vue';
@@ -18,6 +18,7 @@ import { useProjectStore } from '../../renderer/stores/projectStore';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
 import CodeEditor from '../common/CodeEditor.vue';
 import OutputTaskConfigPanel from './OutputTaskConfigPanel.vue';
+import MarkdownRenderer from '../common/MarkdownRenderer.vue';
 import TaskExecutionLog from './TaskExecutionLog.vue';
 import type { ScriptLanguage } from '@core/types/database';
 import NotificationSettings from '../common/NotificationSettings.vue';
@@ -169,7 +170,7 @@ function getDefaultModelForProvider(providerId: string | null): string | null {
     const fallbackDefaults: Record<string, string> = {
         anthropic: 'claude-3-5-sonnet-20250219',
         openai: 'gpt-4o-mini',
-        google: 'gemini-1.5-pro',
+        google: 'gemini-2.5-pro',
         groq: 'llama-3.3-70b-versatile',
         mistral: 'mistral-large-latest',
         lmstudio: 'local-model',
@@ -294,17 +295,7 @@ const dependentTaskIdList = computed(() => {
 
 // MCP 도구 선택 상태
 const selectedMCPTools = ref<string[]>([]);
-interface KeyValuePair {
-    id: string;
-    key: string;
-    value: string;
-}
-interface MCPConfigFormEntry {
-    env: KeyValuePair[];
-    params: KeyValuePair[];
-    notes: string;
-}
-const taskMCPConfig = ref<Record<string, MCPConfigFormEntry>>({});
+// interfaces KeyValuePair, MCPConfigFormEntry and ref taskMCPConfig removed
 
 // Local Agent 실행 옵션
 const executionMode = ref<'api' | 'local'>('api');
@@ -420,8 +411,7 @@ watch(
                 selectedMCPTools.value = Array.isArray(newTask.requiredMCPs)
                     ? [...newTask.requiredMCPs]
                     : [];
-                loadTaskMCPConfig(newTask);
-                selectedMCPTools.value.forEach((id) => ensureMCPConfigEntry(id));
+
                 if (!localAgentWorkingDir.value && baseDevFolder.value) {
                     localAgentWorkingDir.value = baseDevFolder.value;
                 }
@@ -487,7 +477,6 @@ watch(
             previousTaskId.value = null;
             localTask.value = null;
             selectedMCPTools.value = [];
-            taskMCPConfig.value = {};
             aiModel.value = null;
             reviewAiProvider.value = null;
             reviewAiProvider.value = null;
@@ -645,18 +634,20 @@ watch(activeTab, (newTab) => {
 
 watch(
     () => [...selectedMCPTools.value],
-    (newList) => {
-        newList.forEach((id) => ensureMCPConfigEntry(id));
-        syncLocalMCPConfig();
+    () => {
+        // If MCPToolSelector updates localTask.mcpConfig directly, we might not need to do much here
+        // other than ensure persistence happens if this list changes.
+        // Also if we remove a tool, we might want to cleanup mcpConfig, but retaining it is also fine.
+        if (isInitializing.value || isSavingInternally.value) return;
         persistExecutionSettings();
     },
     { immediate: true }
 );
 
 watch(
-    taskMCPConfig,
+    () => localTask.value?.mcpConfig,
     () => {
-        syncLocalMCPConfig();
+        if (isInitializing.value || isSavingInternally.value) return;
         persistExecutionSettings();
     },
     { deep: true }
@@ -900,7 +891,7 @@ function persistExecutionSettings() {
         localAgent: selectedLocalAgent.value as any,
         localAgentWorkingDir: localAgentWorkingDir.value,
         requiredMCPs: [...selectedMCPTools.value],
-        mcpConfig: buildMCPConfigPayload(),
+        mcpConfig: localTask.value.mcpConfig,
         expectedOutputFormat: localTask.value.expectedOutputFormat,
         triggerConfig: buildTriggerConfig(),
     } as Task);
@@ -911,101 +902,13 @@ function persistExecutionSettings() {
     }, 100);
 }
 
-function createKeyValuePair(): KeyValuePair {
-    return {
-        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        key: '',
-        value: '',
-    };
-}
+// function createKeyValuePair removed
+// function ensureMCPConfigEntry removed (if present)
 
-function ensureMCPConfigEntry(serverId: string): MCPConfigFormEntry {
-    if (!taskMCPConfig.value[serverId]) {
-        taskMCPConfig.value[serverId] = {
-            env: [createKeyValuePair()],
-            params: [],
-            notes: '',
-        };
-    }
-    return taskMCPConfig.value[serverId];
-}
+// function ensureMCPConfigEntry, mapToPairs, pairsToRecord, loadTaskMCPConfig, buildMCPConfigPayload removed
+// because MCPToolSelector now handles form state and inheritance internally.
 
-function mapToPairs(source?: Record<string, string>): KeyValuePair[] {
-    if (!source) {
-        return [createKeyValuePair()];
-    }
-    const entries = Object.entries(source);
-    if (entries.length === 0) {
-        return [createKeyValuePair()];
-    }
-    return entries.map(([key, value]) => ({
-        id: `${key}-${Math.random().toString(36).slice(2, 6)}`,
-        key,
-        value: String(value ?? ''),
-    }));
-}
-
-function pairsToRecord(pairs: KeyValuePair[]): Record<string, string> {
-    return pairs.reduce<Record<string, string>>((acc, pair) => {
-        if (pair.key && pair.value) {
-            acc[pair.key] = pair.value;
-        }
-        return acc;
-    }, {});
-}
-
-function loadTaskMCPConfig(task: Task | null): void {
-    const map: Record<string, MCPConfigFormEntry> = {};
-    const source = (task?.mcpConfig as MCPConfig | null) || null;
-    if (source) {
-        for (const [serverId, entry] of Object.entries(source)) {
-            map[serverId] = {
-                env: mapToPairs(entry?.env as Record<string, string> | undefined),
-                params: mapToPairs(entry?.params as Record<string, string> | undefined),
-                notes:
-                    typeof entry?.context === 'object' && entry?.context !== null
-                        ? String((entry.context as Record<string, unknown>).notes ?? '')
-                        : '',
-            };
-        }
-    }
-    taskMCPConfig.value = map;
-    selectedMCPTools.value.forEach((serverId) => ensureMCPConfigEntry(serverId));
-}
-
-function buildMCPConfigPayload(): MCPConfig | null {
-    const payload: MCPConfig = {};
-    for (const serverId of selectedMCPTools.value) {
-        const entry = taskMCPConfig.value[serverId];
-        if (!entry) continue;
-        const env = pairsToRecord(entry.env);
-        const params = pairsToRecord(entry.params);
-        const notes = entry.notes?.trim();
-        const configEntry: Record<string, unknown> = {};
-        if (Object.keys(env).length > 0) {
-            configEntry.env = env;
-        }
-        if (Object.keys(params).length > 0) {
-            configEntry.params = params;
-        }
-        if (notes) {
-            configEntry.context = { notes };
-        }
-        if (Object.keys(configEntry).length > 0) {
-            payload[serverId] = configEntry;
-        }
-    }
-    return Object.keys(payload).length > 0 ? payload : null;
-}
-
-function syncLocalMCPConfig(): void {
-    if (!localTask.value) return;
-    const payload = buildMCPConfigPayload();
-    localTask.value = {
-        ...localTask.value,
-        mcpConfig: payload,
-    } as Task;
-}
+// function syncLocalMCPConfig removed
 
 /**
  * Input Task Config Helpers
@@ -1102,7 +1005,7 @@ function handleSave() {
         autoReview: autoReview.value,
         triggerConfig: buildTriggerConfig(), // Use the shared helper
         requiredMCPs: [...selectedMCPTools.value],
-        mcpConfig: buildMCPConfigPayload(),
+        mcpConfig: localTask.value.mcpConfig,
         expectedOutputFormat: localTask.value.expectedOutputFormat,
         assignedOperatorId: assignedOperatorId.value,
     };
@@ -1485,7 +1388,7 @@ function getHistoryEventTitle(eventType: string): string {
 }
 
 // Format history event data for display
-function formatHistoryEventData(entry: TaskHistoryEntry): string {
+function formatHistoryEventData(entry: TaskHistoryEntry, skipContent: boolean = false): string {
     if (!entry.eventData) return '';
 
     const data = entry.eventData;
@@ -1499,13 +1402,13 @@ function formatHistoryEventData(entry: TaskHistoryEntry): string {
     };
 
     // Common fields
-    if (data.content && typeof data.content === 'string') {
+    if (!skipContent && data.content && typeof data.content === 'string') {
         // Check if it's an image (base64)
         if (isBase64Image(data.content)) {
             parts.push(`결과: [이미지 생성됨]`);
-        } else if (data.content.length > 200) {
+        } else if (data.content.length > 1200) {
             // Truncate long text
-            parts.push(`결과: ${data.content.substring(0, 200)}...`);
+            parts.push(`결과: ${data.content.substring(0, 1200)}...`);
         } else {
             parts.push(`결과: ${data.content}`);
         }
@@ -3014,7 +2917,8 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                             <div>
                                 <MCPToolSelector
                                     v-model:selectedIds="selectedMCPTools"
-                                    v-model:config="taskMCPConfig as any"
+                                    v-model:config="localTask!.mcpConfig"
+                                    :base-config="projectStore.currentProject?.mcpConfig"
                                 />
                             </div>
 
@@ -3789,6 +3693,38 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                                     }}
                                                                 </button>
                                                             </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- Markdown Content Display -->
+                                                    <template
+                                                        v-else-if="
+                                                            entry.eventData?.content &&
+                                                            typeof entry.eventData.content ===
+                                                                'string'
+                                                        "
+                                                    >
+                                                        <div class="space-y-1">
+                                                            <span
+                                                                class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                                                            >
+                                                                Result
+                                                            </span>
+                                                            <MarkdownRenderer
+                                                                :content="entry.eventData.content"
+                                                                class="text-sm text-gray-800 dark:text-gray-200"
+                                                            />
+                                                        </div>
+                                                        <div
+                                                            v-if="
+                                                                formatHistoryEventData(entry, true)
+                                                                    .length > 0
+                                                            "
+                                                            class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 whitespace-pre-wrap font-mono text-xs text-gray-600 dark:text-gray-400"
+                                                        >
+                                                            {{
+                                                                formatHistoryEventData(entry, true)
+                                                            }}
                                                         </div>
                                                     </template>
 

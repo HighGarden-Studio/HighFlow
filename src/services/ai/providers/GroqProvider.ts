@@ -16,6 +16,7 @@ import type {
     Capability,
     ModelInfo,
     AIMessage,
+    ToolCall,
     AiResult,
 } from '@core/types/ai';
 import { detectTextSubType } from '../utils/aiResultUtils';

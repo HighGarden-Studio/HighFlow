@@ -25,92 +25,6 @@ export class GeminiProvider extends BaseAIProvider {
     readonly name: AIProvider = 'google';
     private readonly IMAGE_MODEL = 'gemini-3-pro-image-preview'; // Premium model with 4K support
 
-    readonly defaultModels: ModelInfo[] = [
-        {
-            name: 'gemini-3-pro-image-preview',
-            provider: 'google',
-            contextWindow: 65536,
-            maxOutputTokens: 32768,
-            costPerInputToken: 5.0,
-            costPerOutputToken: 15.0,
-            averageLatency: 5000,
-            features: ['vision', 'function_calling'],
-            bestFor: [
-                'High-fidelity 4K image generation',
-                'Text rendering in images',
-                'Complex design mockups',
-                'Google Search grounding',
-            ],
-        },
-        {
-            name: 'gemini-2.5-flash-image',
-            provider: 'google',
-            contextWindow: 65536,
-            maxOutputTokens: 32768,
-            costPerInputToken: 0.1,
-            costPerOutputToken: 0.4,
-            averageLatency: 2000,
-            features: ['vision', 'function_calling'],
-            bestFor: ['Fast image generation', 'Cost-effective', '1024px resolution'],
-        },
-        {
-            name: 'veo-3.1-generate-preview',
-            provider: 'google',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0, // Priced per second of video
-            costPerOutputToken: 0,
-            averageLatency: 15000,
-            features: ['vision'],
-            bestFor: ['High-fidelity video generation', '1080p video', 'Text-to-video'],
-        },
-        {
-            name: 'veo-2.0-generate-preview',
-            provider: 'google',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 10000,
-            features: ['vision'],
-            bestFor: ['Fast video generation', '720p video'],
-        },
-        {
-            name: 'gemini-1.5-pro',
-            provider: 'google',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 3.5,
-            costPerOutputToken: 10.5,
-            averageLatency: 2000,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Extremely long context', 'Multimodal tasks', 'Complex analysis'],
-        },
-        {
-            name: 'gemini-1.5-flash',
-            provider: 'google',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0.075,
-            costPerOutputToken: 0.3,
-            averageLatency: 800,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Fast responses', 'High volume', 'Cost-effective', 'Long context'],
-        },
-
-        {
-            name: 'gemini-pro',
-            provider: 'google',
-            contextWindow: 32000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0.5,
-            costPerOutputToken: 1.5,
-            averageLatency: 1000,
-            features: ['streaming', 'function_calling', 'system_prompt'],
-            bestFor: ['General purpose', 'Balanced performance', 'Free tier available'],
-        },
-    ];
-
     private client: GoogleGenAI | null = null;
     private injectedApiKey: string | null = null;
 
@@ -128,17 +42,17 @@ export class GeminiProvider extends BaseAIProvider {
     async fetchModels(): Promise<ModelInfo[]> {
         console.log('[GeminiProvider] Fetching models from API... (Force Update)');
         try {
-            // Safely access process.env or use empty string
-            const envKey = typeof process !== 'undefined' ? process.env.GOOGLE_API_KEY : undefined;
-            const apiKey = this.injectedApiKey || envKey;
-
-            if (!apiKey) {
-                console.warn('[GeminiProvider] No API key, using default models');
-                return this.defaultModels;
+            if (!this.injectedApiKey) {
+                console.warn('[GeminiProvider] No API key configured, loading from DB cache');
+                const cachedModels =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository')
+                        .then((m) => m.providerModelsRepository)
+                        .getModels('google');
+                return cachedModels;
             }
 
             // Use SDK to fetch models
-            const client = new GoogleGenAI({ apiKey });
+            const client = new GoogleGenAI({ apiKey: this.injectedApiKey });
             const pager = await client.models.list();
 
             console.log('[GeminiProvider] Fetched models via SDK');
@@ -175,10 +89,28 @@ export class GeminiProvider extends BaseAIProvider {
                 '[GeminiProvider] Fetched models from API:',
                 models.map((m: any) => m.name)
             );
+
+            // Save to DB cache
+            await (
+                await import('../../../../electron/main/database/repositories/provider-models-repository')
+            ).providerModelsRepository.saveModels('google', models);
+            console.log('[GeminiProvider] Saved models to DB cache');
+
             return models;
         } catch (error) {
             console.error('[GeminiProvider] Failed to fetch models from API:', error);
-            return this.defaultModels;
+            // Fall back to DB cache
+            const cachedModels =
+                await import('../../../../electron/main/database/repositories/provider-models-repository')
+                    .then((m) => m.providerModelsRepository)
+                    .getModels('google');
+            if (cachedModels.length > 0) {
+                console.log('[GeminiProvider] Using cached models from DB');
+                return cachedModels;
+            }
+            // Return empty array if no cache available
+            console.warn('[GeminiProvider] No cached models available');
+            return [];
         }
     }
 
@@ -187,15 +119,12 @@ export class GeminiProvider extends BaseAIProvider {
      */
     private getClient(): GoogleGenAI {
         if (!this.client) {
-            // Safely access process.env
-            const envKey = typeof process !== 'undefined' ? process.env.GOOGLE_API_KEY : undefined;
-            const apiKey = this.injectedApiKey || envKey;
-            if (!apiKey) {
+            if (!this.injectedApiKey) {
                 throw new Error(
-                    'GOOGLE_API_KEY not configured. Please set your API key in Settings > AI Providers.'
+                    'API key not configured. Please set your API key in Settings > AI Providers.'
                 );
             }
-            this.client = new GoogleGenAI({ apiKey });
+            this.client = new GoogleGenAI({ apiKey: this.injectedApiKey });
         }
         return this.client;
     }
@@ -218,18 +147,58 @@ export class GeminiProvider extends BaseAIProvider {
             const { systemInstruction, contents } = this.buildGeminiConversation(messages, config);
             const toolDeclarations = this.mapTools(config.tools);
 
-            const result = await client.models.generateContent({
-                model: config.model,
-                contents: contents,
-                config: {
-                    temperature: config.temperature,
-                    topP: config.topP,
-                    maxOutputTokens: config.maxTokens || 8192,
-                    stopSequences: config.stopSequences,
-                    ...(systemInstruction && { systemInstruction }),
-                    ...(toolDeclarations && { tools: toolDeclarations }),
-                },
-            });
+            // Debug: Log tool declarations
+            if (toolDeclarations && toolDeclarations.length > 0) {
+                console.log(
+                    `[GeminiProvider] Sending ${toolDeclarations[0].functionDeclarations?.length || 0} tools to Gemini`
+                );
+                console.log(
+                    '[GeminiProvider] Tool names:',
+                    toolDeclarations[0].functionDeclarations?.map((t: any) => t.name) || []
+                );
+            } else {
+                console.log('[GeminiProvider] No tools to send');
+            }
+
+            let result;
+            try {
+                const requestConfig: any = {
+                    model: config.model,
+                    contents: contents,
+                    config: {
+                        temperature: config.temperature,
+                        topP: config.topP,
+                        maxOutputTokens: config.maxTokens || 8192,
+                        stopSequences: config.stopSequences,
+                        ...(systemInstruction && { systemInstruction }),
+                    },
+                };
+
+                if (toolDeclarations && toolDeclarations.length > 0) {
+                    requestConfig.tools = toolDeclarations;
+                    // Force tool use mode
+                    requestConfig.toolConfig = {
+                        functionCallingConfig: {
+                            mode: 'AUTO',
+                        },
+                    };
+                }
+
+                result = await client.models.generateContent(requestConfig);
+            } catch (error: any) {
+                console.error('[GeminiProvider] API Error:', error);
+
+                let detailedMessage = `Google Gemini API Error: ${error.message || String(error)}`;
+                const status = error.status || error.statusCode;
+
+                if (status) detailedMessage += ` (Status: ${status})`;
+                if (detailedMessage.includes('403'))
+                    detailedMessage += ' - Permission denied. Check API Key and billing.';
+                if (detailedMessage.includes('404')) detailedMessage += ' - Model not found.';
+                if (detailedMessage.includes('429')) detailedMessage += ' - Quota exceeded.';
+
+                throw new Error(detailedMessage);
+            }
             const topCandidate = result.candidates?.[0];
             const parts: any[] = topCandidate?.content?.parts || [];
 
@@ -802,6 +771,25 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     private mapMessageToGemini(message: AIMessage): { role: string; parts: any[] } {
+        // Handle tool/function response messages
+        if (message.role === 'tool') {
+            // Tool responses in Gemini are sent as model role with functionResponse
+            const toolMsg = message as any;
+            return {
+                role: 'model',
+                parts: [
+                    {
+                        functionResponse: {
+                            name: toolMsg.name || 'unknown',
+                            response: {
+                                content: message.content,
+                            },
+                        },
+                    },
+                ],
+            };
+        }
+
         const role = message.role === 'user' ? 'user' : 'model';
         let parts: any[] = [{ text: message.content }];
 
@@ -830,25 +818,51 @@ export class GeminiProvider extends BaseAIProvider {
         return { role, parts };
     }
 
-    private extractGeminiToolCalls(_parts: any[]): ToolCall[] | undefined {
-        // Implement tool call extraction if needed
-        // For basic text generation, this is typically not populated in the same way as OpenAI
-        return undefined;
+    private extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
+        const calls: ToolCall[] = [];
+
+        for (const part of parts) {
+            if (part.functionCall) {
+                calls.push({
+                    id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    name: part.functionCall.name,
+                    arguments: part.functionCall.args || {},
+                });
+            }
+        }
+
+        return calls.length > 0 ? calls : undefined;
     }
 
-    private mapTools(_tools: any[] | undefined): any[] | undefined {
-        // Implement tool mapping if needed
-        return undefined;
+    private mapTools(tools: any[] | undefined): any[] | undefined {
+        if (!tools || tools.length === 0) {
+            return undefined;
+        }
+
+        // Map MCP/OpenAI-style tools to Gemini function declarations format
+        const functionDeclarations = tools.map((tool) => {
+            const params = tool.parameters || tool.input_schema || {};
+
+            return {
+                name: tool.name,
+                description: tool.description || '',
+                parameters: {
+                    type: params.type || 'object',
+                    properties: params.properties || {},
+                    required: params.required || [],
+                },
+            };
+        });
+
+        return [{ functionDeclarations }];
     }
 
     // Helper to calculate cost
-    public calculateCost(tokens: { prompt: number; completion: number }, model: string): number {
-        const modelInfo = this.defaultModels.find((m) => m.name === model);
-        if (!modelInfo) return 0;
-
-        // Cost in dollars
-        const promptCost = (tokens.prompt / 1000000) * modelInfo.costPerInputToken;
-        const completionCost = (tokens.completion / 1000000) * modelInfo.costPerOutputToken;
+    public calculateCost(tokens: { prompt: number; completion: number }, _model: string): number {
+        // Note: Model pricing info is cached in DB, but for now use default Gemini pricing
+        // TODO: Fetch from DB cache when calculating costs
+        const promptCost = (tokens.prompt / 1000000) * 0.5; // ~$0.50 per 1M input tokens
+        const completionCost = (tokens.completion / 1000000) * 1.5; // ~$1.50 per 1M output tokens
 
         return promptCost + completionCost || 0;
     }

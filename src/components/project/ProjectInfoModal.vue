@@ -178,10 +178,12 @@ async function handleUpdateMCPConfig(config: any) {
     if (!props.project) return;
     try {
         const api = getAPI();
+        // Deep clone config to avoid IPC serialization issues with Proxies
+        const configData = JSON.parse(JSON.stringify(config));
         await api.projects.update(props.project.id, {
-            mcpConfig: config,
+            mcpConfig: configData,
         } as any);
-        (props.project as any).mcpConfig = config;
+        (props.project as any).mcpConfig = configData;
     } catch (error) {
         console.error('Failed to update MCP config:', error);
     }

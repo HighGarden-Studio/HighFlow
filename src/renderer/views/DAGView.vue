@@ -25,6 +25,7 @@ import CustomEdge from '../../components/dag/CustomEdge.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import InputTaskForm from '../../components/task/InputTaskForm.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
+import TaskExecutionProgress from '../../components/task/TaskExecutionProgress.vue';
 import { getAPI } from '../../utils/electron';
 
 // Import Vue Flow styles
@@ -57,6 +58,12 @@ const selectedTask = computed(() => {
 const showProjectInfoModal = ref(false);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
+const showExecutionModal = ref(false);
+const executionTaskId = ref<number | null>(null);
+const executionTask = computed(() => {
+    if (!executionTaskId.value) return null;
+    return taskStore.tasks.find((t) => t.id === executionTaskId.value) || null;
+});
 
 // Input Modal State
 const showInputModal = ref(false);
@@ -93,7 +100,7 @@ const resultPreviewTask = computed(() => {
 // const vueFlowKey = ref(0);
 
 // Vue Flow setup
-const { onConnect, addEdges, fitView, updateNodeData } = useVueFlow();
+const { onConnect, addEdges, fitView, updateNodeData, project: projectToFlowCoords } = useVueFlow();
 
 // Nodes and edges
 const nodes = ref<Node[]>([]);
@@ -108,6 +115,11 @@ const nodeTypes = {
 const edgeTypes = {
     custom: markRaw(CustomEdge),
 };
+
+// Context menu state
+const showContextMenu = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 }); // Screen coordinates
+const contextMenuNodePosition = ref({ x: 0, y: 0 }); // Flow coordinates
 
 /**
  * Create Dagre layout
@@ -158,7 +170,7 @@ function buildGraph(shouldFit = false) {
     }
 
     isBuilding = true;
-    console.log('🔄 Building graph with', tasks.value.length, 'tasks. Should fit:', shouldFit);
+    // console.log('🔄 Building graph with', tasks.value.length, 'tasks. Should fit:', shouldFit);
 
     const taskNodes: Node[] = [];
     const taskEdges: Edge[] = [];
@@ -203,10 +215,11 @@ function buildGraph(shouldFit = false) {
                 const outputFormat = sourceTask.expectedOutputFormat || sourceTask.outputType;
                 const formatInfo = getOutputFormatInfo(outputFormat);
 
-                console.log(
-                    `📊 Edge ${depId}->${task.id}: expectedOutputFormat="${sourceTask.expectedOutputFormat}", outputType="${sourceTask.outputType}", formatInfo:`,
-                    formatInfo
-                );
+                // Verbose logging disabled to reduce console noise
+                // console.log(
+                //     `📊 Edge ${depId}->${task.id}: expectedOutputFormat="${sourceTask.expectedOutputFormat}", outputType="${sourceTask.outputType}", formatInfo:`,
+                //     formatInfo
+                // );
 
                 // Determine if this specific dependency is part of an "Active Path"
                 // For direct dependencies (no expression), it's always active if it exists.
@@ -284,7 +297,29 @@ function buildGraph(shouldFit = false) {
         taskEdges
     );
 
-    nodes.value = layoutedNodes;
+    // Override positions for tasks that have saved positions in metadata
+    const finalNodes = layoutedNodes.map((node) => {
+        const task = tasks.value.find((t) => String(t.id) === node.id);
+        if (task?.metadata && typeof task.metadata === 'object' && 'dagPosition' in task.metadata) {
+            const savedPosition = (task.metadata as any).dagPosition;
+            if (
+                savedPosition &&
+                typeof savedPosition.x === 'number' &&
+                typeof savedPosition.y === 'number'
+            ) {
+                return {
+                    ...node,
+                    position: {
+                        x: savedPosition.x,
+                        y: savedPosition.y,
+                    },
+                };
+            }
+        }
+        return node;
+    });
+
+    nodes.value = finalNodes;
     edges.value = layoutedEdges;
 
     // Fit view after layout - Only if requested
@@ -596,11 +631,11 @@ onConnect(async (params) => {
         return;
     }
 
-    // Check for circular dependency
-    if (wouldCreateCircularDependency(sourceId, targetId)) {
-        console.warn('Cannot create circular dependency');
-        return;
-    }
+    // Check for circular dependency - DISABLED to allow circular dependencies
+    // if (wouldCreateCircularDependency(sourceId, targetId)) {
+    //     console.warn('Cannot create circular dependency');
+    //     return;
+    // }
 
     // Update task dependencies
     const targetTask = tasks.value.find((t) => t.id === targetId);
@@ -719,15 +754,6 @@ function openCreateModal(status: TaskStatus = 'todo') {
 /**
  * Handle task created
  */
-/**
- * Handle task created (saved from modal)
- */
-async function handleTaskSaved() {
-    showCreateModal.value = false;
-    await taskStore.fetchTasks(projectId.value);
-    buildGraph();
-}
-
 /**
  * Handle task events
  */
@@ -851,14 +877,9 @@ function closeResultPreview() {
  */
 function handlePreviewStream(task: Task) {
     console.log('🎥 [DAGView] handlePreviewStream called', task.id);
-    selectedTaskId.value = task.id;
-    showDetailPanel.value = true;
-    console.log(
-        '🎥 [DAGView] Set selectedTaskId:',
-        selectedTaskId.value,
-        'showDetailPanel:',
-        showDetailPanel.value
-    );
+    executionTaskId.value = task.id;
+    showExecutionModal.value = true;
+    console.log('🎥 [DAGView] Opening execution modal for task:', executionTaskId.value);
 }
 
 /**
@@ -923,12 +944,39 @@ async function handleInputSubmit(data: any) {
 }
 
 async function handleStop(task: Task) {
-    const result = await taskStore.stopTask(task.id);
-    if (!result.success && result.error) {
-        uiStore.showToast({
-            message: `Failed to stop task: ${result.error}`,
-            type: 'error',
-        });
+    try {
+        const api = (window as any).electron;
+        await api.tasks.stopTask(task.id);
+        console.log('Task stopped successfully:', task.id);
+    } catch (error: any) {
+        console.error('Failed to stop task:', error);
+        if (error.name === 'TaskNotStoppableError') {
+            alert(error.message || 'Task cannot be stopped in its current state');
+        } else {
+            alert('Failed to stop task');
+        }
+    }
+}
+
+/**
+ * Handle task deletion from delete button
+ */
+async function handleTaskDelete(task: Task) {
+    if (!confirm(`Are you sure you want to delete "${task.title}"?`)) {
+        return;
+    }
+
+    try {
+        const api = (window as any).electron;
+        await api.tasks.deleteTask(task.id);
+        console.log('Task deleted successfully:', task.id);
+
+        // Rebuild graph to remove deleted task node
+        await nextTick();
+        rebuildGraphImmediate();
+    } catch (error: any) {
+        console.error('Failed to delete task:', error);
+        alert('Failed to delete task');
     }
 }
 
@@ -966,17 +1014,42 @@ watch(
 /**
  * Handle task save from detail panel
  */
-async function handleTaskSave(task: Task) {
-    // Save the updated task to the database
-    await taskStore.updateTask(task.id, task);
+async function handleTaskSaved() {
+    // Close modal
+    showCreateModal.value = false;
 
-    // Generate graph after store update (optimistic update handles the data)
-    buildGraph(); // Rebuild graph after fetching updated tasks
+    // Fetch latest tasks to include the newly created one
+    await taskStore.fetchTasks(projectId.value);
+
+    // If task was created from context menu, apply position
+    if (contextMenuNodePosition.value.x !== 0 || contextMenuNodePosition.value.y !== 0) {
+        // Find the most recently created task (highest ID)
+        const newTask = [...taskStore.tasks].sort((a, b) => b.id - a.id)[0];
+
+        if (newTask) {
+            // Update task metadata with position
+            const updatedMetadata = {
+                ...(newTask.metadata || {}),
+                dagPosition: {
+                    x: contextMenuNodePosition.value.x,
+                    y: contextMenuNodePosition.value.y,
+                },
+            };
+
+            await taskStore.updateTask(newTask.id, {
+                ...newTask,
+                metadata: updatedMetadata,
+            });
+        }
+
+        // Reset context menu position
+        contextMenuNodePosition.value = { x: 0, y: 0 };
+    }
+
+    // Rebuild graph
+    await nextTick();
+    buildGraph();
 }
-
-/**
- * Handle operator assignment
- */
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
@@ -1060,6 +1133,43 @@ function onDragOver(event: DragEvent) {
     }
 }
 
+/**
+ * Handle context menu on VueFlow pane (right-click on empty space)
+ */
+function handlePaneContextMenu(event: MouseEvent) {
+    event.preventDefault();
+
+    // Store screen coordinates for menu position
+    contextMenuPosition.value = {
+        x: event.clientX,
+        y: event.clientY,
+    };
+
+    // Convert screen coordinates to flow coordinates using VueFlow's project method
+    if (projectToFlowCoords) {
+        const flowCoords = projectToFlowCoords({ x: event.clientX, y: event.clientY });
+        contextMenuNodePosition.value = flowCoords;
+    }
+
+    showContextMenu.value = true;
+}
+
+/**
+ * Handle "New Task" from context menu
+ */
+function handleNewTaskFromContextMenu() {
+    showContextMenu.value = false;
+    // Open task creation modal (will create task at stored position)
+    openCreateModal('todo');
+}
+
+/**
+ * Close context menu
+ */
+function closeContextMenu() {
+    showContextMenu.value = false;
+}
+
 // Initial load
 onMounted(async () => {
     if (projectId.value) {
@@ -1079,7 +1189,7 @@ onMounted(async () => {
         // This ensures INPUT task status updates (including inputSubStatus) are reflected immediately
         const unsubscribe = taskStore.$subscribe(
             async (mutation, state) => {
-                console.log('[DAGView] TaskStore mutation detected:', mutation.type);
+                // console.log('[DAGView] TaskStore mutation detected:', mutation.type);
 
                 // Trigger rebuild on any store mutation
                 await nextTick();
@@ -1093,15 +1203,25 @@ onMounted(async () => {
             const detail = (event as CustomEvent).detail;
             console.log('[DAGView] INPUT task status changed event:', detail);
             await nextTick();
-            // Rebuild graph - taskKey will handle selective TaskCard remount
-            rebuildGraphImmediate();
         };
         window.addEventListener('task:input-status-changed', handleInputStatusChange);
+
+        // Handle context menu close on outside click
+        const handleWindowClick = (event: MouseEvent) => {
+            if (showContextMenu.value) {
+                const target = event.target as HTMLElement;
+                if (!target.closest('.context-menu')) {
+                    closeContextMenu();
+                }
+            }
+        };
+        window.addEventListener('click', handleWindowClick);
 
         // Cleanup on unmount
         onUnmounted(() => {
             unsubscribe();
             window.removeEventListener('task:input-status-changed', handleInputStatusChange);
+            window.removeEventListener('click', handleWindowClick);
         });
     }
 });
@@ -1137,6 +1257,7 @@ onMounted(async () => {
                 :edges-updatable="false"
                 :nodes-draggable="true"
                 @dragover="onDragOver"
+                @pane-context-menu="handlePaneContextMenu"
             >
                 <!-- Custom node template -->
                 <template #node-taskCard="{ data }">
@@ -1150,6 +1271,7 @@ onMounted(async () => {
                         @view-history="handleViewHistory"
                         @retry="handleTaskRetry(data.task)"
                         @stop="handleStop(data.task)"
+                        @delete="handleTaskDelete(data.task)"
                         @operator-drop="handleOperatorDrop"
                         @provide-input="handleProvideInput"
                     />
@@ -1164,7 +1286,7 @@ onMounted(async () => {
             @close="closeDetailPanel"
             @execute="handleTaskExecute"
             @approve="handleTaskApprove"
-            @save="handleTaskSave"
+            @save="handleTaskSaved"
         />
 
         <!-- Task Create Modal -->
@@ -1209,6 +1331,83 @@ onMounted(async () => {
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
         />
+
+        <!-- Context Menu -->
+        <Teleport to="body">
+            <div
+                v-if="showContextMenu"
+                :style="{
+                    position: 'fixed',
+                    top: contextMenuPosition.y + 'px',
+                    left: contextMenuPosition.x + 'px',
+                    zIndex: 9999,
+                }"
+                class="context-menu"
+                @keydown.esc="closeContextMenu"
+            >
+                <button @click="handleNewTaskFromContextMenu" class="context-menu-item">
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    <span>New Task</span>
+                </button>
+            </div>
+        </Teleport>
+
+        <!-- Execution Progress Modal -->
+        <Teleport to="body">
+            <div
+                v-if="showExecutionModal && executionTask"
+                class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]"
+                @click.self="showExecutionModal = false"
+            >
+                <div
+                    class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4"
+                    @click.stop
+                >
+                    <div
+                        class="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10"
+                    >
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900 dark:text-white">
+                                Live Execution
+                            </h2>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                {{ executionTask.title }}
+                            </p>
+                        </div>
+                        <button
+                            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                            @click="showExecutionModal = false"
+                        >
+                            <svg
+                                class="w-6 h-6"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6">
+                        <TaskExecutionProgress :task="executionTask" />
+                    </div>
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>
 
@@ -1280,5 +1479,40 @@ onMounted(async () => {
 :deep(.vue-flow__minimap) {
     background: #1f2937;
     border: 1px solid #374151;
+}
+
+/* Context Menu Styles */
+.context-menu {
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+    min-width: 150px;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #d1d5db;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+}
+
+.context-menu-item:hover {
+    background: #374151;
+    color: #ffffff;
+}
+
+.context-menu-item svg {
+    flex-shrink: 0;
 }
 </style>

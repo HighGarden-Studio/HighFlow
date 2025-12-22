@@ -402,6 +402,7 @@ export interface MCPServerConfig {
     installed?: boolean;
     installLog?: string;
     lastInstalledAt?: string;
+    setupInstructions?: string; // Markdown formatted setup guide (e.g., OAuth setup wizard instructions)
     // Custom configuration fields
     config?: {
         path?: string; // For filesystem MCP
@@ -547,16 +548,7 @@ export const useSettingsStore = defineStore('settings', () => {
             authMethods: ['apiKey'],
             apiKey: '',
             enabled: false,
-            models: [
-                'gpt-4o',
-                'gpt-4o-mini',
-                'o1',
-                'o1-preview',
-                'o1-mini',
-                'gpt-4-turbo',
-                'gpt-4',
-                'gpt-3.5-turbo',
-            ],
+            models: [], // Will be loaded from DB cache on app start
             defaultModel: 'gpt-4o',
             supportsStreaming: true,
             supportsVision: true,
@@ -628,12 +620,12 @@ export const useSettingsStore = defineStore('settings', () => {
                 'gemini-3.0-pro-exp',
                 'gemini-3.0-flash-exp',
                 'gemini-2.0-flash-thinking-exp-1219',
-                'gemini-1.5-pro',
-                'gemini-1.5-flash',
-                'gemini-1.5-flash-8b',
+                'gemini-2.5-pro',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-8b',
                 'gemini-exp-1206',
             ],
-            defaultModel: 'gemini-1.5-flash',
+            defaultModel: 'gemini-2.5-flash',
             supportsStreaming: true,
             supportsVision: true,
             supportsTools: true,
@@ -666,12 +658,12 @@ export const useSettingsStore = defineStore('settings', () => {
                 'gemini-3.0-pro-exp',
                 'gemini-3.0-flash-exp',
                 'gemini-2.0-flash-thinking-exp-1219',
-                'gemini-1.5-pro',
-                'gemini-1.5-flash',
-                'gemini-1.5-flash-8b',
+                'gemini-2.5-pro',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-8b',
                 'gemini-exp-1206',
             ],
-            defaultModel: 'gemini-1.5-flash',
+            defaultModel: 'gemini-2.5-flash',
             supportsStreaming: false, // Streaming not supported through proxy
             supportsVision: true,
             supportsTools: true,
@@ -1386,6 +1378,165 @@ export const useSettingsStore = defineStore('settings', () => {
                 username: '',
                 token: '',
             },
+        },
+        {
+            id: 'atlassian-cloud-oauth',
+            name: 'Atlassian Cloud (OAuth)',
+            description: 'Atlassian Cloud (Jira & Confluence) - OAuth 2.0 인증을 통한 보안 접근',
+            icon: 'atlassian',
+            website: 'https://github.com/sooperset/mcp-atlassian',
+            repository: 'https://github.com/sooperset/mcp-atlassian',
+            tags: ['productivity', 'devops', 'search'],
+            enabled: false,
+            command: 'docker',
+            args: [
+                'run',
+                '--rm',
+                '-i',
+                '-v',
+                '${HOME}/.mcp-atlassian:/home/app/.mcp-atlassian',
+                '-e',
+                'JIRA_URL',
+                '-e',
+                'CONFLUENCE_URL',
+                '-e',
+                'ATLASSIAN_OAUTH_CLIENT_ID',
+                '-e',
+                'ATLASSIAN_OAUTH_CLIENT_SECRET',
+                '-e',
+                'ATLASSIAN_OAUTH_REDIRECT_URI',
+                '-e',
+                'ATLASSIAN_OAUTH_SCOPE',
+                '-e',
+                'ATLASSIAN_OAUTH_CLOUD_ID',
+                'ghcr.io/sooperset/mcp-atlassian:latest',
+            ],
+            installCommand: 'docker',
+            installArgs: ['pull', 'ghcr.io/sooperset/mcp-atlassian:latest'],
+            installed: false,
+            env: {
+                JIRA_URL: '',
+                CONFLUENCE_URL: '',
+                ATLASSIAN_OAUTH_CLIENT_ID: '',
+                ATLASSIAN_OAUTH_CLIENT_SECRET: '',
+                ATLASSIAN_OAUTH_REDIRECT_URI: 'http://localhost:8080/callback',
+                ATLASSIAN_OAUTH_SCOPE:
+                    'read:jira-work write:jira-work read:confluence-content.all write:confluence-content offline_access',
+                ATLASSIAN_OAUTH_CLOUD_ID: '',
+            },
+            config: {
+                jiraUrl: '',
+                confluenceUrl: '',
+                oauthClientId: '',
+                oauthClientSecret: '',
+                oauthRedirectUri: 'http://localhost:8080/callback',
+                oauthScope:
+                    'read:jira-work write:jira-work read:confluence-content.all write:confluence-content offline_access',
+                oauthCloudId: '',
+            },
+            setupInstructions: `
+## OAuth 2.0 Setup Guide
+
+### Step 1: Create OAuth App
+1. Go to [Atlassian Developer Console](https://developer.atlassian.com/console/myapps/)
+2. Click "Create" and choose "OAuth 2.0 (3LO) integration"
+3. Give your app a name
+4. Set **Callback URL**: \`http://localhost:8080/callback\`
+5. Configure **Permissions (Scopes)**:
+   - Jira: \`read:jira-work\`, \`write:jira-work\`
+   - Confluence: \`read:confluence-content.all\`, \`write:confluence-content\`
+   - **Important**: Add \`offline_access\` for automatic token refresh
+6. Save and note your **Client ID** and **Client Secret**
+
+### Step 2: Run OAuth Setup Wizard
+\`\`\`bash
+docker run --rm -i \\
+  -p 8080:8080 \\
+  -v "\${HOME}/.mcp-atlassian:/home/app/.mcp-atlassian" \\
+  ghcr.io/sooperset/mcp-atlassian:latest --oauth-setup -v
+\`\`\`
+
+### Step 3: Complete Authorization
+1. The wizard will open your browser
+2. Log in to Atlassian and authorize the app
+3. The wizard will output your **Cloud ID**
+
+### Step 4: Configure Below
+Enter all values from the wizard in the configuration form below:
+- **JIRA_URL**: Your Jira Cloud URL (e.g., \`https://your-company.atlassian.net\`)
+- **CONFLUENCE_URL**: Your Confluence URL (e.g., \`https://your-company.atlassian.net/wiki\`)
+- **ATLASSIAN_OAUTH_CLIENT_ID**: From Step 1
+- **ATLASSIAN_OAUTH_CLIENT_SECRET**: From Step 1
+- **ATLASSIAN_OAUTH_CLOUD_ID**: From Step 3 wizard output
+
+**Note**: The volume mount (\`-v ...\`) is crucial for persisting OAuth tokens and enabling automatic refresh.
+            `,
+        },
+        {
+            id: 'atlassian-rovo',
+            name: 'Atlassian Rovo MCP (Official)',
+            description:
+                'Atlassian 공식 Rovo MCP Server - Jira, Confluence, Compass 통합 (OAuth 2.1)',
+            icon: 'atlassian',
+            website: 'https://support.atlassian.com/atlassian-rovo-mcp-server/',
+            repository: 'https://www.npmjs.com/package/mcp-remote',
+            tags: ['productivity', 'devops', 'search'],
+            enabled: false,
+            command: 'npx',
+            args: ['-y', 'mcp-remote', 'https://mcp.atlassian.com/v1/mcp'],
+            installCommand: 'npm',
+            installArgs: ['install', '-g', 'mcp-remote'],
+            installed: false,
+            setupInstructions: `
+## Atlassian Rovo MCP Server Setup
+
+### Overview
+Atlassian Rovo MCP Server is the **official cloud-based MCP server** from Atlassian. It provides seamless integration with Jira, Confluence, and Compass using OAuth 2.1 authentication.
+
+### Prerequisites
+- Node.js v18+ installed
+- Atlassian Cloud site with Jira, Confluence, and/or Compass
+- Modern browser for OAuth authorization
+
+### Setup Steps
+
+#### Step 1: Connect via mcp-remote
+The connection is automatically handled by \`mcp-remote\` proxy:
+\`\`\`bash
+npx -y mcp-remote https://mcp.atlassian.com/v1/mcp
+\`\`\`
+
+#### Step 2: OAuth Authorization
+1. When you first use the MCP server, it will trigger an OAuth 2.1 flow
+2. Your browser will open automatically
+3. Log in to your Atlassian Cloud account
+4. Approve the requested permissions
+5. The OAuth tokens are securely stored for future use
+
+#### Step 3: Start Using
+Once authorized, the MCP server will have access to:
+- **Jira**: Create, update, search issues
+- **Confluence**: Search, create, update pages
+- **Compass**: Component and service management
+
+### Key Features
+- ✅ **Official Atlassian Service**: Maintained by Atlassian
+- ✅ **No Manual OAuth Setup**: Just-in-time authorization (lazy loading)
+- ✅ **Automatic Installation**: Installed on first OAuth consent
+- ✅ **Session-based Tokens**: Secure, scoped access
+- ✅ **Permission Inheritance**: Respects existing Atlassian permissions
+
+### Security
+- OAuth 2.1 (3LO) authorization
+- All actions respect user's existing access controls
+- Session-based tokens
+- No manual token management required
+
+### Note
+This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`). The Rovo MCP Server is a fully managed cloud service by Atlassian.
+
+**Important**: The first user to authorize must have access to all Atlassian apps (Jira, Confluence, Compass) to properly register the MCP app for your site.
+            `,
         },
 
         // === Cloud & DevOps ===
@@ -2206,6 +2357,38 @@ export const useSettingsStore = defineStore('settings', () => {
                 setupWizard.value = storedSetupWizard;
             }
 
+            // Load models from DB cache for all enabled providers
+            console.log('[SettingsStore] Loading models from DB cache on startup...');
+            for (const provider of aiProviders.value) {
+                if (provider.enabled && provider.apiKey) {
+                    try {
+                        const models = await window.electron.ai.getModelsFromCache(provider.id);
+                        if (models && models.length > 0) {
+                            const modelNames = models.map((m: any) => m.name);
+                            const providerIndex = aiProviders.value.findIndex(
+                                (p) => p.id === provider.id
+                            );
+                            if (providerIndex >= 0) {
+                                const updatedProviders = [...aiProviders.value];
+                                updatedProviders[providerIndex] = {
+                                    ...updatedProviders[providerIndex]!,
+                                    models: modelNames,
+                                };
+                                aiProviders.value = updatedProviders;
+                                console.log(
+                                    `[SettingsStore] Loaded ${models.length} models from DB for ${provider.id}`
+                                );
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(
+                            `[SettingsStore] Failed to load models for ${provider.id}:`,
+                            err
+                        );
+                    }
+                }
+            }
+
             aiProviders.value
                 .filter(
                     (provider) =>
@@ -2300,6 +2483,71 @@ export const useSettingsStore = defineStore('settings', () => {
                     );
                     if (fetchedModels && Array.isArray(fetchedModels) && fetchedModels.length > 0) {
                         const modelList = fetchedModels.map((m: any) => m.name);
+
+                        // Analyze model characteristics using AI (background, non-blocking)
+                        console.log(
+                            `[Settings] Starting model characteristics analysis for ${fetchedModels.length} models...`
+                        );
+
+                        // Get Google API key for model analysis (primary)
+                        const googleProvider = aiProviders.value.find((p) => p.id === 'google');
+                        const googleApiKey = googleProvider?.apiKey || '';
+
+                        // Build fallback providers list from connected providers
+                        const fallbackProviders: {
+                            provider: string;
+                            apiKey: string;
+                            model: string;
+                        }[] = [];
+
+                        // Groq (free tier available)
+                        const groqProvider = aiProviders.value.find((p) => p.id === 'groq');
+                        if (groqProvider?.apiKey) {
+                            fallbackProviders.push({
+                                provider: 'groq',
+                                apiKey: groqProvider.apiKey,
+                                model: 'llama-3.3-70b-versatile', // Free, fast
+                            });
+                        }
+
+                        // OpenAI (fallback to gpt-4o-mini - cheap)
+                        const openaiProvider = aiProviders.value.find((p) => p.id === 'openai');
+                        if (openaiProvider?.apiKey) {
+                            fallbackProviders.push({
+                                provider: 'openai',
+                                apiKey: openaiProvider.apiKey,
+                                model: 'gpt-4o-mini',
+                            });
+                        }
+
+                        import('../../services/ai/AIModelAnalyzer')
+                            .then(({ analyzeModels }) => {
+                                return analyzeModels(
+                                    fetchedModels,
+                                    googleApiKey,
+                                    fallbackProviders
+                                );
+                            })
+                            .then((analyzedModels) => {
+                                // Update cache with characteristics
+                                import('../../services/ai/AIModelCacheService').then(
+                                    ({ modelCache }) => {
+                                        modelCache.setCachedModels(
+                                            providerId as any,
+                                            analyzedModels
+                                        );
+                                        console.log(
+                                            `[Settings] Model characteristics analysis complete for ${providerId}`
+                                        );
+                                    }
+                                );
+                            })
+                            .catch((err) => {
+                                console.warn(
+                                    `[Settings] Model analysis failed (using models without characteristics):`,
+                                    err
+                                );
+                            });
 
                         // Update provider with key, validation time, and NEW MODELS
                         await updateAIProvider(providerId, {
@@ -2590,19 +2838,14 @@ export const useSettingsStore = defineStore('settings', () => {
      * Validate OpenAI API key
      */
     async function validateOpenAIKey(apiKey: string): Promise<boolean> {
-        try {
-            const response = await fetch('https://api.openai.com/v1/models', {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                },
-            });
+        if (!apiKey.startsWith('sk-')) return false;
 
-            return response.ok;
-        } catch (error) {
-            console.error('OpenAI validation error:', error);
-            return false;
-        }
+        // Skip direct API validation in browser due to CORS issues.
+        // The real validation will happen when models are fetched in the Main process.
+        console.log(
+            '[SettingsStore] Skipping strict OpenAI CORS validation, checking format only.'
+        );
+        return true;
     }
 
     /**
@@ -3089,6 +3332,13 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     function getProviderModelsFetchTime(providerId: string): Date | null {
+        // Check lastValidated from provider first
+        const provider = aiProviders.value.find((p) => p.id === providerId);
+        if (provider?.lastValidated) {
+            return new Date(provider.lastValidated);
+        }
+
+        // Fallback to cache (for backwards compatibility)
         const timestamp = providerFetchTimes.value[providerId];
         return timestamp ? new Date(timestamp) : null;
     }
@@ -3123,18 +3373,20 @@ export const useSettingsStore = defineStore('settings', () => {
 
             const modelNames = models.map((m) => m.name);
 
-            // Update aiProviders models array (ensure Vue reactivity)
+            // Update aiProviders models array and lastValidated (ensure Vue reactivity)
             const providerIndex = aiProviders.value.findIndex((p) => p.id === providerId);
             if (providerIndex >= 0 && aiProviders.value[providerIndex]) {
+                const now = new Date();
                 const updatedProviders = [...aiProviders.value];
                 updatedProviders[providerIndex] = {
                     ...updatedProviders[providerIndex]!,
                     models: modelNames,
+                    lastValidated: now.toISOString(), // Update last validated timestamp
                 };
                 aiProviders.value = updatedProviders;
             }
 
-            // Update fetch time
+            // Update fetch time (for backwards compatibility)
             providerFetchTimes.value = {
                 ...providerFetchTimes.value,
                 [providerId]: Date.now(),

@@ -23,63 +23,6 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class ClaudeProvider extends BaseAIProvider {
     readonly name: AIProvider = 'anthropic';
-    readonly defaultModels: ModelInfo[] = [
-        {
-            name: 'claude-3-5-sonnet-20250219',
-            provider: 'anthropic',
-            contextWindow: 200000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 3.0,
-            costPerOutputToken: 15.0,
-            averageLatency: 2000,
-            features: [
-                'streaming',
-                'function_calling',
-                'vision',
-                'system_prompt',
-                'context_caching',
-            ],
-            bestFor: [
-                'Long-form analysis',
-                'Code review',
-                'Complex reasoning',
-                'Document analysis',
-            ],
-        },
-        {
-            name: 'claude-3-opus-20240229',
-            provider: 'anthropic',
-            contextWindow: 200000,
-            maxOutputTokens: 4096,
-            costPerInputToken: 15.0,
-            costPerOutputToken: 75.0,
-            averageLatency: 3000,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Complex tasks', 'Highest quality', 'Critical decisions'],
-        },
-        {
-            name: 'claude-3-sonnet-20240229',
-            provider: 'anthropic',
-            contextWindow: 200000,
-            maxOutputTokens: 4096,
-            costPerInputToken: 3.0,
-            costPerOutputToken: 15.0,
-            averageLatency: 1500,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Balanced performance', 'General purpose', 'Cost-effective'],
-        },
-        {
-            name: 'claude-3-haiku-20240307',
-            provider: 'anthropic',
-            contextWindow: 200000,
-            maxOutputTokens: 4096,
-            costPerInputToken: 0.25,
-            costPerOutputToken: 1.25,
-            averageLatency: 500,
-            features: ['streaming', 'function_calling', 'system_prompt'],
-            bestFor: ['Fast responses', 'Simple tasks', 'High volume', 'Budget-friendly'],
-        },
-    ];
 
     private client: Anthropic | null = null;
     private injectedApiKey: string | null = null;
@@ -97,11 +40,17 @@ export class ClaudeProvider extends BaseAIProvider {
      */
     async fetchModels(): Promise<ModelInfo[]> {
         try {
-            const client = this.getClient();
+            if (!this.injectedApiKey) {
+                console.warn('[ClaudeProvider] No API key configured, loading from DB cache');
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                return await providerModelsRepository.getModels('anthropic');
+            }
+
             // Anthropic models API endpoint
             const response = await fetch('https://api.anthropic.com/v1/models', {
                 headers: {
-                    'x-api-key': this.injectedApiKey || process.env.ANTHROPIC_API_KEY || '',
+                    'x-api-key': this.injectedApiKey || '',
                     'anthropic-version': '2023-06-01',
                     'content-type': 'application/json',
                 },
@@ -113,29 +62,39 @@ export class ClaudeProvider extends BaseAIProvider {
 
             const data = await response.json();
             const models = (data.data || []).map((m: any) => {
-                const defaultModel = this.defaultModels.find((dm) => dm.name === m.id);
                 return {
                     name: m.id,
                     provider: 'anthropic' as const,
                     displayName: m.display_name || m.id,
-                    contextWindow: defaultModel?.contextWindow || 200000,
-                    maxOutputTokens: defaultModel?.maxOutputTokens || 4096,
-                    costPerInputToken: defaultModel?.costPerInputToken || 0,
-                    costPerOutputToken: defaultModel?.costPerOutputToken || 0,
-                    averageLatency: defaultModel?.averageLatency || 1500,
-                    features: defaultModel?.features || ['streaming'],
-                    bestFor: defaultModel?.bestFor || [],
+                    contextWindow: 200000,
+                    maxOutputTokens: 4096,
+                    costPerInputToken: 0,
+                    costPerOutputToken: 0,
+                    averageLatency: 1500,
+                    features: ['streaming'] as AIFeature[],
+                    bestFor: [],
                 };
             });
 
-            console.log(
-                '[ClaudeProvider] Fetched models from API:',
-                models.map((m: any) => m.name)
-            );
+            // Save to DB cache
+            const { providerModelsRepository: repo1 } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            await repo1.saveModels('anthropic', models);
+            console.log(`[ClaudeProvider] Saved ${models.length} models to DB cache`);
+
             return models;
         } catch (error) {
             console.error('[ClaudeProvider] Failed to fetch models from API:', error);
-            return this.defaultModels;
+            // Fallback to DB cache
+            const { providerModelsRepository: repo2 } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            const cachedModels = await repo2.getModels('anthropic');
+            if (cachedModels.length > 0) {
+                console.log('[ClaudeProvider] Using cached models from DB');
+                return cachedModels;
+            }
+            console.warn('[ClaudeProvider] No cached models available');
+            return [];
         }
     }
 
@@ -207,13 +166,12 @@ export class ClaudeProvider extends BaseAIProvider {
      */
     private getClient(): Anthropic {
         if (!this.client) {
-            const apiKey = this.injectedApiKey || process.env.ANTHROPIC_API_KEY;
-            if (!apiKey) {
+            if (!this.injectedApiKey) {
                 throw new Error(
-                    'ANTHROPIC_API_KEY not configured. Please set your API key in Settings > AI Providers.'
+                    'API key not configured. Please set your API key in Settings > AI Providers.'
                 );
             }
-            this.client = new Anthropic({ apiKey });
+            this.client = new Anthropic({ apiKey: this.injectedApiKey });
         }
         return this.client;
     }
@@ -234,16 +192,34 @@ export class ClaudeProvider extends BaseAIProvider {
                 config,
                 context
             );
-            const response = await client.messages.create({
-                model: config.model,
-                max_tokens: config.maxTokens || 4096,
-                temperature: config.temperature,
-                top_p: config.topP,
-                system: systemPrompt || undefined,
-                messages: conversation,
-                // tools: this.mapTools(config.tools), // Removed - not supported in current SDK version
-                // tool_choice: config.toolChoice === 'none' ? undefined : config.toolChoice,
-            });
+            let response;
+            try {
+                response = await client.messages.create({
+                    model: config.model,
+                    max_tokens: config.maxTokens || 4096,
+                    temperature: config.temperature,
+                    top_p: config.topP,
+                    system: systemPrompt || undefined,
+                    messages: conversation,
+                    tools: this.mapTools(config.tools),
+                    tool_choice: config.toolChoice === 'none' ? undefined : config.toolChoice,
+                });
+            } catch (error: any) {
+                console.error('[ClaudeProvider] API Error:', error);
+
+                let detailedMessage = `Anthropic API Error: ${error.message || String(error)}`;
+                const status = error.status || error.statusCode;
+
+                if (status) detailedMessage += ` (Status: ${status})`;
+                if (status === 401) detailedMessage += ' - Check your API Key.';
+                if (status === 403)
+                    detailedMessage += ' - Permission denied. Check your account settings.';
+                if (status === 429) detailedMessage += ' - Rate limit exceeded. Try again later.';
+                if (status === 529)
+                    detailedMessage += ' - Anthropic is overloaded. Try again later.';
+
+                throw new Error(detailedMessage);
+            }
 
             const duration = Date.now() - startTime;
             const tokensUsed = {
@@ -261,7 +237,7 @@ export class ClaudeProvider extends BaseAIProvider {
                 .filter((block: any) => block.type === 'text')
                 .map((block: any) => block.text || '');
 
-            const toolCalls = this.extractToolCalls(response.content);
+            const toolCalls = this.extractToolCalls(response.content) || [];
             const finishReason =
                 toolCalls.length > 0
                     ? ('tool_calls' as const)
@@ -279,7 +255,7 @@ export class ClaudeProvider extends BaseAIProvider {
                     model: response.model,
                     stopReason: response.stop_reason,
                 },
-                toolCalls: toolCalls?.length > 0 ? toolCalls : undefined,
+                toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
             };
         });
     }
@@ -300,20 +276,35 @@ export class ClaudeProvider extends BaseAIProvider {
         return this.executeWithRetry(async () => {
             const systemPrompt = this.buildSystemPrompt(config, context);
 
-            const response = await client.messages.create({
-                model: config.model,
-                max_tokens: config.maxTokens || 4096,
-                temperature: config.temperature,
-                top_p: config.topP,
-                system: systemPrompt || undefined,
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
-                stop_sequences: config.stopSequences,
-            });
+            let response;
+            try {
+                response = await client.messages.create({
+                    model: config.model,
+                    max_tokens: config.maxTokens || 4096,
+                    temperature: config.temperature,
+                    top_p: config.topP,
+                    system: systemPrompt || undefined,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt,
+                        },
+                    ],
+                    stop_sequences: config.stopSequences,
+                });
+            } catch (error: any) {
+                console.error('[ClaudeProvider] API Error:', error);
+
+                let detailedMessage = `Anthropic API Error: ${error.message || String(error)}`;
+                const status = error.status || error.statusCode;
+
+                if (status) detailedMessage += ` (Status: ${status})`;
+                if (status === 401) detailedMessage += ' - Check your API Key.';
+                if (status === 429) detailedMessage += ' - Rate limit exceeded.';
+                if (status === 529) detailedMessage += ' - Overloaded.';
+
+                throw new Error(detailedMessage);
+            }
 
             const duration = Date.now() - startTime;
             const tokensUsed = {

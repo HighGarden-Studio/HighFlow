@@ -23,21 +23,15 @@ export abstract class BaseAIProvider {
     abstract readonly name: AIProvider;
 
     /**
-     * Static model list (fallback when API fetch fails)
-     */
-    abstract readonly defaultModels: ModelInfo[];
-
-    /**
-     * Dynamic model list (fetched from API)
-     * Falls back to defaultModels if not fetched
+     * Dynamic model list (fetched from API and cached in DB)
      */
     protected _dynamicModels: ModelInfo[] | null = null;
 
     /**
-     * Get models - returns dynamic models if available, otherwise default models
+     * Get models - returns dynamic models if available, otherwise empty array
      */
     get models(): ModelInfo[] {
-        return this._dynamicModels || this.defaultModels;
+        return this._dynamicModels || [];
     }
 
     /**

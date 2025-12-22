@@ -79,6 +79,16 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
         }
     });
 
+    ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
+        try {
+            const content = await fs.promises.readFile(filePath);
+            return content.toString('base64');
+        } catch (error) {
+            console.error('[fs:readFileBase64] Error:', error);
+            throw error;
+        }
+    });
+
     // ========================================
     // Check Path Exists
     // ========================================

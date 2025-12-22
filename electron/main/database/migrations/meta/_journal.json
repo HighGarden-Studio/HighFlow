@@ -64,6 +64,13 @@
       "when": 1765949560526,
       "tag": "0008_tranquil_corsair",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1766154402390,
+      "tag": "0009_zippy_psynapse",
+      "breakpoints": true
     }
   ]
 }

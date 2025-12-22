@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Project } from '@electron/main/database/schema';
+import type { Project } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
 
 export interface ProjectFilters {

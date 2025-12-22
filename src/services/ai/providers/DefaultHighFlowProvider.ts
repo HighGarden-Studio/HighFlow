@@ -164,9 +164,9 @@ export class DefaultHighFlowProvider extends GeminiProvider {
         },
         // Legacy Models (keeping for backward compatibility)
         {
-            name: 'gemini-1.5-pro',
+            name: 'gemini-2.5-pro',
             provider: 'default-highflow',
-            displayName: 'Gemini 1.5 Pro',
+            displayName: 'Gemini 2.5 Pro',
             contextWindow: 1000000,
             maxOutputTokens: 8192,
             costPerInputToken: 3.5,
@@ -190,12 +190,103 @@ export class DefaultHighFlowProvider extends GeminiProvider {
     ];
 
     /**
-     * Fetch models - for DefaultHighFlow, we return static Vertex AI models
-     * as we don't have direct access to Vertex AI model listing API
+     * Fetch models from HighFlow server API
      */
     async fetchModels(): Promise<ModelInfo[]> {
-        console.log('[DefaultHighFlowProvider] Using Vertex AI model list');
-        return this.defaultModels;
+        console.log('[DefaultHighFlowProvider] Fetching models from HighFlow server...');
+
+        try {
+            // Get backend URL
+            let apiUrl = BACKEND_URL;
+            try {
+                const { config } = await import('../../../../electron/main/config');
+                apiUrl = config.BACKEND_URL;
+            } catch (e) {
+                // Fallback to static config
+            }
+
+            // Check authentication
+            const auth = await this.checkAuthentication();
+            if (!auth.authenticated || !auth.token) {
+                console.warn('[DefaultHighFlowProvider] No authentication, loading from DB cache');
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                const cachedModels = await providerModelsRepository.getModels('default-highflow');
+                return cachedModels;
+            }
+
+            // Call HighFlow server API
+            console.log(`[DefaultHighFlowProvider] Calling ${apiUrl}/v1/ai/models...`);
+            const response = await fetch(`${apiUrl}/v1/ai/models`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${auth.token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch models: ${response.status} ${response.statusText}`
+                );
+            }
+
+            const data = await response.json();
+            const apiModels = data.models || [];
+
+            console.log(`[DefaultHighFlowProvider] Fetched ${apiModels.length} models from server`);
+
+            // Transform API response to ModelInfo format
+            const models: ModelInfo[] = apiModels.map((model: any) => ({
+                name: model.name?.replace('models/', '') || model.name,
+                provider: 'default-highflow',
+                displayName: model.displayName || model.name,
+                description: model.description,
+                contextWindow: model.inputTokenLimit || 0,
+                maxOutputTokens: model.outputTokenLimit || 0,
+                costPerInputToken: 0, // Will be calculated by backend
+                costPerOutputToken: 0, // Will be calculated by backend
+                averageLatency: 1000,
+                features: model.supportedGenerationMethods?.includes('streamGenerateContent')
+                    ? ['streaming', 'function_calling']
+                    : ['function_calling'],
+                bestFor: [],
+                supportedActions: model.supportedGenerationMethods || [],
+            }));
+
+            // Save to DB cache
+            try {
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                await providerModelsRepository.saveModels('default-highflow', models);
+                console.log('[DefaultHighFlowProvider] Saved models to DB cache');
+            } catch (saveError) {
+                console.error('[DefaultHighFlowProvider] Failed to save models to DB:', saveError);
+            }
+
+            return models;
+        } catch (error) {
+            console.error('[DefaultHighFlowProvider] Failed to fetch models from server:', error);
+
+            // Fallback to DB cache
+            try {
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                const cachedModels = await providerModelsRepository.getModels('default-highflow');
+                if (cachedModels.length > 0) {
+                    console.log(
+                        `[DefaultHighFlowProvider] Loaded ${cachedModels.length} models from DB cache`
+                    );
+                    return cachedModels;
+                }
+            } catch (dbError) {
+                console.error('[DefaultHighFlowProvider] Failed to load from DB cache:', dbError);
+            }
+
+            // Last resort: return empty array
+            console.warn('[DefaultHighFlowProvider] No models available, returning empty array');
+            return [];
+        }
     }
 
     /**
@@ -302,9 +393,9 @@ export class DefaultHighFlowProvider extends GeminiProvider {
         // Fallback for deprecated/removed models
         if ((config.model as string) === 'gemini-2.0-flash-exp') {
             console.warn(
-                '[DefaultHighFlowProvider] Model gemini-2.0-flash-exp is deprecated, falling back to gemini-1.5-flash'
+                '[DefaultHighFlowProvider] Model gemini-2.0-flash-exp is deprecated, falling back to gemini-2.5-flash'
             );
-            config.model = 'gemini-1.5-flash';
+            config.model = 'gemini-2.5-flash';
         }
 
         this.validateConfig(config);
@@ -403,9 +494,9 @@ export class DefaultHighFlowProvider extends GeminiProvider {
         // Fallback for deprecated/removed models
         if ((config.model as string) === 'gemini-2.0-flash-exp') {
             console.warn(
-                '[DefaultHighFlowProvider] Model gemini-2.0-flash-exp is deprecated, falling back to gemini-1.5-flash'
+                '[DefaultHighFlowProvider] Model gemini-2.0-flash-exp is deprecated, falling back to gemini-2.5-flash'
             );
-            config.model = 'gemini-1.5-flash';
+            config.model = 'gemini-2.5-flash';
         }
 
         this.validateConfig(config);

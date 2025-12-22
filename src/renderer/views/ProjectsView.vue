@@ -262,14 +262,18 @@ async function handleAIWizardCreated(projectData: any) {
 }
 
 // Lifecycle
+let cleanupListeners: (() => void) | undefined;
+
 onMounted(async () => {
     await projectStore.fetchProjects();
-    const cleanup = projectStore.initEventListeners();
+    cleanupListeners = projectStore.initEventListeners();
     await fetchTaskSummaries();
+});
 
-    onUnmounted(() => {
-        cleanup();
-    });
+onUnmounted(() => {
+    if (cleanupListeners) {
+        cleanupListeners();
+    }
 });
 </script>
 

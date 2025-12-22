@@ -54,17 +54,29 @@ export class MultiVendorAiClient {
         instance?: BaseAIProvider
     ): Promise<AiResult> {
         const { provider, name } = await this.resolveProvider(vendor, instance);
-        const aiResult = await provider.generateText(
-            params.messages,
-            params.config,
-            params.context,
-            params.signal
-        );
-        aiResult.meta = {
-            ...(aiResult.meta || {}),
-            provider: name,
-            model: params.config.model,
+
+        // Use chat method to support tool calling
+        const aiResponse = await provider.chat(params.messages, params.config, params.context);
+
+        // Convert AIResponse to AiResult format
+        const aiResult: AiResult = {
+            kind: 'data',
+            subType: 'text',
+            format: 'plain',
+            value: aiResponse.content,
+            mime: 'text/plain',
+            meta: {
+                provider: name,
+                model: params.config.model,
+                finishReason: aiResponse.finishReason,
+                tokensUsed: aiResponse.tokensUsed,
+                cost: aiResponse.cost,
+                duration: aiResponse.duration,
+                toolCalls: aiResponse.toolCalls,
+            },
+            raw: aiResponse,
         };
+
         return aiResult;
     }
 

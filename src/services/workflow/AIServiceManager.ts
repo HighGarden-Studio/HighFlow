@@ -84,6 +84,7 @@ interface MCPContextInsight {
     error?: string;
     userContext?: Record<string, unknown>;
     envOverrides?: string[];
+    envVars?: Record<string, string>;
 }
 
 interface SlackHistoryHints {
@@ -100,7 +101,7 @@ const MCP_SUFFIX_PATTERN = /-(?:mcp|server)$/i;
 const DEFAULT_MODELS: Partial<Record<AIProvider, AIModel>> = {
     anthropic: 'claude-3-5-sonnet-20250219',
     openai: 'gpt-4-turbo',
-    google: 'gemini-1.5-pro',
+    google: 'gemini-2.5-pro',
     groq: 'llama-3.3-70b-versatile',
     'claude-code': 'claude-3-5-sonnet-20250219',
     antigravity: 'antigravity-pro',
@@ -170,13 +171,20 @@ export class AIServiceManager {
     /**
      * 연동된 Provider 목록 설정
      * settingsStore에서 연동된 Provider 목록을 받아 설정합니다.
+     * @param providers 연동된 Provider 목록
+     * @param shouldFetchModels 모델 목록을 즉시 fetch할지 여부 (기본값: false)
      */
-    setEnabledProviders(providers: EnabledProviderInfo[]): void {
+    setEnabledProviders(
+        providers: EnabledProviderInfo[],
+        shouldFetchModels: boolean = false
+    ): void {
         this.enabledProviders = providers;
         this.applyProviderConfigurations();
 
-        // Fetch models for all enabled providers asynchronously
-        this.fetchModelsForEnabledProviders();
+        // Fetch models only if explicitly requested (e.g., from settings page, not from task execution)
+        if (shouldFetchModels) {
+            this.fetchModelsForEnabledProviders();
+        }
     }
 
     /**
@@ -205,6 +213,11 @@ export class AIServiceManager {
                     provider.id as AIProvider
                 );
                 if (providerInstance && typeof providerInstance.fetchModels === 'function') {
+                    // Set API key if provider supports it
+                    if (typeof (providerInstance as any).setApiKey === 'function') {
+                        (providerInstance as any).setApiKey(provider.apiKey);
+                    }
+
                     // Register provider's fetch function with cache
                     modelCache.registerProvider(provider.id as AIProvider, () =>
                         providerInstance.fetchModels()
@@ -354,9 +367,36 @@ export class AIServiceManager {
         const abortController = new AbortController();
         this.activeExecutions.set(executionId, abortController);
         const mcpManager = this.getMCPManager();
-        const hasTaskOverrides = Boolean(task.mcpConfig && mcpManager);
+
+        // [Feature: MCP Config Inheritance]
+        // If an MCP requires specific configuration (e.g. environment variables) and is enabled in the task,
+        // we should try to inherit configuration from the Project Level if the Task Level config is missing.
+        const projectMcpConfig = context.metadata?.projectMcpConfig as MCPConfig | undefined;
+        let effectiveMcpConfig: MCPConfig = task.mcpConfig || {};
+
+        if (projectMcpConfig) {
+            // Merge logic: Project Config acts as a base, Task Config overrides it.
+            // However, we only care about keys that are relevant to this task (though merging all is safe).
+            effectiveMcpConfig = {
+                ...projectMcpConfig,
+                ...effectiveMcpConfig,
+            };
+
+            // Deep merge for nested objects if necessary (e.g. env vars)?
+            // For now, simple spread merges the Server Config Entry level.
+            // If task defines 'slack', it completely overwrites project 'slack'.
+            // To allow partial inheritance (e.g. update one env var but keep others), we'd need deep merge.
+            // User request implies: "If AI task enables MCP, it inherits project settings".
+            // So if task has NO config for 'slack' but enables 'slack', it should use Project 'slack'.
+            // If task HAS config for 'slack', it uses Task 'slack'.
+            // So shallow merge at the Server ID level is correct per requirement.
+        }
+
+        const hasTaskOverrides = Boolean(
+            effectiveMcpConfig && Object.keys(effectiveMcpConfig).length > 0 && mcpManager
+        );
         if (hasTaskOverrides && mcpManager) {
-            mcpManager.setTaskOverrides(task.id, task.mcpConfig as MCPConfig);
+            mcpManager.setTaskOverrides(task.id, effectiveMcpConfig);
         }
 
         try {
@@ -489,6 +529,43 @@ export class AIServiceManager {
                 );
             }
 
+            // Update system prompt with collected MCP context
+            if (mcpContext && mcpContext.length > 0) {
+                // Rebuild system prompt to include the collected environment variables
+                const updatedSystemPrompt = this.buildSystemPrompt(task, mcpContext);
+
+                // Only update if it actually changed (it should, as we're adding context)
+                if (updatedSystemPrompt !== aiConfig.systemPrompt) {
+                    aiConfig.systemPrompt = updatedSystemPrompt;
+                    options.onLog?.(
+                        'info',
+                        '[AIServiceManager] System Prompt updated with MCP Context details',
+                        {
+                            taskId: task.id,
+                            contextCount: mcpContext.length,
+                        }
+                    );
+                }
+            }
+
+            if (mcpContext && mcpContext.length > 0) {
+                console.log('🔍 [AIServiceManager] MCP Context Data Review:');
+                console.log(
+                    '🔍 [AIServiceManager] mcpContext envVars:',
+                    mcpContext.map((c) => ({
+                        name: c.name,
+                        envVars: c.envVars,
+                        envOverrides: c.envOverrides,
+                    }))
+                );
+
+                const promptTail = aiConfig.systemPrompt?.slice(-2000) || '';
+                console.log(
+                    '🔍 [AIServiceManager] System Prompt Tail (Last 2000 chars):\n',
+                    '...' + promptTail
+                );
+            }
+
             this.logPromptEvent(
                 task,
                 provider,
@@ -576,24 +653,56 @@ export class AIServiceManager {
                 model: result.model,
             });
 
+            // [Feature: MCP Error Reporting]
+            // If we have MCP context insights that indicate errors (either explicit error field or error-like JSON in output),
+            // and the AI output didn't seem to mention them (or even if it did), we should append them to the result
+            // to ensure the user sees why the task might have "failed" to produce useful output.
+            if (mcpContext && mcpContext.length > 0) {
+                const mcpErrors = mcpContext.filter((insight) => {
+                    // 1. Explicit connection/execution error
+                    if (insight.error) return true;
+
+                    // 2. Error inside the output (e.g. Slack API returning { ok: false, error: ... })
+                    if (insight.sampleOutput) {
+                        try {
+                            if (
+                                insight.sampleOutput.includes('"ok":false') ||
+                                insight.sampleOutput.includes('"error":') ||
+                                insight.sampleOutput.includes('"ok": false') ||
+                                /"error"\s*:/.test(insight.sampleOutput)
+                            ) {
+                                return true;
+                            }
+                        } catch (e) {
+                            return false;
+                        }
+                    }
+                    return false;
+                });
+
+                if (mcpErrors.length > 0) {
+                    const errorSummary = mcpErrors
+                        .map((e) => {
+                            const errorContent = e.error || e.sampleOutput || 'Unknown error';
+                            return `**MCP Tool Error (${e.name})**:\n\`\`\`json\n${errorContent}\n\`\`\``;
+                        })
+                        .join('\n\n');
+
+                    // Append to content if not already present
+                    if (!result.content.includes(errorSummary)) {
+                        result.content += `\n\n---\n### ⚠️ System Alerts\nThe following errors were reported by connected tools during task preparation:\n\n${errorSummary}`;
+                    }
+                }
+            }
+
             return result;
         } catch (error) {
             const elapsed = Date.now() - startTime;
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`[AIServiceManager] Task failed: ${errorMsg}`);
 
-            // Try fallback providers
-            if (options.fallbackProviders && options.fallbackProviders.length > 0) {
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                console.error(`[AIServiceManager] Primary provider failed: ${errorMsg}`);
-                options.onLog?.(
-                    'warn',
-                    `[AIServiceManager] Primary provider failed: ${errorMsg}. Trying fallbacks...`,
-                    {
-                        error: errorMsg,
-                        fallbackProviders: options.fallbackProviders,
-                    }
-                );
-                return this.executeWithFallback(task, context, options, startTime);
-            }
+            // Fallback logic removed as per user request
+            // We now propagate the original error directly
 
             const resolvedProvider = (task.aiProvider as AIProvider) || 'anthropic';
             const resolvedModel = DEFAULT_MODELS[resolvedProvider];
@@ -1111,62 +1220,6 @@ export class AIServiceManager {
         return `${value.slice(0, limit)}\n... (truncated ${value.length - limit} characters)`;
     }
 
-    /**
-     * Execute with fallback providers
-     */
-    private async executeWithFallback(
-        task: Task,
-        context: ExecutionContext,
-        options: AIExecutionOptions,
-        startTime: number
-    ): Promise<AIExecutionResult> {
-        const fallbacks = options.fallbackProviders || this.getEnabledProviderIds();
-
-        for (const fallbackProvider of fallbacks) {
-            try {
-                console.log(`Trying fallback provider: ${fallbackProvider}`);
-
-                const modifiedTask = {
-                    ...task,
-                    aiProvider: fallbackProvider,
-                    aiModel: DEFAULT_MODELS[fallbackProvider],
-                };
-
-                const result = await this.executeTask(modifiedTask as Task, context, {
-                    ...options,
-                    fallbackProviders: [], // Don't recurse
-                });
-
-                if (result.success) {
-                    return {
-                        ...result,
-                        metadata: {
-                            ...result.metadata,
-                            usedFallback: true,
-                            originalProvider: task.aiProvider,
-                        },
-                    };
-                }
-            } catch (error) {
-                console.error(`Fallback provider ${fallbackProvider} failed:`, error);
-            }
-        }
-
-        // All fallbacks failed
-        return {
-            success: false,
-            content: '',
-            tokensUsed: { prompt: 0, completion: 0, total: 0 },
-            cost: 0,
-            finishReason: 'error',
-            error: new Error('All providers failed'),
-            metadata: { allFallbacksFailed: true },
-            duration: Date.now() - startTime,
-            provider: (task.aiProvider as AIProvider) || 'anthropic',
-            model: (task.aiModel as AIModel) || ('claude-3-5-sonnet-20250219' as AIModel),
-        };
-    }
-
     private static readonly IMAGE_MODELS: Partial<Record<AIProvider, string[]>> = {
         openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
         google: [
@@ -1638,6 +1691,10 @@ export class AIServiceManager {
         if (mcpContext && mcpContext.length > 0) {
             systemPrompt += `\n## MCP Context Data\n`;
             for (const insight of mcpContext) {
+                console.log(`[buildSystemPrompt] Processing insight: ${insight.name}`, {
+                    envVars: insight.envVars,
+                    keys: insight.envVars ? Object.keys(insight.envVars) : [],
+                });
                 systemPrompt += `### ${insight.name}\n`;
                 if (insight.description) {
                     systemPrompt += `- Description: ${insight.description}\n`;
@@ -1658,7 +1715,15 @@ export class AIServiceManager {
                         insight.userContext
                     )}\n`;
                 }
-                if (insight.envOverrides?.length) {
+                if (insight.envVars && Object.keys(insight.envVars).length > 0) {
+                    console.log(`[buildSystemPrompt] Adding env vars for ${insight.name}`);
+                    systemPrompt += `- Environment Configuration:\n`;
+                    for (const [key, value] of Object.entries(insight.envVars)) {
+                        systemPrompt += `  - ${key}=${value}\n`;
+                    }
+                    systemPrompt += `  (Use these values if tool arguments require IDs or tokens. For example, if a tool needs a channel_id, pick a valid ID from SLACK_CHANNEL_IDS. DO NOT use placeholders like "CONSTRAINTS".)\n`;
+                } else if (insight.envOverrides?.length) {
+                    console.log(`[buildSystemPrompt] Adding env overrides for ${insight.name}`);
                     systemPrompt += `- Custom environment variables: ${insight.envOverrides.join(
                         ', '
                     )}\n`;
@@ -1732,11 +1797,20 @@ ${
 
         const directives: string[] = [
             '- Always consult the provided MCP tools before giving a final answer. Never fabricate data; base your conclusions on tool output.',
+            '- You must CALL the tools directly, not just suggest how to use them. Execute the tools to get actual results.',
         ];
 
         if (canonicalRequired.includes('slack')) {
             directives.push(
                 '- For Slack-related questions, you must call the Slack MCP history tools (e.g., list channel messages) to fetch the requested data such as channel transcripts before summarizing. Do not provide instructions or sample code for Slack APIs; provide the actual summarized result from the tool output.'
+            );
+        }
+
+        if (canonicalRequired.includes('atlassian-rovo')) {
+            directives.push(
+                '- For Atlassian/Jira/Confluence searches, ALWAYS use the atlassian-rovo_search tool first with the search query. This tool searches across both Jira and Confluence.',
+                '- Do NOT suggest manual steps like "getAccessibleAtlassianResources" or "getConfluenceSpaces" unless the search tool fails.',
+                "- Call the search tool immediately with the user's search terms to get actual results."
             );
         }
 
@@ -2073,6 +2147,7 @@ ${
                         error: `Failed to connect to MCP: ${(error as Error).message}`,
                         userContext,
                         envOverrides: envOverrideKeys,
+                        envVars: taskConfigEntry?.env as Record<string, string> | undefined,
                     });
                     continue;
                 }
@@ -2178,6 +2253,7 @@ ${
                                 error: (error as Error).message,
                                 userContext,
                                 envOverrides: envOverrideKeys,
+                                envVars: taskConfigEntry?.env as Record<string, string> | undefined,
                             });
                             continue;
                         }
@@ -2192,6 +2268,7 @@ ${
                     sampleOutput,
                     userContext,
                     envOverrides: envOverrideKeys,
+                    envVars: taskConfigEntry?.env as Record<string, string> | undefined,
                 });
             } catch (error) {
                 insights.push({
@@ -2425,10 +2502,58 @@ ${
             .filter(Boolean)
             .join(' ');
 
-        const channelIdMatch = text.match(/C[A-Z0-9]{8,}/i);
+        // More strict regex to avoid matching words like "CONSTRAINTS"
+        // Slack channel IDs: C or G followed by exactly 8-10 alphanumeric characters
+        const channelIdMatch = text.match(/\b[CG][A-Z0-9]{8,10}\b/);
         const channelNameMatch = text.match(/#([a-z0-9_-]{2,})/i);
+
+        let channelId = channelIdMatch ? channelIdMatch[0].toUpperCase() : undefined;
+
+        // Fallback to environment variable if no channel ID found in text
+        if (!channelId) {
+            console.log('[extractSlackHistoryHints] No channel ID in text, trying env fallback');
+            const taskConfigEntry =
+                this.getTaskMCPConfigEntry(task, 'slack-mcp') ||
+                this.getTaskMCPConfigEntry(task, 'slack');
+
+            console.log(
+                '[extractSlackHistoryHints] taskConfigEntry:',
+                taskConfigEntry ? 'FOUND' : 'NULL'
+            );
+
+            if (taskConfigEntry?.env) {
+                const envVars = taskConfigEntry.env as Record<string, string>;
+                const channelIds = envVars.SLACK_CHANNEL_IDS || envVars.SLACK_CHANNEL_ID;
+
+                console.log('[extractSlackHistoryHints] envVars:', envVars);
+                console.log('[extractSlackHistoryHints] channelIds:', channelIds);
+
+                if (channelIds) {
+                    // Extract first channel ID from comma-separated list
+                    const firstChannelId = channelIds.split(',')[0]?.trim();
+                    console.log('[extractSlackHistoryHints] firstChannelId:', firstChannelId);
+                    if (firstChannelId && /^[CG][A-Z0-9]{8,}$/i.test(firstChannelId)) {
+                        channelId = firstChannelId.toUpperCase();
+                        console.log(
+                            `[extractSlackHistoryHints] ✅ Using channel ID from env: ${channelId}`
+                        );
+                    } else {
+                        console.log(
+                            '[extractSlackHistoryHints] ❌ firstChannelId failed regex test'
+                        );
+                    }
+                } else {
+                    console.log('[extractSlackHistoryHints] ❌ No channelIds in env');
+                }
+            } else {
+                console.log('[extractSlackHistoryHints] ❌ No taskConfigEntry.env');
+            }
+        } else {
+            console.log(`[extractSlackHistoryHints] Found channel ID in text: ${channelId}`);
+        }
+
         const hints: SlackHistoryHints = {
-            channelId: channelIdMatch ? channelIdMatch[0].toUpperCase() : undefined,
+            channelId,
             channelName: channelNameMatch ? channelNameMatch[1] : undefined,
             limit: this.extractSlackLimit(text) || 200,
         };

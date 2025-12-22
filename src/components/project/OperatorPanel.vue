@@ -27,7 +27,28 @@
             leave-from-class="opacity-100 max-h-96"
             leave-to-class="opacity-0 max-h-0"
         >
-            <div v-show="!isCollapsed" class="operators-list">
+            <div v-show="!isCollapsed" class="operators-container">
+                <!-- Filter Bar -->
+                <div v-if="uniqueTags.length > 0" class="filter-bar">
+                    <button
+                        @click="selectTag(null)"
+                        class="filter-chip"
+                        :class="{ active: selectedTag === null }"
+                    >
+                        All
+                    </button>
+                    <button
+                        v-for="tag in uniqueTags"
+                        :key="tag"
+                        @click="selectTag(tag)"
+                        class="filter-chip"
+                        :class="{ active: selectedTag === tag }"
+                    >
+                        {{ tag }}
+                    </button>
+                </div>
+
+                <!-- Operators List -->
                 <div v-if="loading" class="loading-state">
                     <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                         <circle
@@ -52,17 +73,20 @@
                     <p class="text-sm">Create operators in Settings</p>
                 </div>
 
-                <div v-else class="operators-grid">
+                <div v-else class="operators-scroll-area">
                     <div
-                        v-for="operator in operators"
+                        v-for="operator in filteredOperators"
                         :key="operator.id"
                         class="operator-card"
                         draggable="true"
                         @dragstart="handleDragStart($event, operator)"
                         @dragend="handleDragEnd"
-                        :style="{ borderColor: operator.color }"
+                        :style="{ borderColor: operator.color || undefined }"
                     >
-                        <div class="operator-avatar" :style="{ backgroundColor: operator.color }">
+                        <div
+                            class="operator-avatar"
+                            :style="{ backgroundColor: operator.color || undefined }"
+                        >
                             {{ operator.avatar || '🤖' }}
                         </div>
                         <div class="operator-info">
@@ -92,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import type { Operator } from '@core/types/database';
 
 const props = defineProps<{
@@ -102,6 +126,24 @@ const props = defineProps<{
 const operators = ref<Operator[]>([]);
 const loading = ref(true);
 const isCollapsed = ref(true);
+
+const selectedTag = ref<string | null>(null);
+
+const uniqueTags = computed(() => {
+    const tags = new Set<string>();
+    operators.value.forEach((op) => {
+        if (op.tags && Array.isArray(op.tags)) {
+            op.tags.forEach((tag) => tags.add(tag));
+        }
+    });
+    return Array.from(tags).sort();
+});
+
+const filteredOperators = computed(() => {
+    if (!selectedTag.value) return operators.value;
+    const tag = selectedTag.value; // Store in local const to satisfy TS type narrowing
+    return operators.value.filter((op) => op.tags && op.tags.includes(tag));
+});
 
 // Load collapsed state from localStorage
 onMounted(async () => {
@@ -118,6 +160,7 @@ watch(
     () => props.projectId,
     () => {
         loadOperators();
+        selectedTag.value = null;
     }
 );
 
@@ -132,6 +175,10 @@ async function loadOperators() {
     } finally {
         loading.value = false;
     }
+}
+
+function selectTag(tag: string | null) {
+    selectedTag.value = selectedTag.value === tag ? null : tag;
 }
 
 function togglePanel() {
@@ -224,9 +271,44 @@ function getProviderLabel(providerId: string): string {
     font-weight: 600;
 }
 
-.operators-list {
+.operators-container {
     overflow: hidden;
     transition: all 0.2s;
+}
+
+.filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem 0;
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+}
+
+.filter-bar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.filter-chip {
+    padding: 0.25rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9999px;
+    color: #aaa;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.filter-chip.active {
+    background: rgba(102, 126, 234, 0.2);
+    border-color: rgba(102, 126, 234, 0.5);
+    color: #667eea;
 }
 
 .loading-state,
@@ -240,13 +322,12 @@ function getProviderLabel(providerId: string): string {
     font-size: 0.875rem;
 }
 
-.operators-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+.operators-scroll-area {
+    display: flex;
     gap: 0.75rem;
     padding: 1rem 1.5rem;
-    max-height: 24rem;
-    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
 
 .operator-card {
@@ -259,6 +340,7 @@ function getProviderLabel(providerId: string): string {
     border-radius: 0.5rem;
     cursor: move;
     transition: all 0.2s;
+    min-width: 200px; /* Fixed width for horizontal scroll items */
 }
 
 .operator-card:hover {
@@ -331,20 +413,20 @@ function getProviderLabel(providerId: string): string {
 }
 
 /* Scrollbar Styling */
-.operators-grid::-webkit-scrollbar {
-    width: 6px;
+.operators-scroll-area::-webkit-scrollbar {
+    height: 6px; /* Horizontal scrollbar */
 }
 
-.operators-grid::-webkit-scrollbar-track {
+.operators-scroll-area::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
 }
 
-.operators-grid::-webkit-scrollbar-thumb {
+.operators-scroll-area::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
 }
 
-.operators-grid::-webkit-scrollbar-thumb:hover {
+.operators-scroll-area::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
 }
 
