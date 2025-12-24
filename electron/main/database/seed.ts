@@ -97,7 +97,7 @@ export async function seedDatabase(): Promise<void> {
         const projectResult = await db
             .insert(schema.projects)
             .values({
-                title: 'AI Workflow Manager 개발',
+                title: 'HighFlow 개발',
                 description: 'AI 기반 프로젝트 관리 도구 개발 프로젝트',
                 status: 'active',
                 aiProvider: 'anthropic',
@@ -125,7 +125,7 @@ export async function seedDatabase(): Promise<void> {
             // 기획 단계 (완료)
             {
                 title: '서비스 컨셉 및 핵심 기능 정의',
-                description: 'AI 워크플로우 매니저의 핵심 가치 제안과 주요 기능을 정의합니다.',
+                description: 'HighFlow의 핵심 가치 제안과 주요 기능을 정의합니다.',
                 status: 'done' as const,
                 priority: 'urgent' as const,
                 order: 1,

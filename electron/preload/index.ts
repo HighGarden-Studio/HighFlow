@@ -275,6 +275,8 @@ const systemAPI = {
         shell?: boolean;
         timeoutMs?: number;
     }) => ipcRenderer.invoke('system:runCommand', payload),
+
+    getPrompts: (): Promise<Record<string, string>> => ipcRenderer.invoke('system:get-prompts'),
 };
 
 // ========================================

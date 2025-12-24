@@ -1,4 +1,4 @@
-# AI Workflow Manager - Project Structure
+# HighFlow - Project Structure
 
 ## Directory Layout
 

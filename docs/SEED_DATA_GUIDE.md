@@ -37,7 +37,7 @@ pnpm dev:electron
 
 - **사용자**: Demo User (admin)
 - **팀**: Demo Team
-- **프로젝트**: "AI Workflow Manager 개발"
+- **프로젝트**: "HighFlow 개발"
 - **태스크**: 15개 메인 태스크 + MCP 서브태스크 5개
 
 ## 주의사항

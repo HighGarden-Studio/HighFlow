@@ -1,4 +1,4 @@
-# AI Workflow Manager
+# HighFlow
 
 > AI-powered project and task management desktop application with real-time collaboration
 

@@ -1,4 +1,4 @@
-# Getting Started - AI Workflow Manager
+# Getting Started - HighFlow
 
 > **Complete guide for developers starting work on this project**
 

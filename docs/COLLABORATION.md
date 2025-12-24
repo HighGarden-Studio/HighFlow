@@ -1,6 +1,6 @@
 # Real-time Collaboration Features
 
-This document describes the real-time collaboration system implemented in the AI Workflow Manager.
+This document describes the real-time collaboration system implemented in the HighFlow.
 
 ## Overview
 

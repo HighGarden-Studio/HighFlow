@@ -1,5 +1,4 @@
 import { Project, ProjectMemory, DecisionLog } from '../../core/types/database';
-import { CURATOR_SYSTEM_PROMPT } from './templates/ContextTemplates';
 import { eventBus } from '../events/EventBus';
 import type { ProviderApiKeys } from './providers/ProviderFactory';
 import type {
@@ -75,6 +74,23 @@ export class CuratorService {
                 { taskId, step: 'analyzing', detail: 'Constructing context from project memory' },
                 'curator-service'
             );
+
+            // Dynamically load prompt
+            let systemPrompt: string = '';
+            try {
+                const { PromptLoader } =
+                    await import('../../../electron/main/services/PromptLoader');
+                systemPrompt = PromptLoader.getInstance().getPrompt('system/curator');
+            } catch (error) {
+                console.error('[Curator] Failed to load system prompt:', error);
+            }
+
+            // Fallback content if loader fails (should effectively never happen in prod if bootstrapped correctly)
+            if (!systemPrompt) {
+                console.warn('[Curator] Using minimal fallback prompt');
+                systemPrompt = 'You are Curator. Maintain project context in Markdown format.';
+            }
+
             const currentMemory = project.memory || {
                 summary: '',
                 recentDecisions: [],
@@ -95,7 +111,7 @@ Task Output:
 ${taskOutput.substring(0, 3000)}${taskOutput.length > 3000 ? '\n[... truncated ...]' : ''}
 `;
 
-            const prompt = `${CURATOR_SYSTEM_PROMPT}
+            const prompt = `${systemPrompt}
 
 ${memoryContext}
 
@@ -235,7 +251,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             }));
 
             const updatedMemory: ProjectMemory = {
-                summary: parsed.summaryUpdate || currentMemory.summary,
+                summary: parsed.summaryUpdate || currentMemory.summary || '',
                 recentDecisions: [
                     ...(currentMemory.recentDecisions || []).slice(-20), // Keep last 20
                     ...newDecisions,

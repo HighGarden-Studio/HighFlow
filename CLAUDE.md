@@ -1,4 +1,4 @@
-# AI Workflow Manager - Development Guidelines
+# HighFlow - Development Guidelines
 
 > **🎯 Multi-Assistant Project**: This codebase uses Claude Code, Antigravity, and Codex. These guidelines ensure consistency across all AI assistants while optimizing token usage.
 

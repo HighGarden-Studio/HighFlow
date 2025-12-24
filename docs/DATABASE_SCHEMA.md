@@ -1,6 +1,6 @@
 # Database Schema Documentation
 
-> Complete database schema for AI Workflow Manager
+> Complete database schema for HighFlow
 
 ---
 

@@ -1,5 +1,5 @@
 {
-    "name": "ai-workflow-manager",
+    "name": "highflow",
     "version": "0.1.0",
     "description": "AI-powered project and task management desktop application",
     "main": "dist-electron/main/index.cjs",
@@ -183,7 +183,7 @@
     },
     "build": {
         "appId": "com.highgarden.highaimanager",
-        "productName": "HighAIManager",
+        "productName": "HighFlow",
         "directories": {
             "output": "release/${version}"
         },

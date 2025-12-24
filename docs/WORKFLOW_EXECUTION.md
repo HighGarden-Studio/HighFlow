@@ -1,6 +1,6 @@
 # 고급 Task 실행 엔진
 
-AI Workflow Manager의 고급 워크플로우 실행 시스템 문서입니다.
+HighFlow의 고급 워크플로우 실행 시스템 문서입니다.
 
 ## 개요
 

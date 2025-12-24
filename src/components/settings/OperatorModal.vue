@@ -308,10 +308,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted } from 'vue';
 import type { Operator } from '@core/types/database';
 import { getRolePresetOptions, getRolePreset } from '../../utils/operatorRolePresets';
 import UnifiedAISelector from '../common/UnifiedAISelector.vue';
+import { usePromptStore } from '../../stores/promptStore';
 
 const props = defineProps<{
     operator?: Operator | null;
@@ -323,6 +324,7 @@ const emit = defineEmits<{
     save: [data: any];
 }>();
 
+const promptStore = usePromptStore();
 const rolePresetOptions = getRolePresetOptions();
 const selectedPreset = ref<string>('custom');
 const aiMode = ref<'api' | 'local'>('api');
@@ -342,6 +344,10 @@ const form = ref({
     isActive: true,
     projectId: null as number | null,
     tags: [] as string[],
+});
+
+onMounted(() => {
+    promptStore.init();
 });
 
 // Tag management
@@ -404,7 +410,7 @@ function onPresetChange() {
         // Auto-fill from preset
         form.value.role = preset.name;
         form.value.avatar = preset.emoji;
-        form.value.systemPrompt = preset.systemPrompt;
+        form.value.systemPrompt = promptStore.getPrompt(preset.systemPromptId);
         form.value.aiProvider = preset.recommendedProvider as any;
         form.value.aiModel = preset.recommendedModel;
 

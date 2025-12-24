@@ -47,7 +47,7 @@ const STEPS: { id: WizardStep; title: string; description: string; required: boo
     {
         id: 'welcome',
         title: '환영합니다',
-        description: 'AI Workflow Manager 시작하기',
+        description: 'HighFlow 시작하기',
         required: true,
     },
     {
@@ -764,12 +764,12 @@ watch(
                         <div
                             class="w-32 h-32 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-purple-500/30"
                         >
-                            <IconRenderer emoji="🤖" class="w-16 h-16" />
+                            <span class="text-5xl font-black text-white tracking-tighter">HF</span>
                         </div>
 
                         <div>
                             <h3 class="text-3xl font-bold text-white mb-3">
-                                AI Workflow Manager에 오신 것을 환영합니다!
+                                HighFlow에 오신 것을 환영합니다!
                             </h3>
                             <p class="text-gray-400 max-w-lg mx-auto">
                                 AI를 활용하여 프로젝트를 효율적으로 관리하고, 태스크를 자동화하며,

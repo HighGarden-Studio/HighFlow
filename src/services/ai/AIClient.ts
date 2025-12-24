@@ -686,7 +686,7 @@ class AIClient {
                     model,
                     headers: {
                         'HTTP-Referer': 'https://workflow-manager.app',
-                        'X-Title': 'AI Workflow Manager',
+                        'X-Title': 'HighFlow',
                     },
                 });
 

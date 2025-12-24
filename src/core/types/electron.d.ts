@@ -142,6 +142,7 @@ export interface RunCommandResult {
 
 export interface SystemAPI {
     runCommand: (options: RunCommandOptions) => Promise<RunCommandResult>;
+    getPrompts: () => Promise<Record<string, string>>;
 }
 
 export interface FileInfo {
