@@ -2137,7 +2137,19 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         </label>
                                         <div class="flex flex-wrap gap-2">
                                             <label
-                                                v-for="ext in ['txt', 'md', 'csv', 'xlsx', 'json']"
+                                                v-for="ext in [
+                                                    'txt',
+                                                    'md',
+                                                    'csv',
+                                                    'xlsx',
+                                                    'json',
+                                                    'png',
+                                                    'jpg',
+                                                    'jpeg',
+                                                    'webp',
+                                                    'gif',
+                                                    'svg',
+                                                ]"
                                                 :key="ext"
                                                 class="flex items-center gap-1.5 text-sm cursor-pointer"
                                             >
