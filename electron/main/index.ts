@@ -92,6 +92,11 @@ async function initializeDatabase(): Promise<void> {
             await seedDatabase();
             console.log('seedDatabase completed');
         }
+
+        // Bootstrap essential app data (System Curator, etc.)
+        const { bootstrapAppData } = await import('./services/bootstrap');
+        await bootstrapAppData();
+
         return;
     } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -398,6 +403,31 @@ async function registerIpcHandlers(): Promise<void> {
         }
     );
 
+    // Send test notification
+    ipcMain.handle('tasks:send-test-notification', async (_event, taskId: number, config: any) => {
+        try {
+            const { taskNotificationService } =
+                await import('./services/task-notification-service');
+
+            // Get task info for display
+            const task = await taskRepo.findById(taskId);
+            if (!task) {
+                throw new Error(`Task ${taskId} not found`);
+            }
+
+            // Send test notification
+            await taskNotificationService.sendTestNotification(taskId, config, {
+                taskName: task.name,
+                taskDescription: task.description,
+            });
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error sending test notification:', error);
+            throw error;
+        }
+    });
+
     ipcMain.handle('tasks:delete', async (_event, id: number) => {
         try {
             await taskRepo.delete(id);
@@ -426,64 +456,9 @@ async function registerIpcHandlers(): Promise<void> {
         }
     });
 
-    // Script task execution
-    ipcMain.handle('tasks:execute-script', async (_event, taskId: number) => {
-        try {
-            const { scriptExecutor } = await import('./services/script-executor');
-            const task = await taskRepo.findById(taskId);
-
-            if (!task) {
-                throw new Error(`Task ${taskId} not found`);
-            }
-
-            if (task.taskType !== 'script') {
-                throw new Error(`Task ${taskId} is not a script task`);
-            }
-
-            // Update status to in_progress
-            await taskRepo.update(taskId, {
-                status: 'in_progress',
-                startedAt: new Date(),
-            });
-
-            mainWindow?.webContents.send('task:updated', await taskRepo.findById(taskId));
-
-            // Execute script
-            const result = await scriptExecutor.execute(task, task.projectId);
-
-            // Update task with result
-            const finalStatus = task.autoReview ? 'in_review' : result.success ? 'done' : 'done';
-            await taskRepo.update(taskId, {
-                status: finalStatus,
-                result: result.output,
-                completedAt: result.success ? new Date() : null,
-                actualCost: 0, // Scripts have no cost
-            });
-
-            const updatedTask = await taskRepo.findById(taskId);
-            mainWindow?.webContents.send('task:updated', updatedTask);
-
-            // Trigger dependent tasks if successful
-            if (result.success && updatedTask) {
-                const { checkAndExecuteDependentTasks } =
-                    await import('./ipc/task-execution-handlers');
-                await checkAndExecuteDependentTasks(taskId, updatedTask);
-            }
-
-            return result;
-        } catch (error) {
-            console.error('Error executing script task:', error);
-
-            // Update task status to done with error
-            await taskRepo.update(taskId, {
-                status: 'done',
-                result: `Error: ${error instanceof Error ? error.message : String(error)}`,
-            });
-
-            mainWindow?.webContents.send('task:updated', await taskRepo.findById(taskId));
-            throw error;
-        }
-    });
+    // Script task execution is handled by task-execution-handlers.ts
+    // via the 'taskExecution:execute' handler to avoid duplication
+    // The old 'tasks:execute-script' handler has been removed
 
     // ========================================
     // App Info IPC Handlers

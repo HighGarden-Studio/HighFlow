@@ -69,28 +69,48 @@
 
                         <!-- Modal Body -->
                         <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                            <!-- Curator Locked Message -->
+                            <div
+                                v-if="form.isCurator"
+                                class="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3"
+                            >
+                                <div class="text-xl">🔒</div>
+                                <div>
+                                    <h4 class="text-sm font-semibold text-blue-200">
+                                        System Curator
+                                    </h4>
+                                    <p class="text-xs text-blue-300/80 mt-1">
+                                        For the System Curator, only AI Provider and Model settings
+                                        can be modified. Other fields are locked to ensure system
+                                        integrity.
+                                    </p>
+                                </div>
+                            </div>
+
                             <!-- Name -->
-                            <div>
+                            <div :class="{ 'opacity-50 pointer-events-none': form.isCurator }">
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
                                     >Name</label
                                 >
                                 <input
                                     v-model="form.name"
                                     type="text"
+                                    :disabled="form.isCurator"
                                     placeholder="Alex"
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                             </div>
 
                             <!-- Role Preset -->
-                            <div>
+                            <div :class="{ 'opacity-50 pointer-events-none': form.isCurator }">
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
                                     >Role Preset</label
                                 >
                                 <select
                                     v-model="selectedPreset"
                                     @change="onPresetChange"
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                    :disabled="form.isCurator"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option
                                         v-for="option in rolePresetOptions"
@@ -109,20 +129,27 @@
                             </div>
 
                             <!-- Custom Role Name -->
-                            <div v-if="selectedPreset === 'custom'">
+                            <div
+                                v-if="selectedPreset === 'custom'"
+                                :class="{ 'opacity-50 pointer-events-none': form.isCurator }"
+                            >
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
                                     >Custom Role Name</label
                                 >
                                 <input
                                     v-model="form.role"
                                     type="text"
+                                    :disabled="form.isCurator"
                                     placeholder="Enter custom role..."
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                             </div>
 
                             <!-- Avatar and Color Row -->
-                            <div class="grid grid-cols-2 gap-4">
+                            <div
+                                class="grid grid-cols-2 gap-4"
+                                :class="{ 'opacity-50 pointer-events-none': form.isCurator }"
+                            >
                                 <div>
                                     <label class="block text-sm font-medium text-gray-300 mb-2"
                                         >Avatar (Emoji)</label
@@ -130,8 +157,9 @@
                                     <input
                                         v-model="form.avatar"
                                         type="text"
+                                        :disabled="form.isCurator"
                                         placeholder="🧑‍💻"
-                                        class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-center text-2xl"
+                                        class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-center text-2xl disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
                                 <div>
@@ -141,7 +169,8 @@
                                     <input
                                         v-model="form.color"
                                         type="color"
-                                        class="w-full h-[42px] px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                        :disabled="form.isCurator"
+                                        class="w-full h-[42px] px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
                             </div>
@@ -167,32 +196,39 @@
                             </div>
 
                             <!-- System Prompt -->
-                            <div>
+                            <div :class="{ 'opacity-50 pointer-events-none': form.isCurator }">
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
                                     >System Prompt</label
                                 >
                                 <textarea
                                     v-model="form.systemPrompt"
+                                    :disabled="form.isCurator"
                                     placeholder="You are a senior developer..."
                                     rows="8"
-                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm resize-vertical min-h-[200px]"
+                                    class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm resize-vertical min-h-[200px] disabled:opacity-50 disabled:cursor-not-allowed"
                                 ></textarea>
                                 <p class="mt-2 text-xs text-gray-500 italic">
                                     {{
-                                        selectedPreset === 'custom'
-                                            ? 'Enter your custom system prompt'
-                                            : 'Pre-filled from role preset. You can edit it.'
+                                        form.isCurator
+                                            ? 'System Prompt is locked for the Curator.'
+                                            : selectedPreset === 'custom'
+                                              ? 'Enter your custom system prompt'
+                                              : 'Pre-filled from role preset. You can edit it.'
                                     }}
                                 </p>
                             </div>
 
                             <!-- QA Reviewer Checkbox -->
-                            <div class="flex items-center gap-2">
+                            <div
+                                class="flex items-center gap-2"
+                                :class="{ 'opacity-50 pointer-events-none': form.isCurator }"
+                            >
                                 <input
                                     v-model="form.isReviewer"
                                     type="checkbox"
                                     id="is-reviewer"
-                                    class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer"
+                                    :disabled="form.isCurator"
+                                    class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                                 <label
                                     for="is-reviewer"
@@ -202,7 +238,7 @@
                                 </label>
                             </div>
                             <!-- Tags -->
-                            <div>
+                            <div :class="{ 'opacity-50 pointer-events-none': form.isCurator }">
                                 <label class="block text-sm font-medium text-gray-300 mb-2"
                                     >Tags</label
                                 >
@@ -215,7 +251,8 @@
                                         <span>{{ tag }}</span>
                                         <button
                                             @click="removeTag(tag)"
-                                            class="hover:text-white focus:outline-none"
+                                            :disabled="form.isCurator"
+                                            class="hover:text-white focus:outline-none disabled:cursor-not-allowed"
                                         >
                                             <svg
                                                 class="w-3 h-3"
@@ -300,6 +337,7 @@ const form = ref({
     aiModel: 'claude-3-5-sonnet-20241022',
     systemPrompt: '',
     isReviewer: false,
+    isCurator: false,
     specialty: [] as string[],
     isActive: true,
     projectId: null as number | null,
@@ -318,6 +356,7 @@ function addTag() {
 }
 
 function removeTag(tag: string) {
+    if (form.value.isCurator) return;
     form.value.tags = form.value.tags.filter((t) => t !== tag);
 }
 
@@ -358,6 +397,8 @@ function handleLocalAgentChange(agent: string | null) {
 
 // Handle preset change
 function onPresetChange() {
+    if (form.value.isCurator) return;
+
     const preset = selectedPresetData.value;
     if (preset) {
         // Auto-fill from preset
@@ -391,6 +432,7 @@ watch(
                 aiModel: operator.aiModel,
                 systemPrompt: operator.systemPrompt || '',
                 isReviewer: operator.isReviewer,
+                isCurator: operator.isCurator || false,
                 specialty: operator.specialty || [],
                 isActive: operator.isActive,
                 projectId: operator.projectId,

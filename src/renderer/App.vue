@@ -262,25 +262,8 @@ onMounted(async () => {
     // Add global keyboard listener
     window.addEventListener('keydown', handleGlobalKeyDown);
 
-    // Listen for activity logs from main process
-    if (window.electron?.events) {
-        window.electron.events.on('activity:log', (data: any) => {
-            const { level, message, details } = data;
-
-            activityLogStore.addLog({
-                level: level as any,
-                category: 'ipc',
-                type: 'activity.log',
-                message,
-                details,
-                source: 'main',
-                taskId: details?.taskId,
-                projectId: details?.projectId,
-            });
-
-            console.log(`[Main Process] [${level.toUpperCase()}] ${message}`, details || '');
-        });
-    }
+    // Note: activity:log events are handled in activityLogStore.ts
+    // to avoid duplication. See subscribeToIPCEvents() in that file.
 
     // Check if we should show setup wizard
     isInitialized.value = true;

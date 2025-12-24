@@ -40,6 +40,7 @@ const emit = defineEmits<{
     (e: 'previewPrompt', task: Task): void; // 스크립트 내용 보기
     (e: 'previewResult', task: Task): void; // 결과 보기
     (e: 'retry', task: Task): void; // 재실행
+    (e: 'approve', task: Task): void; // 승인
     (e: 'viewHistory', task: Task): void;
 }>();
 
@@ -372,6 +373,49 @@ function handleViewScript(event: Event) {
                     >
                         중지
                     </button>
+                </template>
+
+                <!-- IN_REVIEW: Result / Retry / Approve -->
+                <template v-if="task.status === 'in_review'">
+                    <div class="w-full flex gap-1.5">
+                        <button
+                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded flex items-center justify-center gap-1 border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                            @click="
+                                (e) => {
+                                    e.stopPropagation();
+                                    emit('previewResult', task);
+                                }
+                            "
+                        >
+                            결과 확인
+                        </button>
+                        <button
+                            class="px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
+                            @click="
+                                (e) => {
+                                    e.stopPropagation();
+                                    emit('retry', task);
+                                }
+                            "
+                            title="다시 실행"
+                        >
+                            재시도
+                        </button>
+                        <button
+                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
+                            @click.stop="
+                                () => {
+                                    console.log(
+                                        '🟢 [ScriptTaskCard] Approve button clicked',
+                                        task.id
+                                    );
+                                    emit('approve', task);
+                                }
+                            "
+                        >
+                            승인
+                        </button>
+                    </div>
                 </template>
 
                 <!-- DONE: History -->

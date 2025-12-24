@@ -10,7 +10,7 @@ import type { NotificationConfig } from '@core/types/notifications';
 
 interface Emit {
     (e: 'update', config: NotificationConfig | null): void;
-    (e: 'test'): void;
+    (e: 'test', config: NotificationConfig): void;
 }
 
 const props = defineProps<{
@@ -37,40 +37,52 @@ const eventReviewCompleteIncludeResult = ref(true);
 const eventReviewFailed = ref(false);
 const eventReviewFailedIncludeResult = ref(true);
 
+// Track internal updates to prevent feedback loops
+const isUpdatingFromProps = ref(false);
+
 // Initialize from props
 watch(
     () => props.config,
     (newConfig) => {
-        if (newConfig) {
-            // Slack
-            if (newConfig.slack?.enabled) {
-                enabled.value = true;
-                slackWebhookUrl.value = newConfig.slack.webhookUrl || '';
+        isUpdatingFromProps.value = true;
+        try {
+            if (newConfig) {
+                // Slack
+                if (newConfig.slack?.enabled) {
+                    enabled.value = true;
+                    slackWebhookUrl.value = newConfig.slack.webhookUrl || '';
+                }
+
+                // Webhook
+                if (newConfig.webhook?.enabled) {
+                    enabled.value = true;
+                    webhookUrl.value = newConfig.webhook.url || '';
+                    webhookSecret.value = newConfig.webhook.secret || '';
+                }
+
+                // Events
+                const events = [
+                    ...(newConfig.slack?.events || []),
+                    ...(newConfig.webhook?.events || []),
+                ];
+
+                eventExecutionStart.value = events.includes('task.execution-start' as any);
+                eventExecutionComplete.value = events.includes('task.execution-complete' as any);
+                eventReviewStart.value = events.includes('task.review-start' as any);
+                eventReviewComplete.value = events.includes('task.review-complete' as any);
+                eventReviewFailed.value = events.includes('task.review-failed' as any);
+
+                // Options
+                eventExecutionCompleteIncludeResult.value =
+                    newConfig.slack?.includeResults !== false;
+                eventReviewCompleteIncludeResult.value = true;
+                eventReviewFailedIncludeResult.value = true;
             }
-
-            // Webhook
-            if (newConfig.webhook?.enabled) {
-                enabled.value = true;
-                webhookUrl.value = newConfig.webhook.url || '';
-                webhookSecret.value = newConfig.webhook.secret || '';
-            }
-
-            // Events
-            const events = [
-                ...(newConfig.slack?.events || []),
-                ...(newConfig.webhook?.events || []),
-            ];
-
-            eventExecutionStart.value = events.includes('task.execution-start' as any);
-            eventExecutionComplete.value = events.includes('task.execution-complete' as any);
-            eventReviewStart.value = events.includes('task.review-start' as any);
-            eventReviewComplete.value = events.includes('task.review-complete' as any);
-            eventReviewFailed.value = events.includes('task.review-failed' as any);
-
-            // Options
-            eventExecutionCompleteIncludeResult.value = newConfig.slack?.includeResults !== false;
-            eventReviewCompleteIncludeResult.value = true;
-            eventReviewFailedIncludeResult.value = true;
+        } finally {
+            // Use nextTick to ensure watchers have fired before releasing lock
+            setTimeout(() => {
+                isUpdatingFromProps.value = false;
+            }, 0);
         }
     },
     { immediate: true, deep: true }
@@ -79,9 +91,86 @@ watch(
 // Computed
 const hasAnyUrl = computed(() => slackWebhookUrl.value || webhookUrl.value);
 
-function save() {
+// Track if initial props loading is complete
+const isInitialized = ref(false);
+
+// Auto-save on change
+watch(
+    [
+        enabled,
+        slackWebhookUrl,
+        webhookUrl,
+        webhookSecret,
+        eventExecutionStart,
+        eventExecutionComplete,
+        eventExecutionCompleteIncludeResult,
+        eventReviewStart,
+        eventReviewComplete,
+        eventReviewCompleteIncludeResult,
+        eventReviewFailed,
+        eventReviewFailedIncludeResult,
+    ],
+    () => {
+        // Skip initial watch execution
+        if (!isInitialized.value) {
+            isInitialized.value = true;
+            return;
+        }
+
+        // Skip if updating from props
+        if (isUpdatingFromProps.value) {
+            return;
+        }
+
+        // If no URL provided, clear config
+        if (!hasAnyUrl.value) {
+            // Only clear if we actually have initialized and user cleared inputs
+            // Don't mistakenly clear on load
+            if (isInitialized.value) {
+                console.log('[NotificationSettings] No URL provided, clearing config');
+                emit('update', null);
+            }
+            return;
+        }
+
+        const selectedEvents: any[] = [];
+        if (eventExecutionStart.value) selectedEvents.push('task.execution-start');
+        if (eventExecutionComplete.value) selectedEvents.push('task.execution-complete');
+        if (eventReviewStart.value) selectedEvents.push('task.review-start');
+        if (eventReviewComplete.value) selectedEvents.push('task.review-complete');
+        if (eventReviewFailed.value) selectedEvents.push('task.review-failed');
+
+        const config: NotificationConfig = {};
+
+        // Slack
+        if (slackWebhookUrl.value) {
+            config.slack = {
+                enabled: enabled.value,
+                webhookUrl: slackWebhookUrl.value,
+                events: selectedEvents,
+                includeResults: eventExecutionCompleteIncludeResult.value,
+            };
+        }
+
+        // Webhook
+        if (webhookUrl.value) {
+            config.webhook = {
+                enabled: enabled.value,
+                url: webhookUrl.value,
+                secret: webhookSecret.value,
+                events: selectedEvents,
+            };
+        }
+
+        console.log('[NotificationSettings] Auto-saving config:', config);
+        emit('update', config);
+    }
+);
+
+function testNotification() {
+    // Build current config from form values
     if (!hasAnyUrl.value) {
-        emit('update', null);
+        alert('웹훅 URL을 먼저 입력해주세요.');
         return;
     }
 
@@ -114,24 +203,8 @@ function save() {
         };
     }
 
-    emit('update', config);
-}
-
-function testNotification() {
-    emit('test');
-}
-
-function clear() {
-    enabled.value = false;
-    slackWebhookUrl.value = '';
-    webhookUrl.value = '';
-    webhookSecret.value = '';
-    eventExecutionStart.value = false;
-    eventExecutionComplete.value = false;
-    eventReviewStart.value = false;
-    eventReviewComplete.value = false;
-    eventReviewFailed.value = false;
-    emit('update', null);
+    console.log('[NotificationSettings] Sending test with config:', config);
+    emit('test', config);
 }
 </script>
 
@@ -375,28 +448,14 @@ function clear() {
 
             <!-- Actions -->
             <div
-                class="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700"
+                class="flex items-center justify-end pt-3 border-t border-gray-200 dark:border-gray-700"
             >
                 <button
-                    @click="clear"
-                    class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                    @click="testNotification"
+                    class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded transition-colors"
                 >
-                    초기화
+                    테스트 전송
                 </button>
-                <div class="flex items-center space-x-2">
-                    <button
-                        @click="testNotification"
-                        class="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm rounded transition-colors"
-                    >
-                        테스트 전송
-                    </button>
-                    <button
-                        @click="save"
-                        class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded transition-colors"
-                    >
-                        저장
-                    </button>
-                </div>
             </div>
         </div>
     </div>

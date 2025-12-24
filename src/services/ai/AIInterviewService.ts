@@ -506,7 +506,12 @@ export class AIInterviewService {
         providers: EnabledProviderInfo[],
         shouldFetchModels: boolean = false
     ): void {
-        this.aiServiceManager.setEnabledProviders(providers, shouldFetchModels);
+        this.enabledProviders = providers;
+        // shouldFetchModels 파라미터는 호환성을 위해 유지하지만 현재는 사용하지 않음
+        console.log(
+            '[AIInterviewService] Enabled providers set:',
+            providers.map((p) => p.id).join(', ')
+        );
     }
 
     /**

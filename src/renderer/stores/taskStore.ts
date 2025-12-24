@@ -300,6 +300,20 @@ export const useTaskStore = defineStore('tasks', () => {
                 projectId: _projectId,
                 ...updateData
             } = mergedUpdate as Record<string, unknown>;
+
+            // CRITICAL: Preserve notificationConfig from current task if not in update
+            const currentTaskInStore = tasks.value[index];
+            if (
+                updateData.notificationConfig === undefined &&
+                currentTaskInStore?.notificationConfig
+            ) {
+                updateData.notificationConfig = currentTaskInStore.notificationConfig;
+                console.log(
+                    '📝 Preserving notificationConfig:',
+                    currentTaskInStore.notificationConfig
+                );
+            }
+
             // Convert to plain JSON object to avoid serialization issues with Date objects and Vue reactivity
             const plainData = JSON.parse(JSON.stringify(updateData));
             console.log('📝 TaskStore.updateTask calling API:', id, plainData);
@@ -957,7 +971,7 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     /**
-     * Approve task (from NEEDS_APPROVAL) - moves back to IN_PROGRESS
+     * Approve task (from NEEDS_APPROVAL or IN_REVIEW) - moves to IN_PROGRESS or DONE
      */
     async function approveTask(
         taskId: number,
@@ -968,15 +982,20 @@ export const useTaskStore = defineStore('tasks', () => {
             return { success: false, error: 'Task not found' };
         }
 
-        if (task.status !== 'needs_approval') {
-            return { success: false, error: 'Task must be in NEEDS_APPROVAL status to approve' };
+        // Support both needs_approval (AI tasks) and in_review (Script tasks)
+        if (task.status !== 'needs_approval' && task.status !== 'in_review') {
+            return {
+                success: false,
+                error: 'Task must be in NEEDS_APPROVAL or IN_REVIEW status to approve',
+            };
         }
 
         try {
             const api = getAPI();
             if (!api?.taskExecution) {
-                // Fallback to simple status change
-                return changeStatus(taskId, 'in_progress', { approvalResponse: response });
+                // Fallback: Script tasks (in_review) go to done, AI tasks go back to in_progress
+                const newStatus = task.status === 'in_review' ? 'done' : 'in_progress';
+                return changeStatus(taskId, newStatus, { approvalResponse: response });
             }
 
             const result = await api.taskExecution.approve(taskId, response);

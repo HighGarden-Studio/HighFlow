@@ -88,7 +88,7 @@ export class PromptMacroService {
     private static parseMacro(fullMatch: string, content: string): ParsedMacro | null {
         const trimmed = content.trim();
 
-        // {{task:ID}} 또는 {{task:ID.field}}
+        // {{task:ID}} 또는 {{task:ID.field}} (콜론 표기)
         if (trimmed.startsWith('task:')) {
             const parts = trimmed.substring(5).split('.');
             const firstPart = parts[0] ?? '';
@@ -103,10 +103,25 @@ export class PromptMacroService {
             }
         }
 
-        // {{prev}} or {{prev - N}} handling
+        // {{task.ID}} 또는 {{task.ID.field}} (점 표기 - 통일된 표기법)
+        if (trimmed.startsWith('task.')) {
+            const parts = trimmed.substring(5).split('.');
+            const firstPart = parts[0] ?? '';
+            const taskId = parseInt(firstPart, 10);
+            if (!isNaN(taskId)) {
+                return {
+                    fullMatch,
+                    type: 'task',
+                    taskId,
+                    field: parts[1] ?? 'content',
+                };
+            }
+        }
+
+        // {{prev}} or {{prev-N}} or {{prev.N}} handling (두 표기법 모두 지원)
         if (trimmed.startsWith('prev')) {
-            // Regex to match: prev, prev-1, prev - 1, prev.field, prev-1.field
-            const prevMatch = trimmed.match(/^prev\s*(?:-\s*(\d+))?(?:\.(.+))?$/);
+            // Regex to match: prev, prev-1, prev.1, prev - 1, prev.field, prev-1.field, prev.1.field
+            const prevMatch = trimmed.match(/^prev\s*(?:[-.]?\s*(\d+))?(?:\.(\w+))?$/);
             if (prevMatch) {
                 const offsetStr = prevMatch[1];
                 const field = prevMatch[2] ?? 'content';
@@ -487,24 +502,24 @@ export class PromptMacroService {
     static getSuggestions(dependentTaskIds: number[], variables: string[]): MacroSuggestion[] {
         const suggestions: MacroSuggestion[] = [];
 
-        // 의존성 태스크 매크로
+        // 의존성 태스크 매크로 (최신 표기법: 띄어쓰기 없이)
         for (const taskId of dependentTaskIds) {
             suggestions.push({
-                macro: `{{task:${taskId}}}`,
+                macro: `{{task.${taskId}}}`,
                 description: `Task #${taskId}의 결과 (content)`,
-                example: `{{task:${taskId}}}`,
+                example: `{{task.${taskId}}}`,
                 category: 'dependency',
             });
             suggestions.push({
-                macro: `{{task:${taskId}.summary}}`,
+                macro: `{{task.${taskId}.summary}}`,
                 description: `Task #${taskId}의 결과 요약 (500자)`,
-                example: `{{task:${taskId}.summary}}`,
+                example: `{{task.${taskId}.summary}}`,
                 category: 'dependency',
             });
             suggestions.push({
-                macro: `{{task:${taskId}.output}}`,
+                macro: `{{task.${taskId}.output}}`,
                 description: `Task #${taskId}의 전체 output (JSON)`,
-                example: `{{task:${taskId}.output}}`,
+                example: `{{task.${taskId}.output}}`,
                 category: 'dependency',
             });
         }
@@ -512,25 +527,37 @@ export class PromptMacroService {
         // 이전 태스크 매크로
         suggestions.push({
             macro: '{{prev}}',
-            description: '바로 이전 태스크의 결과',
+            description: '바로 이전 태스크(마지막 dependency)',
             example: '{{prev}}',
             category: 'dependency',
         });
         suggestions.push({
+            macro: '{{prev.0}}',
+            description: '마지막 dependency (prev와 동일)',
+            example: '{{prev.0}}',
+            category: 'dependency',
+        });
+        suggestions.push({
+            macro: '{{prev.1}}',
+            description: '두 번째 최근 dependency',
+            example: '{{prev.1}}',
+            category: 'dependency',
+        });
+        suggestions.push({
             macro: '{{prev.summary}}',
-            description: '이전 태스크 결과 요약',
+            description: '이전 결과 요약',
             example: '{{prev.summary}}',
             category: 'dependency',
         });
         suggestions.push({
             macro: '{{all_results}}',
-            description: '모든 이전 결과 (JSON)',
+            description: '모든 이전 결과 (JSON 배열)',
             example: '{{all_results}}',
             category: 'dependency',
         });
         suggestions.push({
             macro: '{{all_results.summary}}',
-            description: '모든 이전 결과 요약',
+            description: '모든 결과 요약',
             example: '{{all_results.summary}}',
             category: 'dependency',
         });

@@ -474,7 +474,7 @@ async function estimateTimeWithAI() {
                                                     <code
                                                         class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
-                                                        >{{task:ID}}</code
+                                                        >{{task.23}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
                                                         >특정 태스크(ID)의 결과 content</span
@@ -484,7 +484,7 @@ async function estimateTimeWithAI() {
                                                     <code
                                                         class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
-                                                        >{{task:ID.output}}</code
+                                                        >{{task.23.output}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
                                                         >전체 output 객체 (JSON)</span
@@ -494,7 +494,17 @@ async function estimateTimeWithAI() {
                                                     <code
                                                         class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
-                                                        >{{task:ID.summary}}</code
+                                                        >{{task.23.status}}</code
+                                                    >
+                                                    <span class="text-gray-600 dark:text-gray-400"
+                                                        >태스크 상태</span
+                                                    >
+                                                </div>
+                                                <div class="flex items-start gap-2">
+                                                    <code
+                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
+                                                        v-pre
+                                                        >{{task.23.summary}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
                                                         >결과 요약 (500자)</span
@@ -519,7 +529,27 @@ async function estimateTimeWithAI() {
                                                         >{{ prev }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
-                                                        >바로 이전 태스크의 결과</span
+                                                        >바로 이전 태스크(마지막 dependency)</span
+                                                    >
+                                                </div>
+                                                <div class="flex items-start gap-2">
+                                                    <code
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
+                                                        v-pre
+                                                        >{{prev.0}}</code
+                                                    >
+                                                    <span class="text-gray-600 dark:text-gray-400"
+                                                        >마지막 dependency (prev와 동일)</span
+                                                    >
+                                                </div>
+                                                <div class="flex items-start gap-2">
+                                                    <code
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
+                                                        v-pre
+                                                        >{{prev.1}}</code
+                                                    >
+                                                    <span class="text-gray-600 dark:text-gray-400"
+                                                        >두 번째 최근 dependency</span
                                                     >
                                                 </div>
                                                 <div class="flex items-start gap-2">
@@ -647,8 +677,8 @@ async function estimateTimeWithAI() {
                                                 <div class="mt-2 text-gray-400">
                                                     # 여러 태스크 결과 종합
                                                 </div>
-                                                <div v-pre>Task #1 결과: {{task:1.summary}}</div>
-                                                <div v-pre>Task #2 결과: {{task:2.summary}}</div>
+                                                <div v-pre>Task #1 결과: {{task.1.summary}}</div>
+                                                <div v-pre>Task #2 결과: {{task.2.summary}}</div>
                                                 <div class="mt-2 text-gray-400"># 날짜 포함</div>
                                                 <div v-pre>
                                                     {{ date }} 기준 보고서를 작성해주세요.

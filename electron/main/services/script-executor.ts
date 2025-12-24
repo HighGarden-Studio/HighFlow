@@ -1,13 +1,12 @@
 /**
- * Script Executor Service
+ * Script Executor
  *
- * Executes JavaScript/TypeScript/Python scripts in a sandboxed environment
+ * Executes JavaScript/TypeScript/Python scripts in a secure sandbox environment
  */
 
 import { VM } from 'vm2';
-import { spawn } from 'child_process';
-import { resolveMacros } from '../utils/macro-resolver';
 import type { Task } from '@core/types/database';
+import { prepareMacroData, resolveMacrosInCode } from '../utils/macro-resolver';
 
 export interface ScriptExecutionResult {
     success: boolean;
@@ -18,43 +17,57 @@ export interface ScriptExecutionResult {
 }
 
 export class ScriptExecutor {
-    private timeout = 30000; // 30 seconds
+    private timeout: number = 30000; // 30 seconds
 
     /**
-     * Execute a script task
+     * Execute script with macro resolution
      */
     async execute(task: Task, projectId: number): Promise<ScriptExecutionResult> {
         const startTime = Date.now();
         const logs: string[] = [];
 
         try {
-            if (!task.scriptCode || !task.scriptLanguage) {
-                throw new Error('Script code or language not specified');
+            if (!task.scriptCode) {
+                throw new Error('No script code provided');
             }
 
-            // Resolve macros
-            const resolvedCode = await resolveMacros(task.scriptCode, {
-                taskId: task.id,
-                projectId,
-            });
+            // Step 1: Prepare macro data for VM context
+            const macroData = await prepareMacroData(task, projectId);
+            console.log(
+                '[ScriptExecutor] Macro data prepared:',
+                JSON.stringify(macroData, null, 2)
+            );
 
+            // Step 2: Resolve macros in the code (for code injection)
+            const resolvedCode = await resolveMacrosInCode(task.scriptCode, task, projectId);
+
+            console.log('[ScriptExecutor] Original code:', task.scriptCode);
+            console.log('[ScriptExecutor] Resolved code:', resolvedCode);
+
+            // Step 3: Execute the resolved code
             let result: ScriptExecutionResult;
+            const language = task.scriptLanguage || 'javascript';
 
-            switch (task.scriptLanguage) {
+            switch (language) {
                 case 'javascript':
                 case 'typescript':
-                    result = await this.executeNode(resolvedCode, task.scriptLanguage, logs);
+                    result = await this.executeJavaScript(resolvedCode, macroData, logs, language);
                     break;
                 case 'python':
-                    result = await this.executePython(resolvedCode, logs);
+                    result = await this.executePython(resolvedCode, logs); // Use resolved code
                     break;
                 default:
                     throw new Error(`Unsupported language: ${task.scriptLanguage}`);
             }
 
             result.duration = Date.now() - startTime;
+
+            // Debug: log the collected logs
+            console.log(`[ScriptExecutor] Collected ${result.logs.length} logs:`, result.logs);
+
             return result;
         } catch (error: any) {
+            console.error('[ScriptExecutor] Error executing script:', error);
             return {
                 success: false,
                 output: '',
@@ -68,13 +81,13 @@ export class ScriptExecutor {
     /**
      * Execute JavaScript/TypeScript in Node.js VM
      */
-    private async executeNode(
+    private async executeJavaScript(
         code: string,
-        language: 'javascript' | 'typescript',
-        logs: string[]
+        macroData: Record<string, any>,
+        logs: string[],
+        language: 'javascript' | 'typescript'
     ): Promise<ScriptExecutionResult> {
         try {
-            // For TypeScript, we would need to compile first
             // For now, simplified - just execute as JavaScript
             let executableCode = code;
 
@@ -84,27 +97,57 @@ export class ScriptExecutor {
                 executableCode = code;
             }
 
+            // Auto-return last expression if no explicit return
+            // This allows "executeTask();" to return its value
+            const lines = executableCode.trim().split('\n');
+            const lastLine = lines[lines.length - 1].trim();
+
+            // Check if last line is an expression statement (not return, declaration, etc.)
+            if (
+                lastLine &&
+                !lastLine.startsWith('return') &&
+                !lastLine.startsWith('let ') &&
+                !lastLine.startsWith('const ') &&
+                !lastLine.startsWith('var ') &&
+                !lastLine.startsWith('function ') &&
+                !lastLine.startsWith('//') &&
+                !lastLine.startsWith('}')
+            ) {
+                // Replace last line with return statement
+                lines[lines.length - 1] = `return ${lastLine}`;
+                executableCode = lines.join('\n');
+                console.log(`[ScriptExecutor] Auto-added return to last line: ${lastLine}`);
+            }
+
+            // Wrap code in IIFE to allow return statements
+            const wrappedCode = `(function() {\n${executableCode}\n})()`;
+
             const vm = new VM({
                 timeout: this.timeout,
                 sandbox: {
+                    // Inject macro data as variables
+                    ...macroData,
                     console: {
                         log: (...args: any[]) => {
                             const message = args.map((a) => String(a)).join(' ');
                             logs.push(message);
+                            // Don't re-log to console to avoid duplication
                         },
                         error: (...args: any[]) => {
                             const message = args.map((a) => String(a)).join(' ');
                             logs.push(`ERROR: ${message}`);
+                            // Don't re-log to console to avoid duplication
                         },
                         warn: (...args: any[]) => {
                             const message = args.map((a) => String(a)).join(' ');
                             logs.push(`WARN: ${message}`);
+                            // Don't re-log to console to avoid duplication
                         },
                     },
                 },
             });
 
-            const result = vm.run(executableCode);
+            const result = vm.run(wrappedCode);
 
             return {
                 success: true,
@@ -124,56 +167,62 @@ export class ScriptExecutor {
     }
 
     /**
-     * Execute Python in a subprocess
+     * Execute Python script
+     * Currently returns a placeholder - Python execution needs separate runtime
      */
     private async executePython(code: string, logs: string[]): Promise<ScriptExecutionResult> {
+        // Python execution needs separate runtime (e.g., child_process with python3)
+        // For now, return error
+        logs.push('Python execution not yet implemented');
+        return {
+            success: false,
+            output: '',
+            error: 'Python execution not yet implemented',
+            logs,
+            duration: 0,
+        };
+    }
+
+    /**
+     * Validate script before execution
+     */
+    validateScript(code: string): { valid: boolean; errors: string[] } {
+        const errors: string[] = [];
+
+        if (!code || code.trim().length === 0) {
+            errors.push('Script code is empty');
+        }
+
+        // Basic syntax validation (can be enhanced)
+        try {
+            new Function(code);
+        } catch (e: any) {
+            errors.push(`Syntax error: ${e.message}`);
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors,
+        };
+    }
+
+    /**
+     * Execute script with timeout
+     */
+    async executeWithTimeout(
+        code: string,
+        timeout: number = this.timeout
+    ): Promise<ScriptExecutionResult> {
         return new Promise((resolve) => {
-            const python = spawn('python3', ['-c', code]);
-            let stdout = '';
-            let stderr = '';
-
-            python.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                logs.push(text.trim());
-            });
-
-            python.stderr.on('data', (data) => {
-                const text = data.toString();
-                stderr += text;
-                logs.push(`ERROR: ${text.trim()}`);
-            });
-
-            python.on('close', (exitCode) => {
-                if (exitCode === 0) {
-                    resolve({
-                        success: true,
-                        output: stdout,
-                        logs,
-                        duration: 0,
-                    });
-                } else {
-                    resolve({
-                        success: false,
-                        output: stdout,
-                        error: stderr || `Process exited with code ${exitCode}`,
-                        logs,
-                        duration: 0,
-                    });
-                }
-            });
-
-            // Timeout
-            setTimeout(() => {
-                python.kill();
+            const timer = setTimeout(() => {
                 resolve({
                     success: false,
-                    output: stdout,
-                    error: 'Execution timeout (30s)',
-                    logs,
-                    duration: 0,
+                    output: '',
+                    error: `Execution timeout after ${timeout}ms`,
+                    logs: [],
+                    duration: timeout,
                 });
-            }, this.timeout);
+            }, timeout);
         });
     }
 }

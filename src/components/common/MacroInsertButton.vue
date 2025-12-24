@@ -258,7 +258,13 @@ function closeDropdown() {
                             <code
                                 class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 v-pre
-                                >{{task:ID}}</code
+                                >{{task.23}}</code
+                            >
+                            또는
+                            <code
+                                class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
+                                v-pre
+                                >{{prev.1}}</code
                             >
                             형식으로 직접 입력할 수도 있습니다.
                         </p>

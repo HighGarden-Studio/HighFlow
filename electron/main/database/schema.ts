@@ -253,6 +253,7 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         inputSubStatus: text('input_sub_status'), // 'WAITING_USER' | 'PROCESSING' | null
         // Output Task 필드
         outputConfig: text('output_config', { mode: 'json' }), // Output task configuration
+        notificationConfig: text('notification_config', { mode: 'json' }), // Task-specific notification settings
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
@@ -1114,3 +1115,27 @@ export type NewTaskHistory = typeof taskHistory.$inferInsert;
 
 export type ProviderModel = typeof providerModels.$inferSelect;
 export type NewProviderModel = typeof providerModels.$inferInsert;
+
+// ========================================
+// Settings Table
+// ========================================
+
+export const settings = sqliteTable(
+    'settings',
+    {
+        key: text('key').primaryKey(),
+        value: text('value').notNull(),
+        createdAt: integer('created_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+        updatedAt: integer('updated_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => ({
+        keyIdx: index('setting_key_idx').on(table.key),
+    })
+);
+
+export type Setting = typeof settings.$inferSelect;
+export type NewSetting = typeof settings.$inferInsert;

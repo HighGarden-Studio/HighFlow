@@ -64,8 +64,20 @@ export class NotificationResolver {
         }
 
         // Priority 3: Global config
-        // TODO: Implement global config from settings
-        // For now, return null (no config)
+        try {
+            const { settingsRepository } =
+                await import('../database/repositories/settings-repository');
+            const globalConfig =
+                await settingsRepository.getJSON<NotificationConfig>('notification.global');
+
+            if (globalConfig && this.isConfigValid(globalConfig)) {
+                console.log(`[NotificationResolver] Using global config for task ${taskId}`);
+                return globalConfig;
+            }
+        } catch (error) {
+            console.error(`[NotificationResolver] Failed to load global config:`, error);
+        }
+
         console.log(`[NotificationResolver] No notification config found for task ${taskId}`);
         return null;
     }

@@ -10,15 +10,17 @@ import type { ScriptLanguage } from '@core/types/database';
 
 interface Props {
     modelValue: string;
-    language?: ScriptLanguage;
+    language?: ScriptLanguage | 'markdown'; // markdown 추가
     height?: string;
     readonly?: boolean;
+    showLineNumbers?: boolean; // 라인 넘버 표시 옵션
 }
 
 const props = withDefaults(defineProps<Props>(), {
     language: 'javascript',
     height: '400px',
     readonly: false,
+    showLineNumbers: true, // 기본값: 표시
 });
 
 const emit = defineEmits<{
@@ -52,6 +54,16 @@ onMounted(() => {
         };
     }
 
+    // 매크로 사용을 위해 TypeScript/JavaScript 진단 비활성화
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: true,
+    });
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: true,
+    });
+
     // Monaco Editor 설정
     editor = monaco.editor.create(editorContainer.value, {
         value: props.modelValue,
@@ -60,15 +72,15 @@ onMounted(() => {
         automaticLayout: true,
         minimap: { enabled: true },
         fontSize: 14,
-        lineNumbers: 'on',
+        lineNumbers: props.showLineNumbers ? 'on' : 'off', // 라인 넘버 옵션 적용
         roundedSelection: false,
         scrollBeyondLastLine: false,
         readOnly: props.readonly,
         tabSize: 2,
         insertSpaces: true,
         wordWrap: 'on',
-        formatOnPaste: true,
-        formatOnType: true,
+        formatOnPaste: false, // 붙여넣기 시 자동 포매팅 비활성화 (매크로 보호)
+        formatOnType: false, // 타이핑 시 자동 포매팅 비활성화 (매크로 보호)
     });
 
     // 값 변경 감지
@@ -77,59 +89,94 @@ onMounted(() => {
         emit('update:modelValue', value);
     });
 
-    // 매크로 자동완성 제안 등록
-    monaco.languages.registerCompletionItemProvider(props.language, {
-        provideCompletionItems: (model, position) => {
-            const word = model.getWordUntilPosition(position);
-            const range = {
-                startLineNumber: position.lineNumber,
-                endLineNumber: position.lineNumber,
-                startColumn: word.startColumn,
-                endColumn: word.endColumn,
-            };
+    // 매크로 자동완성 제안 등록 (모든 언어에 등록)
+    const languages = ['javascript', 'typescript', 'python', 'markdown'];
+    languages.forEach((lang) => {
+        monaco.languages.registerCompletionItemProvider(lang, {
+            provideCompletionItems: (model, position) => {
+                const word = model.getWordUntilPosition(position);
+                const range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn,
+                };
 
-            const suggestions: monaco.languages.CompletionItem[] = [
-                {
-                    label: '{{task:N}}',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    documentation: '이전 태스크의 전체 결과',
-                    insertText: '{{task:${1:taskId}}}',
-                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    range,
-                },
-                {
-                    label: '{{task:N.output}}',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    documentation: '이전 태스크의 출력',
-                    insertText: '{{task:${1:taskId}.output}}',
-                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    range,
-                },
-                {
-                    label: '{{project.name}}',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    documentation: '프로젝트 이름',
-                    insertText: '{{project.name}}',
-                    range,
-                },
-                {
-                    label: '{{project.description}}',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    documentation: '프로젝트 설명',
-                    insertText: '{{project.description}}',
-                    range,
-                },
-                {
-                    label: '{{project.baseDevFolder}}',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    documentation: '프로젝트 기본 개발 폴더',
-                    insertText: '{{project.baseDevFolder}}',
-                    range,
-                },
-            ];
+                const suggestions: monaco.languages.CompletionItem[] = [
+                    {
+                        label: '{{task.N}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '특정 태스크의 전체 결과 (projectSequence 기반)',
+                        insertText: '{{task.${1:sequenceNum}}}',
+                        insertTextRules:
+                            monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        range,
+                    },
+                    {
+                        label: '{{task.N.summary}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '특정 태스크의 결과 요약',
+                        insertText: '{{task.${1:sequenceNum}.summary}}',
+                        insertTextRules:
+                            monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        range,
+                    },
+                    {
+                        label: '{{task.N.output}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '특정 태스크의 전체 output (JSON)',
+                        insertText: '{{task.${1:sequenceNum}.output}}',
+                        insertTextRules:
+                            monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        range,
+                    },
+                    {
+                        label: '{{prev}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '마지막 dependency 결과',
+                        insertText: '{{prev}}',
+                        range,
+                    },
+                    {
+                        label: '{{prev.0}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '마지막 dependency (prev와 동일)',
+                        insertText: '{{prev.0}}',
+                        range,
+                    },
+                    {
+                        label: '{{prev.1}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '두 번째 최근 dependency',
+                        insertText: '{{prev.1}}',
+                        range,
+                    },
+                    {
+                        label: '{{project.name}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '프로젝트 이름',
+                        insertText: '{{project.name}}',
+                        range,
+                    },
+                    {
+                        label: '{{project.description}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '프로젝트 설명',
+                        insertText: '{{project.description}}',
+                        range,
+                    },
+                    {
+                        label: '{{project.baseDevFolder}}',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        documentation: '프로젝트 기본 개발 폴더',
+                        insertText: '{{project.baseDevFolder}}',
+                        range,
+                    },
+                ];
 
-            return { suggestions };
-        },
+                return { suggestions };
+            },
+        });
     });
 });
 

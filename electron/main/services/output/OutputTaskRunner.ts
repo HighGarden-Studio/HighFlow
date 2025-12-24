@@ -236,17 +236,56 @@ export class OutputTaskRunner {
         if (config.aggregation === 'concat' || config.aggregation === 'single') {
             return inputs.join('\n\n---\n\n');
         } else if (config.aggregation === 'template') {
-            // TODO: V2 Template implementation
+            // Template with unified macro support
             if (config.templateConfig?.template) {
-                // Minimal placeholder replacement MVP
                 let rendered = config.templateConfig.template;
-                // Very naive replacement for MVP
-                // In real impl, use Handlebars or similar
+
+                // Build macro context for template
+                const depTasks = await taskRepository.findByProject(task.projectId);
+                const dependencyResults = dependencies
+                    .map((depId) => {
+                        const depTask = depTasks.find((t) => t.id === depId);
+                        return depTask
+                            ? {
+                                  taskId: depTask.id,
+                                  taskTitle: depTask.title,
+                                  status:
+                                      depTask.status === 'done'
+                                          ? ('success' as const)
+                                          : ('failure' as const),
+                                  output: (depTask as any).result || depTask.generatedPrompt || '',
+                                  startTime: depTask.startedAt || new Date(),
+                                  endTime: depTask.completedAt || new Date(),
+                                  duration: 0,
+                                  retries: 0,
+                                  metadata: {},
+                              }
+                            : null;
+                    })
+                    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+                const { PromptMacroService } =
+                    await import('../../../../src/services/workflow/PromptMacroService');
+
+                const macroContext = {
+                    previousResults: dependencyResults,
+                    variables: {},
+                };
+
+                // Replace unified macros: {{prev}}, {{prev.1}}, {{task.23}}, etc.
+                rendered = PromptMacroService.replaceMacros(rendered, macroContext);
+
+                // Legacy support: {{inputN}} macros
                 inputs.forEach((input, idx) => {
                     rendered = rendered.replace(new RegExp(`{{input${idx + 1}}}`, 'g'), input);
                 });
-                // Also support joining all
-                rendered = rendered.replace('{{all_results}}', inputs.join('\n\n'));
+
+                // Legacy support: {{all_results}} is already handled by PromptMacroService
+                // But also support direct replacement for compatibility
+                if (rendered.includes('{{all_results}}')) {
+                    rendered = rendered.replace(/\{\{all_results\}\}/g, inputs.join('\n\n'));
+                }
+
                 return rendered;
             }
             return inputs.join('\n\n');

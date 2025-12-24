@@ -460,6 +460,55 @@ export class TaskNotificationService {
 
         return result[0] || null;
     }
+
+    /**
+     * Send test notification
+     */
+    async sendTestNotification(
+        taskId: number,
+        config: any,
+        taskInfo: { taskName?: string; taskDescription?: string | null }
+    ) {
+        console.log(`[TaskNotificationService] Sending test notification for task ${taskId}`);
+
+        const testPayload = {
+            event: 'test',
+            task: {
+                id: taskId,
+                name: taskInfo.taskName || `Task ${taskId}`,
+                description: taskInfo.taskDescription || '테스트 알림입니다.',
+            },
+            message:
+                '🧪 알림 테스트: 이것은 테스트 메시지입니다. 실제 알림은 태스크 실행 시 전송됩니다.',
+            timestamp: new Date().toISOString(),
+        };
+
+        const promises: Promise<void>[] = [];
+
+        // Send Slack notification
+        if (config.slack?.enabled && config.slack.webhookUrl) {
+            promises.push(
+                this.sendSlackNotification(config.slack, {
+                    task: {
+                        id: taskId,
+                        title: taskInfo.taskName || `Task ${taskId}`,
+                        description: taskInfo.taskDescription,
+                    } as any,
+                    project: null,
+                    event: 'test' as any,
+                    result: '🧪 테스트 알림입니다.',
+                })
+            );
+        }
+
+        // Send Webhook notification
+        if (config.webhook?.enabled && config.webhook.url) {
+            promises.push(this.sendWebhookNotification(config.webhook, testPayload));
+        }
+
+        await Promise.all(promises);
+        console.log('[TaskNotificationService] Test notification sent');
+    }
 }
 
 // Singleton instance

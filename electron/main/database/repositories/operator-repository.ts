@@ -20,7 +20,7 @@ export class OperatorRepository {
      * Find all operators for a project (including global)
      */
     async findByProject(projectId: number | null): Promise<Operator[]> {
-        return (await db
+        const results = await db
             .select()
             .from(operators)
             .where(
@@ -32,7 +32,15 @@ export class OperatorRepository {
                       )
                     : and(eq(operators.isActive, true), isNull(operators.projectId))
             )
-            .orderBy(desc(operators.usageCount), desc(operators.createdAt))) as any;
+            .orderBy(desc(operators.usageCount), desc(operators.createdAt));
+
+        // Parse tags from JSON string to array
+        return results.map((op: any) => ({
+            ...op,
+            tags: typeof op.tags === 'string' ? JSON.parse(op.tags) : op.tags || [],
+            specialty:
+                typeof op.specialty === 'string' ? JSON.parse(op.specialty) : op.specialty || [],
+        }));
     }
 
     /**
@@ -41,7 +49,17 @@ export class OperatorRepository {
     async findById(id: number): Promise<Operator | undefined> {
         const [result] = await db.select().from(operators).where(eq(operators.id, id)).limit(1);
 
-        return result;
+        if (!result) return undefined;
+
+        // Parse JSON fields
+        return {
+            ...result,
+            tags: typeof result.tags === 'string' ? JSON.parse(result.tags) : result.tags || [],
+            specialty:
+                typeof result.specialty === 'string'
+                    ? JSON.parse(result.specialty)
+                    : result.specialty || [],
+        } as Operator;
     }
 
     /**
@@ -197,7 +215,7 @@ export class OperatorRepository {
      * Find reviewer operators for a project
      */
     async findReviewers(projectId: number | null): Promise<Operator[]> {
-        return await db
+        const results = await db
             .select()
             .from(operators)
             .where(
@@ -210,6 +228,14 @@ export class OperatorRepository {
                 )
             )
             .orderBy(desc(operators.usageCount));
+
+        // Parse JSON fields
+        return results.map((op: any) => ({
+            ...op,
+            tags: typeof op.tags === 'string' ? JSON.parse(op.tags) : op.tags || [],
+            specialty:
+                typeof op.specialty === 'string' ? JSON.parse(op.specialty) : op.specialty || [],
+        }));
     }
 
     /**

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+/**
+ * AI & Script Task Card Component
+ * Supports both 'ai' and 'script' task types with in_review workflow
+ */
 import { computed, ref, watch, onMounted } from 'vue';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';

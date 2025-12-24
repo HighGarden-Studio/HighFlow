@@ -83,6 +83,12 @@ const tasksAPI = {
     executeScript: (taskId: number) => ipcRenderer.invoke('tasks:execute-script', taskId),
 
     stopTask: (taskId: number) => ipcRenderer.invoke('taskExecution:stop', taskId),
+
+    sendTestNotification: (taskId: number, config: any) =>
+        ipcRenderer.invoke('tasks:send-test-notification', taskId, config),
+
+    updateNotificationConfig: (taskId: number, config: any) =>
+        ipcRenderer.invoke('tasks:update-notification-config', taskId, config),
 };
 
 // ========================================

@@ -48,6 +48,8 @@ coverage
 *.db-journal
 *.db-shm
 *.db-wal
+*.sqlite
+*.bak
 
 # Playwright
 test-results

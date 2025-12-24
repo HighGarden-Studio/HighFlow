@@ -308,7 +308,7 @@ const triggerType = ref<'none' | 'dependency' | 'time'>('none');
 const dependencyTaskIds = ref<string>(''); // Comma-separated task IDs
 const dependencyOperator = ref<'all' | 'any'>('all');
 const dependencyExpression = ref<string>(''); // Complex boolean expression
-const dependencyExecutionPolicy = ref<'once' | 'repeat'>('once'); // 자동 실행 정책
+const dependencyExecutionPolicy = ref<'once' | 'repeat'>('repeat'); // 자동 실행 정책 (디폴트: 매번 자동 실행)
 const scheduleType = ref<'once' | 'recurring'>('once');
 const scheduledDatetime = ref('');
 const cronExpression = ref('');
@@ -894,6 +894,7 @@ function persistExecutionSettings() {
         mcpConfig: localTask.value.mcpConfig,
         expectedOutputFormat: localTask.value.expectedOutputFormat,
         triggerConfig: buildTriggerConfig(),
+        notificationConfig: localTask.value.notificationConfig,
     } as Task);
 
     // Reset flag after save completes (use timeout to ensure task prop update happens first)
@@ -1008,6 +1009,9 @@ function handleSave() {
         mcpConfig: localTask.value.mcpConfig,
         expectedOutputFormat: localTask.value.expectedOutputFormat,
         assignedOperatorId: assignedOperatorId.value,
+        // Script task fields
+        scriptCode: scriptCode.value,
+        scriptLanguage: scriptLanguage.value,
     };
 
     emit('save', updatedTask as Task);
@@ -1194,7 +1198,7 @@ async function handleExecute() {
     try {
         // Check if it's a script task or AI task
         if (localTask.value.taskType === 'script') {
-            // Execute script task
+            // Execute script task via taskExecution API (unified handler)
             console.log(`Executing script task ${localTask.value.id}`);
 
             if (!localTask.value.scriptCode) {
@@ -1202,7 +1206,14 @@ async function handleExecute() {
                 return;
             }
 
-            const result = await window.electron.tasks.executeScript(localTask.value.id);
+            // Use the unified taskExecution API instead of tasks.executeScript
+            const api = window.electron?.taskExecution;
+            if (!api) {
+                alert('Task execution API not available');
+                return;
+            }
+
+            const result = await api.execute(localTask.value.id);
 
             if (result.success) {
                 console.log('Script execution completed:', result);
@@ -1244,24 +1255,57 @@ async function handleUpdateNotificationConfig(config: any) {
     if (!localTask.value) return;
 
     try {
-        const electron = window.electron;
-        if (electron) {
-            // @ts-ignore - IPC handler exists
-            await electron.ipcRenderer.invoke(
-                'tasks:update-notification-config',
-                localTask.value.id,
-                config
+        const api = getAPI();
+        if (!api) {
+            console.warn(
+                '[TaskDetailPanel] Electron API not available, skipping notification config update'
             );
-            console.log('Notification config updated');
+            return;
+        }
+
+        // Update task notification config via API
+        console.log('[TaskDetailPanel] Saving notification config:', config);
+
+        // @ts-ignore - API method exists
+        const updatedTask = await api.tasks.updateNotificationConfig(localTask.value.id, config);
+
+        // 업데이트된 태스크로 localTask 갱신
+        if (updatedTask) {
+            localTask.value = updatedTask;
+            console.log('[TaskDetailPanel] Notification config saved successfully');
         }
     } catch (error) {
-        console.error('Failed to update notification config:', error);
+        console.error('[TaskDetailPanel] Failed to update notification config:', error);
+        alert(`알림 설정 저장 실패: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
-async function handleTestNotification() {
-    // TODO: Implement test notification
-    console.log('Test notification requested');
+async function handleTestNotification(config: any) {
+    if (!localTask.value) return;
+
+    console.log('Test notification requested with config:', config);
+
+    try {
+        const api = getAPI();
+        if (!api) {
+            alert('Electron API를 사용할 수 없습니다.');
+            return;
+        }
+
+        if (!config || (!config.slack?.webhookUrl && !config.webhook?.url)) {
+            alert('알림 설정을 먼저 입력해주세요. (Slack Webhook URL 또는 Custom Webhook URL)');
+            return;
+        }
+
+        // Send test notification via API
+        // @ts-ignore - API method exists
+        await api.tasks.sendTestNotification(localTask.value.id, config);
+
+        alert('테스트 알림이 전송되었습니다. 웹훅 URL을 확인해주세요.');
+    } catch (error) {
+        console.error('Failed to send test notification:', error);
+        alert(`테스트 알림 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 
 /**
@@ -1795,40 +1839,26 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 </button>
                                             </div>
                                         </div>
-                                        <textarea
-                                            ref="promptTextarea"
+                                        <CodeEditor
                                             v-model="promptText"
-                                            :disabled="isReadOnly"
-                                            rows="15"
-                                            :class="[
-                                                'w-full px-3 py-2 border rounded-lg font-mono text-sm',
-                                                isReadOnly
-                                                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 cursor-not-allowed'
-                                                    : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-                                            ]"
-                                            placeholder="AI에게 전달할 작업 지시사항을 입력하세요..."
+                                            :language="'markdown'"
+                                            height="400px"
+                                            :readonly="isReadOnly"
+                                            :show-line-numbers="false"
                                         />
                                         <div
-                                            class="flex items-center justify-between mt-2 text-xs text-gray-500"
+                                            class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-2"
                                         >
-                                            <span>{{ promptText.length }}자</span>
-                                            <span
-                                                v-if="promptText.length < 50"
-                                                class="text-yellow-500"
+                                            <MacroInsertButton
+                                                :dependent-task-ids="dependentTaskIdList"
+                                                :disabled="isReadOnly"
+                                                @insert="handleMacroInsert"
+                                            />
+                                            <span v-pre
+                                                >💡 <strong>Tip:</strong> {{ prev }}, {{ task.N }},
+                                                {{ project.name }} 등 매크로 자동완성 지원
+                                                (Ctrl+Space 또는 {{ 입력)</span
                                             >
-                                                더 상세한 지시사항을 작성하면 좋은 결과를 얻을 수
-                                                있습니다
-                                            </span>
-                                        </div>
-
-                                        <!-- 매크로 사용 힌트 -->
-                                        <div v-if="promptText && promptText.includes('{{')">
-                                            <p
-                                                class="mt-2 text-xs text-indigo-600 dark:text-indigo-400"
-                                            >
-                                                ✨ 매크로가 포함되어 있습니다. 실행 시 실제 값으로
-                                                치환됩니다.
-                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -1859,7 +1889,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 />
 
                                 <div
-                                    class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+                                    class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-2"
                                 >
                                     <MacroInsertButton
                                         :dependent-task-ids="dependentTaskIdList"
@@ -1867,15 +1897,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                         @insert="handleMacroInsert"
                                     />
                                     <span v-pre
-                                        >매크로 사용 가능:
-                                        <code
-                                            class="text-purple-600 dark:text-purple-400"
-                                            >{{task:N}}</code
-                                        >,
-                                        <code class="text-purple-600 dark:text-purple-400">{{
-                                            project.name
-                                        }}</code>
-                                        등</span
+                                        >💡 <strong>Tip:</strong> {{ prev }}, {{ task.N }},
+                                        {{ project.name }} 등 매크로 자동완성 지원 (Ctrl+Space 또는
+                                        {{ 입력)</span
                                     >
                                 </div>
                             </div>
@@ -2263,7 +2287,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <code
                                                     class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
-                                                    >{{task:ID}}</code
+                                                    >{{task.23}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400"
                                                     >특정 태스크(ID)의 결과 content</span
@@ -2273,7 +2297,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <code
                                                     class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
-                                                    >{{task:ID.output}}</code
+                                                    >{{task.23.output}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400"
                                                     >전체 output 객체 (JSON)</span
@@ -2283,7 +2307,17 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <code
                                                     class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
-                                                    >{{task:ID.summary}}</code
+                                                    >{{task.23.status}}</code
+                                                >
+                                                <span class="text-gray-600 dark:text-gray-400"
+                                                    >태스크 상태</span
+                                                >
+                                            </div>
+                                            <div class="flex items-start gap-2">
+                                                <code
+                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
+                                                    v-pre
+                                                    >{{task.23.summary}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400"
                                                     >결과 요약 (500자)</span
@@ -2307,7 +2341,27 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                     >{{ prev }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400"
-                                                    >바로 이전 태스크의 결과</span
+                                                    >바로 이전 태스크(마지막 dependency)</span
+                                                >
+                                            </div>
+                                            <div class="flex items-start gap-2">
+                                                <code
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
+                                                    v-pre
+                                                    >{{prev.0}}</code
+                                                >
+                                                <span class="text-gray-600 dark:text-gray-400"
+                                                    >마지막 dependency (prev와 동일)</span
+                                                >
+                                            </div>
+                                            <div class="flex items-start gap-2">
+                                                <code
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
+                                                    v-pre
+                                                    >{{prev.1}}</code
+                                                >
+                                                <span class="text-gray-600 dark:text-gray-400"
+                                                    >두 번째 최근 dependency</span
                                                 >
                                             </div>
                                             <div class="flex items-start gap-2">
@@ -2433,8 +2487,8 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             <div class="mt-2 text-gray-400">
                                                 # 여러 태스크 결과 종합
                                             </div>
-                                            <div v-pre>Task #1 결과: {{task:1.summary}}</div>
-                                            <div v-pre>Task #2 결과: {{task:2.summary}}</div>
+                                            <div v-pre>Task #1 결과: {{task.1.summary}}</div>
+                                            <div v-pre>Task #2 결과: {{task.2.summary}}</div>
                                             <div class="mt-2 text-gray-400"># 날짜 포함</div>
                                             <div v-pre>{{ date }} 기준 보고서를 작성해주세요.</div>
                                         </div>
@@ -3353,7 +3407,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <div class="flex flex-col">
                                                     <span
                                                         class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
-                                                        >1회만 실행 (권장)</span
+                                                        >1회만 실행</span
                                                     >
                                                     <span
                                                         class="text-xs text-indigo-500 dark:text-indigo-400"
@@ -3371,7 +3425,7 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                 <div class="flex flex-col">
                                                     <span
                                                         class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
-                                                        >매번 자동 실행</span
+                                                        >매번 자동 실행 (권장)</span
                                                     >
                                                     <span
                                                         class="text-xs text-indigo-500 dark:text-indigo-400"

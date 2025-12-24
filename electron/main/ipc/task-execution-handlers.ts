@@ -25,6 +25,7 @@ import type { TaskResult } from '../../../src/services/workflow/types';
 import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
 import { GlobalExecutionService } from '../services/GlobalExecutionService';
+import { taskNotificationService } from '../services/task-notification-service';
 
 /**
  * Get the main window for sending IPC messages
@@ -336,18 +337,30 @@ export async function checkAndExecuteDependentTasks(
 
             if (!triggerConfig?.dependsOn?.taskIds) return false;
 
-            // Check if completed task is in taskIds OR in expression
-            const hasIdInList =
+            // Check if this task depends on the completed task
+            const hasIdInTaskIds =
                 triggerConfig.dependsOn.taskIds &&
                 triggerConfig.dependsOn.taskIds.includes(completedTaskId);
             const hasIdInExpr = triggerConfig.dependsOn.expression
                 ? new RegExp(`\\b${completedTaskId}\\b`).test(triggerConfig.dependsOn.expression)
                 : false;
 
-            if (!hasIdInList && !hasIdInExpr) return false;
+            // If the completed task is not a dependency, skip
+            if (!hasIdInTaskIds && !hasIdInExpr) return false;
 
-            // Execution Policy Logic
-            const policy = triggerConfig.dependsOn.executionPolicy || 'once';
+            // Get execution policy (default: 'repeat' for backwards compatibility and user preference)
+            const policy = triggerConfig.dependsOn.executionPolicy || 'repeat';
+
+            // If policy is 'once', only execute if task is in 'todo' status
+            if (policy === 'once') {
+                const isInTodoStatus = task.status === 'todo';
+                if (!isInTodoStatus) {
+                    console.log(
+                        `[TaskExecution] Task ${task.id} has executionPolicy='once' and is not in TODO status (current: ${task.status}). Skipping auto-execution.`
+                    );
+                    return false;
+                }
+            }
 
             // 1. REPEAT/ALWAYS Policy Handling
             if (policy === 'repeat' || (policy as string) === 'always') {
@@ -670,6 +683,26 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             result = await scriptExecutor.execute(task as Task, task.projectId);
 
+                            // Send all script logs to Activity Console
+                            console.log(
+                                `[TaskExecution] Sending ${result.logs.length} logs to Activity Console`
+                            );
+                            result.logs.forEach((log) => {
+                                const level = log.startsWith('ERROR:')
+                                    ? 'error'
+                                    : log.startsWith('WARN:')
+                                      ? 'warning' // Changed from 'warn' to 'warning'
+                                      : 'info';
+                                const message = log.replace(/^(ERROR:|WARN:)\s*/, '');
+
+                                console.log(`[ActivityConsole] ${level}: ${message}`);
+                                getMainWindow()?.webContents.send('activity:log', {
+                                    level,
+                                    message,
+                                    details: { taskId, source: 'script' },
+                                });
+                            });
+
                             if (result.success) {
                                 executionState.status = 'completed';
                                 executionState.streamContent = result.output || '';
@@ -824,6 +857,10 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             taskId,
                             error: executionState.error,
                         });
+
+                        // Send failure notification
+                        await taskNotificationService.notifyFailure(taskId, executionState.error);
+
                         activeExecutions.delete(taskId); // Clean up
                         throw error;
                     }
@@ -1246,9 +1283,32 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 executionResult
                             );
 
+                            // Send notifications
                             if (finalStatus === 'done') {
+                                await taskNotificationService.notifyCompletion(
+                                    taskId,
+                                    response.content,
+                                    {
+                                        duration: response.duration,
+                                        cost: 0, // Local agent has no cost
+                                        tokenUsage: response.tokenUsage
+                                            ? {
+                                                  input: response.tokenUsage.input,
+                                                  output: response.tokenUsage.output,
+                                                  total:
+                                                      response.tokenUsage.input +
+                                                      response.tokenUsage.output,
+                                              }
+                                            : undefined,
+                                    }
+                                );
                                 triggerCurator(taskId, task, response.content, project); // Trigger Curator
                                 await checkAndExecuteDependentTasks(taskId, task as Task);
+                            } else if (finalStatus === 'in_review') {
+                                await taskNotificationService.notifyReviewReady(
+                                    taskId,
+                                    response.content
+                                );
                             }
 
                             activeExecutions.delete(taskId);
@@ -1847,35 +1907,58 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      * Approve and continue execution with user response
      */
     ipcMain.handle('taskExecution:approve', async (_event, taskId: number, response?: string) => {
+        console.log(`[TaskExecution] Approve task`, taskId);
+
         try {
-            const state = activeExecutions.get(taskId);
-            if (state) {
-                state.status = 'running';
-                state.currentPhase = 'resuming_after_approval';
+            const task = await taskRepository.findById(taskId);
+            if (!task) {
+                return { success: false, error: 'Task not found' };
             }
 
-            // Update task status back to in_progress
+            // Support both needs_approval (AI tasks) and in_review (Script tasks)
+            if (task.status !== 'needs_approval' && task.status !== 'in_review') {
+                return {
+                    success: false,
+                    error: 'Task must be in NEEDS_APPROVAL or IN_REVIEW status to approve',
+                };
+            }
+
+            // Determine new status based on current status
+            // Script tasks (in_review) go to done, AI tasks (needs_approval) go back to in_progress
+            let newStatus: 'done' | 'in_progress' = 'in_progress';
+            if (task.status === 'in_review') {
+                newStatus = 'done';
+                console.log('[TaskExecution] Script task approved, moving to DONE');
+            } else {
+                newStatus = 'in_progress';
+                console.log('[TaskExecution] AI task approved, moving back to IN_PROGRESS');
+            }
+
+            // Update task status
             await taskRepository.update(taskId, {
-                status: 'in_progress',
-                aiApprovalResponse: response,
+                status: newStatus,
+                approvalResponse: response || null,
+                updatedAt: new Date(),
             });
 
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'in_progress',
-            });
-            getMainWindow()?.webContents.send('taskExecution:approved', {
-                taskId,
-                response,
-            });
+            // Broadcast update
+            const updatedTask = await taskRepository.findById(taskId);
+            if (updatedTask) {
+                broadcastTaskUpdate(updatedTask as Task);
+            }
 
-            // Log approved to history
-            await taskHistoryRepository.logApproved(taskId, response);
+            // Trigger dependent tasks if moving to DONE (Script tasks)
+            if (newStatus === 'done' && updatedTask) {
+                await triggerDependentTasks(updatedTask as Task);
+            }
 
             return { success: true };
         } catch (error) {
-            console.error('Error approving task:', error);
-            throw error;
+            console.error('[TaskExecution] Approve failed:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
         }
     });
 

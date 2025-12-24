@@ -275,7 +275,11 @@ export async function getCurrentUser() {
     }
 
     try {
-        const response = await fetch(`${config.BACKEND_URL}/v1/auth/me`, {
+        const url = `${config.BACKEND_URL}/v1/auth/me`;
+        console.log(`[Auth Debug] Fetching user from: ${url}`);
+        console.log(`[Auth Debug] Backend URL config: ${config.BACKEND_URL}`);
+
+        const response = await fetch(url, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },

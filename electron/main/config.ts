@@ -9,7 +9,7 @@ export const config = {
     OAUTH_SCOPES: 'openid email profile',
 
     // Backend API
-    BACKEND_URL: process.env.BACKEND_URL || process.env.VITE_BACKEND_URL || 'http://localhost:8081',
+    BACKEND_URL: process.env.BACKEND_URL || process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8081',
 
     // OAuth Settings
     OAUTH_TIMEOUT_MS: 5 * 60 * 1000, // 5 minutes
