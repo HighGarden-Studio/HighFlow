@@ -80,7 +80,7 @@ export class CuratorService {
             try {
                 const { PromptLoader } =
                     await import('../../../electron/main/services/PromptLoader');
-                systemPrompt = PromptLoader.getInstance().getPrompt('system/curator');
+                systemPrompt = PromptLoader.getInstance().getPrompt('system/curator') || '';
             } catch (error) {
                 console.error('[Curator] Failed to load system prompt:', error);
             }
@@ -217,20 +217,26 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             try {
                 // Clean cleanup function
                 const cleanJson = (str: string) => {
-                    // Remove markdown code blocks
-                    str = str.replace(/```json\s*|\s*```/g, '');
-                    // Remove other markdown code blocks
-                    str = str.replace(/```\s*|\s*```/g, '');
-                    // Remove leading/trailing non-json characters (find first { and last })
+                    // Remove markdown code blocks with optional language identifier
+                    // Matches ```json, ```markdown, ```, etc.
+                    str = str.replace(/```[a-zA-Z]*\s*|\s*```/g, '');
+
+                    // Find the outer-most JSON object
                     const firstBrace = str.indexOf('{');
                     const lastBrace = str.lastIndexOf('}');
+
                     if (firstBrace !== -1 && lastBrace !== -1) {
-                        str = str.substring(firstBrace, lastBrace + 1);
+                        return str.substring(firstBrace, lastBrace + 1);
                     }
+
                     return str;
                 };
 
                 const cleaned = cleanJson(aiResponse || '{}');
+                // Ensure we have something effectively JSON-like before parsing to avoid "unexpected token" on plain text
+                if (!cleaned || cleaned.trim().length === 0 || cleaned.indexOf('{') === -1) {
+                    throw new Error('No JSON object found in response');
+                }
                 parsed = JSON.parse(cleaned);
             } catch (parseError) {
                 console.error('[Curator] Failed to parse AI response:', parseError);

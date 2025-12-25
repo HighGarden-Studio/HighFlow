@@ -32,7 +32,7 @@ export class UserInputProvider implements InputProvider {
         // or update a specific 'waitingForInput' state in the DB.
         // For MVP, the task status 'in_progress' combined with taskType 'input'
         // is enough for the UI to render the input form.
-        console.log(`[UserInputProvider] Task ${task.id} is waiting for user input.`);
+        console.log(`[UserInputProvider] Task #${task.projectSequence} is waiting for user input.`);
     }
 
     async validate(task: Task, payload: any): Promise<{ valid: boolean; error?: string }> {
@@ -106,6 +106,6 @@ export class UserInputProvider implements InputProvider {
     }
 
     async cancel(task: Task): Promise<void> {
-        console.log(`[UserInputProvider] Input cancelled for task ${task.id}`);
+        console.log(`[UserInputProvider] Input cancelled for task #${task.projectSequence}`);
     }
 }

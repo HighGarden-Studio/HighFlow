@@ -16,8 +16,10 @@ export class LocalFileProvider implements InputProvider {
         return (config as any)?.sourceType === 'LOCAL_FILE';
     }
 
-    async start(task: Task, ctx: ExecutionContext): Promise<void> {
-        console.log(`[LocalFileProvider] Task ${task.id} is waiting for file selection.`);
+    async start(task: Task, _ctx: ExecutionContext): Promise<void> {
+        console.log(
+            `[LocalFileProvider] Task #${task.projectSequence} is waiting for file selection.`
+        );
     }
 
     async validate(task: Task, payload: any): Promise<{ valid: boolean; error?: string }> {
@@ -160,7 +162,81 @@ export class LocalFileProvider implements InputProvider {
             }
         }
 
-        // 3. Binary (Just return file metadata)
+        // 3. Auto Mode (Smart detection)
+        if (readMode === 'auto') {
+            const mimeType = this.getMimeType(ext);
+
+            // 3.1 Image -> Base64
+            if (mimeType.startsWith('image/')) {
+                try {
+                    // Read file as base64 using fs.readFile with encoding
+                    const buffer = await fs.readFile(filePath);
+                    const base64 = buffer.toString('base64');
+
+                    return {
+                        kind: 'file', // or 'image' if we want to be specific, but 'file' is general for input tasks
+                        file: {
+                            name: fileName,
+                            path: filePath,
+                            size: stats.size,
+                        },
+                        mimeType: mimeType,
+                        metadata: {
+                            source: 'local_file',
+                            readMode: 'auto',
+                            attachments: [
+                                {
+                                    type: 'image',
+                                    mime: mimeType,
+                                    data: base64, // Raw base64, no prefix
+                                    name: fileName,
+                                },
+                            ],
+                        },
+                    };
+                } catch (e: any) {
+                    return {
+                        kind: 'error',
+                        text: `Failed to read image file: ${e.message}`,
+                        metadata: { error: e.message },
+                    };
+                }
+            }
+
+            // 3.2 Text-like -> Text
+            const isTextLike =
+                mimeType.startsWith('text/') ||
+                mimeType === 'application/json' ||
+                ['.md', '.xml', '.yml', '.yaml', '.svg'].includes(ext);
+
+            if (isTextLike) {
+                try {
+                    const content = await fs.readFile(filePath, 'utf-8');
+                    return {
+                        kind: 'text',
+                        text: content,
+                        mimeType: mimeType,
+                        file: { name: fileName, path: filePath, size: stats.size },
+                        metadata: { source: 'local_file', readMode: 'auto' },
+                    };
+                } catch (e: any) {
+                    // If text read fails, fall back to binary metadata
+                    console.warn(
+                        `[LocalFileProvider] Auto-read as text failed for ${filePath}, falling back to binary.`
+                    );
+                }
+            }
+
+            // 3.3 Fallback -> Binary Metadata
+            return {
+                kind: 'file',
+                file: { name: fileName, path: filePath, size: stats.size },
+                mimeType: mimeType,
+                metadata: { source: 'local_file', readMode: 'auto (binary)' },
+            };
+        }
+
+        // 4. Binary (Just return file metadata)
         return {
             kind: 'file',
             file: {

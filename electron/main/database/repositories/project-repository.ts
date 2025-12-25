@@ -477,6 +477,22 @@ export class ProjectRepository {
 
         return newProject;
     }
+
+    /**
+     * Reset project results (clear statistics and memory)
+     */
+    async resetResults(projectId: number): Promise<void> {
+        await db
+            .update(projects)
+            .set({
+                totalCost: 0,
+                totalTokens: 0,
+                actualHours: 0,
+                memory: null,
+                updatedAt: new Date(),
+            })
+            .where(eq(projects.id, projectId));
+    }
 }
 
 // Export singleton instance

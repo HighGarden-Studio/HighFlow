@@ -76,6 +76,10 @@ const getPreloadPath = () => {
 // Main window reference
 let mainWindow: BrowserWindow | null = null;
 
+export function getMainWindow() {
+    return mainWindow;
+}
+
 /**
  * Initialize the database before window creation
  */
@@ -238,6 +242,31 @@ async function registerIpcHandlers(): Promise<void> {
             }
         }
     );
+
+    ipcMain.handle('projects:resetResults', async (_event, id: number) => {
+        try {
+            // 1. Clear project memory
+            await projectRepo.resetResults(id);
+            // 2. Reset all tasks
+            await taskRepo.resetResultsForProject(id);
+            // 3. Delete all task history
+            const historyRepo = new (
+                await import('./database/repositories/task-history-repository')
+            ).TaskHistoryRepository();
+            await historyRepo.deleteByProjectId(id);
+
+            const project = await projectRepo.findById(id);
+            mainWindow?.webContents.send('project:updated', project);
+            // Also notify tasks updated to refresh board
+            mainWindow?.webContents.send('tasks:refreshed', id); // Custom event to trigger re-fetch? Or just let frontend handle it?
+            // Sending 'task:updated' for each task might be too heavy.
+            // Better to likely re-fetch everything.
+            return { success: true };
+        } catch (error) {
+            console.error('Error resetting project results:', error);
+            throw error;
+        }
+    });
 
     // Update project notification config
     ipcMain.handle(

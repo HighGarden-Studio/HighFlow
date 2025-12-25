@@ -63,7 +63,7 @@ export class AdvancedTaskExecutor {
         if (onLog) {
             onLog(
                 'info',
-                `[AdvancedTaskExecutor] Starting execution for task ${task.id}: ${task.title}`,
+                `[AdvancedTaskExecutor] Starting execution for task #${task.projectSequence}: ${task.title}`,
                 {
                     taskId: task.id,
                     contextKeys: Object.keys(context),
@@ -74,7 +74,7 @@ export class AdvancedTaskExecutor {
         // 세분화된 그룹 테스크는 실행 불가 (건너뛰기)
         if (task.isSubdivided) {
             console.warn(
-                `Task ${task.id} is subdivided and cannot be executed directly. Skipping...`
+                `Task #${task.projectSequence} is subdivided and cannot be executed directly. Skipping...`
             );
             return {
                 taskId: task.id,
@@ -171,7 +171,7 @@ export class AdvancedTaskExecutor {
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 console.error(
-                    `Task ${task.id} failed (attempt ${retries + 1}/${retryStrategy.maxRetries + 1}):`,
+                    `Task #${task.projectSequence} failed (attempt ${retries + 1}/${retryStrategy.maxRetries + 1}):`,
                     lastError
                 );
 
@@ -286,7 +286,7 @@ export class AdvancedTaskExecutor {
         };
 
         console.log(
-            `[AdvancedTaskExecutor] Executing task ${task.id} with provider ${task.aiProvider || 'anthropic'}`
+            `[AdvancedTaskExecutor] Executing task #${task.projectSequence} with provider ${task.aiProvider || 'anthropic'}`
         );
 
         // 스트리밍 여부 결정 (기본적으로 비활성화, 옵션으로 활성화 가능)
@@ -338,7 +338,7 @@ export class AdvancedTaskExecutor {
         });
 
         if (!result.success) {
-            throw result.error || new Error(`Task ${task.id} execution failed`);
+            throw result.error || new Error(`Task #${task.projectSequence} execution failed`);
         }
 
         // Add generated prompt to metadata
@@ -796,6 +796,22 @@ export class AdvancedTaskExecutor {
      * 재시도 가능한 에러인지 확인
      */
     private isRetryableError(error: Error, strategy: RetryStrategy): boolean {
+        // Critical errors that should never be retried or fallen back from
+        const fatalPatterns = [
+            'quota exceeded',
+            'resource_exhausted',
+            'insufficient_quota',
+            'billing',
+            'api key',
+            'invalid key',
+            'unauthorized',
+        ];
+
+        const errorMessage = error.message.toLowerCase();
+        if (fatalPatterns.some((p) => errorMessage.includes(p))) {
+            return false;
+        }
+
         if (error instanceof RetryableError) return true;
         if (error instanceof TimeoutError) return true;
 
@@ -815,9 +831,7 @@ export class AdvancedTaskExecutor {
             '502',
             '503',
         ];
-        return retryablePatterns.some((pattern) =>
-            error.message.toLowerCase().includes(pattern.toLowerCase())
-        );
+        return retryablePatterns.some((pattern) => errorMessage.includes(pattern.toLowerCase()));
     }
 
     /**
@@ -1134,20 +1148,39 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
     }
 
     private stringifyResultOutput(result: TaskResult): string {
+        // Helper to strip large data fields
+        const safeStringify = (obj: any): string => {
+            if (!obj) return '';
+            const replacer = (key: string, value: any) => {
+                if (key === 'data' && typeof value === 'string' && value.length > 100) {
+                    return `[Base64 Data Omitted: ${value.length} chars]`;
+                }
+                if (key === 'attachments' && Array.isArray(value)) {
+                    return value.map((att) => ({
+                        ...att,
+                        data: att.data
+                            ? `[Base64 Data Omitted: ${att.data.length} chars]`
+                            : undefined,
+                    }));
+                }
+                return value;
+            };
+            try {
+                return JSON.stringify(obj, replacer, 2);
+            } catch {
+                return String(obj);
+            }
+        };
+
         if (typeof result.output === 'string') {
             return this.truncateContent(result.output);
         }
         if (result.output?.aiResult?.value) {
             const value = result.output.aiResult.value;
-            return this.truncateContent(
-                typeof value === 'string' ? value : JSON.stringify(value, null, 2)
-            );
+            return this.truncateContent(typeof value === 'string' ? value : safeStringify(value));
         }
-        try {
-            return this.truncateContent(JSON.stringify(result.output, null, 2));
-        } catch {
-            return this.truncateContent(String(result.output ?? ''));
-        }
+
+        return this.truncateContent(safeStringify(result.output));
     }
 
     private truncateContent(value: string, limit = 2000): string {

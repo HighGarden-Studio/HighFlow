@@ -409,9 +409,15 @@ export interface ToolCall {
 
 export type AIMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
+export type MultiModalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image'; mimeType: string; data: string } // base64
+    | { type: 'file'; mimeType: string; data: string; name: string };
+
 export interface AIMessage {
     role: AIMessageRole;
     content: string;
+    multiModalContent?: MultiModalContentPart[];
     name?: string;
     toolCallId?: string;
     toolCalls?: ToolCall[];

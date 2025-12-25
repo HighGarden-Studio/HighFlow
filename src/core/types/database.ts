@@ -683,7 +683,7 @@ export interface InputTaskConfig {
     localFile?: {
         filePath?: string;
         acceptedExtensions: string[];
-        readMode: 'text' | 'table' | 'binary';
+        readMode: 'text' | 'table' | 'binary' | 'auto';
         parser?: {
             type: 'csv' | 'xlsx' | 'markdown' | 'text' | 'docx' | 'pptx' | 'pdf';
             options?: any;

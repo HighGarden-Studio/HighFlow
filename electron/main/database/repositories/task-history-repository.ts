@@ -5,8 +5,8 @@
  */
 
 import { db } from '../client';
-import { taskHistory, type TaskHistory, type NewTaskHistory } from '../schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { taskHistory, tasks, type TaskHistory, type NewTaskHistory } from '../schema';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import type {
     TaskHistoryEventType,
     TaskHistoryEventData,
@@ -44,7 +44,7 @@ export class TaskHistoryRepository {
             .select()
             .from(taskHistory)
             .where(eq(taskHistory.taskId, taskId))
-            .orderBy(desc(taskHistory.createdAt));
+            .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id));
 
         if (limit) {
             query = query.limit(limit) as typeof query;
@@ -64,7 +64,7 @@ export class TaskHistoryRepository {
             .select()
             .from(taskHistory)
             .where(and(eq(taskHistory.taskId, taskId), eq(taskHistory.eventType, eventType)))
-            .orderBy(desc(taskHistory.createdAt));
+            .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id));
     }
 
     /**
@@ -75,7 +75,7 @@ export class TaskHistoryRepository {
             .select()
             .from(taskHistory)
             .where(eq(taskHistory.taskId, taskId))
-            .orderBy(desc(taskHistory.createdAt))
+            .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id))
             .limit(1);
 
         return result[0];
@@ -92,7 +92,7 @@ export class TaskHistoryRepository {
             .select()
             .from(taskHistory)
             .where(and(eq(taskHistory.taskId, taskId), eq(taskHistory.eventType, eventType)))
-            .orderBy(desc(taskHistory.createdAt))
+            .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id))
             .limit(1);
 
         return result[0];
@@ -280,6 +280,23 @@ export class TaskHistoryRepository {
      */
     async logStopped(taskId: number): Promise<TaskHistory> {
         return this.create(taskId, 'stopped');
+    }
+
+    /**
+     * Delete all history for a project
+     */
+    async deleteByProjectId(projectId: number): Promise<void> {
+        // Get all task IDs for the project
+        const projectTasks = await db
+            .select({ id: tasks.id })
+            .from(tasks)
+            .where(eq(tasks.projectId, projectId));
+
+        const taskIds = projectTasks.map((t) => t.id);
+
+        if (taskIds.length > 0) {
+            await db.delete(taskHistory).where(inArray(taskHistory.taskId, taskIds));
+        }
     }
 }
 

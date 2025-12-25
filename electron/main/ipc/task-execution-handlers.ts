@@ -4,7 +4,8 @@
  * Handles IPC communication for AI task execution with streaming support
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain } from 'electron';
+import { getMainWindow } from '../index';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
 import { DependencyEvaluator } from '../services/DependencyEvaluator';
@@ -31,10 +32,6 @@ import { taskNotificationService } from '../services/task-notification-service';
  * Get the main window for sending IPC messages
  * Uses BrowserWindow.getAllWindows() to ensure we always have the current window
  */
-function getMainWindow(): BrowserWindow | null {
-    const windows = BrowserWindow.getAllWindows();
-    return windows.length > 0 ? (windows[0] ?? null) : null;
-}
 
 /**
  * Send activity log to renderer
@@ -205,28 +202,90 @@ async function buildDependencyContext(
  * Helper: Check if task dependencies are met (Robust Logic with Novelty Check)
  * @param ignoreNovelty If true, bypasses the "New Event" check (used for manual execution)
  */
+/**
+ * Helper: Resolve expression containing Project Sequences or Task IDs to strictly Task IDs
+ * Returns the resolved expression and the set of Task IDs found.
+ */
+function resolveExpressionToIds(
+    expression: string,
+    allTasks: any[]
+): { resolvedExpression: string; referencedIds: Set<number> } {
+    if (!expression || !expression.trim()) {
+        return { resolvedExpression: '', referencedIds: new Set() };
+    }
+
+    const referencedIds = new Set<number>();
+
+    // Replace all numbers in the expression
+    // We assume numbers are Project Sequences first, then Task IDs
+    const resolvedExpression = expression.replace(/\b\d+\b/g, (match) => {
+        const val = parseInt(match, 10);
+
+        // 1. Try to find by Project Sequence
+        const taskBySeq = allTasks.find((t) => t.projectSequence === val);
+        if (taskBySeq) {
+            referencedIds.add(taskBySeq.id);
+            return taskBySeq.id.toString();
+        }
+
+        // 2. Fallback: Check if it matches a Task ID directly
+        const taskById = allTasks.find((t) => t.id === val);
+        if (taskById) {
+            referencedIds.add(taskById.id);
+            return val.toString();
+        }
+
+        // 3. No match found - keep original (will likely fail evaluation but preserves intent)
+        return match;
+    });
+
+    return { resolvedExpression, referencedIds };
+}
+
+/**
+ * Helper: Check if task dependencies are met (Robust Logic with Novelty Check)
+ * @param ignoreNovelty If true, bypasses the "New Event" check (used for manual execution)
+ */
 function areTaskDependenciesMet(
     task: any,
     allTasks: any[],
     ignoreNovelty: boolean = false
 ): { met: boolean; reason?: string; details?: string } {
     const triggerConfig = task.triggerConfig;
-    if (!triggerConfig?.dependsOn?.taskIds || triggerConfig.dependsOn.taskIds.length === 0) {
+    if (!triggerConfig?.dependsOn?.taskIds && !triggerConfig?.dependsOn?.expression) {
+        // No dependencies defined
+        if (
+            triggerConfig?.dependsOn &&
+            !triggerConfig.dependsOn.taskIds &&
+            !triggerConfig.dependsOn.expression
+        ) {
+            return { met: true };
+        }
+        // If dependsOn object is missing entirely, usually implies no deps
         return { met: true };
     }
 
     const dependsOn = triggerConfig.dependsOn;
-    const expression = dependsOn.expression;
+    const originalExpression = dependsOn.expression;
     const operator = dependsOn.operator || 'all';
-    const dependencyTaskIds = dependsOn.taskIds as number[];
+    let dependencyTaskIds = (dependsOn.taskIds as number[]) || [];
+
+    // Resolve Expression if present
+    let resolvedExpression = '';
+    if (originalExpression && originalExpression.trim().length > 0) {
+        const resolution = resolveExpressionToIds(originalExpression, allTasks);
+        resolvedExpression = resolution.resolvedExpression;
+        // Merge referenced IDs from expression into dependencyTaskIds for info gathering
+        resolution.referencedIds.forEach((id) => {
+            if (!dependencyTaskIds.includes(id)) {
+                dependencyTaskIds.push(id);
+            }
+        });
+    }
 
     // 1. Prepare Dependency Data for Evaluator
     const dependencyInfo = allTasks
-        .filter(
-            (t) =>
-                dependencyTaskIds.includes(t.id) ||
-                (expression && expression.includes(String(t.id)))
-        )
+        .filter((t) => dependencyTaskIds.includes(t.id))
         .map((t) => ({
             id: t.id,
             status: t.status,
@@ -242,15 +301,15 @@ function areTaskDependenciesMet(
     }
 
     // 3. Evaluate
-    if (expression && expression.trim().length > 0) {
-        // Advanced Mode: Use DependencyEvaluator
+    if (resolvedExpression && resolvedExpression.trim().length > 0) {
+        // Advanced Mode: Use DependencyEvaluator with RESOLVED expression (IDs)
         const evaluator = new DependencyEvaluator(dependencyInfo, lastRunAt);
-        const result = evaluator.evaluate(expression);
+        const result = evaluator.evaluate(resolvedExpression);
 
         return {
             met: result.met,
             reason: result.met ? undefined : result.reason,
-            details: `Expression "${expression}" -> ${result.met}. Reason: ${result.reason || 'Met'}`,
+            details: `Expression "${originalExpression}" (Resolved: "${resolvedExpression}") -> ${result.met}. Reason: ${result.reason || 'Met'}`,
         };
     } else if (operator === 'any') {
         // Any one dependency completed
@@ -314,7 +373,7 @@ export async function checkAndExecuteDependentTasks(
 ): Promise<void> {
     try {
         console.log(
-            `[TaskExecution] Checking dependent tasks for completed task ${completedTaskId}`
+            `[TaskExecution] Checking dependent tasks for completed task ${completedTaskId} (Seq: ${completedTask.projectSequence})`
         );
 
         // Global Pause Check
@@ -322,9 +381,6 @@ export async function checkAndExecuteDependentTasks(
             console.log(
                 `[TaskExecution] Global execution is PAUSED. Skipping auto-execution for task ${completedTaskId}'s dependents.`
             );
-            // We do NOT queue them here for MVP. They just don't run.
-            // User must manually resume or re-run tasks.
-            // To make it better, we could perhaps Log a warning.
             return;
         }
 
@@ -335,18 +391,26 @@ export async function checkAndExecuteDependentTasks(
         const dependentTasks = allTasks.filter((task) => {
             const triggerConfig = task.triggerConfig as TaskTriggerConfig | null;
 
-            if (!triggerConfig?.dependsOn?.taskIds) return false;
+            if (!triggerConfig?.dependsOn) return false;
 
             // Check if this task depends on the completed task
-            const hasIdInTaskIds =
-                triggerConfig.dependsOn.taskIds &&
-                triggerConfig.dependsOn.taskIds.includes(completedTaskId);
-            const hasIdInExpr = triggerConfig.dependsOn.expression
-                ? new RegExp(`\\b${completedTaskId}\\b`).test(triggerConfig.dependsOn.expression)
-                : false;
+            const taskIds = triggerConfig.dependsOn.taskIds || [];
+            const hasIdInTaskIds = taskIds.includes(completedTaskId);
+
+            // Check expression for BOTH Task ID and Project Sequence
+            // We use word boundaries ensuring we match "6" but not "16"
+            let hasMatchInExpr = false;
+            if (triggerConfig.dependsOn.expression) {
+                const expr = triggerConfig.dependsOn.expression;
+                const matchesId = new RegExp(`\\b${completedTaskId}\\b`).test(expr);
+                const matchesSeq = completedTask.projectSequence
+                    ? new RegExp(`\\b${completedTask.projectSequence}\\b`).test(expr)
+                    : false;
+                hasMatchInExpr = matchesId || matchesSeq;
+            }
 
             // If the completed task is not a dependency, skip
-            if (!hasIdInTaskIds && !hasIdInExpr) return false;
+            if (!hasIdInTaskIds && !hasMatchInExpr) return false;
 
             // Get execution policy (default: 'repeat' for backwards compatibility and user preference)
             const policy = triggerConfig.dependsOn.executionPolicy || 'repeat';
@@ -418,12 +482,7 @@ export async function checkAndExecuteDependentTasks(
 
         // Check each dependent task
         for (const dependentTask of dependentTasks) {
-            const triggerConfig = dependentTask.triggerConfig as TaskTriggerConfig | null;
-
-            const dependsOn = triggerConfig?.dependsOn;
-            if (!dependsOn?.taskIds) continue;
-
-            // Use shared helper - unused vars removed
+            // Use revised helper that handles sequence-to-ID resolution
             const checkResult = areTaskDependenciesMet(dependentTask, allTasks);
             const shouldExecute = checkResult.met;
 
@@ -447,7 +506,7 @@ export async function checkAndExecuteDependentTasks(
                 });
             } else {
                 console.log(
-                    `[TaskExecution] Task ${dependentTask.id} dependencies not yet satisfied`
+                    `[TaskExecution] Task ${dependentTask.id} dependencies not yet satisfied. Reason: ${checkResult.details}`
                 );
             }
         }
@@ -494,6 +553,149 @@ export async function resetStuckTasks(): Promise<number> {
         console.error('[TaskExecution] Error resetting stuck tasks:', error);
         return 0;
     }
+}
+
+/**
+ * Trigger Curator for a completed task
+ */
+const triggerCurator = async (taskId: number, task: any, output: string, project: any) => {
+    // Only trigger if task is marked as done (fully completed)
+    // If it goes to in_review, we wait until review is approved
+    if (task.status === 'done' || task.autoApprove) {
+        try {
+            const { CuratorService } = await import('../../../src/services/ai/CuratorService');
+
+            // Fetch API keys from renderer localStorage to inject into Curator
+            const win = getMainWindow();
+            let apiKeys: any = {};
+
+            if (win) {
+                try {
+                    // Read settings from localStorage in renderer context
+                    const storedProviders = await win.webContents.executeJavaScript(
+                        'localStorage.getItem("workflow_settings_aiProviders")'
+                    );
+
+                    if (storedProviders) {
+                        const providers = JSON.parse(storedProviders);
+                        apiKeys = {
+                            anthropic: providers.find((p: any) => p.id === 'anthropic' && p.apiKey)
+                                ?.apiKey,
+                            openai: providers.find((p: any) => p.id === 'openai' && p.apiKey)
+                                ?.apiKey,
+                            google: providers.find((p: any) => p.id === 'google' && p.apiKey)
+                                ?.apiKey,
+                            groq: providers.find((p: any) => p.id === 'groq' && p.apiKey)?.apiKey,
+                            lmstudio: providers.find((p: any) => p.id === 'lmstudio' && p.apiKey)
+                                ?.apiKey,
+                        };
+                        console.log(
+                            '[CuratorTrigger] Injected API keys for providers:',
+                            Object.keys(apiKeys).filter((k) => !!apiKeys[k])
+                        );
+                    }
+                } catch (e) {
+                    console.warn('[CuratorTrigger] Failed to fetch API keys from renderer:', e);
+                }
+            }
+
+            const curator = CuratorService.getInstance();
+            curator.setApiKeys(apiKeys);
+
+            await curator.runCurator(taskId, task.title, output, project, null, projectRepository);
+        } catch (err: any) {
+            console.error('[CuratorTrigger] Failed:', err);
+        }
+    }
+};
+
+/**
+ * Process input task submission (shared logic for IPC and auto-execution)
+ */
+async function processInputSubmission(taskId: number, payload: any): Promise<any> {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+        throw new Error(`Task not found: ${taskId}`);
+    }
+
+    if (task.taskType !== 'input') {
+        throw new Error(`Task ${taskId} is not an input task`);
+    }
+
+    const { InputProviderManager } =
+        await import('../../../src/services/workflow/input/InputProviderManager');
+    const providerManager = InputProviderManager.getInstance();
+    const inputProvider = providerManager.getProviderForTask(task as Task);
+
+    if (!inputProvider) {
+        throw new Error('No input provider available for this task');
+    }
+
+    // Validate input
+    const validation = await inputProvider.validate(task as Task, payload);
+    if (!validation.valid) {
+        throw new Error(validation.error || 'Invalid input');
+    }
+
+    // Process submission
+    const output = await inputProvider.submit(task as Task, payload);
+
+    // Input tasks always go directly to 'done'
+    const finalStatus = 'done';
+
+    const updateData: any = {
+        status: finalStatus,
+        executionResult: JSON.stringify(output), // Store as executionResult for consistency
+        completedAt: new Date(),
+        inputSubStatus: null, // Clear input waiting status
+    };
+
+    await taskRepository.update(taskId, updateData);
+
+    // Log completion to history
+    await taskHistoryRepository.logExecutionCompleted(
+        taskId,
+        output.text || JSON.stringify(output.json) || 'Input submitted',
+        {
+            provider: 'input',
+            model: 'user',
+            cost: 0,
+            tokens: 0,
+            duration: 0,
+        },
+        undefined,
+        output
+    );
+
+    // Log completion
+    console.log(`[Input] ✅ Task ${taskId} input submitted - status: ${finalStatus}`);
+
+    getMainWindow()?.webContents.send('task:status-changed', {
+        id: taskId,
+        status: finalStatus,
+    });
+
+    // We can also send a completed event if needed for UI to refresh
+    getMainWindow()?.webContents.send('taskExecution:completed', {
+        taskId,
+        result: {
+            content: output.text || JSON.stringify(output.json) || 'Input submitted',
+            provider: 'input',
+            model: 'user',
+            // Input metadata
+        },
+    });
+
+    // Trigger dependents
+    await checkAndExecuteDependentTasks(taskId, task as Task);
+
+    // Explicitly notify Curator for Input Tasks (similar to standard tasks) if needed
+    const project = await projectRepository.findById(task.projectId);
+    if (project) {
+        triggerCurator(taskId, task, output.text || 'Input submitted', project);
+    }
+
+    return output;
 }
 
 /**
@@ -609,14 +811,34 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     const initialStatus = 'in_progress';
 
+                    // Check if this is an auto-submit input task (e.g. Local File) BEFORE updating status
+                    // to avoid flickering "Waiting for User" state in UI
+                    let isAutoSubmitInput = false;
+                    if (task.taskType === 'input') {
+                        let cfg = task.inputConfig;
+                        if (typeof cfg === 'string') {
+                            try {
+                                cfg = JSON.parse(cfg);
+                            } catch {}
+                        }
+                        const sType = (cfg as any)?.sourceType;
+                        if (
+                            sType &&
+                            (sType === 'localFile' || sType === 'LOCAL_FILE') &&
+                            (cfg as any)?.localFile?.filePath
+                        ) {
+                            isAutoSubmitInput = true;
+                        }
+                    }
+
                     // Update task status
-                    // For Input Task, we set sub-status to WAITING_USER
+                    // For Input Task, we set sub-status to WAITING_USER only if NOT auto-submit
                     const updateData: Partial<Task> = {
                         status: initialStatus,
                         startedAt: new Date(),
                     };
 
-                    if (task.taskType === 'input') {
+                    if (task.taskType === 'input' && !isAutoSubmitInput) {
                         updateData.inputSubStatus = 'WAITING_USER';
                     }
 
@@ -638,11 +860,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             const providerManager = InputProviderManager.getInstance();
 
                             console.log('[TaskExecution] Handling Input Task:', task.id);
-                            console.log('[TaskExecution] Raw inputConfig:', task.inputConfig);
-                            console.log(
-                                '[TaskExecution] inputConfig type:',
-                                typeof task.inputConfig
-                            );
+                            // console.log('[TaskExecution] Raw inputConfig:', task.inputConfig);
 
                             const inputProvider = providerManager.getProviderForTask(task as Task);
 
@@ -656,17 +874,93 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 userId: (task as any).userId || 0,
                             });
 
+                            // AUTO-SUBMISSION LOGIC
+                            // Parse inputConfig if string
+                            let inputConfig = task.inputConfig;
+                            if (typeof inputConfig === 'string') {
+                                try {
+                                    inputConfig = JSON.parse(inputConfig);
+                                } catch (e) {
+                                    console.error(
+                                        '[TaskExecution] Failed to parse inputConfig:',
+                                        e
+                                    );
+                                }
+                            }
+
+                            console.log(
+                                '[TaskExecution] Checked inputConfig for auto-submit:',
+                                inputConfig
+                            );
+                            const sourceType = (inputConfig as any)?.sourceType;
+
+                            // Check if this is a non-interactive input task (e.g. Local File with path)
+                            // Handle both 'localFile' and 'LOCAL_FILE' cases
+                            if (
+                                sourceType &&
+                                (sourceType === 'localFile' || sourceType === 'LOCAL_FILE') &&
+                                (inputConfig as any)?.localFile?.filePath
+                            ) {
+                                const filePath = (inputConfig as any).localFile.filePath;
+                                console.log(
+                                    `[TaskExecution] Auto-submitting Local File Input Task ${taskId} with path: ${filePath}`
+                                );
+                                try {
+                                    // Verify file exists
+                                    const fs = await import('fs/promises');
+                                    await fs.access(filePath);
+
+                                    // Submit automatically
+                                    await processInputSubmission(taskId, {
+                                        filePath: filePath,
+                                    });
+
+                                    // Remove execution state and return success (already marked done by processInputSubmission)
+                                    activeExecutions.delete(taskId);
+                                    return { success: true, autoSubmitted: true };
+                                } catch (fileErr) {
+                                    console.error(
+                                        '[TaskExecution] Failed to auto-submit local file:',
+                                        fileErr
+                                    );
+                                    // Continue to wait for user input if auto-submit fails?
+                                    // Or fail? Probably better to fail if explicitly configured but invalid.
+                                    throw new Error(
+                                        `Failed to read configured local file: ${fileErr}`
+                                    );
+                                }
+                            }
+
                             // Input task stays in 'in_progress' waiting for user input
                             return { success: true, waitingForInput: true };
                         } catch (error) {
                             executionState.status = 'failed';
                             executionState.error =
                                 error instanceof Error ? error.message : String(error);
-                            await taskRepository.update(taskId, { status: 'todo' });
-                            getMainWindow()?.webContents.send('taskExecution:failed', {
+
+                            // Log failure to history
+                            await taskHistoryRepository.logExecutionFailed(
                                 taskId,
-                                error: executionState.error,
-                            });
+                                executionState.error
+                            );
+
+                            await taskRepository.update(taskId, { status: 'todo' });
+
+                            const win = getMainWindow();
+                            if (win) {
+                                win.webContents.send('taskExecution:failed', {
+                                    taskId,
+                                    error: executionState.error,
+                                });
+
+                                // Send specific notification for critical errors
+                                win.webContents.send('app:notification', {
+                                    type: 'error',
+                                    message: executionState.error,
+                                    duration: 5000,
+                                });
+                            }
+
                             throw error;
                         }
                     }
@@ -837,7 +1131,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             }
 
                             activeExecutions.delete(taskId);
-                            return; // Exit here
+                            return { success: true }; // Exit here
                         } else {
                             throw new Error(result.error || 'Output execution failed');
                         }
@@ -962,80 +1256,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // getOutputContract removed to prevent pollution of task results with summary headers
                     // The CuratorService extracts this information independently.
-
-                    const { CuratorService } =
-                        await import('../../../src/services/ai/CuratorService');
-
-                    const triggerCurator = async (
-                        taskId: number,
-                        task: any,
-                        output: string,
-                        project: any
-                    ) => {
-                        // Only trigger if task is marked as done (fully completed)
-                        // If it goes to in_review, we wait until review is approved
-                        if (task.status === 'done' || task.autoApprove) {
-                            try {
-                                // Fetch API keys from renderer localStorage to inject into Curator
-                                const win = getMainWindow();
-                                let apiKeys: any = {};
-
-                                if (win) {
-                                    try {
-                                        // Read settings from localStorage in renderer context
-                                        const storedProviders =
-                                            await win.webContents.executeJavaScript(
-                                                'localStorage.getItem("workflow_settings_aiProviders")'
-                                            );
-
-                                        if (storedProviders) {
-                                            const providers = JSON.parse(storedProviders);
-                                            apiKeys = {
-                                                anthropic: providers.find(
-                                                    (p: any) => p.id === 'anthropic' && p.apiKey
-                                                )?.apiKey,
-                                                openai: providers.find(
-                                                    (p: any) => p.id === 'openai' && p.apiKey
-                                                )?.apiKey,
-                                                google: providers.find(
-                                                    (p: any) => p.id === 'google' && p.apiKey
-                                                )?.apiKey,
-                                                groq: providers.find(
-                                                    (p: any) => p.id === 'groq' && p.apiKey
-                                                )?.apiKey,
-                                                lmstudio: providers.find(
-                                                    (p: any) => p.id === 'lmstudio' && p.apiKey
-                                                )?.apiKey,
-                                            };
-                                            console.log(
-                                                '[CuratorTrigger] Injected API keys for providers:',
-                                                Object.keys(apiKeys).filter((k) => !!apiKeys[k])
-                                            );
-                                        }
-                                    } catch (e) {
-                                        console.warn(
-                                            '[CuratorTrigger] Failed to fetch API keys from renderer:',
-                                            e
-                                        );
-                                    }
-                                }
-
-                                const curator = CuratorService.getInstance();
-                                curator.setApiKeys(apiKeys);
-
-                                await curator.runCurator(
-                                    taskId,
-                                    task.title,
-                                    output,
-                                    project,
-                                    null,
-                                    projectRepository
-                                );
-                            } catch (err: any) {
-                                console.error('[CuratorTrigger] Failed:', err);
-                            }
-                        }
-                    };
 
                     // Route execution based on provider type using Provider Registry
                     const { isLocalAgent, getLocalAgentType } =
@@ -1467,6 +1687,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         const updateData: any = { status: finalStatus, executionResult };
                         if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
+                        console.log(
+                            `[TaskExecution] 📝 Updating task ${taskId} status to ${finalStatus} (autoApprove: ${task.autoApprove})`
+                        );
                         await taskRepository.update(taskId, updateData);
 
                         console.log(
@@ -1496,8 +1719,26 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         );
 
                         if (finalStatus === 'done') {
+                            await taskNotificationService.notifyCompletion(
+                                taskId,
+                                displayContent || '',
+                                {
+                                    duration: result.duration,
+                                    cost: result.cost,
+                                    tokenUsage: {
+                                        total: result.tokens || 0,
+                                        input: 0,
+                                        output: 0,
+                                    },
+                                }
+                            );
                             triggerCurator(taskId, task, displayContent || '', project); // Trigger Curator
                             await checkAndExecuteDependentTasks(taskId, task as Task);
+                        } else if (finalStatus === 'in_review') {
+                            await taskNotificationService.notifyReviewReady(
+                                taskId,
+                                displayContent || ''
+                            );
                         }
 
                         activeExecutions.delete(taskId);
@@ -1534,101 +1775,89 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         }
 
                         return { success: true, result };
+                        return { success: true, result };
                     } else {
                         // Failed
-                        // Re-check execution state before updating
-                        const tempState = activeExecutions.get(taskId);
-                        if (!tempState) {
-                            console.error(
-                                `[TaskExecution] Execution state was deleted for task ${taskId} during failure handling`
-                            );
-                            throw new Error('Execution state was cleared during failure handling');
+                        const rawError =
+                            result.error instanceof Error
+                                ? result.error.message
+                                : String(result.error || 'Unknown error');
+
+                        let shortError = rawError;
+                        try {
+                            // Try to parse JSON error (common with Google/Gemini)
+                            const jsonMatch = rawError.match(/\{.*\"error\".*\}/s);
+                            if (jsonMatch) {
+                                const parsed = JSON.parse(jsonMatch[0]);
+                                if (parsed.error && parsed.error.message) {
+                                    shortError = parsed.error.message.split('\n')[0]; // Take first line (e.g. "Quota exceeded...")
+                                }
+                            }
+                        } catch (e) {
+                            // Keep raw error if parsing fails
                         }
-                        executionState = tempState;
 
-                        executionState.status = 'failed';
-                        executionState.error = result.error?.message || 'Unknown error';
+                        // Truncate if still too long
+                        if (shortError.length > 300) {
+                            shortError = shortError.substring(0, 300) + '...';
+                        }
 
-                        const permissionError =
-                            result.error instanceof MCPPermissionError ? result.error : null;
-                        if (permissionError) {
-                            // Handle permission error (abbreviated for compactness, logic same as before)
-                            const permissionResult = {
-                                content: buildPermissionDeniedContent(permissionError),
-                                metadata: { permissionDenied: true, ...permissionError.details },
-                            };
-                            await taskRepository.update(taskId, {
-                                status: 'in_review',
-                                executionResult: permissionResult,
-                            });
-                            getMainWindow()?.webContents.send('task:status-changed', {
+                        console.error(`[TaskExecution] Task ${taskId} failed: ${shortError}`);
+
+                        // Log failure to history
+                        await taskHistoryRepository.logExecutionFailed(taskId, shortError);
+
+                        // Set to in_review on failure so user can see error state
+                        await taskRepository.update(taskId, { status: 'in_review' });
+
+                        const win = getMainWindow();
+                        if (win) {
+                            win.webContents.send('task:status-changed', {
                                 id: taskId,
                                 status: 'in_review',
                             });
-                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                            win.webContents.send('taskExecution:failed', {
                                 taskId,
-                                result: permissionResult,
+                                error: shortError,
                             });
-                            activeExecutions.delete(taskId);
-                            return { success: false, error: permissionError.message };
+                            console.log(
+                                `[TaskExecution] Sending notification for failure: ${shortError}`
+                            );
+                            win.webContents.send('app:notification', {
+                                type: 'error',
+                                message: `Task Failed: ${shortError}`,
+                                duration: 7000,
+                            });
                         }
 
-                        // Handle general execution failure by saving the error as a result
-                        const errorContent = `Execution Failed: ${executionState.error}`;
-                        const errorResult = {
-                            content: errorContent,
-                            error: executionState.error,
-                            metadata: { error: true, ...((result.error as any)?.details || {}) },
-                            provider: result.metadata?.provider,
-                            model: result.metadata?.model,
-                        };
-
-                        await taskRepository.update(taskId, {
-                            status: 'in_review',
-                            executionResult: errorResult,
-                        });
-
-                        console.log(
-                            `[Main IPC] ❌ Task ${taskId} failed but result saved - error: ${executionState.error}`
-                        );
-
-                        getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
-                            status: 'in_review',
-                        });
-                        getMainWindow()?.webContents.send('taskExecution:completed', {
-                            taskId,
-                            result: errorResult,
-                        });
-
-                        await taskHistoryRepository.logExecutionCompleted(
-                            taskId,
-                            errorContent,
-                            {
-                                cost: result.cost,
-                                tokens: result.tokens,
-                                duration: result.duration,
-                            },
-                            undefined
-                        );
-
                         activeExecutions.delete(taskId);
-                        return { success: false, error: executionState.error };
+                        return { success: false, error: shortError };
                     }
                 } catch (error) {
                     console.error('Error executing AI task:', error);
                     activeExecutions.delete(taskId);
 
-                    // Don't revert to todo if it was a permission error handled above, but here we catch threw errors
-                    await taskRepository.update(taskId, { status: 'todo' }).catch(() => {});
+                    // Set to in_review on error
+                    await taskRepository.update(taskId, { status: 'in_review' }).catch(() => {});
                     getMainWindow()?.webContents.send('task:status-changed', {
                         id: taskId,
-                        status: 'todo',
+                        status: 'in_review',
                     });
                     getMainWindow()?.webContents.send('taskExecution:failed', {
                         taskId,
                         error: error instanceof Error ? error.message : String(error),
                     });
+
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    console.log(
+                        `[TaskExecution] Sending notification for exception (inner): ${errorMsg}`
+                    );
+                    getMainWindow()?.webContents.send('app:notification', {
+                        type: 'error',
+                        message: `Task Execution Error: ${errorMsg}`,
+                        duration: 7000,
+                    });
+
                     throw error;
                 }
             } catch (error) {
@@ -1637,15 +1866,25 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 // Clean up on error
                 activeExecutions.delete(taskId);
 
-                // Revert status
-                await taskRepository.update(taskId, { status: 'todo' }).catch(() => {});
+                // Set to in_review on error
+                await taskRepository.update(taskId, { status: 'in_review' }).catch(() => {});
                 getMainWindow()?.webContents.send('task:status-changed', {
                     id: taskId,
-                    status: 'todo',
+                    status: 'in_review',
                 });
                 getMainWindow()?.webContents.send('taskExecution:failed', {
                     taskId,
                     error: error instanceof Error ? error.message : String(error),
+                });
+
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                console.log(
+                    `[TaskExecution] Sending notification for exception (outer): ${errorMsg}`
+                );
+                getMainWindow()?.webContents.send('app:notification', {
+                    type: 'error',
+                    message: `Task Error: ${errorMsg}`,
+                    duration: 7000,
                 });
 
                 throw error;
@@ -1944,12 +2183,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             // Broadcast update
             const updatedTask = await taskRepository.findById(taskId);
             if (updatedTask) {
-                broadcastTaskUpdate(updatedTask as Task);
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    id: updatedTask.id,
+                    status: updatedTask.status,
+                });
+                // broadcastTaskUpdate(updatedTask as Task);
             }
 
             // Trigger dependent tasks if moving to DONE (Script tasks)
             if (newStatus === 'done' && updatedTask) {
-                await triggerDependentTasks(updatedTask as Task);
+                await checkAndExecuteDependentTasks(taskId, updatedTask as Task);
             }
 
             return { success: true };
@@ -2629,88 +2872,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle('task:submitInput', async (_event, taskId: number, payload: any) => {
         try {
-            const task = await taskRepository.findById(taskId);
-            if (!task) {
-                throw new Error(`Task not found: ${taskId}`);
-            }
-
-            if (task.taskType !== 'input') {
-                throw new Error(`Task ${taskId} is not an input task`);
-            }
-
-            const { InputProviderManager } =
-                await import('../../../src/services/workflow/input/InputProviderManager');
-            const providerManager = InputProviderManager.getInstance();
-            const inputProvider = providerManager.getProviderForTask(task as Task);
-
-            if (!inputProvider) {
-                throw new Error('No input provider available for this task');
-            }
-
-            // Validate input
-            const validation = await inputProvider.validate(task as Task, payload);
-            if (!validation.valid) {
-                throw new Error(validation.error || 'Invalid input');
-            }
-
-            // Process submission
-            const output = await inputProvider.submit(task as Task, payload);
-
-            // Input tasks always go directly to 'done' - they don't need review since they're user-provided data
-            const finalStatus = 'done';
-
-            const updateData: any = {
-                status: finalStatus,
-                executionResult: JSON.stringify(output), // Store as executionResult for consistency
-                completedAt: new Date(),
-                inputSubStatus: null, // Clear input waiting status
-            };
-
-            await taskRepository.update(taskId, updateData);
-
-            // Log completion to history
-            await taskHistoryRepository.logExecutionCompleted(
-                taskId,
-                output.text || JSON.stringify(output.json) || 'Input submitted',
-                {
-                    provider: 'input',
-                    model: 'user',
-                    cost: 0,
-                    tokens: 0,
-                    duration: 0,
-                },
-                undefined,
-                output
-            );
-
-            // Log completion
-            console.log(`[Input] ✅ Task ${taskId} input submitted - status: ${finalStatus}`);
-
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: finalStatus,
-            });
-
-            // We can also send a completed event if needed for UI to refresh
-            getMainWindow()?.webContents.send('taskExecution:completed', {
-                taskId,
-                result: {
-                    content: output.text || JSON.stringify(output.json) || 'Input submitted',
-                    provider: 'input',
-                    model: 'user',
-                },
-            });
-
-            // Check dependents
-            if (finalStatus === 'done') {
-                await checkAndExecuteDependentTasks(taskId, task as Task);
-            }
-
-            return { success: true, output };
+            const result = await processInputSubmission(taskId, payload);
+            return { success: true, result };
         } catch (error) {
-            console.error(`Error submitting input for task ${taskId}:`, error);
-            // Don't mark task as failed, just return error to UI so user can retry
-            throw error;
+            console.error('[TaskExecution] Failed to submit input:', error);
+            // Log failure to history
+            await taskHistoryRepository.logExecutionFailed(
+                taskId,
+                error instanceof Error ? error.message : String(error),
+                {
+                    reason: 'input_submission_failed',
+                }
+            );
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
         }
     });
 

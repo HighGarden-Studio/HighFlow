@@ -559,7 +559,15 @@ const liveResponseType = computed(() => {
         } catch {}
     }
     if (content.includes('```') || content.match(/^#\s/m)) return 'markdown';
-    if (content.match(/^(data:image|https?:\/\/.*\.(png|jpg|jpeg|gif|webp))/i)) return 'image';
+
+    // Improved image detection (include magic bytes)
+    if (
+        content.match(/^(data:image|https?:\/\/.*\.(png|jpg|jpeg|gif|webp))/i) ||
+        content.startsWith('iVBORw0KGgo') ||
+        content.startsWith('/9j/') ||
+        content.startsWith('R0lGOD')
+    )
+        return 'image';
 
     return 'text';
 });
@@ -1102,7 +1110,7 @@ onMounted(async () => {
                     </div>
 
                     <!-- Tasks List -->
-                    <div class="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+                    <div class="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-3">
                         <!-- Use full-featured TaskCard component -->
                         <div
                             v-for="task in groupedTasks[column.id]"
@@ -1698,7 +1706,12 @@ onMounted(async () => {
                                 <!-- Image Viewer -->
                                 <img
                                     v-else-if="liveResponseType === 'image' && liveResponseContent"
-                                    :src="liveResponseContent"
+                                    :src="
+                                        liveResponseContent.startsWith('data:') ||
+                                        liveResponseContent.startsWith('http')
+                                            ? liveResponseContent
+                                            : `data:image/png;base64,${liveResponseContent}`
+                                    "
                                     alt="Result Image"
                                     class="max-w-full h-auto rounded-lg shadow-lg"
                                 />

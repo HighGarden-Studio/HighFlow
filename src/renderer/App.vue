@@ -273,6 +273,19 @@ onMounted(async () => {
 
     // Check for updates
     await checkForUpdates();
+
+    // Listen for global notifications from main process
+    if (window.electron?.app?.onNotification) {
+        const cleanup = window.electron.app.onNotification((data: any) => {
+            console.log('[App] Received notification:', data);
+            uiStore.showToast(data.message, data.type || 'info');
+        });
+
+        // Clean up on unmount
+        onUnmounted(() => {
+            cleanup();
+        });
+    }
 });
 
 onUnmounted(() => {

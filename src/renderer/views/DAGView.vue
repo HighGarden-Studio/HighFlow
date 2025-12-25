@@ -23,10 +23,18 @@ import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
-import InputTaskForm from '../../components/task/InputTaskForm.vue';
+import TaskEditModal from '../../components/task/TaskEditModal.vue';
+import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import TaskExecutionProgress from '../../components/task/TaskExecutionProgress.vue';
 import { getAPI } from '../../utils/electron';
+import { tagService } from '../../services/task/TagService';
+import { estimationService } from '../../services/task/EstimationService';
+import { aiInterviewService } from '../../services/ai/AIInterviewService';
+import {
+    taskSubdivisionService,
+    type SubdivisionSuggestion,
+} from '../../services/ai/TaskSubdivisionService';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -58,6 +66,18 @@ const selectedTask = computed(() => {
 const showProjectInfoModal = ref(false);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
+
+// Task Edit Modal State
+const showEditModal = ref(false);
+const editingTask = ref<Task | null>(null);
+
+// Subdivision modal state
+const showSubdivisionModal = ref(false);
+const subdivisionTask = ref<Task | null>(null);
+const subdivisionSuggestion = ref<SubdivisionSuggestion | null>(null);
+const subdivisionLoading = ref(false);
+const subdivisionCreating = ref(false);
+
 const showExecutionModal = ref(false);
 const executionTaskId = ref<number | null>(null);
 const executionTask = computed(() => {
@@ -190,10 +210,26 @@ function buildGraph(shouldFit = false) {
     });
 
     // Create edges from dependencies
+    // Create edges from dependencies
     tasks.value.forEach((task) => {
-        const dependencies = new Set<number>(task.triggerConfig?.dependsOn?.taskIds || []);
+        const dependencies = new Set<number>();
 
-        // Also parse IDs from expression if present to ensure all dependencies are visualized
+        // 1. Trigger Config IDs
+        if (task.triggerConfig?.dependsOn?.taskIds) {
+            task.triggerConfig.dependsOn.taskIds.forEach((id) => dependencies.add(id));
+        }
+
+        // 2. Explicit Dependencies (Task model field)
+        if (task.dependencies && Array.isArray(task.dependencies)) {
+            task.dependencies.forEach((id) => dependencies.add(id));
+        }
+
+        // 3. Data Dependencies (passResultsFrom)
+        if (task.triggerConfig?.dependsOn?.passResultsFrom) {
+            task.triggerConfig.dependsOn.passResultsFrom.forEach((id) => dependencies.add(id));
+        }
+
+        // 4. Parse IDs (or Sequences) from expression
         const expression = task.triggerConfig?.dependsOn?.expression;
         let isComplexDependency = false;
 
@@ -201,8 +237,21 @@ function buildGraph(shouldFit = false) {
             isComplexDependency = true;
             const idPattern = /\b\d+\b/g;
             const idsInExpression = [...new Set(expression.match(idPattern) || [])];
+
             idsInExpression.forEach((idStr) => {
-                dependencies.add(parseInt(idStr, 10));
+                const val = parseInt(idStr, 10);
+
+                // Try to find by projectSequence first (User mostly types sequences)
+                const taskBySeq = tasks.value.find((t) => t.projectSequence === val);
+                if (taskBySeq) {
+                    dependencies.add(taskBySeq.id);
+                } else {
+                    // Fallback: Check if it's a raw Task ID
+                    const taskById = tasks.value.find((t) => t.id === val);
+                    if (taskById) {
+                        dependencies.add(taskById.id);
+                    }
+                }
             });
         }
 
@@ -757,124 +806,190 @@ function openCreateModal(status: TaskStatus = 'todo') {
 /**
  * Handle task events
  */
+/**
+ * Handle task execution result
+ */
 async function handleTaskExecute(task: Task) {
     const result = await taskStore.executeTask(task.id);
-    if (!result.success && result.error) {
-        uiStore.showToast({
-            message: `Failed to execute task: ${result.error}`,
-            type: 'error',
-        });
+    if (!result.success) {
+        console.error('Failed to execute task:', result.error);
+        if (result.validationError) {
+            uiStore.showToast({
+                message: result.error || '태스크 실행 설정을 확인해주세요.',
+                type: 'warning',
+            });
+        } else {
+            uiStore.showToast({
+                message: result.error || '태스크 실행에 실패했습니다.',
+                type: 'error',
+            });
+        }
     }
     // Force immediate rebuild after execution to show updated state
-    // This is especially important for Input tasks that transition to WAITING_USER
     await nextTick();
     rebuildGraphImmediate();
 }
 
-async function handleTaskApprove(task: Task) {
-    console.log('🟣 [DAGView] handleTaskApprove called', task.id);
+/**
+ * Handle Task Edit
+ */
+function handleEditTask(task: Task) {
+    editingTask.value = task;
+    showEditModal.value = true;
+}
 
-    // IMPORTANT: Fetch latest task from store to avoid stale data from node
-    const latestTask = taskStore.tasks.find((t) => t.id === task.id);
-    if (!latestTask) {
-        console.error('❌ [DAGView] Task not found in store:', task.id);
-        return;
+function closeEditModal() {
+    showEditModal.value = false;
+    editingTask.value = null;
+}
+
+async function handleEditModalSave(updates: Partial<Task>) {
+    if (!editingTask.value) return;
+    await taskStore.updateTask(editingTask.value.id, updates);
+    closeEditModal();
+}
+
+async function handleEditModalDelete(taskId: number) {
+    await taskStore.deleteTask(taskId);
+    closeEditModal();
+}
+
+/**
+ * Handle Task Subdivision
+ */
+async function handleTaskSubdivide(task: Task) {
+    subdivisionTask.value = task;
+    showSubdivisionModal.value = true;
+    subdivisionLoading.value = true;
+    subdivisionSuggestion.value = null;
+
+    try {
+        const suggestion = await taskSubdivisionService.suggestSubdivision(task);
+        subdivisionSuggestion.value = suggestion;
+    } catch (error) {
+        console.error('Failed to get subdivision suggestions:', error);
+    } finally {
+        subdivisionLoading.value = false;
     }
+}
 
-    console.log('🟣 [DAGView] Latest task status:', latestTask.status);
-    const result = await taskStore.approveTask(latestTask.id);
-    console.log('🟣 [DAGView] Approve result:', result);
-    if (!result.success && result.error) {
-        console.error('❌ [DAGView] Approve failed:', result.error);
+async function confirmSubdivision() {
+    if (!subdivisionTask.value || !subdivisionSuggestion.value) return;
+
+    subdivisionCreating.value = true;
+    try {
+        const parentTask = subdivisionTask.value;
+        const subtasks = subdivisionSuggestion.value.subtasks;
+
+        for (const subtask of subtasks) {
+            await taskStore.createTask({
+                projectId: projectId.value,
+                title: subtask.title,
+                description: subtask.description,
+                priority: subtask.priority || 'medium',
+                tags: subtask.tags,
+                estimatedMinutes: subtask.estimatedMinutes || undefined,
+                parentTaskId: parentTask.id,
+            });
+        }
+
+        await taskStore.updateTask(parentTask.id, {
+            isSubdivided: true,
+        });
+
+        closeSubdivisionModal();
+        rebuildGraphDebounced();
+    } catch (error) {
+        console.error('Failed to create subtasks:', error);
+    } finally {
+        subdivisionCreating.value = false;
+    }
+}
+
+function closeSubdivisionModal() {
+    showSubdivisionModal.value = false;
+    subdivisionTask.value = null;
+    subdivisionSuggestion.value = null;
+    subdivisionLoading.value = false;
+}
+
+/**
+ * Handle Task Pause/Resume/Stop
+ */
+async function handlePause(task: Task) {
+    const result = await taskStore.pauseTask(task.id);
+    if (!result.success) {
+        uiStore.showToast({
+            message: `Failed to pause task: ${result.error}`,
+            type: 'error',
+        });
+    }
+}
+
+async function handleResume(task: Task) {
+    const result = await taskStore.resumeTask(task.id);
+    if (!result.success) {
+        uiStore.showToast({
+            message: `Failed to resume task: ${result.error}`,
+            type: 'error',
+        });
+    }
+}
+
+async function handleStop(task: Task) {
+    const result = await taskStore.stopTask(task.id);
+    if (!result.success) {
+        uiStore.showToast({
+            message: `Failed to stop task: ${result.error}`,
+            type: 'error',
+        });
     }
 }
 
 async function handleTaskRetry(task: Task) {
-    // Retry: reset to TODO first, then execute
-    if (task.status === 'done') {
-        await taskStore.updateTask(task.id, { status: 'todo' });
-    }
+    await taskStore.updateTask(task.id, { status: 'todo' });
     await taskStore.executeTask(task.id);
 }
 
 /**
- * Handle preview result - open result preview modal
+ * Handle Task Approval/Rejection (from Detail Panel or Card)
  */
-function handlePreviewResult(task: Task) {
-    console.log('📊 [DAGView] handlePreviewResult called', task.id);
-    openResultPreview(task);
+async function handleTaskApprove(task: Task) {
+    const result = await taskStore.completeReview(task.id);
+    if (!result.success) {
+        uiStore.showToast({
+            type: 'error',
+            message: result.error || '승인 처리에 실패했습니다.',
+        });
+        return;
+    }
+    uiStore.showToast({
+        type: 'success',
+        message: '테스크가 승인되었습니다.',
+    });
+    closeDetailPanel();
 }
 
-/**
- * Open result preview modal
- */
-async function openResultPreview(task: Task) {
-    // Fetch latest task data to ensure result is up-to-date
-    let fullTask: any = task;
-    try {
-        const fetched = await getAPI().tasks.get(task.id);
-        if (fetched) {
-            fullTask = { ...task, ...fetched };
-        }
-    } catch (error) {
-        console.error('Failed to fetch task for preview:', error);
-    }
+async function handleTaskReject(task: Task, feedback: string) {
+    await taskStore.updateTask(task.id, {
+        status: 'todo',
+        description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
+    });
+    closeDetailPanel();
+}
 
-    // Try to get result from task current state
-    let result = (fullTask as any).result || (fullTask as any).executionResult?.content;
+async function handleTaskSave(task: Task) {
+    // This is called from Detail Panel for saving edits
+    await taskStore.updateTask(task.id, task);
+    // Detail panel stays open, but graph might need update if structural generic props changed
+    // updateNodesDataSmooth(); // Optional
+}
 
-    const progress = taskStore.executionProgress.get(task.id);
-    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
-
-    // If result is empty and task is in TODO, try to fetch from history
-    if (!result && !progress && !reviewProgressEntry && fullTask.status === 'todo') {
-        try {
-            console.log('📜 [DAGView] No current result, fetching history for:', task.id);
-            // Fetch execution history
-            const history = await window.electron.taskHistory.getByEventType(
-                task.id,
-                'execution_completed'
-            );
-            if (history && history.length > 0) {
-                // Get latest entry
-                const latest = history[0]; // Assuming sorted by desc (repo default) or need to sort?
-                // Repo usually returns sorted desc? Let's assume standard sort or sort it manually
-                // The handler logic: findByTaskIdAndEventType calls repo.findByTaskIdAndEventType
-                // Repo implementation usually sorts by created_at desc.
-
-                if (latest.eventData && latest.eventData.response) {
-                    result = latest.eventData.response;
-                    console.log('📜 [DAGView] Found result from history');
-                }
-            }
-        } catch (err) {
-            console.error('Failed to fetch task history:', err);
-        }
-    }
-
-    // Set preview ID to enable reactive updates
+function handlePreviewResult(task: Task) {
     previewTaskId.value = task.id;
     showResultPreview.value = true;
-
-    // Attempt to fetch latest details to ensure we have the result
-    try {
-        await taskStore.fetchTasks(projectId.value);
-    } catch (e) {
-        console.error('Failed to refresh task for preview:', e);
-    }
 }
 
-/**
- * Close result preview modal
- */
-function closeResultPreview() {
-    showResultPreview.value = false;
-    previewTaskId.value = null;
-}
-
-/**
- * Handle preview stream (live preview) - open task detail panel with live execution stream
- */
 function handlePreviewStream(task: Task) {
     console.log('🎥 [DAGView] handlePreviewStream called', task.id);
     executionTaskId.value = task.id;
@@ -882,38 +997,17 @@ function handlePreviewStream(task: Task) {
     console.log('🎥 [DAGView] Opening execution modal for task:', executionTaskId.value);
 }
 
-/**
- * Handle view history
- */
 function handleViewHistory(task: Task) {
-    console.log('📜 [DAGView] handleViewHistory called', task.id);
     selectedTaskId.value = task.id;
     showDetailPanel.value = true;
-    console.log(
-        '📜 [DAGView] Set selectedTaskId:',
-        selectedTaskId.value,
-        'showDetailPanel:',
-        showDetailPanel.value
-    );
 }
 
-async function handleProvideInput(task: Task) {
-    console.log('[DAGView] handleProvideInput called:', task?.id, task?.title);
-    console.log('[DAGView] Setting inputTask and opening modal...');
-    // For INPUT tasks, open the input modal
+function handleProvideInput(task: Task) {
     inputTask.value = task;
     showInputModal.value = true;
-    console.log('[DAGView] Modal state:', {
-        showInputModal: showInputModal.value,
-        inputTask: inputTask.value?.id,
-    });
 }
 
-function closeInputModal() {
-    showInputModal.value = false;
-    inputTask.value = null;
-}
-
+// Fixed: Implement Input Submission Handler
 async function handleInputSubmit(data: any) {
     if (!inputTask.value) return;
 
@@ -924,10 +1018,8 @@ async function handleInputSubmit(data: any) {
                 type: 'success',
                 message: '입력이 제출되었습니다.',
             });
-            closeInputModal();
-            // Force refresh tasks and rebuild graph to show state change
-            await taskStore.fetchTasks(projectId.value);
-            rebuildGraphImmediate();
+            showInputModal.value = false;
+            rebuildGraphImmediate(); // Update graph to reflect new status
         } else {
             uiStore.showToast({
                 type: 'error',
@@ -943,20 +1035,20 @@ async function handleInputSubmit(data: any) {
     }
 }
 
-async function handleStop(task: Task) {
-    try {
-        const api = (window as any).electron;
-        await api.tasks.stopTask(task.id);
-        console.log('Task stopped successfully:', task.id);
-    } catch (error: any) {
-        console.error('Failed to stop task:', error);
-        if (error.name === 'TaskNotStoppableError') {
-            alert(error.message || 'Task cannot be stopped in its current state');
-        } else {
-            alert('Failed to stop task');
-        }
-    }
+function handleConnectProvider(providerId: string) {
+    router.push({
+        path: '/settings',
+        query: { tab: 'ai-providers', highlight: providerId },
+    });
 }
+
+/**
+ * Handle preview result - open result preview modal
+ */
+
+/**
+ * Handle view history
+ */
 
 /**
  * Handle task deletion from delete button
@@ -1014,42 +1106,7 @@ watch(
 /**
  * Handle task save from detail panel
  */
-async function handleTaskSaved() {
-    // Close modal
-    showCreateModal.value = false;
 
-    // Fetch latest tasks to include the newly created one
-    await taskStore.fetchTasks(projectId.value);
-
-    // If task was created from context menu, apply position
-    if (contextMenuNodePosition.value.x !== 0 || contextMenuNodePosition.value.y !== 0) {
-        // Find the most recently created task (highest ID)
-        const newTask = [...taskStore.tasks].sort((a, b) => b.id - a.id)[0];
-
-        if (newTask) {
-            // Update task metadata with position
-            const updatedMetadata = {
-                ...(newTask.metadata || {}),
-                dagPosition: {
-                    x: contextMenuNodePosition.value.x,
-                    y: contextMenuNodePosition.value.y,
-                },
-            };
-
-            await taskStore.updateTask(newTask.id, {
-                ...newTask,
-                metadata: updatedMetadata,
-            });
-        }
-
-        // Reset context menu position
-        contextMenuNodePosition.value = { x: 0, y: 0 };
-    }
-
-    // Rebuild graph
-    await nextTick();
-    buildGraph();
-}
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
@@ -1264,6 +1321,10 @@ onMounted(async () => {
                     <TaskFlowNode
                         :data="data"
                         @click="handleNodeClick(data.task)"
+                        @edit="handleEditTask(data.task)"
+                        @subdivide="handleTaskSubdivide(data.task)"
+                        @pause="handlePause(data.task)"
+                        @resume="handleResume(data.task)"
                         @execute="handleTaskExecute(data.task)"
                         @approve="handleTaskApprove(data.task)"
                         @preview-result="handlePreviewResult"
@@ -1279,50 +1340,80 @@ onMounted(async () => {
             </VueFlow>
         </div>
 
-        <!-- Task Detail Panel -->
-        <TaskDetailPanel
-            :open="!!selectedTask"
-            :task="selectedTask"
-            @close="closeDetailPanel"
-            @execute="handleTaskExecute"
-            @approve="handleTaskApprove"
-            @save="handleTaskSaved"
+        <!-- Task Edit Modal -->
+        <TaskEditModal
+            v-if="showEditModal"
+            :open="showEditModal"
+            :task="editingTask"
+            @close="closeEditModal"
+            @save="handleEditModalSave"
+            @delete="handleEditModalDelete"
         />
 
-        <!-- Task Create Modal -->
+        <!-- Input Task Modal -->
+        <InputTaskModal
+            v-if="showInputModal"
+            :show="showInputModal"
+            :task="inputTask"
+            @close="showInputModal = false"
+            @submit="handleInputSubmit"
+        />
+
+        <!-- Create Task Modal -->
         <TaskCreateModal
             v-if="showCreateModal"
             :open="showCreateModal"
-            :project-id="projectId"
             :initial-status="createInColumn"
+            :project-id="projectId"
             @close="showCreateModal = false"
-            @saved="handleTaskSaved"
+            @created="rebuildGraphDebounced"
         />
 
-        <!-- Input Modal -->
-        <Teleport to="body">
-            <div
-                v-if="showInputModal && inputTask"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-                @click.self="closeInputModal"
-            >
-                <div class="max-w-2xl w-full mx-4" @click.stop>
-                    <InputTaskForm
-                        :task="inputTask"
-                        @close="closeInputModal"
-                        @submit="handleInputSubmit"
-                    />
-                </div>
-            </div>
-        </Teleport>
+        <!-- Task Detail Panel -->
+        <TaskDetailPanel
+            v-if="showDetailPanel && selectedTask"
+            :open="showDetailPanel"
+            :task="selectedTask"
+            :project-id="projectId"
+            @close="closeDetailPanel"
+            @save="handleTaskSave"
+            @execute="handleTaskExecute"
+            @approve="handleTaskApprove"
+            @reject="handleTaskReject"
+        />
 
-        <!-- Enhanced Result Preview Modal -->
+        <!-- Result Preview Modal -->
         <EnhancedResultPreview
-            v-if="resultPreviewTask"
+            v-if="showResultPreview && resultPreviewTask"
             :open="showResultPreview"
             :task="resultPreviewTask"
-            @close="closeResultPreview"
+            @close="showResultPreview = false"
         />
+
+        <!-- Execution Progress Modal -->
+        <div
+            v-if="showExecutionModal && executionTask"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        >
+            <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-[600px] max-h-[80vh] overflow-hidden flex flex-col"
+            >
+                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                    Task Execution
+                </h3>
+                <div class="flex-1 overflow-y-auto min-h-0">
+                    <TaskExecutionProgress :task="executionTask" />
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button
+                        @click="showExecutionModal = false"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Project Info Modal -->
         <ProjectInfoModal
@@ -1358,54 +1449,6 @@ onMounted(async () => {
                     </svg>
                     <span>New Task</span>
                 </button>
-            </div>
-        </Teleport>
-
-        <!-- Execution Progress Modal -->
-        <Teleport to="body">
-            <div
-                v-if="showExecutionModal && executionTask"
-                class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]"
-                @click.self="showExecutionModal = false"
-            >
-                <div
-                    class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4"
-                    @click.stop
-                >
-                    <div
-                        class="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10"
-                    >
-                        <div>
-                            <h2 class="text-xl font-bold text-gray-900 dark:text-white">
-                                Live Execution
-                            </h2>
-                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                {{ executionTask.title }}
-                            </p>
-                        </div>
-                        <button
-                            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                            @click="showExecutionModal = false"
-                        >
-                            <svg
-                                class="w-6 h-6"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12"
-                                />
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="p-6">
-                        <TaskExecutionProgress :task="executionTask" />
-                    </div>
-                </div>
             </div>
         </Teleport>
     </div>

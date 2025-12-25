@@ -102,6 +102,30 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             bestFor: ['Fast image generation', '1024px resolution'],
         },
         {
+            name: 'gemini-3-pro-image-preview',
+            provider: 'default-highflow',
+            displayName: 'Gemini 3 Pro Image (Preview)',
+            contextWindow: 1000000,
+            maxOutputTokens: 8192,
+            costPerInputToken: 0,
+            costPerOutputToken: 0,
+            averageLatency: 4000,
+            features: ['vision', 'streaming'],
+            bestFor: ['High quality image generation', 'Complex prompts'],
+        },
+        {
+            name: 'imagen-3.0-generate-001',
+            provider: 'default-highflow',
+            displayName: 'Imagen 3.0',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0.04,
+            costPerOutputToken: 0.0,
+            averageLatency: 4000,
+            features: ['vision'],
+            bestFor: ['High Quality Image Generation'],
+        },
+        {
             name: 'imagen-4.0-generate-001',
             provider: 'default-highflow',
             displayName: 'Imagen 4',
@@ -248,11 +272,30 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 costPerOutputToken: 0, // Will be calculated by backend
                 averageLatency: 1000,
                 features: model.supportedGenerationMethods?.includes('streamGenerateContent')
-                    ? ['streaming', 'function_calling']
-                    : ['function_calling'],
+                    ? ['streaming', 'function_calling', 'vision', 'system_prompt']
+                    : ['vision'], // Assume non-streaming are image/video
                 bestFor: [],
                 supportedActions: model.supportedGenerationMethods || [],
             }));
+
+            console.log(
+                `[DefaultHighFlowProvider] Total models available from API: ${models.length}`,
+                models.map((m) => m.name)
+            );
+
+            // Merge with local defaultModels to ensure critical models (like new ones) are present
+            // even if the backend API doesn't return them yet.
+            const apiModelNames = new Set(models.map((m) => m.name));
+            for (const defaultModel of this.defaultModels) {
+                if (!apiModelNames.has(defaultModel.name)) {
+                    console.log(
+                        `[DefaultHighFlowProvider] Injecting local default model: ${defaultModel.name}`
+                    );
+                    models.push(defaultModel);
+                }
+            }
+
+            console.log(`[DefaultHighFlowProvider] Total models after merge: ${models.length}`);
 
             // Save to DB cache
             try {
@@ -269,23 +312,12 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             console.error('[DefaultHighFlowProvider] Failed to fetch models from server:', error);
 
             // Fallback to DB cache
-            try {
-                const { providerModelsRepository } =
-                    await import('../../../../electron/main/database/repositories/provider-models-repository');
-                const cachedModels = await providerModelsRepository.getModels('default-highflow');
-                if (cachedModels.length > 0) {
-                    console.log(
-                        `[DefaultHighFlowProvider] Loaded ${cachedModels.length} models from DB cache`
-                    );
-                    return cachedModels;
-                }
-            } catch (dbError) {
-                console.error('[DefaultHighFlowProvider] Failed to load from DB cache:', dbError);
-            }
+            console.warn('[DefaultHighFlowProvider] Using cached models due to error');
+            const { providerModelsRepository } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            const cachedModels = await providerModelsRepository.getModels('default-highflow');
 
-            // Last resort: return empty array
-            console.warn('[DefaultHighFlowProvider] No models available, returning empty array');
-            return [];
+            return cachedModels;
         }
     }
 
@@ -619,6 +651,179 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             }
         } catch (error) {
             console.error('[DefaultHighFlowProvider] Stream execution failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Generate Image using Default HighFlow (Proxy)
+     */
+    async generateImage(
+        prompt: string,
+        config: AIConfig,
+        _context?: ExecutionContext,
+        options: Record<string, any> = {},
+        signal?: AbortSignal
+    ): Promise<AiResult> {
+        try {
+            if (signal?.aborted) {
+                throw new Error('Request aborted');
+            }
+
+            // Check authentication
+            const auth = await this.checkAuthentication();
+            if (!auth.authenticated || !auth.token) {
+                throw new Error(
+                    'Default HighFlow Provider를 사용하려면 로그인이 필요합니다. Settings에서 로그인해주세요.'
+                );
+            }
+
+            const modelName = config.model || 'gemini-3-pro-image-preview';
+            console.log(
+                `[DefaultHighFlowProvider] Attempting image generation with model: ${modelName}`
+            );
+
+            // Prepare generation config (similar to GeminiProvider)
+            const generationConfig: any = {
+                temperature: config.temperature,
+                maxOutputTokens: config.maxTokens || 2048,
+            };
+
+            // Model specific settings
+            if (modelName.includes('imagen')) {
+                generationConfig.sampleCount = options.sampleCount || 1;
+                generationConfig.aspectRatio = options.aspectRatio;
+            } else if (modelName.includes('gemini-3')) {
+                // Gemini 3 specific config for image generation
+                generationConfig.responseModalities = ['IMAGE'];
+                generationConfig['response_modalities'] = ['IMAGE']; // Snake case for REST API compatibility
+                if (options.aspectRatio) {
+                    // Note: Gemini 3 might handle aspect ratio differently in prompt or config
+                    // For now, we rely on prompt or default behavior
+                }
+            } else if (modelName.includes('gemini-2.5-flash-preview-image-generation')) {
+                generationConfig.imageGenerationConfig = {
+                    numberOfImages: options.sampleCount || 1,
+                    aspectRatio: options.aspectRatio || '1:1',
+                    imageSize: options.imageSize || '1024x1024',
+                };
+            } else {
+                // Fallback
+                generationConfig.responseModalities = ['IMAGE'];
+            }
+
+            // Build request for backend proxy
+            // If using a multimodal model for image generation (like Gemini 2.0/3.0),
+            // it is safer to explicitly prompt for image generation in text
+            const explicitPrompt =
+                modelName.includes('gemini') && !prompt.toLowerCase().includes('generate')
+                    ? `Generate an image of: ${prompt}`
+                    : prompt;
+
+            const contentParts: any[] = [{ text: explicitPrompt }];
+
+            // Add input images if present (for Image-to-Image)
+            if (
+                options.inputImages &&
+                Array.isArray(options.inputImages) &&
+                options.inputImages.length > 0
+            ) {
+                console.log(
+                    `[DefaultHighFlowProvider] Including ${options.inputImages.length} input images in request`
+                );
+                for (const img of options.inputImages) {
+                    contentParts.push({
+                        inlineData: {
+                            mimeType: img.mimeType,
+                            data: img.data,
+                        },
+                    });
+                }
+            }
+
+            const request: any = {
+                contents: [
+                    {
+                        role: 'user',
+                        parts: contentParts,
+                    },
+                ],
+                generationConfig,
+                model: modelName,
+            };
+
+            // Call backend
+            const result = await this.callBackendProxy(request, auth.token);
+
+            console.log('[DefaultHighFlowProvider] Image API response received');
+
+            // Extract ALL inline images (logic from GeminiProvider)
+            const allParts = result.candidates?.flatMap((c: any) => c.content?.parts || []) || [];
+            const imageParts = allParts.filter((part: any) => part.inlineData);
+
+            if (imageParts.length === 0) {
+                console.error(
+                    `[DefaultHighFlowProvider] No inline data in response. Full response:`,
+                    JSON.stringify(result, null, 2)
+                );
+                throw new Error('HighFlow image generation did not return any inline data.');
+            }
+
+            console.log(`[DefaultHighFlowProvider] Found ${imageParts.length} images in response`);
+
+            // Use the first image as the primary result
+            const firstImage = imageParts[0].inlineData;
+            const mime = firstImage.mimeType || 'image/png';
+            const base64Data = firstImage.data;
+
+            if (!base64Data) {
+                throw new Error('Image data is missing');
+            }
+
+            const dataSizeKB = Math.round((base64Data.length * 3) / 4 / 1024);
+
+            // Save images to temp files
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const os = await import('os');
+
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'highflow-images-'));
+            const files: Array<{ path: string; type: 'created' }> = [];
+
+            for (let i = 0; i < imageParts.length; i++) {
+                const imageData = imageParts[i].inlineData;
+                const imageMime = imageData.mimeType || 'image/png';
+                const imageBase64 = imageData.data || '';
+
+                if (!imageBase64) continue;
+
+                const ext = imageMime.split('/')[1] || 'png';
+                const fileName = `image_${i + 1}.${ext}`;
+                const filePath = path.join(tempDir, fileName);
+
+                const buffer = Buffer.from(imageBase64, 'base64');
+                await fs.writeFile(filePath, buffer);
+
+                files.push({ path: filePath, type: 'created' });
+            }
+
+            return {
+                kind: 'image',
+                subType: mime.includes('png') ? 'png' : 'jpeg',
+                format: 'base64',
+                value: base64Data,
+                mime,
+                meta: {
+                    provider: this.name,
+                    model: modelName,
+                    dataSizeKB,
+                    imageCount: imageParts.length,
+                    files,
+                },
+                raw: result,
+            };
+        } catch (error) {
+            console.error('[DefaultHighFlowProvider] Image generation error:', error);
             throw error;
         }
     }

@@ -45,7 +45,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
-const { isMissingExecutionSettings, outputFormatInfo } = useTaskStatus({ task: props.task });
+const { isMissingExecutionSettings, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
 const assignedOperator = ref<any>(null);

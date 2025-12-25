@@ -68,7 +68,9 @@ export class RemoteResourceProvider implements InputProvider {
     }
 
     async start(task: Task, ctx: ExecutionContext): Promise<void> {
-        console.log(`[RemoteResourceProvider] Task ${task.id} is waiting for remote resource.`);
+        console.log(
+            `[RemoteResourceProvider] Task #${task.projectSequence} is waiting for remote resource.`
+        );
     }
 
     async validate(task: Task, payload: any): Promise<{ valid: boolean; error?: string }> {

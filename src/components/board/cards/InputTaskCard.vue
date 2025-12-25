@@ -42,7 +42,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
-const { isWaitingForInput, outputFormatInfo } = useTaskStatus({ task: props.task });
+const { isWaitingForInput, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
 const assignedOperator = ref<any>(null);
@@ -118,6 +118,17 @@ function handleProvideInput(event: Event) {
     event.stopPropagation();
     emit('provideInput', props.task);
 }
+function hexToRgba(hex: string, alpha: number) {
+    // Remove hash if present
+    hex = hex.replace('#', '');
+
+    // Parse r, g, b
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 </script>
 
 <template>
@@ -138,7 +149,20 @@ function handleProvideInput(event: Event) {
                 <!-- Row 1: Operator Info (If Assigned) -->
                 <div
                     v-if="assignedOperator"
-                    class="flex items-center gap-2 p-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800"
+                    class="flex items-center gap-2 p-1.5 rounded-lg border transition-colors"
+                    :style="{
+                        backgroundColor: assignedOperator.color
+                            ? hexToRgba(assignedOperator.color, 0.1)
+                            : undefined,
+                        borderColor: assignedOperator.color
+                            ? hexToRgba(assignedOperator.color, 0.2)
+                            : undefined,
+                    }"
+                    :class="[
+                        !assignedOperator.color
+                            ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-800'
+                            : '',
+                    ]"
                 >
                     <!-- Avatar/Emoji -->
                     <img
@@ -147,22 +171,63 @@ function handleProvideInput(event: Event) {
                             assignedOperator.avatar?.startsWith('/')
                         "
                         :src="assignedOperator.avatar"
-                        class="w-6 h-6 rounded-full object-cover border border-orange-200 dark:border-orange-700"
+                        class="w-6 h-6 rounded-full object-cover border"
+                        :style="{
+                            borderColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.3)
+                                : undefined,
+                        }"
+                        :class="[
+                            !assignedOperator.color
+                                ? 'border-orange-200 dark:border-orange-700'
+                                : '',
+                        ]"
                     />
                     <div
                         v-else
-                        class="w-6 h-6 rounded-full bg-white dark:bg-orange-800 border border-orange-200 dark:border-orange-700 flex items-center justify-center text-sm"
+                        class="w-6 h-6 rounded-full border flex items-center justify-center text-sm"
+                        :style="{
+                            backgroundColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.05)
+                                : undefined,
+                            borderColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.3)
+                                : undefined,
+                        }"
+                        :class="[
+                            !assignedOperator.color
+                                ? 'bg-white dark:bg-orange-800 border-orange-200 dark:border-orange-700'
+                                : 'bg-white dark:bg-gray-800',
+                        ]"
                     >
                         {{ assignedOperator.avatar || '👤' }}
                     </div>
 
                     <div class="flex flex-col min-w-0">
                         <span
-                            class="text-xs font-semibold text-orange-900 dark:text-orange-100 truncate"
+                            class="text-xs font-semibold truncate"
+                            :style="{ color: assignedOperator.color || undefined }"
+                            :class="[
+                                !assignedOperator.color
+                                    ? 'text-orange-900 dark:text-orange-100'
+                                    : '',
+                            ]"
                         >
                             {{ assignedOperator.name }}
                         </span>
-                        <span class="text-[10px] text-orange-600 dark:text-orange-300 truncate">
+                        <span
+                            class="text-[10px] truncate"
+                            :style="{
+                                color: assignedOperator.color
+                                    ? hexToRgba(assignedOperator.color, 0.7)
+                                    : undefined,
+                            }"
+                            :class="[
+                                !assignedOperator.color
+                                    ? 'text-orange-600 dark:text-orange-300'
+                                    : '',
+                            ]"
+                        >
                             {{ assignedOperator.role || 'Input Provider' }}
                         </span>
                     </div>

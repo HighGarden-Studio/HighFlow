@@ -228,17 +228,33 @@ export abstract class BaseAIProvider {
         }
 
         const modelInfo = this.getModelInfo(config.model);
-        if (!modelInfo) {
-            console.error(`[BaseAIProvider] Model validation failed for provider ${this.name}`);
-            console.error(`[BaseAIProvider] Requested model: '${config.model}'`);
+
+        // Dynamic Model Validation:
+        // If the model exists in the dynamic list (fetched from DB/API), it is valid.
+        // We do NOT strictly check against the AIModel enum here to allow for new models
+        // to be supported dynamically without code changes.
+        if (modelInfo) {
+            return;
+        }
+
+        // Fallback: If not found in dynamic list, check if it's a known static model
+        // that hasn't been synced yet (edge case).
+        // But generally, if it's not in the list, we warn/error.
+
+        console.error(`[BaseAIProvider] Model validation failed for provider ${this.name}`);
+        console.error(`[BaseAIProvider] Requested model: '${config.model}'`);
+        try {
             console.error(
                 `[BaseAIProvider] Available models:`,
                 this.models.map((m) => m.name)
             );
-            throw new Error(
-                `Model ${config.model} not supported by ${this.name}. Available models: ${this.models.map((m) => m.name).join(', ')}`
-            );
+        } catch (e) {
+            console.error(`[BaseAIProvider] Could not list available models`, e);
         }
+
+        throw new Error(
+            `Model ${config.model} not supported by ${this.name}. Available models: ${this.models.map((m) => m.name).join(', ')}`
+        );
     }
 
     /**

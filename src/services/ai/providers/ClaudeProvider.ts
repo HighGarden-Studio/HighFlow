@@ -522,14 +522,70 @@ export class ClaudeProvider extends BaseAIProvider {
             };
         }
 
+        const content: any[] = [];
+        if (message.content) {
+            content.push({ type: 'text', text: message.content });
+        }
+
+        if (message.multiModalContent) {
+            for (const part of message.multiModalContent) {
+                if (part.type === 'image') {
+                    // Ensure data is base64 (strip prefix if present, though ai.ts says it should be raw)
+                    const base64Data = part.data.includes(',')
+                        ? part.data.split(',')[1]
+                        : part.data;
+                    content.push({
+                        type: 'image',
+                        source: {
+                            type: 'base64',
+                            media_type: part.mimeType,
+                            data: base64Data,
+                        },
+                    });
+                } else if (part.type === 'text') {
+                    // Avoid duplicate text if it's the same as message.content
+                    // But usually message.content is a fallback str.
+                    // If multiModalContent exists, we should probably rely on it primarily.
+                    // However, for safety, let's just append if it's different or just rely on multiModalContent if present.
+                    // The current logic pushes message.content first.
+                    // Let's change strategy: If multiModalContent exists, use it. If not, use message.content.
+                }
+            }
+        }
+
+        // Redoing the strategy:
+        // If multiModalContent is present, map it directly.
+        // Else, use message.content.
+
+        let anthropicContent: any[] = [];
+        if (message.multiModalContent && message.multiModalContent.length > 0) {
+            anthropicContent = message.multiModalContent
+                .map((part) => {
+                    if (part.type === 'text') {
+                        return { type: 'text', text: part.text };
+                    } else if (part.type === 'image') {
+                        const base64Data = part.data.includes(',')
+                            ? part.data.split(',')[1]
+                            : part.data;
+                        return {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: part.mimeType,
+                                data: base64Data,
+                            },
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+        } else {
+            anthropicContent = [{ type: 'text', text: message.content }];
+        }
+
         return {
             role: message.role as 'user' | 'assistant',
-            content: [
-                {
-                    type: 'text',
-                    text: message.content,
-                },
-            ],
+            content: anthropicContent,
         };
     }
 

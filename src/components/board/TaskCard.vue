@@ -114,7 +114,6 @@ const cardComponent = computed(() => {
         @provideInput="(t: Task) => emit('provideInput', t)"
         @approve="
             (t: Task) => {
-                console.log('🟡 [TaskCard] Approve event received', t.id);
                 emit('approve', t);
             }
         "

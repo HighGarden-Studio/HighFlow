@@ -160,7 +160,7 @@ const parentTasks = computed(() => {
         </div>
 
         <!-- Task List -->
-        <div class="flex-1 overflow-y-auto p-3 space-y-3 min-h-[200px]">
+        <div class="flex-1 overflow-y-auto px-3 pb-3 pt-10 space-y-3 min-h-[200px]">
             <!-- Empty State -->
             <div
                 v-if="tasks.length === 0"

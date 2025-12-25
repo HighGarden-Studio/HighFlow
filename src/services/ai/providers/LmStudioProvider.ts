@@ -187,14 +187,38 @@ export class LmStudioProvider extends BaseAIProvider {
             if (message.role === 'system') {
                 continue;
             }
-            const content =
-                typeof message.content === 'string'
-                    ? message.content
-                    : JSON.stringify(message.content);
-            preparedMessages.push({
-                role: message.role,
-                content,
-            });
+
+            if (message.role === 'user' && message.multiModalContent) {
+                const contentParts: any[] = message.multiModalContent
+                    .map((part) => {
+                        if (part.type === 'text') {
+                            return { type: 'text', text: part.text };
+                        } else if (part.type === 'image') {
+                            return {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${part.mimeType};base64,${part.data}`,
+                                },
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(Boolean);
+
+                preparedMessages.push({
+                    role: 'user',
+                    content: contentParts as any,
+                });
+            } else {
+                const content =
+                    typeof message.content === 'string'
+                        ? message.content
+                        : JSON.stringify(message.content);
+                preparedMessages.push({
+                    role: message.role,
+                    content,
+                });
+            }
         }
 
         const payload: ChatCompletionPayload = {

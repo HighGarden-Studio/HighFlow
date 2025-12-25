@@ -80,13 +80,26 @@ export class TaskNotificationService {
      */
     async notifyCompletion(taskId: number, result: string, metadata?: TaskExecutionMetadata) {
         const config = await notificationResolver.resolveConfig(taskId);
+
+        console.log(
+            `[TaskNotificationService] notifyCompletion config for ${taskId}:`,
+            JSON.stringify(config, null, 2)
+        );
+
         if (!config) return;
 
         const shouldNotify =
             config.slack?.events.includes('task.completed') ||
-            config.webhook?.events.includes('task.completed');
+            config.slack?.events.includes('task.execution-complete') ||
+            config.webhook?.events.includes('task.completed') ||
+            config.webhook?.events.includes('task.execution-complete');
 
-        if (!shouldNotify) return;
+        if (!shouldNotify) {
+            console.log(
+                '[TaskNotificationService] notifyCompletion: Notification disabled for this event inside config'
+            );
+            return;
+        }
 
         const task = await this.getTask(taskId);
         if (!task) return;
@@ -100,7 +113,11 @@ export class TaskNotificationService {
         const images = config.slack?.includeImages ? extractImages(result) : [];
 
         // Send Slack notification
-        if (config.slack?.enabled && config.slack.events.includes('task.completed')) {
+        if (
+            config.slack?.enabled &&
+            (config.slack.events.includes('task.completed') ||
+                config.slack.events.includes('task.execution-complete'))
+        ) {
             await this.sendSlackNotification(config.slack, {
                 task,
                 project,
@@ -112,7 +129,11 @@ export class TaskNotificationService {
         }
 
         // Send Webhook notification
-        if (config.webhook?.enabled && config.webhook.events.includes('task.completed')) {
+        if (
+            config.webhook?.enabled &&
+            (config.webhook.events.includes('task.completed') ||
+                config.webhook.events.includes('task.execution-complete'))
+        ) {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.completed',
                 task: {
@@ -133,13 +154,28 @@ export class TaskNotificationService {
      */
     async notifyReviewReady(taskId: number, result: string) {
         const config = await notificationResolver.resolveConfig(taskId);
+
+        console.log(
+            `[TaskNotificationService] notifyReviewReady config for ${taskId}:`,
+            JSON.stringify(config, null, 2)
+        );
+
         if (!config) return;
 
         const shouldNotify =
             config.slack?.events.includes('task.in-review') ||
-            config.webhook?.events.includes('task.in-review');
+            config.slack?.events.includes('task.review-start') ||
+            config.slack?.events.includes('task.execution-complete') ||
+            config.webhook?.events.includes('task.in-review') ||
+            config.webhook?.events.includes('task.review-start') ||
+            config.webhook?.events.includes('task.execution-complete');
 
-        if (!shouldNotify) return;
+        if (!shouldNotify) {
+            console.log(
+                '[TaskNotificationService] notifyReviewReady: Notification disabled for this event inside config'
+            );
+            return;
+        }
 
         const task = await this.getTask(taskId);
         if (!task) return;
@@ -152,7 +188,12 @@ export class TaskNotificationService {
         const images = config.slack?.includeImages ? extractImages(result) : [];
 
         // Send notifications similar to completion
-        if (config.slack?.enabled && config.slack.events.includes('task.in-review')) {
+        if (
+            config.slack?.enabled &&
+            (config.slack.events.includes('task.in-review') ||
+                config.slack.events.includes('task.review-start') ||
+                config.slack.events.includes('task.execution-complete'))
+        ) {
             await this.sendSlackNotification(config.slack, {
                 task,
                 project,
@@ -162,7 +203,11 @@ export class TaskNotificationService {
             });
         }
 
-        if (config.webhook?.enabled && config.webhook.events.includes('task.in-review')) {
+        if (
+            config.webhook?.enabled &&
+            (config.webhook.events.includes('task.in-review') ||
+                config.webhook.events.includes('task.review-start'))
+        ) {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.in-review',
                 task: {

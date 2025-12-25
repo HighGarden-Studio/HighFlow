@@ -52,6 +52,8 @@ const projectsAPI = {
     export: (id: number) => ipcRenderer.invoke('projects:export', id),
 
     import: (data: unknown) => ipcRenderer.invoke('projects:import', data),
+
+    resetResults: (id: number) => ipcRenderer.invoke('projects:resetResults', id),
 };
 
 // ========================================
@@ -97,6 +99,17 @@ const tasksAPI = {
 
 const appAPI = {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:getInfo'),
+
+    onNotification: (
+        callback: (data: { type: string; message: string; duration?: number }) => void
+    ) => {
+        const handler = (_event: any, data: any) => {
+            console.log('[Preload] Received app:notification', data);
+            callback(data);
+        };
+        ipcRenderer.on('app:notification', handler);
+        return () => ipcRenderer.removeListener('app:notification', handler);
+    },
 
     getPaths: (): Promise<AppPaths> => ipcRenderer.invoke('app:getPaths'),
 

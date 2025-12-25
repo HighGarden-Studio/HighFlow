@@ -67,14 +67,14 @@ const engine = new AdvancedAIEngine();
 
 // Analyze a project prompt
 const analysis = await engine.analyzeMainPrompt(
-  "Build a real-time chat application with Vue 3 and WebSocket",
-  {
-    userId: 1,
-    preferences: { preferredAI: 'anthropic' },
-    skillLevel: 'intermediate',
-    recentProjects: [],
-    timezone: 'UTC',
-  }
+    'Build a real-time chat application with Vue 3 and WebSocket',
+    {
+        userId: 1,
+        preferences: { preferredAI: 'anthropic' },
+        skillLevel: 'intermediate',
+        recentProjects: [],
+        timezone: 'UTC',
+    }
 );
 
 console.log(analysis.requirements);
@@ -114,17 +114,10 @@ const analysis = await engine.analyzeMainPrompt(prompt, userContext);
 const conversation = engine.createConversation(mainPrompt, userId);
 
 // Generate follow-up questions
-const questions = await engine.generateFollowUpQuestions(
-  conversation,
-  previousAnswers
-);
+const questions = await engine.generateFollowUpQuestions(conversation, previousAnswers);
 
 // Synthesize requirements
-const structuredReq = await engine.synthesizeRequirements(
-  mainPrompt,
-  answers,
-  template
-);
+const structuredReq = await engine.synthesizeRequirements(mainPrompt, answers, template);
 ```
 
 #### Task Decomposition
@@ -166,23 +159,23 @@ const recommendations = await engine.recommendSkills(task, availableSkills);
 
 ```typescript
 const selection = await engine.selectOptimalProvider(task, {
-  maxCost: 0.05,                    // $0.05 max
-  maxLatency: 2000,                 // 2 seconds max
-  requiredFeatures: ['streaming', 'function_calling'],
+    maxCost: 0.05, // $0.05 max
+    maxLatency: 2000, // 2 seconds max
+    requiredFeatures: ['streaming', 'function_calling'],
 });
 
 // Returns:
 {
-  provider: AIProvider;
-  model: AIModel;
-  estimatedCost: number;
-  estimatedTime: number;
-  reasoning: string;
-  alternatives: Array<{
     provider: AIProvider;
     model: AIModel;
-    tradeoff: string;
-  }>;
+    estimatedCost: number;
+    estimatedTime: number;
+    reasoning: string;
+    alternatives: Array<{
+        provider: AIProvider;
+        model: AIModel;
+        tradeoff: string;
+    }>;
 }
 ```
 
@@ -201,30 +194,31 @@ const claude = new ClaudeProvider();
 
 // Execute
 const response = await claude.execute(
-  "Review this code for security issues",
-  {
-    model: 'claude-3-5-sonnet-20250219',
-    temperature: 0.3,
-    maxTokens: 4000,
-    systemPrompt: 'You are a security expert...',
-  },
-  {
-    userId: 1,
-    taskId: 123,
-  }
+    'Review this code for security issues',
+    {
+        model: 'claude-3-5-sonnet-20250219',
+        temperature: 0.3,
+        maxTokens: 4000,
+        systemPrompt: 'You are a security expert...',
+    },
+    {
+        userId: 1,
+        taskId: 123,
+    }
 );
 
 // Streaming
 for await (const chunk of claude.streamExecute(prompt, config, (token) => {
-  console.log(token); // Real-time tokens
+    console.log(token); // Real-time tokens
 })) {
-  if (chunk.done) {
-    console.log('Complete:', chunk.accumulated);
-  }
+    if (chunk.done) {
+        console.log('Complete:', chunk.accumulated);
+    }
 }
 ```
 
 **Models:**
+
 - `claude-3-5-sonnet-20250219`: $3/M input, $15/M output, 200K context
 - `claude-3-opus-20240229`: $15/M input, $75/M output (highest quality)
 - `claude-3-haiku-20240307`: $0.25/M input, $1.25/M output (fastest)
@@ -238,18 +232,16 @@ import { GPTProvider } from '@/services/ai/providers/GPTProvider';
 
 const gpt = new GPTProvider();
 
-const response = await gpt.execute(
-  "Generate a React component for user authentication",
-  {
+const response = await gpt.execute('Generate a React component for user authentication', {
     model: 'gpt-4-turbo',
     temperature: 0.7,
     maxTokens: 2000,
     responseFormat: 'json', // Guaranteed JSON output
-  }
-);
+});
 ```
 
 **Models:**
+
 - `gpt-4-turbo`: $10/M input, $30/M output, 128K context
 - `gpt-4`: $30/M input, $60/M output (8K context)
 - `gpt-3.5-turbo`: $0.5/M input, $1.5/M output (fast & cheap)
@@ -263,19 +255,17 @@ import { GeminiProvider } from '@/services/ai/providers/GeminiProvider';
 
 const gemini = new GeminiProvider();
 
-const response = await gemini.execute(
-  "Summarize this entire codebase",
-  {
-    model: 'gemini-1.5-pro',
+const response = await gemini.execute('Summarize this entire codebase', {
+    model: 'gemini-2.5-flash',
     temperature: 0.5,
     maxTokens: 8192,
-  }
-);
+});
 ```
 
 **Models:**
-- `gemini-1.5-pro`: $3.5/M input, $10.5/M output, 1M context
-- `gemini-1.5-flash`: $0.075/M input, $0.3/M output (very cheap)
+
+- `gemini-2.5-pro`: $3.5/M input, $10.5/M output, 1M context
+- `gemini-2.5-flash`: $0.075/M input, $0.3/M output (very cheap)
 - `gemini-pro`: $0.5/M input, $1.5/M output (free tier available)
 
 #### UI/UX Design Providers
@@ -283,17 +273,17 @@ const response = await gemini.execute(
 Best for: 화면 설계, 하이파이 목업, UX 카피 생성
 
 - **Figma AI**
-  - Dev Mode AI, Flow Scribe를 통해 컴포넌트 구조/UX 카피/디자인 토큰을 자동 생성
-  - 모델: `figma-design-agent`, `figma-flow-scribe`
-  - 인증: Personal Access Token (`FIGMA_ACCESS_TOKEN`)
+    - Dev Mode AI, Flow Scribe를 통해 컴포넌트 구조/UX 카피/디자인 토큰을 자동 생성
+    - 모델: `figma-design-agent`, `figma-flow-scribe`
+    - 인증: Personal Access Token (`FIGMA_ACCESS_TOKEN`)
 - **Galileo AI**
-  - 고해상도 목업·디자인 시스템 제안, 사용자 시나리오 기반 플로우 설계
-  - 모델: `galileo-studio`, `galileo-mockup-pro`
-  - 인증: API Key
+    - 고해상도 목업·디자인 시스템 제안, 사용자 시나리오 기반 플로우 설계
+    - 모델: `galileo-studio`, `galileo-mockup-pro`
+    - 인증: API Key
 - **Uizard Autodesigner**
-  - 와이어프레임, UX 카피, 플로우 다이어그램을 신속히 생성하는 경량형 도구
-  - 모델: `uizard-autodesigner`, `uizard-wireflow`
-  - 인증: API Key (무료 체험 제공)
+    - 와이어프레임, UX 카피, 플로우 다이어그램을 신속히 생성하는 경량형 도구
+    - 모델: `uizard-autodesigner`, `uizard-wireflow`
+    - 인증: API Key (무료 체험 제공)
 
 이들 공급자는 설정 화면에서 `design` 태그로 필터링할 수 있으며, UI/UX 관련 태스크에서 우선 추천됩니다.
 
@@ -311,50 +301,50 @@ import { LangChainOrchestrator } from '@/services/ai/LangChainOrchestrator';
 const orchestrator = new LangChainOrchestrator();
 
 const chainConfig: ChainConfig = {
-  name: 'code-review-chain',
-  steps: [
-    {
-      name: 'analyze',
-      type: 'llm',
-      config: {
-        provider: 'anthropic',
-        model: 'claude-3-5-sonnet-20250219',
-        prompt: 'Analyze this code: {{code}}',
-        systemPrompt: 'You are a code reviewer...',
-      },
-    },
-    {
-      name: 'suggest-improvements',
-      type: 'llm',
-      config: {
-        provider: 'openai',
-        model: 'gpt-4-turbo',
-        prompt: 'Based on {{analyze}}, suggest improvements',
-      },
-    },
-    {
-      name: 'generate-tests',
-      type: 'tool',
-      config: {
-        tool: async (params: any) => {
-          // Custom tool logic
-          return 'Generated tests...';
+    name: 'code-review-chain',
+    steps: [
+        {
+            name: 'analyze',
+            type: 'llm',
+            config: {
+                provider: 'anthropic',
+                model: 'claude-3-5-sonnet-20250219',
+                prompt: 'Analyze this code: {{code}}',
+                systemPrompt: 'You are a code reviewer...',
+            },
         },
-      },
+        {
+            name: 'suggest-improvements',
+            type: 'llm',
+            config: {
+                provider: 'openai',
+                model: 'gpt-4-turbo',
+                prompt: 'Based on {{analyze}}, suggest improvements',
+            },
+        },
+        {
+            name: 'generate-tests',
+            type: 'tool',
+            config: {
+                tool: async (params: any) => {
+                    // Custom tool logic
+                    return 'Generated tests...';
+                },
+            },
+        },
+    ],
+    memory: {
+        type: 'buffer',
+        maxTokens: 4000,
     },
-  ],
-  memory: {
-    type: 'buffer',
-    maxTokens: 4000,
-  },
-  callbacks: {
-    onProgress: (data) => console.log('Progress:', data.step),
-    onComplete: (result) => console.log('Done:', result),
-  },
+    callbacks: {
+        onProgress: (data) => console.log('Progress:', data.step),
+        onComplete: (result) => console.log('Done:', result),
+    },
 };
 
 const result = await orchestrator.executeChain(chainConfig, {
-  code: 'function foo() { ... }',
+    code: 'function foo() { ... }',
 });
 ```
 
@@ -362,33 +352,33 @@ const result = await orchestrator.executeChain(chainConfig, {
 
 ```typescript
 const agentConfig: AgentConfig = {
-  name: 'research-agent',
-  objective: 'Research best practices for React performance optimization',
-  thinkingMode: 'react', // 'react' | 'plan-and-execute' | 'reflection'
-  maxIterations: 10,
-  tools: [
-    {
-      name: 'search_web',
-      description: 'Search the web for information',
-      execute: async (params) => {
-        // Web search implementation
-        return 'Search results...';
-      },
-    },
-    {
-      name: 'read_documentation',
-      description: 'Read technical documentation',
-      execute: async (params) => {
-        // Doc reading implementation
-        return 'Documentation content...';
-      },
-    },
-  ],
+    name: 'research-agent',
+    objective: 'Research best practices for React performance optimization',
+    thinkingMode: 'react', // 'react' | 'plan-and-execute' | 'reflection'
+    maxIterations: 10,
+    tools: [
+        {
+            name: 'search_web',
+            description: 'Search the web for information',
+            execute: async (params) => {
+                // Web search implementation
+                return 'Search results...';
+            },
+        },
+        {
+            name: 'read_documentation',
+            description: 'Read technical documentation',
+            execute: async (params) => {
+                // Doc reading implementation
+                return 'Documentation content...';
+            },
+        },
+    ],
 };
 
 const result = await orchestrator.executeAgent(
-  agentConfig,
-  'What are the top 5 React performance optimization techniques?'
+    agentConfig,
+    'What are the top 5 React performance optimization techniques?'
 );
 
 console.log(result.finalAnswer);
@@ -419,11 +409,7 @@ const suggestions = await mcpManager.suggestMCPsForTask(task);
 // Returns ranked recommendations with confidence scores
 
 // Execute an MCP tool
-const result = await mcpManager.executeMCPTool(
-  mcpId,
-  'read_file',
-  { path: '/path/to/file.txt' }
-);
+const result = await mcpManager.executeMCPTool(mcpId, 'read_file', { path: '/path/to/file.txt' });
 
 // Health check
 const health = await mcpManager.healthCheck(mcpId);
@@ -451,10 +437,7 @@ console.log(formatTokens(tokens)); // "125 tokens" or "1.5K tokens"
 ```typescript
 import { calculateCost, formatCost } from '@/services/ai/utils';
 
-const cost = calculateCost(
-  { prompt: 1000, completion: 500 },
-  { input: 3.0, output: 15.0 }
-);
+const cost = calculateCost({ prompt: 1000, completion: 500 }, { input: 3.0, output: 15.0 });
 console.log(formatCost(cost)); // "$0.0105"
 ```
 
@@ -483,14 +466,15 @@ import { RateLimitTracker, TokenBucket } from '@/services/ai/utils';
 
 // Request-based rate limiting
 const rateLimiter = new RateLimitTracker();
-if (rateLimiter.isAllowed('openai', 60, 60000)) { // 60 requests per minute
-  // Make API call
+if (rateLimiter.isAllowed('openai', 60, 60000)) {
+    // 60 requests per minute
+    // Make API call
 }
 
 // Token bucket rate limiting
 const bucket = new TokenBucket(1000, 10); // 1000 capacity, 10 tokens/sec
 if (bucket.tryConsume(100)) {
-  // Use 100 tokens
+    // Use 100 tokens
 }
 ```
 
@@ -505,13 +489,13 @@ The engine automatically selects the most cost-effective provider:
 ```typescript
 // Low-cost, simple task
 const result = await engine.selectOptimalProvider(simpleTask, {
-  maxCost: 0.001, // 1/10th of a cent
+    maxCost: 0.001, // 1/10th of a cent
 });
 // Likely selects: gemini-1.5-flash or gpt-3.5-turbo
 
 // High-quality, complex task
 const result = await engine.selectOptimalProvider(complexTask, {
-  requiredFeatures: ['vision', 'function_calling'],
+    requiredFeatures: ['vision', 'function_calling'],
 });
 // Likely selects: claude-3-5-sonnet or gpt-4-turbo
 ```
@@ -522,9 +506,9 @@ const result = await engine.selectOptimalProvider(complexTask, {
 import { AIServiceConfig } from '@/services/ai/AIConfig';
 
 const estimatedCost = AIServiceConfig.estimateCost(
-  'gpt-4-turbo',
-  1000,  // input tokens
-  500    // output tokens
+    'gpt-4-turbo',
+    1000, // input tokens
+    500 // output tokens
 );
 console.log(`Estimated: $${estimatedCost.toFixed(4)}`);
 ```
@@ -622,7 +606,7 @@ import { chunkText } from '@/services/ai/utils';
 
 const chunks = chunkText(largeText, 4000, 200); // 4K per chunk, 200 overlap
 for (const chunk of chunks) {
-  await provider.execute(chunk, config);
+    await provider.execute(chunk, config);
 }
 ```
 

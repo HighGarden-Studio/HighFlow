@@ -16,7 +16,7 @@ import type {
     Capability,
     ModelInfo,
     AIMessage,
-    ToolCall,
+    AIMessage,
     AiResult,
 } from '@core/types/ai';
 import { detectTextSubType } from '../utils/aiResultUtils';
@@ -172,24 +172,82 @@ export class GroqProvider extends BaseAIProvider {
      * Fetch models from Groq API
      */
     async fetchModels(): Promise<ModelInfo[]> {
+        const providerId = 'groq';
         try {
             const client = this.getClient();
             const response = await client.models.list();
 
-            return response.data.map((model: any) => ({
+            const models = response.data.map((model: any) => ({
                 name: model.id,
-                provider: 'groq' as AIProvider,
+                provider: providerId as AIProvider,
                 contextWindow: model.context_window || 8192, // Default fallback
                 maxOutputTokens: 4096, // Default fallback
                 costPerInputToken: 0,
                 costPerOutputToken: 0,
                 averageLatency: 0,
-                features: ['streaming'],
+                features: ['streaming'] as AIFeature[],
                 bestFor: [],
             }));
+
+            // Save to DB cache
+            try {
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                await providerModelsRepository.saveModels(providerId, models);
+                console.log('[GroqProvider] Saved models to DB cache');
+            } catch (saveError) {
+                console.error('[GroqProvider] Failed to save models to DB:', saveError);
+            }
+
+            // Allow immediate usage by setting dynamic models
+            this.setDynamicModels(models);
+
+            return models;
         } catch (error) {
             console.error('Failed to fetch Groq models:', error);
-            return this.defaultModels; // Fallback to hardcoded models
+
+            // Fallback to DB cache
+            try {
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                const cachedModels = await providerModelsRepository.getModels(providerId);
+                if (cachedModels.length > 0) {
+                    console.log('[GroqProvider] Using cached models from DB');
+                    this.setDynamicModels(cachedModels);
+                    return cachedModels;
+                }
+            } catch (dbError) {
+                console.warn('[GroqProvider] Failed to load cached models:', dbError);
+            }
+
+            console.warn('[GroqProvider] Using default hardcoded models');
+            this.setDynamicModels(this.defaultModels);
+            return this.defaultModels;
+        }
+    }
+
+    /**
+     * Ensure models are loaded from DB if not already available
+     */
+    private async ensureModelsLoaded(): Promise<void> {
+        if (this.models.length > 0) return;
+
+        console.log('[GroqProvider] Models not loaded, attempting to load from DB...');
+        try {
+            const { providerModelsRepository } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            const cachedModels = await providerModelsRepository.getModels('groq');
+
+            if (cachedModels.length > 0) {
+                console.log(`[GroqProvider] Loaded ${cachedModels.length} models from DB`);
+                this.setDynamicModels(cachedModels);
+            } else {
+                console.log('[GroqProvider] No models in DB, using defaults');
+                this.setDynamicModels(this.defaultModels);
+            }
+        } catch (error) {
+            console.error('[GroqProvider] Failed to load models from DB:', error);
+            this.setDynamicModels(this.defaultModels);
         }
     }
 
@@ -201,6 +259,7 @@ export class GroqProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AIResponse> {
+        await this.ensureModelsLoaded();
         this.validateConfig(config);
 
         const startTime = Date.now();
@@ -278,6 +337,7 @@ export class GroqProvider extends BaseAIProvider {
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
+        await this.ensureModelsLoaded();
         this.validateConfig(config);
 
         const client = this.getClient();

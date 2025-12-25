@@ -74,6 +74,24 @@ function toggleExpand(event: Event) {
     event.stopPropagation();
     isExpanded.value = !isExpanded.value;
 }
+
+const taskTypeConfig = computed(() => {
+    switch (props.task.taskType) {
+        case 'ai':
+            return { label: 'AI', class: 'bg-purple-600 text-white border-purple-700' };
+        case 'script':
+            return { label: 'SCRIPT', class: 'bg-slate-600 text-white border-slate-700' };
+        case 'input':
+            return { label: 'INPUT', class: 'bg-emerald-600 text-white border-emerald-700' };
+        case 'output':
+            return { label: 'OUTPUT', class: 'bg-rose-600 text-white border-rose-700' };
+        default:
+            return {
+                label: props.task.taskType ? props.task.taskType.toUpperCase() : 'UNKNOWN',
+                class: 'bg-gray-600 text-white border-gray-700',
+            };
+    }
+});
 </script>
 
 <template>
@@ -118,6 +136,14 @@ function toggleExpand(event: Event) {
             }
         "
     >
+        <!-- Task Type Badge (Top Left) -->
+        <div
+            class="absolute -top-2.5 -left-2.5 z-30 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-sm border tracking-wider"
+            :class="taskTypeConfig.class"
+        >
+            {{ taskTypeConfig.label }}
+        </div>
+
         <!-- Delete Button (Top Right, visible on hover) -->
         <button
             class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded opacity-0 group-hover:opacity-100 transition-all z-20"

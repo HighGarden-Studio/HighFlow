@@ -26,6 +26,16 @@ const emit = defineEmits<{
     (e: 'delete', task: Task): void;
     (e: 'operatorDrop', taskId: number, operatorId: number): void;
     (e: 'provideInput', task: Task): void;
+    // New events synced with Kanban Board
+    (e: 'edit', task: Task): void;
+    (e: 'subdivide', task: Task): void;
+    (e: 'pause', task: Task): void;
+    (e: 'resume', task: Task): void;
+    (e: 'enhancePrompt', task: Task): void;
+    (e: 'previewPrompt', task: Task): void;
+    (e: 'viewProgress', task: Task): void;
+    (e: 'openApproval', task: Task): void;
+    (e: 'connectProvider', providerId: string): void;
 }>();
 
 // Operator drag state
@@ -65,14 +75,47 @@ function handleRetry() {
 }
 
 function handleApprove() {
-    console.log('🔵 [TaskFlowNode] handleApprove called', props.data.task.id);
     emit('approve', props.data.task);
 }
 
+function handleEdit() {
+    emit('edit', props.data.task);
+}
+
+function handleSubdivide() {
+    emit('subdivide', props.data.task);
+}
+
+function handlePause() {
+    emit('pause', props.data.task);
+}
+
+function handleResume() {
+    emit('resume', props.data.task);
+}
+
+function handleEnhancePrompt() {
+    emit('enhancePrompt', props.data.task);
+}
+
+function handlePreviewPrompt() {
+    emit('previewPrompt', props.data.task);
+}
+
+function handleViewProgress() {
+    emit('viewProgress', props.data.task);
+}
+
+function handleOpenApproval() {
+    emit('openApproval', props.data.task);
+}
+
+function handleConnectProvider(providerId: string) {
+    emit('connectProvider', providerId);
+}
+
 function handleOperatorDrop(taskId: number, operatorId: number) {
-    console.log('🔵 TaskFlowNode handleOperatorDrop:', taskId, operatorId);
     emit('operatorDrop', taskId, operatorId);
-    console.log('🔵 TaskFlowNode emitted operatorDrop');
 }
 
 function handleProvideInput() {
@@ -97,19 +140,15 @@ function handleWrapperDragOver(event: DragEvent) {
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = 'copy';
         }
-        console.log('🟡 TaskFlowNode wrapper dragover');
     }
 }
 
 function handleWrapperDragLeave(event: DragEvent) {
     isOperatorDragOver.value = false;
-    console.log('🟡 TaskFlowNode wrapper dragleave');
 }
 
 function handleWrapperDrop(event: DragEvent) {
-    console.log('🟡 TaskFlowNode wrapper drop fired!');
     const operatorData = event.dataTransfer?.getData('application/x-operator');
-    console.log('🟡 Operator data:', operatorData);
 
     if (operatorData) {
         event.preventDefault();
@@ -118,7 +157,6 @@ function handleWrapperDrop(event: DragEvent) {
 
         try {
             const operator = JSON.parse(operatorData);
-            console.log('🟡 Emitting from wrapper:', props.data.task.id, operator.id);
             emit('operatorDrop', props.data.task.id, operator.id);
         } catch (error) {
             console.error('Failed to parse operator data:', error);
@@ -131,14 +169,10 @@ const nodeRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
     if (nodeRef.value) {
-        console.log('🟣 Setting up native listeners for task:', props.data.task.id);
-
         // Try mouseup event instead of drop for better compatibility
         nodeRef.value.addEventListener('mouseup', (e: Event) => {
-            const event = e as MouseEvent;
             // Check if this is the end of a drag operation
             if (isOperatorDragOver.value) {
-                console.log('🟣 NATIVE mouseup during drag!');
                 // Create a synthetic DragEvent
                 const dataTransfer = (window as any).__operatorDragData;
                 if (dataTransfer) {
@@ -157,7 +191,6 @@ onMounted(() => {
 
         nodeRef.value.addEventListener('drop', (e: Event) => {
             const event = e as DragEvent;
-            console.log('🟣 NATIVE drop event fired!');
             handleWrapperDrop(event);
         });
 
@@ -275,6 +308,15 @@ onUnmounted(() => {
                 @delete="handleDelete"
                 @operator-drop="handleOperatorDrop"
                 @provide-input="handleProvideInput"
+                @edit="handleEdit"
+                @subdivide="handleSubdivide"
+                @pause="handlePause"
+                @resume="handleResume"
+                @enhance-prompt="handleEnhancePrompt"
+                @preview-prompt="handlePreviewPrompt"
+                @view-progress="handleViewProgress"
+                @open-approval="handleOpenApproval"
+                @connect-provider="handleConnectProvider"
             />
         </div>
 

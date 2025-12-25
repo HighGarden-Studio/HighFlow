@@ -972,7 +972,11 @@ async function handleSelectLocalFile() {
         const extensions = config.localFile?.acceptedExtensions || [];
 
         // Prepare filters based on accepted extensions
-        const filters = extensions.length > 0 ? [{ name: 'Allowed Files', extensions }] : undefined;
+        // IMPORTANT: Must copy to plain array to avoid sending Vue Proxy to IPC (causes Clone Error)
+        const filters =
+            extensions.length > 0
+                ? [{ name: 'Allowed Files', extensions: [...extensions] }]
+                : undefined;
 
         console.log('[TaskDetailPanel] Opening file dialog with filters:', filters);
         const filePath = await getAPI().fs.selectFile(filters);
@@ -2193,6 +2197,9 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             "
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                         >
+                                            <option value="auto">
+                                                자동 (형식 감지 - 이미지 등)
+                                            </option>
                                             <option value="text">텍스트 (기본)</option>
                                             <option value="table">테이블 (CSV/Excel)</option>
                                             <option value="binary">바이너리</option>

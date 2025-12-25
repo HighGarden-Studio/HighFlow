@@ -6,10 +6,16 @@
 
 export type NotificationEvent =
     | 'task.status-changed'
-    | 'task.in-review'
-    | 'task.completed'
+    | 'task.in-review' // Legacy
+    | 'task.completed' // Legacy
     | 'task.failed'
-    | 'task.result-ready';
+    | 'task.result-ready'
+    // New granular events
+    | 'task.execution-start'
+    | 'task.execution-complete'
+    | 'task.review-start'
+    | 'task.review-complete'
+    | 'task.review-failed';
 
 export interface SlackNotificationConfig {
     enabled: boolean;

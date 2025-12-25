@@ -62,10 +62,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
-const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus({
-    task: props.task,
-    missingProvider: props.missingProvider,
-});
+const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
 const assignedOperator = ref<any>(null);
@@ -136,6 +133,37 @@ const hasPreviousResult = computed(() => {
     return !!(t.executionResult?.content || t.result);
 });
 
+// Image content detection
+const imageContent = computed(() => {
+    const content =
+        (props.task.status === 'in_progress'
+            ? streamedContent.value
+            : (props.task as any).executionResult?.content || (props.task as any).result) || '';
+
+    if (!content) return null;
+
+    // Check if it looks like an image
+    if (
+        content.startsWith('iVBORw0KGgo') || // PNG
+        content.startsWith('/9j/') || // JPEG
+        content.startsWith('R0lGOD') || // GIF
+        content.startsWith('data:image') ||
+        (props.task as any).outputFormat === 'png' ||
+        outputFormatInfo.value?.label === 'Image'
+    ) {
+        // Add prefix if missing
+        if (content.startsWith('data:image')) return content;
+
+        let mimeType = 'image/png';
+        if (content.startsWith('/9j/')) mimeType = 'image/jpeg';
+        else if (content.startsWith('R0lGOD')) mimeType = 'image/gif';
+
+        return `data:${mimeType};base64,${content}`;
+    }
+
+    return null;
+});
+
 // Action handlers
 function handleExecute(event: Event) {
     event.stopPropagation();
@@ -182,6 +210,17 @@ function handleConnectProviderClick() {
         emit('connectProvider', props.missingProvider.id);
     }
 }
+function hexToRgba(hex: string, alpha: number) {
+    // Remove hash if present
+    hex = hex.replace('#', '');
+
+    // Parse r, g, b
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 </script>
 
 <template>
@@ -200,9 +239,23 @@ function handleConnectProviderClick() {
         <template #header>
             <div class="flex flex-col gap-2">
                 <!-- Row 1: Operator Info (If Assigned) -->
+                <!-- Row 1: Operator Info (If Assigned) -->
                 <div
                     v-if="assignedOperator"
-                    class="flex items-center gap-2 p-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800"
+                    class="flex items-center gap-2 p-1.5 rounded-lg border transition-colors"
+                    :style="{
+                        backgroundColor: assignedOperator.color
+                            ? hexToRgba(assignedOperator.color, 0.1)
+                            : undefined,
+                        borderColor: assignedOperator.color
+                            ? hexToRgba(assignedOperator.color, 0.2)
+                            : undefined,
+                    }"
+                    :class="[
+                        !assignedOperator.color
+                            ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800'
+                            : '',
+                    ]"
                 >
                     <!-- Avatar/Emoji -->
                     <img
@@ -211,23 +264,63 @@ function handleConnectProviderClick() {
                             assignedOperator.avatar?.startsWith('/')
                         "
                         :src="assignedOperator.avatar"
-                        class="w-6 h-6 rounded-full object-cover border border-purple-200 dark:border-purple-700"
+                        class="w-6 h-6 rounded-full object-cover border"
+                        :style="{
+                            borderColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.3)
+                                : undefined,
+                        }"
+                        :class="[
+                            !assignedOperator.color
+                                ? 'border-purple-200 dark:border-purple-700'
+                                : '',
+                        ]"
                     />
                     <div
                         v-else
-                        class="w-6 h-6 rounded-full bg-white dark:bg-purple-800 border border-purple-200 dark:border-purple-700 flex items-center justify-center text-sm"
+                        class="w-6 h-6 rounded-full border flex items-center justify-center text-sm"
+                        :style="{
+                            backgroundColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.05)
+                                : undefined,
+                            borderColor: assignedOperator.color
+                                ? hexToRgba(assignedOperator.color, 0.3)
+                                : undefined,
+                        }"
+                        :class="[
+                            !assignedOperator.color
+                                ? 'bg-white dark:bg-purple-800 border-purple-200 dark:border-purple-700'
+                                : 'bg-white dark:bg-gray-800',
+                        ]"
                     >
-                        <!-- Use IconRenderer for emoji consistency if needed, but direct text usually works better for raw emoji strings -->
                         {{ assignedOperator.avatar || '🤖' }}
                     </div>
 
                     <div class="flex flex-col min-w-0">
                         <span
-                            class="text-xs font-semibold text-purple-900 dark:text-purple-100 truncate"
+                            class="text-xs font-semibold truncate"
+                            :style="{ color: assignedOperator.color || undefined }"
+                            :class="[
+                                !assignedOperator.color
+                                    ? 'text-purple-900 dark:text-purple-100'
+                                    : '',
+                            ]"
                         >
                             {{ assignedOperator.name }}
                         </span>
-                        <span class="text-[10px] text-purple-600 dark:text-purple-300 truncate">
+                        <span
+                            class="text-[10px] truncate"
+                            :style="{
+                                color: assignedOperator.color
+                                    ? hexToRgba(assignedOperator.color, 0.7)
+                                    : undefined,
+                            }"
+                            :class="[
+                                !assignedOperator.color
+                                    ? 'text-purple-600 dark:text-purple-300'
+                                    : '',
+                            ]"
+                        >
                             {{ assignedOperator.role || 'Operator' }}
                         </span>
                     </div>
@@ -483,8 +576,18 @@ function handleConnectProviderClick() {
 
                 <!-- Streaming content -->
                 <div class="relative overflow-hidden" style="height: 40px">
+                    <div v-if="imageContent" class="h-full w-full flex items-center justify-start">
+                        <img
+                            :src="imageContent"
+                            class="h-full w-auto object-contain rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                            alt="Generated Image"
+                        />
+                        <span class="ml-2 text-[10px] text-gray-500 font-mono"
+                            >Image Generated</span
+                        >
+                    </div>
                     <p
-                        v-if="streamedContent || hasPreviousResult"
+                        v-else-if="streamedContent || hasPreviousResult"
                         class="text-gray-700 dark:text-gray-200 font-mono leading-tight overflow-hidden text-[10px]"
                         style="
                             display: -webkit-box;

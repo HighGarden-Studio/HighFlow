@@ -109,7 +109,7 @@ export function useTaskExecution() {
                     ? 'claude-3-5-sonnet-20250219'
                     : task.aiProvider === 'openai'
                       ? 'gpt-4-turbo'
-                      : 'gemini-1.5-pro') as AIModel,
+                      : 'gemini-2.5-pro') as AIModel,
                 temperature: 0.7,
                 maxTokens: 4096,
             };

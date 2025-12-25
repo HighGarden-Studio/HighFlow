@@ -429,7 +429,17 @@ const outputFormat = computed<OutputFormat>(() => {
     }
 
     // Always use markdown for AI Result view (when no file selected)
-    // User requested: "Always show markdown regardless of task result type"
+    // BUT check for image content first
+    const content = fallbackResultContent.value;
+    if (
+        content &&
+        (content.startsWith('iVBORw0KGgo') ||
+            content.startsWith('/9j/') ||
+            content.startsWith('data:image'))
+    ) {
+        return 'png';
+    }
+
     return 'markdown';
 });
 
@@ -659,6 +669,24 @@ const updateResultFiles = async () => {
             }
         }
 
+        // Handle Input Task Output (Local File)
+        const taskOutput = (props.task as any)?.output;
+        if (taskOutput && taskOutput.kind === 'file' && taskOutput.file?.path) {
+            const inputFilePath = taskOutput.file.path;
+            if (!filesMap.has(inputFilePath)) {
+                filesMap.set(inputFilePath, {
+                    path: inputFilePath,
+                    absolutePath: inputFilePath,
+                    type: 'created', // or 'status' as 'existing'? Type 'created'/'modified' is used for color. Maybe 'created' is fine.
+                    size: taskOutput.file.size || 0,
+                    extension: inputFilePath.split('.').pop() || 'txt',
+                });
+                console.log(
+                    `[EnhancedResultPreview] Added Input Local File to tree: ${inputFilePath}`
+                );
+            }
+        }
+
         const files = Array.from(filesMap.values());
         console.log('[EnhancedResultPreview] resultFiles computed:', {
             existingFilesCount: existingFiles.length,
@@ -669,8 +697,12 @@ const updateResultFiles = async () => {
 
         resultFiles.value = files;
 
-        // Auto-select first file for Output tasks if nothing selected
-        if (!selectedFile.value && files.length > 0 && props.task?.taskType === 'output') {
+        // Auto-select first file for Output/Input tasks if nothing selected
+        if (
+            !selectedFile.value &&
+            files.length > 0 &&
+            (props.task?.taskType === 'output' || props.task?.taskType === 'input')
+        ) {
             selectedFile.value = files[0]!;
         }
     } finally {
@@ -2806,6 +2838,27 @@ onMounted(() => {
                                             </div>
 
                                             <!-- PNG/Image View -->
+                                            <div
+                                                v-else-if="outputFormat === 'png'"
+                                                class="h-full flex flex-col items-center justify-center bg-gray-900/50 rounded-lg p-4"
+                                            >
+                                                <img
+                                                    :src="
+                                                        aiValue ||
+                                                        (content.startsWith('data:')
+                                                            ? content
+                                                            : `data:image/png;base64,${content}`)
+                                                    "
+                                                    class="max-w-full max-h-full object-contain rounded shadow-lg"
+                                                    alt="Generated Image"
+                                                />
+                                                <div class="mt-4 text-sm text-gray-500 font-mono">
+                                                    {{
+                                                        (content?.length || 0).toLocaleString()
+                                                    }}
+                                                    bytes
+                                                </div>
+                                            </div>
                                             <div
                                                 v-else-if="outputFormat === 'png'"
                                                 class="h-full flex items-center justify-center"

@@ -23,7 +23,7 @@ import { detectTextSubType } from '../utils/aiResultUtils';
 
 export class GeminiProvider extends BaseAIProvider {
     readonly name: AIProvider = 'google';
-    private readonly IMAGE_MODEL = 'gemini-3-pro-image-preview'; // Premium model with 4K support
+    private readonly IMAGE_MODEL = 'gemini-2.5-flash-image'; // Premium model with 4K support
 
     private client: GoogleGenAI | null = null;
     private injectedApiKey: string | null = null;
@@ -63,27 +63,21 @@ export class GeminiProvider extends BaseAIProvider {
                 fetchedModels.push(model);
             }
 
-            const models: ModelInfo[] = fetchedModels
-                .map((m: any) => {
-                    return {
-                        name: m.name.replace('models/', ''),
-                        provider: 'google' as AIProvider,
-                        contextWindow: m.inputTokenLimit || 32000,
-                        maxOutputTokens: m.outputTokenLimit || 2048,
-                        description: m.description,
-                        features: ['streaming', 'function_calling'] as AIFeature[], // Default features
-                        supportedActions: m.supportedGenerationMethods || [],
-                        costPerInputToken: 0,
-                        costPerOutputToken: 0,
-                        averageLatency: 0,
-                        bestFor: [],
-                    };
-                })
-                .filter(
-                    (m: any) =>
-                        m.supportedActions?.includes('generateContent') ||
-                        m.name?.includes('gemini')
-                );
+            const models: ModelInfo[] = fetchedModels.map((m: any) => {
+                return {
+                    name: m.name.replace('models/', ''),
+                    provider: 'google' as AIProvider,
+                    contextWindow: m.inputTokenLimit || 32000,
+                    maxOutputTokens: m.outputTokenLimit || 2048,
+                    description: m.description,
+                    features: ['streaming', 'function_calling'] as AIFeature[], // Default features
+                    supportedActions: m.supportedGenerationMethods || [],
+                    costPerInputToken: 0,
+                    costPerOutputToken: 0,
+                    averageLatency: 0,
+                    bestFor: [],
+                };
+            });
 
             console.log(
                 '[GeminiProvider] Fetched models from API:',
@@ -404,10 +398,35 @@ export class GeminiProvider extends BaseAIProvider {
                 generationConfig.responseModalities = ['IMAGE'];
             }
 
+            // Construct contents (text + optional images)
+            let contents: any = prompt;
+
+            if (
+                options.inputImages &&
+                Array.isArray(options.inputImages) &&
+                options.inputImages.length > 0
+            ) {
+                console.log(
+                    `[GeminiProvider] Including ${options.inputImages.length} input images in request`
+                );
+                const parts: any[] = [{ text: prompt }];
+
+                for (const img of options.inputImages) {
+                    parts.push({
+                        inlineData: {
+                            mimeType: img.mimeType,
+                            data: img.data,
+                        },
+                    });
+                }
+                // When using parts, we pass an array of content objects or a single object with parts
+                contents = [{ role: 'user', parts }];
+            }
+
             // New SDK API: client.models.generateContent
             const response = await client.models.generateContent({
-                model: modelName,
-                contents: prompt,
+                model: 'gemini-2.0-flash-exp-image-generation',
+                contents: contents,
                 config: generationConfig,
             });
 
@@ -795,21 +814,17 @@ export class GeminiProvider extends BaseAIProvider {
 
         // Cast message to any to access multiModalContent if it exists at runtime
         const msgAny = message as any;
-        if (msgAny.multiModalContent) {
-            parts = msgAny.multiModalContent.map((content: any) => {
+        if (message.multiModalContent) {
+            parts = message.multiModalContent.map((content) => {
                 if (content.type === 'text') {
-                    return { text: content.value };
+                    return { text: content.text };
                 } else if (content.type === 'image') {
-                    // Extract base64 and mime type
-                    const matches = content.value.match(/^data:(image\/[a-z]+);base64,(.+)$/);
-                    if (matches) {
-                        return {
-                            inlineData: {
-                                mimeType: matches[1],
-                                data: matches[2],
-                            },
-                        };
-                    }
+                    return {
+                        inlineData: {
+                            mimeType: content.mimeType,
+                            data: content.data, // Expecting raw base64
+                        },
+                    };
                 }
                 return { text: '' };
             });

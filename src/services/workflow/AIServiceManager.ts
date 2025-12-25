@@ -443,7 +443,7 @@ export class AIServiceManager {
 
             options.onLog?.(
                 'info',
-                `[AIServiceManager] Task ${task.id} requires MCPs: ${
+                `[AIServiceManager] Task #${task.projectSequence} requires MCPs: ${
                     allRequiredMCPs.length ? allRequiredMCPs.join(', ') : 'none'
                 }`,
                 {
@@ -477,42 +477,89 @@ export class AIServiceManager {
             }
 
             // Check if task has imageData for vision models (e.g., for auto-review of images)
+            // Enhanced: Check for generic attachments from Input Task (Local File)
+            const attachments = context.metadata?.attachments as
+                | Array<{ type: string; mime: string; data: string; name: string }>
+                | undefined;
             const imageData = (task as any).imageData || context.metadata?.imageData;
-            if (imageData) {
-                // Vision message with multimodal content
-                console.log('[AIServiceManager] Vision task detected, creating multimodal message');
+
+            const inputImages: Array<{ mimeType: string; data: string }> = [];
+
+            if (attachments && attachments.length > 0) {
+                // Construct Multi-Modal Message
+                console.log(
+                    `[AIServiceManager] Task #${task.projectSequence} has ${attachments.length} attachments. Constructing multi-modal message.`
+                );
+
+                const multiModalContent: any[] = [{ type: 'text', text: userPrompt }];
+
+                for (const att of attachments) {
+                    if (att.type === 'image') {
+                        const imagePart = {
+                            type: 'image',
+                            mimeType: att.mime,
+                            data: att.data, // Base64
+                        };
+                        multiModalContent.push(imagePart);
+                        inputImages.push({ mimeType: att.mime, data: att.data });
+                    } else if (att.type === 'file' || att.type === 'binary') {
+                        // Future support for other file types?
+                        // For now, only images are strictly supported by `MultiModalContentPart` in `ai.ts`
+                        // But we can extend this or just ignore non-image attachments for vision models
+                        console.warn(
+                            `[AIServiceManager] Attachment type ${att.type} (${att.mime}) not yet fully supported for vision models.`
+                        );
+                    }
+                }
+
                 baseMessages.push({
                     role: 'user',
-                    content: [
+                    content: userPrompt, // Fallback content for legacy/non-supported
+                    multiModalContent: multiModalContent,
+                });
+            } else if (imageData) {
+                // Legacy single-image support
+                console.log(
+                    '[AIServiceManager] Vision task detected (legacy imageData), creating multimodal message'
+                );
+
+                // Construct standard multiModalContent from legacy imageData
+                const mimeType = imageData.startsWith('data:image/png')
+                    ? 'image/png'
+                    : 'image/jpeg'; // Guess or parse
+                const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+                inputImages.push({ mimeType, data: base64Data });
+
+                baseMessages.push({
+                    role: 'user',
+                    content: userPrompt,
+                    multiModalContent: [
                         { type: 'text', text: userPrompt },
-                        {
-                            type: 'image_url',
-                            image_url: {
-                                url: imageData.startsWith('data:')
-                                    ? imageData
-                                    : `data:image/png;base64,${imageData}`,
-                            },
-                        },
-                    ] as any,
+                        { type: 'image', mimeType: mimeType, data: base64Data },
+                    ],
                 });
             } else {
                 // Standard text message
                 baseMessages.push({ role: 'user', content: userPrompt });
             }
 
-            options.onLog?.('info', `[AIServiceManager] Generated prompt for task ${task.id}`, {
-                taskId: task.id,
-                systemPromptLength: aiConfig.systemPrompt?.length,
-                userPromptLength: userPrompt.length,
-                model: aiConfig.model,
-            });
+            options.onLog?.(
+                'info',
+                `[AIServiceManager] Generated prompt for task #${task.projectSequence}`,
+                {
+                    taskId: task.id,
+                    systemPromptLength: aiConfig.systemPrompt?.length,
+                    userPromptLength: userPrompt.length,
+                    model: aiConfig.model,
+                }
+            );
 
             const toolCount = Array.isArray(aiConfig.tools) ? aiConfig.tools.length : 0;
             const hasTools = toolCount > 0;
             if (!hasTools) {
                 options.onLog?.(
                     'warn',
-                    `[AIServiceManager] No MCP tools available for task ${task.id} despite required list`,
+                    `[AIServiceManager] No MCP tools available for task #${task.projectSequence} despite required list`,
                     {
                         taskId: task.id,
                         requiredMCPs: allRequiredMCPs,
@@ -521,7 +568,7 @@ export class AIServiceManager {
             } else {
                 options.onLog?.(
                     'info',
-                    `[AIServiceManager] Collected ${toolCount} MCP tools for task ${task.id}`,
+                    `[AIServiceManager] Collected ${toolCount} MCP tools for task #${task.projectSequence}`,
                     {
                         taskId: task.id,
                         toolNames: (aiConfig.tools ?? []).map((t) => t.name),
@@ -597,7 +644,8 @@ export class AIServiceManager {
                     aiContext,
                     provider,
                     options,
-                    startTime
+                    startTime,
+                    inputImages // Pass collected images
                 );
             } else if (hasTools) {
                 if (options.streaming) {
@@ -998,7 +1046,7 @@ export class AIServiceManager {
         }
 
         throw new Error(
-            `Exceeded maximum MCP tool iterations (${AIServiceManager.MAX_TOOL_ITERATIONS}) while executing task ${task.id}`
+            `Exceeded maximum MCP tool iterations (${AIServiceManager.MAX_TOOL_ITERATIONS}) while executing task #${task.projectSequence}`
         );
     }
 
@@ -1224,6 +1272,17 @@ export class AIServiceManager {
         openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini'],
         google: [
             'imagen-3.0',
+            'imagen-3.0-generate-001',
+            'imagen-3.0-generate-002',
+            'gemini-2.5-flash-image',
+            'gemini-3-pro-image-preview',
+            'veo-3.1-generate-preview',
+            'veo-2.0-generate-preview',
+        ],
+        'default-highflow': [
+            'imagen-3.0',
+            'imagen-3.0-generate-001',
+            'imagen-3.0-generate-002',
             'gemini-2.5-flash-image',
             'gemini-3-pro-image-preview',
             'veo-3.1-generate-preview',
@@ -1276,23 +1335,6 @@ export class AIServiceManager {
         return isImage;
     }
 
-    private getImageGenerationConfig(task: Task): ImageGenerationConfig {
-        const config = ((task as any).imageConfig || {}) as ImageGenerationConfig;
-        return {
-            provider: config.provider,
-            model: config.model,
-            size: config.size || '1024x1024',
-            quality: config.quality || 'standard',
-            style: config.style,
-            background: config.background,
-            format: (config.format || 'png') as ImageGenerationConfig['format'],
-            negativePrompt: config.negativePrompt,
-            promptTemplate: config.promptTemplate,
-            count: config.count ?? 1,
-            extra: config.extra,
-        };
-    }
-
     private async resolveImageModelForProvider(
         provider: AIProvider,
         task: Task,
@@ -1308,6 +1350,10 @@ export class AIServiceManager {
         if (preferredModel && validImageModels[provider]?.includes(preferredModel)) {
             const providerInstance = await this.providerFactory.getProvider(provider);
             const modelInfo = providerInstance.getModelInfo(preferredModel);
+            console.log(
+                `[AIServiceManager] Model info for ${provider} - ${preferredModel}:`,
+                modelInfo
+            );
             if (modelInfo) {
                 console.log(`[AIServiceManager] Using preferred image model: ${preferredModel}`);
                 return preferredModel;
@@ -1325,7 +1371,7 @@ export class AIServiceManager {
             case 'openai':
                 return 'dall-e-3';
             case 'google':
-                return 'imagen-3.0';
+                return 'gemini-2.0-flash-exp-image-generation';
             default:
                 throw new Error(
                     `Provider ${provider} does not currently support image generation in this workspace.`
@@ -1337,15 +1383,38 @@ export class AIServiceManager {
         task: Task,
         prompt: string,
         aiContext: AIExecutionContext,
-        providerName: AIProvider,
+        provider: AIProvider | null, // Provider resolved by executeTask
         options: AIExecutionOptions,
-        startTime: number
+        startTime: number,
+        inputImages: Array<{ mimeType: string; data: string }> = []
     ): Promise<AIExecutionResult> {
-        const imageConfig = this.getImageGenerationConfig(task);
-        const preferredProvider =
+        const imageConfig = (task as any).imageConfig || {};
+        let preferredProvider =
             (imageConfig.provider as AIProvider | null) ||
             (task.aiProvider as AIProvider | null) ||
-            providerName;
+            provider ||
+            'google'; // Default to google if null
+        const preferredModel = (imageConfig.model || task.aiModel) as AIModel | undefined;
+
+        // Auto-detect provider if model matches a known invalid provider combination
+        // (e.g. User configured Google model but provider is somehow OpenAI in DB)
+        if (preferredModel && preferredProvider) {
+            const validImageModels = AIServiceManager.IMAGE_MODELS;
+            const currentProviderModels = validImageModels[preferredProvider] || [];
+
+            if (!currentProviderModels.includes(preferredModel)) {
+                // Check if this model belongs to another provider
+                for (const [p, models] of Object.entries(validImageModels)) {
+                    if (models && models.includes(preferredModel)) {
+                        console.warn(
+                            `[AIServiceManager] Model ${preferredModel} not found in ${preferredProvider}, but found in ${p}. Switching provider.`
+                        );
+                        preferredProvider = p as AIProvider;
+                        break;
+                    }
+                }
+            }
+        }
 
         const promptWithTemplate = imageConfig.promptTemplate
             ? imageConfig.promptTemplate.replace('{{prompt}}', prompt)
@@ -1358,7 +1427,9 @@ export class AIServiceManager {
             background: imageConfig.background,
             format: imageConfig.format,
             count: imageConfig.count,
+
             extra: imageConfig.extra,
+            inputImages: inputImages, // Pass input images to provider
         };
 
         const model = await this.resolveImageModelForProvider(preferredProvider, task, imageConfig);
@@ -1879,7 +1950,7 @@ ${
 
         options.onLog?.(
             'info',
-            `[AI] Prompt prepared for task #${task.id} (${provider}/${model}): ${this.truncateString(prompt, 200)}`,
+            `[AI] Prompt prepared for task #${task.projectSequence} (${provider}/${model}): ${this.truncateString(prompt, 200)}`,
             {
                 taskId: task.id,
                 projectId: task.projectId,
@@ -2059,7 +2130,7 @@ ${
 
             if (detectedMCPs.length > 0) {
                 console.log(
-                    `[MCP Detection] ✓ Successfully auto-detected ${detectedMCPs.length} relevant MCPs for task ${task.id}:`,
+                    `[MCP Detection] ✓ Successfully auto-detected ${detectedMCPs.length} relevant MCPs for task #${task.projectSequence}:`,
                     detectedMCPs
                 );
                 onLog?.(
@@ -2067,8 +2138,13 @@ ${
                     `[MCP Detection] ✓ Successfully auto-detected ${detectedMCPs.length} relevant MCPs: ${detectedMCPs.join(', ')}`
                 );
             } else {
-                console.log(`[MCP Detection] ✗ No MCPs auto-detected for task ${task.id}`);
-                onLog?.('info', `[MCP Detection] ✗ No MCPs auto-detected for task ${task.id}`);
+                console.log(
+                    `[MCP Detection] ✗ No MCPs auto-detected for task #${task.projectSequence}`
+                );
+                onLog?.(
+                    'info',
+                    `[MCP Detection] ✗ No MCPs auto-detected for task #${task.projectSequence}`
+                );
             }
 
             return detectedMCPs;

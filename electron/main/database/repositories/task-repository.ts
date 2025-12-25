@@ -387,6 +387,29 @@ export class TaskRepository {
             parentTaskId: original.parentTaskId,
         });
     }
+
+    /**
+     * Reset results for all tasks in a project
+     */
+    async resetResultsForProject(projectId: number): Promise<void> {
+        await db
+            .update(tasks)
+            .set({
+                status: 'todo',
+                executionResult: null,
+                startedAt: null,
+                completedAt: null,
+                pausedAt: null,
+                actualMinutes: null,
+                actualCost: null,
+                tokenUsage: null,
+                isPaused: false,
+                autoReviewed: false,
+                reviewFailed: false,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)));
+    }
 }
 
 // Export singleton instance

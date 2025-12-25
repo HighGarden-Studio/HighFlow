@@ -211,6 +211,28 @@ async function handleExportProject() {
     }
 }
 
+async function handleResetResults() {
+    if (!props.project) return;
+    if (
+        !confirm(
+            '정말로 프로젝트 결과를 초기화하시겠습니까?\n\n이 작업은 다음 항목들을 삭제하며 되돌릴 수 없습니다:\n- 프로젝트 AI 메모리\n- 모든 태스크의 실행 결과 및 히스토리\n- 모든 태스크의 상태 (Todo로 초기화)\n\n태스크 정의와 설정은 유지됩니다.'
+        )
+    ) {
+        return;
+    }
+
+    try {
+        const api = getAPI();
+        await api.projects.resetResults(props.project.id);
+        alert('프로젝트 결과가 초기화되었습니다.');
+        emit('update');
+        emit('close');
+    } catch (error) {
+        console.error('Failed to reset project results:', error);
+        alert('프로젝트 결과 초기화에 실패했습니다.');
+    }
+}
+
 // Handle escape key
 watch(
     () => props.open,
@@ -363,6 +385,25 @@ watch(
                                     {{ new Date(project.updatedAt).toLocaleDateString('ko-KR') }}
                                 </div>
                                 <div class="flex items-center gap-2">
+                                    <button
+                                        @click="handleResetResults"
+                                        class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    >
+                                        <svg
+                                            class="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                            />
+                                        </svg>
+                                        Reset Results
+                                    </button>
                                     <button
                                         @click="handleExportProject"
                                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2"

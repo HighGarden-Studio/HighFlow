@@ -316,6 +316,9 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Convert to plain JSON object to avoid serialization issues with Date objects and Vue reactivity
             const plainData = JSON.parse(JSON.stringify(updateData));
+            console.groupCollapsed('📝 TaskStore.updateTask trace');
+            console.trace();
+            console.groupEnd();
             console.log('📝 TaskStore.updateTask calling API:', id, plainData);
             const task = await api.tasks.update(id, plainData);
             console.log('📝 Task updated from API:', task);
@@ -950,6 +953,12 @@ export const useTaskStore = defineStore('tasks', () => {
             // Ignore IPC errors
         }
 
+        // Check if task status was already updated to 'todo' by event listeners
+        const updatedTask = tasks.value.find((t) => t.id === taskId);
+        if (updatedTask && updatedTask.status === 'todo') {
+            return { success: true };
+        }
+
         // Clear execution progress from local state
         executionProgress.value.delete(taskId);
 
@@ -1482,7 +1491,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Execution completed
             const unsubscribeCompleted = api.taskExecution.onCompleted(
-                (data: { taskId: number; result: unknown }) => {
+                (data: { taskId: number; result: ExecutionResult }) => {
                     console.log('[TaskStore] Execution completed:', data);
                     executingTaskIds.value.delete(data.taskId);
 
@@ -1492,7 +1501,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (existing) {
                         newMap.set(data.taskId, {
                             ...existing,
-                            progress: 100,
+                            percentage: 100,
                             phase: 'completed',
                         });
                     }
@@ -1546,6 +1555,18 @@ export const useTaskStore = defineStore('tasks', () => {
                             inputSubStatus: null, // Clear input waiting status
                         };
 
+                        // Dispatch custom event to notify views (especially DAGView)
+                        if (task.taskType === 'input') {
+                            window.dispatchEvent(
+                                new CustomEvent('task:input-status-changed', {
+                                    detail: {
+                                        taskId: data.taskId,
+                                        inputSubStatus: null,
+                                    },
+                                })
+                            );
+                        }
+
                         // Trigger auto-review if enabled
                         if (task.autoReview) {
                             console.log(
@@ -1586,7 +1607,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (index >= 0) {
                         tasks.value[index] = {
                             ...tasks.value[index],
-                            status: 'todo',
+                            status: 'in_review',
                         };
                     }
 

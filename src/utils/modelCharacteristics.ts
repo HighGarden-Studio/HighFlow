@@ -153,8 +153,8 @@ export const MODEL_CHARACTERISTICS: Record<string, ModelCharacteristics> = {
     },
 
     // Google
-    'gemini-1.5-pro': {
-        name: 'Gemini 1.5 Pro',
+    'gemini-2.5-pro': {
+        name: 'Gemini 2.5 Pro',
         description: '강력한 멀티모달 모델',
         contextWindow: 1000000,
         supportsVision: true,
@@ -164,8 +164,8 @@ export const MODEL_CHARACTERISTICS: Record<string, ModelCharacteristics> = {
         costTier: 'medium',
         capabilities: ['vision', 'tools', 'ultra-long-context'],
     },
-    'gemini-1.5-flash': {
-        name: 'Gemini 1.5 Flash',
+    'gemini-2.5-flash': {
+        name: 'Gemini 2.5 Flash',
         description: '빠른 멀티모달 모델',
         contextWindow: 1000000,
         supportsVision: true,

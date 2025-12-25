@@ -626,6 +626,29 @@ export class GPTProvider extends BaseAIProvider {
                 } as OpenAI.Chat.ChatCompletionMessageParam;
             }
 
+            if (message.role === 'user' && message.multiModalContent) {
+                const contentParts: any[] = message.multiModalContent
+                    .map((part) => {
+                        if (part.type === 'text') {
+                            return { type: 'text', text: part.text };
+                        } else if (part.type === 'image') {
+                            return {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${part.mimeType};base64,${part.data}`,
+                                },
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(Boolean);
+
+                return {
+                    role: 'user',
+                    content: contentParts,
+                } as OpenAI.Chat.ChatCompletionMessageParam;
+            }
+
             return {
                 role: message.role as 'user' | 'system',
                 content: message.content,

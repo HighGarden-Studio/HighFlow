@@ -102,6 +102,47 @@ const truncatedContent = computed(() => {
     return content.slice(0, 1000) + '...';
 });
 
+// Check if content is likely an image
+const isImageResult = computed(() => {
+    const content = effectiveStreamedContent.value;
+    if (!content) return false;
+
+    // Check task metadata first
+    if (
+        props.task.outputFormat === 'png' ||
+        props.task.expectedOutputFormat === 'png' ||
+        props.task.aiModel?.includes('image') ||
+        props.task.aiModel?.includes('veo')
+    ) {
+        return true;
+    }
+
+    // Heuristic check for base64 image start sequences
+    // PNG: ivbORw0KGgo
+    // JPEG: /9j/
+    // GIF: R0lGOD
+    return (
+        content.startsWith('iVBORw0KGgo') ||
+        content.startsWith('/9j/') ||
+        content.startsWith('R0lGOD')
+    );
+});
+
+const imageSrc = computed(() => {
+    const content = effectiveStreamedContent.value;
+    if (!content) return '';
+
+    // If already has data prefix, return as is
+    if (content.startsWith('data:image')) return content;
+
+    // Otherwise assume standard base64 and guess mime type
+    let mimeType = 'image/png';
+    if (content.startsWith('/9j/')) mimeType = 'image/jpeg';
+    else if (content.startsWith('R0lGOD')) mimeType = 'image/gif';
+
+    return `data:${mimeType};base64,${content}`;
+});
+
 // Methods
 async function startExecution() {
     try {
@@ -317,9 +358,14 @@ defineExpose({
             class="relative rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
         >
             <!-- Header with status -->
-            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-between">
+            <div
+                class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-between"
+            >
                 <div class="flex items-center gap-2">
-                    <span v-if="isEffectivelyExecuting" class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                    <span
+                        v-if="isEffectivelyExecuting"
+                        class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"
+                    ></span>
                     <span v-else class="w-2 h-2 rounded-full bg-green-500"></span>
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
                         {{ isEffectivelyExecuting ? 'AI 응답 생성중...' : 'AI 응답' }}
@@ -331,15 +377,42 @@ defineExpose({
             </div>
 
             <!-- Content area - larger and more readable, limited height to not obscure buttons below -->
-            <div class="px-4 py-4 max-h-[250px] overflow-y-auto">
-                <pre
-                    v-if="effectiveStreamedContent"
-                    class="text-base text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono leading-relaxed"
-                    >{{ truncatedContent }}</pre>
+            <div class="px-4 py-4 max-h-[350px] overflow-y-auto">
+                <div v-if="effectiveStreamedContent">
+                    <div
+                        v-if="isImageResult"
+                        class="flex flex-col items-center justify-center bg-gray-900/5 rounded-lg p-2"
+                    >
+                        <img
+                            :src="imageSrc"
+                            alt="Generated Image"
+                            class="max-w-full h-auto rounded shadow-sm object-contain max-h-[300px]"
+                        />
+                        <div class="mt-2 text-xs text-gray-500 font-mono">
+                            {{ effectiveStreamedContent.length.toLocaleString() }} bytes
+                        </div>
+                    </div>
+                    <pre
+                        v-else
+                        class="text-base text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono leading-relaxed"
+                        >{{ truncatedContent }}</pre
+                    >
+                </div>
                 <div v-else class="flex items-center justify-center py-8 text-gray-400">
                     <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                        ></circle>
+                        <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                     </svg>
                     응답 대기중...
                 </div>
@@ -354,7 +427,11 @@ defineExpose({
                     class="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
                     @click="showFullContent = !showFullContent"
                 >
-                    {{ showFullContent ? '접기' : `전체 보기 (${effectiveStreamedContent.length.toLocaleString()} 문자)` }}
+                    {{
+                        showFullContent
+                            ? '접기'
+                            : `전체 보기 (${effectiveStreamedContent.length.toLocaleString()} 문자)`
+                    }}
                 </button>
             </div>
         </div>
