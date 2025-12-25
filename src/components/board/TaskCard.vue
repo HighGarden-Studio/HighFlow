@@ -27,6 +27,7 @@ interface Props {
     showTags?: boolean;
     missingProvider?: MissingProviderInfo | null; // 미연동 Provider 정보
     hideConnectionHandles?: boolean; // Hide connection handles (for DAG view)
+    hideTypeIndicator?: boolean; // Hide type indicator badge
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
     missingProvider: null,
     hidePromptActions: false,
     hideConnectionHandles: false,
+    hideTypeIndicator: false,
 });
 
 const emit = defineEmits<{
@@ -82,41 +84,116 @@ const cardComponent = computed(() => {
 </script>
 
 <template>
-    <component
-        :is="cardComponent"
-        v-bind="props"
-        @click="
-            (t: Task) => {
-                console.log('[TaskCard] Click event received for task:', t.id, t.title, t.taskType);
-                emit('click', t);
-            }
-        "
-        @previewStream="(t: Task) => emit('previewStream', t)"
-        @edit="(t: Task) => emit('edit', t)"
-        @delete="(t: Task) => emit('delete', t)"
-        @execute="(t: Task) => emit('execute', t)"
-        @enhancePrompt="(t: Task) => emit('enhancePrompt', t)"
-        @previewPrompt="(t: Task) => emit('previewPrompt', t)"
-        @previewResult="(t: Task) => emit('previewResult', t)"
-        @retry="(t: Task) => emit('retry', t)"
-        @viewHistory="(t: Task) => emit('viewHistory', t)"
-        @viewProgress="(t: Task) => emit('viewProgress', t)"
-        @pause="(t: Task) => emit('pause', t)"
-        @resume="(t: Task) => emit('resume', t)"
-        @stop="(t: Task) => emit('stop', t)"
-        @subdivide="(t: Task) => emit('subdivide', t)"
-        @openApproval="(t: Task) => emit('openApproval', t)"
-        @connectionStart="(t: Task, e: DragEvent) => emit('connectionStart', t, e)"
-        @connectionEnd="(t: Task) => emit('connectionEnd', t)"
-        @connectionCancel="emit('connectionCancel')"
-        @connectProvider="(id: string) => emit('connectProvider', id)"
-        @operatorDrop="(tid: number, oid: number) => emit('operatorDrop', tid, oid)"
-        @provideInput="(t: Task) => emit('provideInput', t)"
-        @approve="
-            (t: Task) => {
-                emit('approve', t);
-            }
-        "
-        :hide-connection-handles="props.hideConnectionHandles"
-    />
+    <div class="task-card-container relative group/card">
+        <!-- Type Indicator Badge -->
+        <div
+            v-if="!hideTypeIndicator"
+            class="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center shadow-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            :title="task.taskType || 'AI'"
+        >
+            <!-- AI Task -->
+            <svg
+                v-if="task.taskType === 'ai' || !task.taskType"
+                class="w-3.5 h-3.5 text-purple-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+                />
+            </svg>
+            <!-- Script Task -->
+            <svg
+                v-else-if="task.taskType === 'script'"
+                class="w-3.5 h-3.5 text-emerald-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+            </svg>
+            <!-- Input Task -->
+            <svg
+                v-else-if="task.taskType === 'input'"
+                class="w-3.5 h-3.5 text-blue-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+            </svg>
+            <!-- Output Task -->
+            <svg
+                v-else-if="task.taskType === 'output'"
+                class="w-3.5 h-3.5 text-gray-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+            </svg>
+        </div>
+
+        <component
+            :is="cardComponent"
+            v-bind="props"
+            @click="
+                (t: Task) => {
+                    console.log(
+                        '[TaskCard] Click event received for task:',
+                        t.id,
+                        t.title,
+                        t.taskType
+                    );
+                    emit('click', t);
+                }
+            "
+            @previewStream="(t: Task) => emit('previewStream', t)"
+            @edit="(t: Task) => emit('edit', t)"
+            @delete="(t: Task) => emit('delete', t)"
+            @execute="(t: Task) => emit('execute', t)"
+            @enhancePrompt="(t: Task) => emit('enhancePrompt', t)"
+            @previewPrompt="(t: Task) => emit('previewPrompt', t)"
+            @previewResult="(t: Task) => emit('previewResult', t)"
+            @retry="(t: Task) => emit('retry', t)"
+            @viewHistory="(t: Task) => emit('viewHistory', t)"
+            @viewProgress="(t: Task) => emit('viewProgress', t)"
+            @pause="(t: Task) => emit('pause', t)"
+            @resume="(t: Task) => emit('resume', t)"
+            @stop="(t: Task) => emit('stop', t)"
+            @subdivide="(t: Task) => emit('subdivide', t)"
+            @openApproval="(t: Task) => emit('openApproval', t)"
+            @connectionStart="(t: Task, e: DragEvent) => emit('connectionStart', t, e)"
+            @connectionEnd="(t: Task) => emit('connectionEnd', t)"
+            @connectionCancel="emit('connectionCancel')"
+            @connectProvider="(id: string) => emit('connectProvider', id)"
+            @operatorDrop="(tid: number, oid: number) => emit('operatorDrop', tid, oid)"
+            @provideInput="(t: Task) => emit('provideInput', t)"
+            @approve="
+                (t: Task) => {
+                    emit('approve', t);
+                }
+            "
+            :hide-connection-handles="props.hideConnectionHandles"
+        />
+    </div>
 </template>

@@ -42,6 +42,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
     });
     const autoscroll = ref(true);
     const isSubscribed = ref(false);
+    const isIPCSubscribed = ref(false);
 
     // Computed
     const filteredLogs = computed(() => {
@@ -269,6 +270,8 @@ export const useActivityLogStore = defineStore('activityLog', () => {
 
     // Subscribe to IPC events
     function subscribeToIPCEvents() {
+        if (isIPCSubscribed.value) return;
+
         const api = getAPI();
         if (!api) return;
 
@@ -462,6 +465,8 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                 });
             });
         }
+
+        isIPCSubscribed.value = true;
     }
 
     // Initialize

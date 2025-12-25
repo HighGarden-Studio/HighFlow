@@ -275,7 +275,7 @@ watch(
                 >
                     <div
                         v-if="isOpen && project"
-                        class="relative w-full max-w-2xl max-h-[85vh] bg-gray-900 rounded-xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
+                        class="relative w-full max-w-4xl max-h-[85vh] bg-gray-900 rounded-xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
                     >
                         <!-- Modal Header -->
                         <div
@@ -376,8 +376,8 @@ watch(
 
                         <!-- Modal Footer -->
                         <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
-                            <div class="flex items-center justify-between">
-                                <div class="text-sm text-gray-500">
+                            <div class="flex items-center justify-between flex-wrap gap-y-4">
+                                <div class="text-sm text-gray-400">
                                     생성일:
                                     {{ new Date(project.createdAt).toLocaleDateString('ko-KR') }}
                                     <span class="mx-2">|</span>
@@ -387,7 +387,7 @@ watch(
                                 <div class="flex items-center gap-2">
                                     <button
                                         @click="handleResetResults"
-                                        class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center gap-2"
+                                        class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
                                     >
                                         <svg
                                             class="w-4 h-4"
@@ -406,7 +406,7 @@ watch(
                                     </button>
                                     <button
                                         @click="handleExportProject"
-                                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2"
+                                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
                                     >
                                         <svg
                                             class="w-4 h-4"
@@ -425,7 +425,7 @@ watch(
                                     </button>
                                     <button
                                         @click="handleClose"
-                                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors whitespace-nowrap"
                                     >
                                         닫기
                                     </button>

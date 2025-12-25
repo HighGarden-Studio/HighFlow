@@ -56,6 +56,7 @@ export interface ProjectsAPI {
     delete: (id: number) => Promise<void>;
     export: (id: number) => Promise<unknown>;
     import: (data: unknown) => Promise<Project>;
+    resetResults: (id: number) => Promise<void>;
 }
 
 export interface TasksAPI {

@@ -13,7 +13,13 @@ import type { AiResult } from './ai';
 
 export type ProjectStatus = 'active' | 'completed' | 'archived' | 'on_hold';
 
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
+export type TaskStatus =
+    | 'todo'
+    | 'in_progress'
+    | 'in_review'
+    | 'done'
+    | 'blocked'
+    | 'needs_approval';
 
 /**
  * Task Status Transition Rules
@@ -61,10 +67,11 @@ export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocke
 // Allowed status transitions
 export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
     todo: ['in_progress', 'done', 'blocked'],
-    in_progress: ['in_review', 'blocked', 'todo', 'done'], // done allowed for auto-approve
+    in_progress: ['in_review', 'blocked', 'todo', 'done', 'needs_approval'], // done allowed for auto-approve
     in_review: ['done', 'in_progress', 'blocked'],
     done: ['in_progress', 'blocked'],
     blocked: ['todo'],
+    needs_approval: ['in_progress', 'todo', 'blocked'],
 };
 
 // Check if a status transition is valid

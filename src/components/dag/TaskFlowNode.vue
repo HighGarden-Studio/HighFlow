@@ -143,7 +143,7 @@ function handleWrapperDragOver(event: DragEvent) {
     }
 }
 
-function handleWrapperDragLeave(event: DragEvent) {
+function handleWrapperDragLeave() {
     isOperatorDragOver.value = false;
 }
 
@@ -170,7 +170,7 @@ const nodeRef = ref<HTMLElement | null>(null);
 onMounted(() => {
     if (nodeRef.value) {
         // Try mouseup event instead of drop for better compatibility
-        nodeRef.value.addEventListener('mouseup', (e: Event) => {
+        nodeRef.value.addEventListener('mouseup', () => {
             // Check if this is the end of a drag operation
             if (isOperatorDragOver.value) {
                 // Create a synthetic DragEvent
@@ -216,7 +216,7 @@ onUnmounted(() => {
         <!-- Connection handles -->
         <Handle type="target" :position="Position.Left" class="handle-left" />
 
-        <!-- Status Icon Overlay -->
+        <!-- Status Icon Overlay (Right) -->
         <div class="status-icon-overlay">
             <!-- Input Task Waiting for User Input -->
             <div v-if="isInputTaskWaiting" class="status-icon waiting-input">
@@ -286,6 +286,62 @@ onUnmounted(() => {
             </div>
         </div>
 
+        <!-- Type Icon Overlay (Left) -->
+        <div class="type-icon-overlay">
+            <div
+                class="status-icon bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
+            >
+                <svg
+                    v-if="data.task.taskType === 'input'"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    class="text-blue-500"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                </svg>
+                <svg
+                    v-else-if="data.task.taskType === 'script'"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    class="text-emerald-500"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                </svg>
+                <svg
+                    v-else
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    class="text-purple-500"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+                    />
+                </svg>
+            </div>
+        </div>
+
         <!-- TaskCard component with max-width -->
         <div class="task-card-wrapper">
             <TaskCard
@@ -297,6 +353,7 @@ onUnmounted(() => {
                 :hide-prompt-actions="true"
                 :hide-extra-actions="false"
                 :hide-connection-handles="true"
+                :hide-type-indicator="true"
                 @click="handleClick"
                 @execute="handleExecute"
                 @preview-result="handlePreviewResult"
@@ -392,6 +449,14 @@ onUnmounted(() => {
     position: absolute;
     top: -8px;
     right: -8px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.type-icon-overlay {
+    position: absolute;
+    top: -8px;
+    left: -8px;
     z-index: 10;
     pointer-events: none;
 }

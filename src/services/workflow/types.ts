@@ -45,6 +45,7 @@ export interface ExecutionOptions {
     enabledProviders?: EnabledProviderInfo[];
     mcpServers?: MCPServerRuntimeConfig[];
     onLog?: (level: LogLevel, message: string, details?: any) => void;
+    signal?: AbortSignal;
 }
 
 export interface RetryStrategy {

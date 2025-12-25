@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Task } from '@core/types/database';
+import type { Task, TaskStatus } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
 import type { ExecutionProgress } from '@core/types/electron.d';
 import { TASK_STATUS_TRANSITIONS, isValidStatusTransition } from '@core/types/database';
@@ -24,10 +24,9 @@ import {
     AssignOperatorCommand,
 } from '../../core/commands/TaskCommands';
 
-// Re-export Task type for convenience
-export type { Task };
+// Re-export Task, TaskStatus type for convenience
+export type { Task, TaskStatus };
 
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // Re-export transition rules for convenience
@@ -1394,26 +1393,24 @@ export const useTaskStore = defineStore('tasks', () => {
                         } catch (error) {
                             console.error('[TaskStore] Failed to refetch INPUT task:', error);
                             // Fallback to simple status update
-                            tasks.value[index] = { ...tasks.value[index], status };
+                            tasks.value[index] = { ...tasks.value[index], status } as Task;
                             if (currentTask.value?.id === id) {
                                 currentTask.value = { ...currentTask.value, status };
                             }
                         }
                     } else {
                         // Normal status update for non-INPUT tasks
-                        tasks.value[index] = { ...tasks.value[index], status };
+                        tasks.value[index] = { ...tasks.value[index], status } as Task;
                         if (currentTask.value?.id === id) {
                             currentTask.value = { ...currentTask.value, status };
                         }
                     }
 
                     // Check and trigger dependent tasks when a task completes
+                    // MOVED TO BACKEND: Auto-execution is now fully handled by the main process (task-execution-handlers.ts)
+                    // to prevent duplicate executions, infinite loops, and to respect global pause state securely.
                     if (status === 'done') {
-                        console.log(
-                            '[TaskStore] Task completed, checking for dependent tasks:',
-                            id
-                        );
-                        checkAndTriggerDependentTasks(id);
+                        // console.log('[TaskStore] Task completed (backend will handle dependencies)', id);
                     }
                 }
             }
@@ -1442,7 +1439,7 @@ export const useTaskStore = defineStore('tasks', () => {
                         tasks.value[index] = {
                             ...tasks.value[index],
                             status: 'in_progress',
-                        };
+                        } as Task;
                     }
                 }
             );
@@ -1491,7 +1488,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Execution completed
             const unsubscribeCompleted = api.taskExecution.onCompleted(
-                (data: { taskId: number; result: ExecutionResult }) => {
+                (data: { taskId: number; result: any }) => {
                     console.log('[TaskStore] Execution completed:', data);
                     executingTaskIds.value.delete(data.taskId);
 
@@ -1553,7 +1550,7 @@ export const useTaskStore = defineStore('tasks', () => {
                             status: newStatus,
                             executionResult,
                             inputSubStatus: null, // Clear input waiting status
-                        };
+                        } as Task;
 
                         // Dispatch custom event to notify views (especially DAGView)
                         if (task.taskType === 'input') {
@@ -1605,10 +1602,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     // Update task status back to todo on failure
                     const index = tasks.value.findIndex((t) => t.id === data.taskId);
                     if (index >= 0) {
-                        tasks.value[index] = {
-                            ...tasks.value[index],
-                            status: 'in_review',
-                        };
+                        tasks.value[index] = { ...tasks.value[index], status: 'in_review' } as Task;
                     }
 
                     error.value = data.error;
@@ -1634,10 +1628,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 // Update task isPaused flag
                 const index = tasks.value.findIndex((t) => t.id === data.taskId);
                 if (index >= 0) {
-                    tasks.value[index] = {
-                        ...tasks.value[index],
-                        isPaused: true,
-                    };
+                    tasks.value[index] = { ...tasks.value[index], isPaused: true } as Task;
                 }
             });
             cleanupFns.push(unsubscribePaused);
@@ -1660,10 +1651,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 // Update task isPaused flag
                 const index = tasks.value.findIndex((t) => t.id === data.taskId);
                 if (index >= 0) {
-                    tasks.value[index] = {
-                        ...tasks.value[index],
-                        isPaused: false,
-                    };
+                    tasks.value[index] = { ...tasks.value[index], isPaused: false } as Task;
                 }
             });
             cleanupFns.push(unsubscribeResumed);
@@ -1685,7 +1673,7 @@ export const useTaskStore = defineStore('tasks', () => {
                         ...tasks.value[index],
                         status: 'todo',
                         isPaused: false,
-                    };
+                    } as Task;
                 }
             });
             cleanupFns.push(unsubscribeStopped);
@@ -1938,6 +1926,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // 태스크를 순서대로 생성
             for (let i = 0; i < planSafe.tasks.length; i++) {
                 const taskPlan = planSafe.tasks[i];
+                if (!taskPlan) continue;
 
                 const normalizedDependencies = Array.isArray(taskPlan.dependencies)
                     ? taskPlan.dependencies

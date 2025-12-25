@@ -6,7 +6,7 @@
  */
 export class GlobalExecutionService {
     private static instance: GlobalExecutionService;
-    private isPaused: boolean = false;
+    private pausedProjects: Set<number> = new Set();
 
     private constructor() {}
 
@@ -18,26 +18,32 @@ export class GlobalExecutionService {
     }
 
     /**
-     * Check if global execution is paused
+     * Check if execution is paused for a specific project
      */
-    public isGlobalPaused(): boolean {
-        return this.isPaused;
+    public isProjectPaused(projectId: number): boolean {
+        return this.pausedProjects.has(projectId);
     }
 
     /**
-     * Set global pause state
+     * Set pause state for a specific project
      */
-    public setGlobalPause(paused: boolean): void {
-        this.isPaused = paused;
-        console.log(`[GlobalExecutionService] Global Execution Paused: ${this.isPaused}`);
+    public setProjectPause(projectId: number, paused: boolean): void {
+        if (paused) {
+            this.pausedProjects.add(projectId);
+        } else {
+            this.pausedProjects.delete(projectId);
+        }
+        console.log(
+            `[GlobalExecutionService] Project ${projectId} Execution Paused: ${this.isProjectPaused(projectId)}`
+        );
     }
 
     /**
-     * Toggle global pause state
+     * Toggle pause state for a specific project
      */
-    public toggleGlobalPause(): boolean {
-        this.isPaused = !this.isPaused;
-        console.log(`[GlobalExecutionService] Global Execution Paused: ${this.isPaused}`);
-        return this.isPaused;
+    public toggleProjectPause(projectId: number): boolean {
+        const isPaused = this.isProjectPaused(projectId);
+        this.setProjectPause(projectId, !isPaused);
+        return !isPaused;
     }
 }

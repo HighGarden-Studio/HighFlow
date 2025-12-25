@@ -21,6 +21,7 @@ export class AdvancedTaskExecutor {
     private aiServiceManager: AIServiceManager;
     private executionStates: Map<string, ExecutionState> = new Map();
     private checkpoints: Map<string, Checkpoint[]> = new Map();
+    private activeTaskExecutions: Map<number, AbortController> = new Map();
 
     constructor() {
         this.aiServiceManager = new AIServiceManager();
@@ -60,163 +61,182 @@ export class AdvancedTaskExecutor {
         const startTime = new Date();
         const { onLog } = options;
 
-        if (onLog) {
-            onLog(
-                'info',
-                `[AdvancedTaskExecutor] Starting execution for task #${task.projectSequence}: ${task.title}`,
-                {
-                    taskId: task.id,
-                    contextKeys: Object.keys(context),
-                }
-            );
-        }
+        // Create AbortController for this task
+        const abortController = new AbortController();
+        this.activeTaskExecutions.set(task.id, abortController);
 
-        // 세분화된 그룹 테스크는 실행 불가 (건너뛰기)
-        if (task.isSubdivided) {
-            console.warn(
-                `Task #${task.projectSequence} is subdivided and cannot be executed directly. Skipping...`
-            );
-            return {
-                taskId: task.id,
-                status: 'skipped',
-                output: {
-                    message: 'Task is subdivided into subtasks and cannot be executed directly',
-                },
-                startTime,
-                endTime: new Date(),
-                duration: 0,
-                cost: 0,
-                retries: 0,
-                metadata: { skipped: true, reason: 'subdivided' },
-            };
-        }
+        try {
+            // If external signal is provided, link it
+            if (options.signal) {
+                options.signal.addEventListener('abort', () => abortController.abort());
+            }
 
-        let retries = 0;
-        let lastError: Error | undefined;
+            // Add signal to options for downstream use
+            options = { ...options, signal: abortController.signal };
 
-        const retryStrategy: RetryStrategy = options.retryStrategy || {
-            maxRetries: 3,
-            initialDelay: 1000,
-            maxDelay: 30000,
-            backoffMultiplier: 2,
-        };
-
-        while (retries <= retryStrategy.maxRetries) {
-            try {
-                // 예산 체크
-                if (context.budget) {
-                    this.checkBudget(context.budget);
-                }
-
-                // 타임아웃 설정
-                const timeout = options.timeout || 300000; // 기본 5분
-                if (onLog) {
-                    onLog('debug', `[AdvancedTaskExecutor] Delegating to AIServiceManager`, {
+            if (onLog) {
+                onLog(
+                    'info',
+                    `[AdvancedTaskExecutor] Starting execution for task #${task.projectSequence}: ${task.title}`,
+                    {
                         taskId: task.id,
-                        provider: context.metadata?.provider,
-                        model: context.metadata?.model,
-                    });
-                }
+                        contextKeys: Object.keys(context),
+                    }
+                );
+            }
 
-                const aiResult = (await this.executeWithTimeout(
-                    task,
-                    context,
-                    timeout,
-                    options
-                )) as AIExecutionResult;
-
-                const endTime = new Date();
-
-                // 예산 업데이트
-                if (context.budget && aiResult.cost) {
-                    context.budget.currentCost = (context.budget.currentCost || 0) + aiResult.cost;
-                    context.budget.currentTokens =
-                        (context.budget.currentTokens || 0) + aiResult.tokensUsed.total;
-                }
-
-                const finalAiResult =
-                    aiResult.aiResult ||
-                    buildPlainTextResult(aiResult.content, {
-                        provider: aiResult.provider,
-                        model: aiResult.model,
-                    });
-                const attachments = this.buildAttachmentsFromAiResult(task.id, finalAiResult);
-
+            // 세분화된 그룹 테스크는 실행 불가 (건너뛰기)
+            if (task.isSubdivided) {
+                console.warn(
+                    `Task #${task.projectSequence} is subdivided and cannot be executed directly. Skipping...`
+                );
                 return {
                     taskId: task.id,
-                    status: 'success',
+                    status: 'skipped',
                     output: {
-                        aiResult: finalAiResult,
-                        provider: aiResult.provider,
-                        model: aiResult.model,
-                        finishReason: aiResult.finishReason,
-                        metadata: aiResult.metadata,
-                        attachments,
+                        message: 'Task is subdivided into subtasks and cannot be executed directly',
                     },
                     startTime,
-                    endTime,
-                    duration: aiResult.duration,
-                    cost: aiResult.cost,
-                    tokens: aiResult.tokensUsed.total,
-                    retries,
-                    metadata: {
-                        tokensUsed: aiResult.tokensUsed,
-                        provider: aiResult.provider,
-                        model: aiResult.model,
-                        aiResult: finalAiResult,
-                        attachments,
-                    },
-                    attachments,
+                    endTime: new Date(),
+                    duration: 0,
+                    cost: 0,
+                    retries: 0,
+                    metadata: { skipped: true, reason: 'subdivided' },
                 };
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-                console.error(
-                    `Task #${task.projectSequence} failed (attempt ${retries + 1}/${retryStrategy.maxRetries + 1}):`,
-                    lastError
-                );
+            }
 
-                // 재시도 불가능한 에러인 경우 즉시 실패
-                if (!this.isRetryableError(lastError, retryStrategy)) {
-                    break;
-                }
+            let retries = 0;
+            let lastError: Error | undefined;
 
-                if (options.fallbackProviders && options.fallbackProviders.length > retries) {
-                    console.log(`Trying fallback provider: ${options.fallbackProviders[retries]}`);
-                    task = {
-                        ...task,
-                        aiProvider: options.fallbackProviders[retries] as Task['aiProvider'],
-                        aiModel: null, // Reset model to allow default resolution for new provider
+            const retryStrategy: RetryStrategy = options.retryStrategy || {
+                maxRetries: 3,
+                initialDelay: 1000,
+                maxDelay: 30000,
+                backoffMultiplier: 2,
+            };
+
+            while (retries <= retryStrategy.maxRetries) {
+                try {
+                    // 예산 체크
+                    if (context.budget) {
+                        this.checkBudget(context.budget);
+                    }
+
+                    // 타임아웃 설정
+                    const timeout = options.timeout || 300000; // 기본 5분
+                    if (onLog) {
+                        onLog('debug', `[AdvancedTaskExecutor] Delegating to AIServiceManager`, {
+                            taskId: task.id,
+                            provider: context.metadata?.provider,
+                            model: context.metadata?.model,
+                        });
+                    }
+
+                    const aiResult = (await this.executeWithTimeout(
+                        task,
+                        context,
+                        timeout,
+                        options
+                    )) as AIExecutionResult;
+
+                    const endTime = new Date();
+
+                    // 예산 업데이트
+                    if (context.budget && aiResult.cost) {
+                        context.budget.currentCost =
+                            (context.budget.currentCost || 0) + aiResult.cost;
+                        context.budget.currentTokens =
+                            (context.budget.currentTokens || 0) + aiResult.tokensUsed.total;
+                    }
+
+                    const finalAiResult =
+                        aiResult.aiResult ||
+                        buildPlainTextResult(aiResult.content, {
+                            provider: aiResult.provider,
+                            model: aiResult.model,
+                        });
+                    const attachments = this.buildAttachmentsFromAiResult(task.id, finalAiResult);
+
+                    return {
+                        taskId: task.id,
+                        status: 'success',
+                        output: {
+                            aiResult: finalAiResult,
+                            provider: aiResult.provider,
+                            model: aiResult.model,
+                            finishReason: aiResult.finishReason,
+                            metadata: aiResult.metadata,
+                            attachments,
+                        },
+                        startTime,
+                        endTime,
+                        duration: aiResult.duration,
+                        cost: aiResult.cost,
+                        tokens: aiResult.tokensUsed.total,
+                        retries,
+                        metadata: {
+                            tokensUsed: aiResult.tokensUsed,
+                            provider: aiResult.provider,
+                            model: aiResult.model,
+                            aiResult: finalAiResult,
+                            attachments,
+                        },
+                        attachments,
                     };
-                }
-
-                retries++;
-
-                // 지수 백오프
-                if (retries <= retryStrategy.maxRetries) {
-                    const delay = Math.min(
-                        retryStrategy.initialDelay *
-                            Math.pow(retryStrategy.backoffMultiplier, retries - 1),
-                        retryStrategy.maxDelay
+                } catch (error) {
+                    lastError = error instanceof Error ? error : new Error(String(error));
+                    console.error(
+                        `Task #${task.projectSequence} failed (attempt ${retries + 1}/${retryStrategy.maxRetries + 1}):`,
+                        lastError
                     );
-                    console.log(`Waiting ${delay}ms before retry...`);
-                    await this.sleep(delay);
+
+                    // 재시도 불가능한 에러인 경우 즉시 실패
+                    if (!this.isRetryableError(lastError, retryStrategy)) {
+                        break;
+                    }
+
+                    if (options.fallbackProviders && options.fallbackProviders.length > retries) {
+                        console.log(
+                            `Trying fallback provider: ${options.fallbackProviders[retries]}`
+                        );
+                        task = {
+                            ...task,
+                            aiProvider: options.fallbackProviders[retries] as Task['aiProvider'],
+                            aiModel: null, // Reset model to allow default resolution for new provider
+                        };
+                    }
+
+                    retries++;
+
+                    // 지수 백오프
+                    if (retries <= retryStrategy.maxRetries) {
+                        const delay = Math.min(
+                            retryStrategy.initialDelay *
+                                Math.pow(retryStrategy.backoffMultiplier, retries - 1),
+                            retryStrategy.maxDelay
+                        );
+                        console.log(`Waiting ${delay}ms before retry...`);
+                        await this.sleep(delay);
+                    }
                 }
             }
-        }
 
-        // 모든 재시도 실패
-        const endTime = new Date();
-        return {
-            taskId: task.id,
-            status: 'failure',
-            output: null,
-            error: lastError,
-            startTime,
-            endTime,
-            duration: endTime.getTime() - startTime.getTime(),
-            retries,
-            metadata: {},
-        };
+            // 모든 재시도 실패
+            const endTime = new Date();
+            return {
+                taskId: task.id,
+                status: 'failure',
+                output: null,
+                error: lastError,
+                startTime,
+                endTime,
+                duration: endTime.getTime() - startTime.getTime(),
+                retries,
+                metadata: {},
+            };
+        } finally {
+            this.activeTaskExecutions.delete(task.id);
+        }
     }
 
     /**
@@ -673,6 +693,20 @@ export class AdvancedTaskExecutor {
             state.endTime = new Date();
             console.log(`Workflow ${workflowId} cancelled`);
         }
+    }
+
+    /**
+     * 특정 태스크 실행 취소
+     */
+    async cancelTask(taskId: number): Promise<boolean> {
+        const controller = this.activeTaskExecutions.get(taskId);
+        if (controller) {
+            controller.abort();
+            this.activeTaskExecutions.delete(taskId);
+            console.log(`[AdvancedTaskExecutor] Cancelled task ${taskId}`);
+            return true;
+        }
+        return false;
     }
 
     /**

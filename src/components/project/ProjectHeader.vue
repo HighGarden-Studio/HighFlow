@@ -47,10 +47,10 @@ async function togglePause() {
     try {
         const api = (window as any).electron;
         if (isGlobalPaused.value) {
-            await api.taskExecution.resumeAll();
+            await api.taskExecution.resumeAll(props.projectId);
             isGlobalPaused.value = false;
         } else {
-            await api.taskExecution.pauseAll();
+            await api.taskExecution.pauseAll(props.projectId);
             isGlobalPaused.value = true;
         }
     } catch (err) {
@@ -61,7 +61,7 @@ async function togglePause() {
 onMounted(async () => {
     try {
         const api = (window as any).electron;
-        isGlobalPaused.value = await api.taskExecution.getGlobalPauseStatus();
+        isGlobalPaused.value = await api.taskExecution.getGlobalPauseStatus(props.projectId);
     } catch (err) {
         console.warn('Failed to get global pause status:', err);
     }

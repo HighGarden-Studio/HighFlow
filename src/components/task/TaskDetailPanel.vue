@@ -3360,13 +3360,13 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             v-model="dependencyExpression"
                                             type="text"
                                             class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                                            placeholder="예: (1 && 2) || 3"
+                                            placeholder="예: (!2 && !3) || 6"
                                         />
                                         <p
                                             class="text-xs text-indigo-600 dark:text-indigo-400 mt-1"
                                         >
-                                            복잡한 논리 조건을 설정합니다. 설정 시 위의 '실행
-                                            조건'보다 우선합니다.
+                                            복잡한 논리 조건을 설정합니다. ! (Not) 연산자를 사용하여
+                                            '완료되지 않음' 조건을 설정할 수 있습니다.
                                         </p>
                                     </div>
 

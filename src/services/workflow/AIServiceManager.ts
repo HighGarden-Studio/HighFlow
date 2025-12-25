@@ -45,6 +45,7 @@ export interface AIExecutionOptions {
     maxRetries?: number;
     fallbackProviders?: AIProvider[];
     onLog?: (level: 'info' | 'warn' | 'error' | 'debug', message: string, details?: any) => void;
+    signal?: AbortSignal;
 }
 
 export interface AIExecutionProgress {
@@ -366,6 +367,13 @@ export class AIServiceManager {
         const executionId = `exec-${task.id}-${startTime}`;
         const abortController = new AbortController();
         this.activeExecutions.set(executionId, abortController);
+
+        if (options.signal) {
+            options.signal.addEventListener('abort', () => {
+                abortController.abort();
+            });
+        }
+
         const mcpManager = this.getMCPManager();
 
         // [Feature: MCP Config Inheritance]

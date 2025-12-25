@@ -4,7 +4,7 @@
  * Handles IPC communication for AI task execution with streaming support
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, IpcMainInvokeEvent, shell, dialog, BrowserWindow } from 'electron';
 import { getMainWindow } from '../index';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
@@ -376,10 +376,10 @@ export async function checkAndExecuteDependentTasks(
             `[TaskExecution] Checking dependent tasks for completed task ${completedTaskId} (Seq: ${completedTask.projectSequence})`
         );
 
-        // Global Pause Check
-        if (GlobalExecutionService.getInstance().isGlobalPaused()) {
+        // Project Pause Check
+        if (GlobalExecutionService.getInstance().isProjectPaused(completedTask.projectId)) {
             console.log(
-                `[TaskExecution] Global execution is PAUSED. Skipping auto-execution for task ${completedTaskId}'s dependents.`
+                `[TaskExecution] Project ${completedTask.projectId} execution is PAUSED. Skipping auto-execution for task ${completedTaskId}'s dependents.`
             );
             return;
         }
@@ -411,6 +411,14 @@ export async function checkAndExecuteDependentTasks(
 
             // If the completed task is not a dependency, skip
             if (!hasIdInTaskIds && !hasMatchInExpr) return false;
+
+            // Prevent self-dependency (task triggering itself)
+            if (task.id === completedTaskId) {
+                console.warn(
+                    `[TaskExecution] Task ${task.id} depends on itself (via ID or Sequence). Ignoring self-trigger to prevent infinite loop.`
+                );
+                return false;
+            }
 
             // Get execution policy (default: 'repeat' for backwards compatibility and user preference)
             const policy = triggerConfig.dependsOn.executionPolicy || 'repeat';
@@ -729,9 +737,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 mcpServers?: MCPServerRuntimeConfig[];
             }
         ) => {
-            // Global Pause Check for manual execution
-            if (GlobalExecutionService.getInstance().isGlobalPaused()) {
-                const errorMsg = 'Global execution is currently PAUSED. Resume to execute tasks.';
+            // Get task from database first to check project ID
+            const task = await taskRepository.findById(taskId);
+            if (!task) {
+                throw new Error(`Task ${taskId} not found`);
+            }
+
+            // Project Pause Check for manual execution
+            if (GlobalExecutionService.getInstance().isProjectPaused(task.projectId)) {
+                const errorMsg = 'Project execution is currently PAUSED. Resume to execute tasks.';
                 console.warn(`[TaskExecution] Blocked execution of task ${taskId}: ${errorMsg}`);
 
                 // Notify frontend
@@ -758,11 +772,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     executor.setMCPServers(options.mcpServers);
                 }
 
-                // Get task from database
-                const task = await taskRepository.findById(taskId);
-                if (!task) {
-                    throw new Error(`Task ${taskId} not found`);
-                }
+                // Task is already fetched above
 
                 // Validate dependencies (Robust Check)
                 const triggerConfig = task.triggerConfig as any;
@@ -945,6 +955,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             );
 
                             await taskRepository.update(taskId, { status: 'todo' });
+
+                            // Create explicit logger for this execution
+                            // Create explicit logger for this execution
+                            const logger = (log: any) => {
+                                getMainWindow()?.webContents.send('task-execution:log', {
+                                    taskId,
+                                    log,
+                                });
+                            };
 
                             const win = getMainWindow();
                             if (win) {
@@ -1958,7 +1977,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle('taskExecution:stop', async (_event, taskId: number) => {
         try {
-            const aiCancelled = executor.cancelTaskExecution(taskId);
+            const aiCancelled = await executor.cancelTask(taskId);
             if (aiCancelled) {
                 console.log(`[TaskExecution] Sent cancel signal to AI provider for task ${taskId}`);
             } else {
@@ -2060,29 +2079,43 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
     /**
      * Pause All Executions (Global)
+     * Cancel task execution
      */
-    ipcMain.handle('taskExecution:pauseAll', async () => {
-        GlobalExecutionService.getInstance().setGlobalPause(true);
-        // Note: This prevents NEW executions.
-        // It does NOT pause currently running tasks (existing behavior).
-        // If we wanted to pause running tasks, we would need to iterate activeExecutions and pause them.
-        // For now, "Pause" means "Stop processing the queue/prevent new runs".
-        return true;
+    ipcMain.handle('taskExecution:cancel', async (_event, taskId: number) => {
+        executor.cancel(taskId);
     });
 
     /**
-     * Resume All Executions (Global)
+     * Pause execution for a project
      */
-    ipcMain.handle('taskExecution:resumeAll', async () => {
-        GlobalExecutionService.getInstance().setGlobalPause(false);
-        return true;
+    ipcMain.handle('taskExecution:pauseAll', async (_event, projectId: number) => {
+        if (typeof projectId !== 'number') {
+            console.error('[TaskExecution] pauseAll called without projectId');
+            return;
+        }
+        GlobalExecutionService.getInstance().setProjectPause(projectId, true);
     });
 
     /**
-     * Get Global Pause Status
+     * Resume execution for a project
      */
-    ipcMain.handle('taskExecution:getGlobalPauseStatus', async () => {
-        return GlobalExecutionService.getInstance().isGlobalPaused();
+    ipcMain.handle('taskExecution:resumeAll', async (_event, projectId: number) => {
+        if (typeof projectId !== 'number') {
+            console.error('[TaskExecution] resumeAll called without projectId');
+            return;
+        }
+        GlobalExecutionService.getInstance().setProjectPause(projectId, false);
+
+        // When resuming, we should check if any tasks are ready to run?
+        // Ideally, we'd check "stuck" pending tasks, but for now we just allow new executions.
+    });
+
+    /**
+     * Get pause status for a project
+     */
+    ipcMain.handle('taskExecution:getGlobalPauseStatus', async (_event, projectId?: number) => {
+        if (!projectId) return false;
+        return GlobalExecutionService.getInstance().isProjectPaused(projectId);
     });
 
     // ========================================
@@ -3028,17 +3061,6 @@ ${processedContent}
 **의도:** [한 줄 요약]
 **결과:** [통과/실패 + 이유 한 줄]
 **점수: X/10**`;
-}
-
-function buildPermissionDeniedContent(error: MCPPermissionError): string {
-    const serverName = error.details?.serverName || error.details?.serverId || 'MCP 서버';
-    const missingScopes = error.details?.missingScopes || [];
-    const scopeLine =
-        missingScopes.length > 0
-            ? `\n\n필요 Scope: ${missingScopes.map((scope) => `\`${scope}\``).join(', ')}`
-            : '';
-    const toolLine = error.details?.toolName ? `\n요청 도구: ${error.details.toolName}` : '';
-    return `⚠️ ${serverName} 권한 부족으로 작업을 완료하지 못했습니다.${toolLine}${scopeLine}\n\n설정 > MCP Servers에서 필요한 기능을 활성화한 뒤 다시 실행해 주세요.`;
 }
 
 /**
