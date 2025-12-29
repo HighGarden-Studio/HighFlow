@@ -229,11 +229,27 @@ export const useTaskStore = defineStore('tasks', () => {
 
         try {
             const api = getAPI();
-            // Auto-populate description with title if not provided
-            const taskData = {
+
+            // Set default execution policies for AI, Script, and Output tasks
+            const taskData: typeof data = {
                 ...data,
                 description: data.description || data.title,
             };
+
+            // Apply defaults if not explicitly set
+            const taskType = data.taskType || 'ai'; // 기본값은 'ai'
+            if (taskType === 'ai' || taskType === 'script' || taskType === 'output') {
+                // triggerConfig가 없거나 비어있으면 기본값 설정
+                if (!taskData.triggerConfig) {
+                    taskData.triggerConfig = {
+                        type: 'dependency',
+                        dependencyOperator: 'all', // 모든 태스크가 완료되어야 함
+                        dependencyExecutionPolicy: 'repeat', // 매번 자동 실행 (권장)
+                        dependencyTaskIds: [],
+                    } as any;
+                }
+            }
+
             const task = await api.tasks.create(taskData);
             upsertTask(task as Task);
             return task as Task;

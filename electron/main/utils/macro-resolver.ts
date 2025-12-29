@@ -37,25 +37,116 @@ export async function resolveMacrosInCode(
         );
     }
 
-    // 2. Get all previously completed tasks (in execution order)
-    const allPreviousTasks = await db
-        .select()
-        .from(tasks)
-        .where(
-            sql`${tasks.projectId} = ${projectId} AND ${tasks.id} < ${task.id} AND ${tasks.status} = 'done'`
+    // 2. Get dependency chain tasks (only tasks this task depends on)
+    let dependencyTaskIds: number[] = [];
+
+    // Parse dependencies from triggerConfig (where UI stores them)
+    if (task.triggerConfig) {
+        try {
+            const config =
+                typeof task.triggerConfig === 'string'
+                    ? JSON.parse(task.triggerConfig)
+                    : task.triggerConfig;
+            // Check dependsOn.taskIds (actual structure from UI)
+            if (config.dependsOn?.taskIds && Array.isArray(config.dependsOn.taskIds)) {
+                dependencyTaskIds = config.dependsOn.taskIds;
+            }
+        } catch (e) {
+            console.warn('[MacroResolver] Failed to parse triggerConfig:', e);
+        }
+    }
+
+    // Fallback: also check task.dependencies field (legacy)
+    if (dependencyTaskIds.length === 0 && task.dependencies) {
+        try {
+            const deps =
+                typeof task.dependencies === 'string'
+                    ? JSON.parse(task.dependencies)
+                    : task.dependencies;
+            dependencyTaskIds = Array.isArray(deps) ? deps : [];
+        } catch (e) {
+            console.warn('[MacroResolver] Failed to parse dependencies:', e);
+        }
+    }
+
+    // Build readable dependency list with projectSequence
+    const dependencySeqList =
+        dependencyTaskIds.length > 0
+            ? await (async () => {
+                  const depTasks = await db
+                      .select()
+                      .from(tasks)
+                      .where(
+                          sql`${tasks.id} IN (${sql.join(
+                              dependencyTaskIds.map((id) => sql`${id}`),
+                              sql`, `
+                          )})`
+                      );
+                  return depTasks.map((t) => `#${t.projectSequence}`).join(', ');
+              })()
+            : '';
+
+    console.log(`[MacroResolver] Task #${task.projectSequence} depends on: [${dependencySeqList}]`);
+
+    // Fetch only dependency tasks that are completed
+    let previousTasks: any[] = [];
+
+    if (dependencyTaskIds.length > 0) {
+        const dependencyTasks = await db
+            .select()
+            .from(tasks)
+            .where(
+                sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
+                    dependencyTaskIds.map((id) => sql`${id}`),
+                    sql`, `
+                )}) AND ${tasks.status} = 'done'`
+            );
+
+        // Sort by ID to maintain consistent ordering
+        previousTasks = dependencyTasks.sort((a, b) => a.id - b.id);
+
+        console.log(
+            `[MacroResolver] Found ${previousTasks.length} completed dependency tasks for Task #${task.projectSequence}`
         );
-
-    const previousTasks = allPreviousTasks.sort((a, b) => a.id - b.id);
-
-    console.log(
-        `[MacroResolver] Found ${previousTasks.length} previously completed tasks for task ${task.id}`
-    );
+    } else {
+        console.log(
+            `[MacroResolver] Task #${task.projectSequence} has no dependencies, {{prev}} will be null`
+        );
+    }
 
     // Helper to extract result
     const getTaskResult = (task: any): string | null => {
-        if (task.executionResult && typeof task.executionResult === 'object') {
-            if (task.executionResult.content) {
-                return task.executionResult.content;
+        if (task.executionResult) {
+            let result = task.executionResult;
+            // If executionResult is a JSON string, parse it
+            if (typeof result === 'string') {
+                try {
+                    result = JSON.parse(result);
+                } catch {
+                    // If parsing fails, treat as plain text result
+                    return result;
+                }
+            }
+            // Check for various output formats
+            if (typeof result === 'object') {
+                // AI Task format: { content: '...' }
+                if (result.content) {
+                    return result.content;
+                }
+                // Input Task format: { kind: 'text', text: '...' }
+                if (result.text) {
+                    return result.text;
+                }
+                // Table format: convert to string representation
+                if (result.kind === 'table' && result.table) {
+                    // Simple CSV-like representation
+                    const { columns, rows } = result.table;
+                    const header = columns.join(',');
+                    const dataRows = rows.map((row: any) =>
+                        columns.map((col: string) => row[col] || '').join(',')
+                    );
+                    return [header, ...dataRows].join('\n');
+                }
             }
         }
         return task.result || null;
@@ -73,23 +164,32 @@ export async function resolveMacrosInCode(
         if (value === null || value === undefined) {
             return 'null';
         }
-        if (insideQuotes) {
-            if (typeof value === 'string') {
-                return value
-                    .replace(/\\/g, '\\\\')
-                    .replace(/"/g, '\\"')
-                    .replace(/'/g, "\\'")
-                    .replace(/\n/g, '\\n')
-                    .replace(/\r/g, '\\r')
-                    .replace(/\t/g, '\\t');
+
+        // For string values, always escape special characters to ensure JavaScript safety
+        if (typeof value === 'string') {
+            // Escape backslashes first, then other special characters
+            const escaped = value
+                .replace(/\\/g, '\\\\')
+                .replace(/"/g, '\\"')
+                .replace(/'/g, "\\'")
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r')
+                .replace(/\t/g, '\\t');
+
+            if (insideQuotes) {
+                // Already inside quotes: return escaped value as-is
+                return escaped;
+            } else {
+                // Outside quotes: wrap in quotes for JavaScript string literal
+                return `"${escaped}"`;
             }
+        }
+
+        // For non-string values
+        if (insideQuotes) {
             return String(value);
         } else {
-            // Outside quotes: for code injection, return raw string
-            if (typeof value === 'string') {
-                return value; // Insert code as-is
-            }
-            return JSON.stringify(value); // For numbers, objects, etc.
+            return JSON.stringify(value);
         }
     };
 
@@ -98,7 +198,7 @@ export async function resolveMacrosInCode(
         // {{prev}} = last completed task
         const lastTask = previousTasks[previousTasks.length - 1];
         const lastResult = getTaskResult(lastTask);
-        console.log(`[MacroResolver] {{prev}} = task ${lastTask.id}:`, lastResult);
+        console.log(`[MacroResolver] {{prev}} = Task #${lastTask.projectSequence}:`, lastResult);
 
         // Simple string replacement - find all {{prev}} in the code
         const prevMatches = Array.from(code.matchAll(/\{\{prev\}\}/g));
@@ -118,7 +218,10 @@ export async function resolveMacrosInCode(
                 const prevResult = getTaskResult(prevTask);
                 const macroPattern = `{{prev.${i}}}`;
 
-                console.log(`[MacroResolver] ${macroPattern} = task ${prevTask.id}:`, prevResult);
+                console.log(
+                    `[MacroResolver] ${macroPattern} = Task #${prevTask.projectSequence}:`,
+                    prevResult
+                );
 
                 // Find all occurrences of this macro
                 const matches = Array.from(
@@ -207,23 +310,84 @@ export async function prepareMacroData(
         };
     }
 
-    // Get all previously completed tasks
-    const allPreviousTasks = await db
-        .select()
-        .from(tasks)
-        .where(
-            sql`${tasks.projectId} = ${projectId} AND ${tasks.id} < ${task.id} AND ${tasks.status} = 'done'`
-        );
+    // Get dependency chain tasks (only tasks this task depends on)
+    let dependencyTaskIds: number[] = [];
 
-    const previousTasks = allPreviousTasks.sort((a, b) => a.id - b.id);
+    // Parse dependencies from triggerConfig (where UI stores them)
+    if (task.triggerConfig) {
+        try {
+            const config =
+                typeof task.triggerConfig === 'string'
+                    ? JSON.parse(task.triggerConfig)
+                    : task.triggerConfig;
+            if (config.dependencyTaskIds && Array.isArray(config.dependencyTaskIds)) {
+                dependencyTaskIds = config.dependencyTaskIds;
+            }
+        } catch (e) {
+            console.warn('[MacroResolver] prepareMacroData: Failed to parse triggerConfig:', e);
+        }
+    }
+
+    // Fallback: also check task.dependencies field (legacy)
+    if (dependencyTaskIds.length === 0 && task.dependencies) {
+        try {
+            const deps =
+                typeof task.dependencies === 'string'
+                    ? JSON.parse(task.dependencies)
+                    : task.dependencies;
+            dependencyTaskIds = Array.isArray(deps) ? deps : [];
+        } catch (e) {
+            console.warn('[MacroResolver] prepareMacroData: Failed to parse dependencies:', e);
+        }
+    }
+
+    let previousTasks: any[] = [];
+
+    if (dependencyTaskIds.length > 0) {
+        const dependencyTasks = await db
+            .select()
+            .from(tasks)
+            .where(
+                sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
+                    dependencyTaskIds.map((id) => sql`${id}`),
+                    sql`, `
+                )}) AND ${tasks.status} = 'done'`
+            );
+
+        previousTasks = dependencyTasks.sort((a, b) => a.id - b.id);
+    }
 
     const getResult = (t: any) => {
-        if (
-            t.executionResult &&
-            typeof t.executionResult === 'object' &&
-            t.executionResult.content
-        ) {
-            return t.executionResult.content;
+        if (t.executionResult) {
+            let result = t.executionResult;
+            // If executionResult is a JSON string, parse it
+            if (typeof result === 'string') {
+                try {
+                    result = JSON.parse(result);
+                } catch {
+                    return result;
+                }
+            }
+            // Check for various output formats
+            if (typeof result === 'object') {
+                // AI Task format: { content: '...' }
+                if (result.content) {
+                    return result.content;
+                }
+                // Input Task format: { kind: 'text', text: '...' }
+                if (result.text) {
+                    return result.text;
+                }
+                // Table format: convert to string
+                if (result.kind === 'table' && result.table) {
+                    const { columns, rows } = result.table;
+                    const header = columns.join(',');
+                    const dataRows = rows.map((row: any) =>
+                        columns.map((col: string) => row[col] || '').join(',')
+                    );
+                    return [header, ...dataRows].join('\n');
+                }
+            }
         }
         return t.result || null;
     };
@@ -240,7 +404,7 @@ export async function prepareMacroData(
             if (index >= 0) {
                 macroData[`prev_${i}`] = getResult(previousTasks[index]);
                 console.log(
-                    `[MacroResolver] prepareMacroData: prev_${i} = task ${previousTasks[index].id}:`,
+                    `[MacroResolver] prepareMacroData: prev_${i} = Task #${previousTasks[index].projectSequence}:`,
                     macroData[`prev_${i}`]
                 );
             }
