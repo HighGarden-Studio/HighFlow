@@ -159,6 +159,7 @@ export class AdvancedTaskExecutor {
 
                     return {
                         taskId: task.id,
+                        projectSequence: task.projectSequence,
                         status: 'success',
                         output: {
                             aiResult: finalAiResult,
@@ -225,6 +226,7 @@ export class AdvancedTaskExecutor {
             const endTime = new Date();
             return {
                 taskId: task.id,
+                projectSequence: task.projectSequence,
                 status: 'failure',
                 output: null,
                 error: lastError,

@@ -319,12 +319,13 @@ export class MistralProvider extends BaseAIProvider {
      * Execute with streaming
      */
     async *streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
         this.validateConfig(config);
+        const prompt = this.getPromptText(input);
 
         const client = this.getClient();
         const systemPrompt = this.buildSystemPrompt(config, context);

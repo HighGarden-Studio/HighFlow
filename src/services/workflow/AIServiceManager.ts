@@ -477,8 +477,9 @@ export class AIServiceManager {
             const aiConfig = await this.buildAIConfig(task, model, mcpContext, allRequiredMCPs);
 
             // Build AI execution context
+            // Build AI execution context
             const aiContext = this.buildAIContext(task, contextWithMCP, mcpContext);
-            const userPrompt = this.buildPrompt(task, mcpContext);
+            const userPrompt = this.buildPrompt(task, mcpContext, contextWithMCP);
             const baseMessages: AIMessage[] = [];
             if (aiConfig.systemPrompt) {
                 baseMessages.push({ role: 'system', content: aiConfig.systemPrompt });
@@ -486,9 +487,37 @@ export class AIServiceManager {
 
             // Check if task has imageData for vision models (e.g., for auto-review of images)
             // Enhanced: Check for generic attachments from Input Task (Local File)
-            const attachments = context.metadata?.attachments as
-                | Array<{ type: string; mime: string; data: string; name: string }>
-                | undefined;
+            const explicitAttachments = (context.metadata?.attachments || []) as Array<{
+                type: string;
+                mime: string;
+                data: string;
+                name: string;
+            }>;
+
+            // Collect attachments from dependencies
+            const dependencyAttachments: Array<{
+                type: string;
+                mime: string;
+                data: string;
+                name: string;
+            }> = [];
+
+            if (task.dependencies && task.dependencies.length > 0 && context.previousResults) {
+                const depResults = context.previousResults.filter((r) =>
+                    task.dependencies.includes(r.taskId)
+                );
+                for (const res of depResults) {
+                    if (res.attachments && res.attachments.length > 0) {
+                        for (const att of res.attachments) {
+                            // Ensure compatibility
+                            dependencyAttachments.push(att as any);
+                        }
+                    }
+                }
+            }
+
+            const attachments = [...explicitAttachments, ...dependencyAttachments];
+
             const imageData = (task as any).imageData || context.metadata?.imageData;
 
             const inputImages: Array<{ mimeType: string; data: string }> = [];
@@ -503,13 +532,31 @@ export class AIServiceManager {
 
                 for (const att of attachments) {
                     if (att.type === 'image') {
-                        const imagePart = {
-                            type: 'image',
-                            mimeType: att.mime,
-                            data: att.data, // Base64
-                        };
-                        multiModalContent.push(imagePart);
-                        inputImages.push({ mimeType: att.mime, data: att.data });
+                        const data = att.data || (att as any).value;
+                        const mime = att.mime || (att as any).mimeType;
+
+                        // Detailed debug for image attachment
+                        console.log(`[AIServiceManager] Processing image attachment:`, {
+                            name: att.name,
+                            mime: mime,
+                            hasData: !!data,
+                            dataLen: data ? data.length : 0,
+                            keys: Object.keys(att),
+                        });
+
+                        if (data) {
+                            const imagePart = {
+                                type: 'image',
+                                mimeType: mime,
+                                data: data, // Base64
+                            };
+                            multiModalContent.push(imagePart);
+                            inputImages.push({ mimeType: mime, data: data });
+                        } else {
+                            console.warn(
+                                `[AIServiceManager] Image attachment ${att.name} has no data/value`
+                            );
+                        }
                     } else if (att.type === 'file' || att.type === 'binary') {
                         // Future support for other file types?
                         // For now, only images are strictly supported by `MultiModalContentPart` in `ai.ts`
@@ -632,18 +679,61 @@ export class AIServiceManager {
             );
 
             const outputFormat = this.getTaskOutputFormat(task);
-            const isImageTask = this.isImageOutputFormat(outputFormat);
+            let isImageTask = this.isImageOutputFormat(outputFormat);
+
+            // [Corrective Logic for Input Images]
+            // If the task has Input Images, it is likely a Vision Analysis task (e.g. "Convert this diagram to text"),
+            // even if the user mistakenly set the Output Format to 'png'.
+            // Most Image Generation models (DALL-E 3) do NOT support Image-to-Image, so sending them input images results in them ignoring the input
+            // and generating a hallucination from the prompt.
+            // Therefore, if we have input images, we force the task to be treated as a Text/Analysis task (not Image Generation),
+            // which routes it to Vision models (GPT-4o, Gemini Pro Vision, etc.).
+            if (isImageTask && inputImages.length > 0) {
+                options.onLog?.(
+                    'warn',
+                    '[AIServiceManager] Input images detected for an Image Output task. Switching to Vision Analysis mode (Text Generation) to ensure input is analyzed.',
+                    { taskId: task.id }
+                );
+                isImageTask = false;
+
+                // We must also ensure the model is suitable for Chat/Vision, not Image Generation
+                // If the selected model was DALL-E or similar, switch to the provider's default Chat model.
+                if (
+                    model.includes('dall-e') ||
+                    model.includes('image-generation') ||
+                    model.includes('fly')
+                ) {
+                    const newModel = this.resolveModel(provider, null); // Get default chat model
+                    options.onLog?.(
+                        'info',
+                        `[AIServiceManager] Switching model from ${model} to ${newModel} for Vision Analysis`,
+                        { taskId: task.id }
+                    );
+                    // Update the aiConfig model to the new chat-capable model
+                    aiConfig.model = newModel;
+                }
+            }
 
             // Report progress
             options.onProgress?.({
                 phase: 'preparing',
                 elapsedTime: Date.now() - startTime,
                 provider,
-                model,
+                model: aiConfig.model,
             });
 
             // Execute with streaming, tool loop, or standard completion
             let result: AIExecutionResult;
+
+            // Debug log for message content
+            console.log(
+                '[AIServiceManager] Executing with messages:',
+                baseMessages.map((m) => ({
+                    role: m.role,
+                    hasMultiModal: !!m.multiModalContent,
+                    multiModalLen: m.multiModalContent?.length,
+                }))
+            );
 
             if (isImageTask) {
                 result = await this.executeImageGenerationTask(
@@ -674,7 +764,7 @@ export class AIServiceManager {
             } else if (options.streaming && options.onToken) {
                 result = await this.executeWithStreaming(
                     task,
-                    userPrompt,
+                    [...baseMessages], // Pass full messages including MM content
                     aiConfig,
                     aiContext,
                     provider,
@@ -795,7 +885,7 @@ export class AIServiceManager {
      */
     private async executeWithStreaming(
         _task: Task,
-        prompt: string,
+        messages: AIMessage[],
         config: AIConfig,
         context: AIExecutionContext,
         providerName: AIProvider,
@@ -817,7 +907,7 @@ export class AIServiceManager {
         });
 
         const stream = provider.streamExecute(
-            prompt,
+            messages,
             config,
             (token) => {
                 if (signal.aborted) return;
@@ -847,7 +937,10 @@ export class AIServiceManager {
         }
 
         const duration = Date.now() - startTime;
-        const promptTokens = provider.estimateTokens(prompt);
+        // Estimate tokens using provider's helper (now handles string | AIMessage[])
+        // We'll just estimate based on the text content for now as a rough approx
+        const promptText = messages.map((m) => m.content).join('\n');
+        const promptTokens = provider.estimateTokens(promptText);
         const completionTokens = provider.estimateTokens(accumulated);
         const cost = provider.calculateCost(
             { prompt: promptTokens, completion: completionTokens },
@@ -1171,6 +1264,8 @@ export class AIServiceManager {
                 execution = await mcpManager.executeMCPTool(mcp.id, toolName, args, {
                     taskId: task.id,
                     projectId: task.projectId,
+                    taskTitle: task.title,
+                    projectName: (task as any).projectName, // Try to pass project name if available
                     source: 'ai-service',
                 });
             } catch (error) {
@@ -1809,6 +1904,17 @@ export class AIServiceManager {
                 }
             }
             systemPrompt += `\nLeverage the MCP context above to ground your response. If additional MCP tool output is needed, clearly specify which tool and parameters you require.\n`;
+
+            // APPEND STRONG INSTRUCTION
+            systemPrompt += `
+## CRITICAL INSTRUCTION: TOOL USAGE MANDATORY
+You have access to external tools (MCPs) to retrieve information (e.g., Jira issues, Confluence pages, Slack messages, Filesystem).
+- **You MUST use these tools** to answer the user's request.
+- **Do NOT** reply with "I cannot access..." or "I don't have information..." without trying the relevant tools first.
+- **Do NOT** ask the user for IDs or links if you can search for them using the provided search tools (e.g., "atlassian-rovo_search", "slack_search").
+- If the user asks for a summary, you MUST fetch the content using tools FIRST, then summarize it.
+- **Do NOT** write Python code or pseudo-code to call tools (e.g., \`print(tool_name(...))\`). Use the native function calling capability provided to you.
+`;
         }
 
         systemPrompt += `
@@ -1829,11 +1935,57 @@ ${
         return systemPrompt;
     }
 
-    private buildPrompt(task: Task, mcpContext: MCPContextInsight[] = []): string {
+    private buildPrompt(
+        task: Task,
+        mcpContext: MCPContextInsight[] = [],
+        context?: ExecutionContext
+    ): string {
         let prompt = task.description || task.title;
 
         if ((task as any).aiPrompt) {
             prompt = (task as any).aiPrompt;
+        }
+
+        // Implicit Context Injection from Dependencies
+        // If the task has dependencies, we automatically inject their outputs into the prompt
+        // unless they are macros (which are already resolved in aiPrompt).
+        if (task.dependencies && task.dependencies.length > 0 && context?.previousResults) {
+            const dependencyResults = context.previousResults.filter((r) =>
+                task.dependencies.includes(r.taskId)
+            );
+
+            if (dependencyResults.length > 0) {
+                prompt += `\n\n## Context from Dependencies\n`;
+                for (const result of dependencyResults) {
+                    if (result.status === 'success' && result.output) {
+                        // Skip input parsing if output is empty/null
+                        if (
+                            result.output === null ||
+                            result.output === undefined ||
+                            result.output === ''
+                        ) {
+                            continue;
+                        }
+
+                        const depTitle = result.taskTitle || `Task #${result.taskId}`;
+                        prompt += `### Output from ${depTitle}\n`;
+
+                        if (typeof result.output === 'string') {
+                            prompt += `${result.output}\n`;
+                        } else if (typeof result.output === 'object') {
+                            // Handle special output structures if needed, else JSON verify
+                            if (result.output.content) {
+                                prompt += `${result.output.content}\n`;
+                            } else {
+                                prompt += `${JSON.stringify(result.output, null, 2)}\n`;
+                            }
+                        } else {
+                            prompt += `${String(result.output)}\n`;
+                        }
+                        prompt += '\n';
+                    }
+                }
+            }
         }
 
         if (mcpContext && mcpContext.length > 0) {
@@ -1856,6 +2008,7 @@ ${
                     )}\n`;
                 }
             }
+            prompt += `\nREMINDER: You have access to tools. USE THEM. Do not say you cannot access information.`;
         }
 
         return prompt;

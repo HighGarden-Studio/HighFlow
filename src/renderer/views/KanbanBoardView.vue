@@ -527,19 +527,38 @@ const liveReviewContent = computed(() => {
 });
 
 const liveResponseContent = computed(() => {
+    const task = livePreviewTask.value as any;
+    if (!task) return '';
+
     return (
         liveStreamingContent.value ||
         liveReviewContent.value ||
-        (livePreviewTask.value as any)?.executionResult?.content ||
-        (livePreviewTask.value as any)?.result ||
+        // Check for structured output first
+        task?.output?.aiResult?.value ||
+        task?.output?.result || // Legacy result field
+        task?.executionResult?.content ||
+        task?.result ||
         ''
     );
 });
 
 const liveResponseType = computed(() => {
-    const task = livePreviewTask.value;
+    const task = livePreviewTask.value as any;
     if (!task) return 'text';
 
+    // 1. Check actual execution result first (Authoritative)
+    if (task.output?.aiResult) {
+        const { kind, subType } = task.output.aiResult;
+        if (kind === 'image') return 'image';
+        if (kind === 'text' || kind === 'markdown') {
+            if (subType === 'markdown') return 'markdown';
+            if (subType === 'json') return 'json';
+            return 'text';
+        }
+        if (subType === 'json') return 'json';
+    }
+
+    // 2. Fallback to settings or legacy hints
     const contentType =
         (task as any)?.executionResult?.contentType ||
         (task as any)?.expectedOutputFormat ||
@@ -552,22 +571,24 @@ const liveResponseType = computed(() => {
 
     // Auto-detect based on content
     const content = liveResponseContent.value;
-    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-        try {
-            JSON.parse(content);
-            return 'json';
-        } catch {}
-    }
-    if (content.includes('```') || content.match(/^#\s/m)) return 'markdown';
+    if (typeof content === 'string') {
+        if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+            try {
+                JSON.parse(content);
+                return 'json';
+            } catch {}
+        }
+        if (content.includes('```') || content.match(/^#\s/m)) return 'markdown';
 
-    // Improved image detection (include magic bytes)
-    if (
-        content.match(/^(data:image|https?:\/\/.*\.(png|jpg|jpeg|gif|webp))/i) ||
-        content.startsWith('iVBORw0KGgo') ||
-        content.startsWith('/9j/') ||
-        content.startsWith('R0lGOD')
-    )
-        return 'image';
+        // Improved image detection (include magic bytes)
+        if (
+            content.match(/^(data:image|https?:\/\/.*\.(png|jpg|jpeg|gif|webp))/i) ||
+            content.startsWith('iVBORw0KGgo') ||
+            content.startsWith('/9j/') ||
+            content.startsWith('R0lGOD')
+        )
+            return 'image';
+    }
 
     return 'text';
 });

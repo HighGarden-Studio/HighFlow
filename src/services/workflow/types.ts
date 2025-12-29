@@ -59,6 +59,7 @@ export interface RetryStrategy {
 // ========== Task Result ==========
 export interface TaskResult {
     taskId: number;
+    projectSequence?: number; // Added to support sequence-based macros
     taskTitle?: string; // Optional task title for display in dependency results
     status: 'success' | 'failure' | 'partial' | 'skipped';
     output: any;

@@ -9,6 +9,7 @@ import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import type { Task, TaskHistoryEntry } from '@core/types/database';
 import type { AiResult, AiSubType } from '@core/types/ai';
 import { extractTaskResult } from '../../renderer/utils/aiResultHelpers';
+import { detectTextSubType } from '../../services/ai/utils/aiResultUtils';
 import { marked } from 'marked';
 import type { MarkedOptions, Tokens } from 'marked';
 import FileTreeItem from './FileTreeItem.vue';
@@ -55,26 +56,6 @@ const OUTPUT_FORMAT_VALUES: OutputFormat[] = [
     'log',
     'code',
 ];
-
-const SUBTYPE_TO_FORMAT: Partial<Record<AiSubType, OutputFormat>> = {
-    text: 'text',
-    markdown: 'markdown',
-    html: 'html',
-    pdf: 'pdf',
-    json: 'json',
-    yaml: 'yaml',
-    csv: 'csv',
-    sql: 'sql',
-    shell: 'shell',
-    mermaid: 'mermaid',
-    svg: 'svg',
-    png: 'png',
-    mp4: 'mp4',
-    mp3: 'mp3',
-    diff: 'diff',
-    log: 'log',
-    code: 'code',
-};
 
 const SUBTYPE_MIME_MAP: Partial<Record<AiSubType, string>> = {
     text: 'text/plain',
@@ -157,6 +138,40 @@ const markdownHtml = ref('');
 const history = ref<TaskHistoryEntry[]>([]);
 const selectedVersionId = ref<number | null>(null);
 const selectedFile = ref<ResultFile | null>(null);
+
+// Resize & Layout State
+const panelWidth = ref(70); // Default 70%
+const isResizing = ref(false);
+const isPreviewMaximized = ref(false);
+
+const startResize = (e: MouseEvent) => {
+    e.preventDefault(); // Prevent text selection
+    isResizing.value = true;
+    window.addEventListener('mousemove', doResize);
+    window.addEventListener('mouseup', stopResize);
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+};
+
+const doResize = (e: MouseEvent) => {
+    if (!isResizing.value) return;
+    const windowWidth = window.innerWidth;
+    // Calculate width as percentage from RIGHT edge
+    const newWidth = ((windowWidth - e.clientX) / windowWidth) * 100;
+    panelWidth.value = Math.max(30, Math.min(100, newWidth));
+};
+
+const stopResize = () => {
+    isResizing.value = false;
+    window.removeEventListener('mousemove', doResize);
+    window.removeEventListener('mouseup', stopResize);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+};
+
+const toggleMaximize = () => {
+    isPreviewMaximized.value = !isPreviewMaximized.value;
+};
 
 const projectStore = useProjectStore();
 const currentProject = computed(() => projectStore.currentProject);
@@ -438,6 +453,26 @@ const outputFormat = computed<OutputFormat>(() => {
             content.startsWith('data:image'))
     ) {
         return 'png';
+    }
+
+    // Use AI Metadata if available
+    if (
+        aiResult.value?.subType &&
+        (OUTPUT_FORMAT_VALUES as ReadonlyArray<string>).includes(aiResult.value.subType)
+    ) {
+        return aiResult.value.subType as OutputFormat;
+    }
+
+    // Auto-detect format from content
+    if (content) {
+        const detection = detectTextSubType(content);
+        if (
+            detection.subType === 'mermaid' ||
+            detection.subType === 'html' ||
+            detection.subType === 'svg'
+        ) {
+            return detection.subType as OutputFormat;
+        }
     }
 
     return 'markdown';
@@ -1263,7 +1298,22 @@ async function renderMermaid() {
             securityLevel: 'loose',
         });
 
-        const { svg } = await mermaid.default.render('mermaid-diagram', content.value);
+        const rawContent = content.value.trim();
+
+        // Try to extract content from ```mermaid code fence first
+        const mermaidFenceMatch = rawContent.match(/```mermaid\s*\n([\s\S]*?)```/i);
+        let cleanContent: string;
+
+        if (mermaidFenceMatch && mermaidFenceMatch[1]) {
+            // Found mermaid code fence, use only the content inside
+            cleanContent = mermaidFenceMatch[1].trim();
+        } else {
+            // Fallback: remove generic code fences
+            cleanContent = rawContent.replace(/^```(?:mermaid)?\s*\n?/i, '');
+            cleanContent = cleanContent.replace(/\s*```\s*$/, '');
+        }
+
+        const { svg } = await mermaid.default.render('mermaid-diagram', cleanContent.trim());
         renderedMermaid.value = svg;
     } catch (err) {
         console.error('Mermaid render error:', err);
@@ -1653,10 +1703,21 @@ onMounted(() => {
 
             <!-- Panel -->
             <div
-                class="absolute inset-y-0 right-0 flex"
-                :class="isFullscreen ? 'inset-x-0' : 'max-w-5xl w-full'"
+                class="absolute inset-y-0 right-0 flex shadow-2xl"
+                :class="isFullscreen ? 'inset-x-0 w-full' : ''"
+                :style="!isFullscreen ? { width: `${panelWidth}%` } : {}"
             >
-                <div class="flex h-full flex-col bg-white dark:bg-gray-900 shadow-2xl w-full">
+                <!-- Resize Handle -->
+                <div
+                    v-if="!isFullscreen"
+                    class="absolute left-0 inset-y-0 w-1 cursor-ew-resize hover:bg-blue-500/50 z-50 transition-colors flex flex-col justify-center items-center group -ml-0.5"
+                    @mousedown="startResize"
+                >
+                    <!-- Visual indicator on hover -->
+                    <div class="h-8 w-1 bg-gray-400/50 rounded-full group-hover:bg-blue-500"></div>
+                </div>
+
+                <div class="flex h-full flex-col bg-white dark:bg-gray-900 w-full overflow-hidden">
                     <!-- Header -->
                     <div
                         class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 px-4 py-3"
@@ -2776,38 +2837,67 @@ onMounted(() => {
                                                 </div>
                                             </div>
 
-                                            <!-- Mermaid Diagram View -->
+                                            <!-- Mermaid Diagram View (Split) -->
                                             <div
                                                 v-else-if="outputFormat === 'mermaid'"
-                                                class="h-full"
+                                                class="h-full grid gap-4"
+                                                :class="
+                                                    isPreviewMaximized
+                                                        ? 'grid-cols-1'
+                                                        : 'grid-cols-2'
+                                                "
                                             >
+                                                <!-- Left: Code -->
                                                 <div
-                                                    class="bg-gray-800 rounded-lg p-6 overflow-auto"
+                                                    v-if="!isPreviewMaximized"
+                                                    class="bg-gray-900 rounded-lg p-4 overflow-auto border border-gray-700"
+                                                >
+                                                    <div class="text-xs text-gray-500 mb-2">
+                                                        Mermaid Source
+                                                    </div>
+                                                    <pre
+                                                        class="font-mono text-sm text-gray-300 h-full"
+                                                        >{{ content }}</pre
+                                                    >
+                                                </div>
+
+                                                <!-- Right: Diagram -->
+                                                <div
+                                                    class="bg-gray-800 rounded-lg p-6 overflow-auto border border-gray-700 flex flex-col"
                                                 >
                                                     <div
-                                                        v-if="renderedMermaid"
-                                                        v-html="renderedMermaid"
-                                                        class="flex justify-center mermaid-container"
-                                                    />
+                                                        class="text-xs text-gray-500 mb-2 flex justify-between items-center"
+                                                    >
+                                                        <span>Preview</span>
+                                                        <button
+                                                            @click="toggleMaximize"
+                                                            class="text-blue-500 hover:text-blue-400 text-xs px-2 py-1 rounded hover:bg-white/5 transition-colors"
+                                                            title="Toggle Full Width"
+                                                        >
+                                                            {{
+                                                                isPreviewMaximized
+                                                                    ? '축소'
+                                                                    : '전체화면'
+                                                            }}
+                                                        </button>
+                                                    </div>
                                                     <div
-                                                        v-else
-                                                        class="flex items-center justify-center h-64"
+                                                        class="flex-1 flex items-center justify-center min-h-0"
                                                     >
                                                         <div
-                                                            class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+                                                            v-if="renderedMermaid"
+                                                            v-html="renderedMermaid"
+                                                            class="mermaid-container w-full h-full flex items-center justify-center p-4 bg-white/5 rounded"
                                                         />
+                                                        <div
+                                                            v-else
+                                                            class="flex items-center justify-center"
+                                                        >
+                                                            <div
+                                                                class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+                                                            />
+                                                        </div>
                                                     </div>
-                                                    <details class="mt-4">
-                                                        <summary
-                                                            class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
-                                                        >
-                                                            소스 코드 보기
-                                                        </summary>
-                                                        <pre
-                                                            class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto"
-                                                            >{{ content }}</pre
-                                                        >
-                                                    </details>
                                                 </div>
                                             </div>
 
@@ -2853,21 +2943,9 @@ onMounted(() => {
                                                     alt="Generated Image"
                                                 />
                                                 <div class="mt-4 text-sm text-gray-500 font-mono">
-                                                    {{
-                                                        (content?.length || 0).toLocaleString()
-                                                    }}
+                                                    {{ (content?.length || 0).toLocaleString() }}
                                                     bytes
                                                 </div>
-                                            </div>
-                                            <div
-                                                v-else-if="outputFormat === 'png'"
-                                                class="h-full flex items-center justify-center"
-                                            >
-                                                <img
-                                                    :src="pngImageSrc"
-                                                    alt="Result Image"
-                                                    class="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                                                />
                                             </div>
 
                                             <!-- MP4 Video View -->

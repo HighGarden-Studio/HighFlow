@@ -16,7 +16,6 @@ import type {
     Capability,
     ModelInfo,
     AIMessage,
-    AIMessage,
     AiResult,
 } from '@core/types/ai';
 import { detectTextSubType } from '../utils/aiResultUtils';
@@ -99,7 +98,14 @@ export class GroqProvider extends BaseAIProvider {
     ): Promise<AiResult> {
         this.validateConfig(config);
         const client = this.getClient();
-        const chatMessages = this.buildChatMessages(messages, config, context);
+
+        const systemPrompt = this.buildSystemPrompt(config, context);
+        const systemMessage: Groq.Chat.ChatCompletionMessageParam | undefined = systemPrompt
+            ? { role: 'system', content: systemPrompt }
+            : undefined;
+
+        const userMessages = this.buildChatMessages(messages.filter((m) => m.role !== 'system'));
+        const chatMessages = systemMessage ? [systemMessage, ...userMessages] : userMessages;
 
         const response = await client.chat.completions.create({
             model: config.model,
@@ -127,26 +133,6 @@ export class GroqProvider extends BaseAIProvider {
             },
             raw: response,
         };
-    }
-
-    private buildChatMessages(
-        messages: AIMessage[],
-        config: AIConfig,
-        context?: ExecutionContext
-    ): Groq.Chat.ChatCompletionMessageParam[] {
-        const systemPrompt =
-            `${this.buildSystemPrompt(config, context)}\nYou must respond in valid JSON whenever possible. If JSON is not feasible, return a concise answer.`.trim();
-        const chatMessages: Groq.Chat.ChatCompletionMessageParam[] = [];
-        if (systemPrompt) {
-            chatMessages.push({ role: 'system', content: systemPrompt });
-        }
-        for (const message of messages) {
-            chatMessages.push({
-                role: message.role as 'system' | 'user' | 'assistant',
-                content: message.content,
-            });
-        }
-        return chatMessages;
     }
 
     /**
@@ -242,12 +228,24 @@ export class GroqProvider extends BaseAIProvider {
                 console.log(`[GroqProvider] Loaded ${cachedModels.length} models from DB`);
                 this.setDynamicModels(cachedModels);
             } else {
-                console.log('[GroqProvider] No models in DB, using defaults');
-                this.setDynamicModels(this.defaultModels);
+                console.log('[GroqProvider] No models in DB, fetching from API...');
+                try {
+                    await this.fetchModels();
+                } catch (fetchError) {
+                    console.error('[GroqProvider] Failed to fetch models from API:', fetchError);
+                    console.log('[GroqProvider] Falling back to default models');
+                    this.setDynamicModels(this.defaultModels);
+                }
             }
         } catch (error) {
             console.error('[GroqProvider] Failed to load models from DB:', error);
-            this.setDynamicModels(this.defaultModels);
+            // Try fetching from API as last resort
+            try {
+                await this.fetchModels();
+            } catch (fetchError) {
+                console.error('[GroqProvider] Failed to fetch models from API:', fetchError);
+                this.setDynamicModels(this.defaultModels);
+            }
         }
     }
 
@@ -332,7 +330,7 @@ export class GroqProvider extends BaseAIProvider {
      * Execute with streaming
      */
     async *streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext
@@ -343,7 +341,7 @@ export class GroqProvider extends BaseAIProvider {
         const client = this.getClient();
         const systemPrompt = this.buildSystemPrompt(config, context);
 
-        const messages: Groq.Chat.ChatCompletionMessageParam[] = [];
+        let messages: Groq.Chat.ChatCompletionMessageParam[] = [];
 
         if (systemPrompt) {
             messages.push({
@@ -352,10 +350,20 @@ export class GroqProvider extends BaseAIProvider {
             });
         }
 
-        messages.push({
-            role: 'user',
-            content: prompt,
-        });
+        if (Array.isArray(input)) {
+            // Filter out system messages from input since we handled them via config/buildSystemPrompt
+            // or if they are in input, we might duplicate?
+            // BaseAIProvider usually puts system prompt in config.
+            // If input has system message, we should probably prefer it or merge.
+            // For now, let's assume input 'user/assistant' messages are what we need + config system prompt.
+            const chatMessages = this.buildChatMessages(input.filter((m) => m.role !== 'system'));
+            messages = [...messages, ...chatMessages];
+        } else {
+            messages.push({
+                role: 'user',
+                content: input,
+            });
+        }
 
         const stream = await client.chat.completions.create({
             model: config.model,
@@ -429,8 +437,7 @@ export class GroqProvider extends BaseAIProvider {
             {
                 name: 'Vision',
                 description: 'Image analysis capabilities',
-                supported: false,
-                limitations: ['Not yet supported'],
+                supported: true,
             },
             {
                 name: 'JSON Mode',
@@ -456,5 +463,44 @@ export class GroqProvider extends BaseAIProvider {
             default:
                 return 'stop';
         }
+    }
+
+    private buildChatMessages(messages: AIMessage[]): Groq.Chat.ChatCompletionMessageParam[] {
+        return messages.map((message) => {
+            // Handle multi-modal content (Vision)
+            if (message.multiModalContent && message.multiModalContent.length > 0) {
+                const contentParts: any[] = [];
+
+                message.multiModalContent.forEach((part) => {
+                    if (part.type === 'text') {
+                        contentParts.push({ type: 'text', text: part.text });
+                    } else if (part.type === 'image' && part.data) {
+                        let imageUrl = part.data;
+                        // For Groq/OpenAI, it expects data URI for base64 inline images
+                        if (!imageUrl.startsWith('data:')) {
+                            imageUrl = `data:${part.mimeType || 'image/png'};base64,${part.data}`;
+                        }
+
+                        contentParts.push({
+                            type: 'image_url',
+                            image_url: {
+                                url: imageUrl,
+                            },
+                        });
+                    }
+                });
+
+                return {
+                    role: message.role as any,
+                    content: contentParts,
+                };
+            }
+
+            // Standard text content
+            return {
+                role: message.role as any,
+                content: message.content,
+            };
+        });
     }
 }

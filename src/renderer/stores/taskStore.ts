@@ -1399,10 +1399,27 @@ export const useTaskStore = defineStore('tasks', () => {
                             }
                         }
                     } else {
-                        // Normal status update for non-INPUT tasks
-                        tasks.value[index] = { ...tasks.value[index], status } as Task;
+                        // Normal status update for non-INPUT tasks or INPUT tasks completing
+                        const updates: Partial<Task> = { status };
+
+                        // For INPUT tasks completing, clear the sub-status
+                        if (task.taskType === 'input' && status !== 'in_progress') {
+                            updates.inputSubStatus = undefined;
+
+                            // Notify views (DAGView) immediately
+                            window.dispatchEvent(
+                                new CustomEvent('task:input-status-changed', {
+                                    detail: {
+                                        taskId: id,
+                                        inputSubStatus: undefined,
+                                    },
+                                })
+                            );
+                        }
+
+                        tasks.value[index] = { ...tasks.value[index], ...updates } as Task;
                         if (currentTask.value?.id === id) {
-                            currentTask.value = { ...currentTask.value, status };
+                            currentTask.value = { ...currentTask.value, ...updates };
                         }
                     }
 
@@ -1444,6 +1461,8 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             );
             cleanupFns.push(unsubscribeStarted);
+
+            // Execution completed
 
             // Progress updates with streaming content
             const unsubscribeProgress = api.taskExecution.onProgress(

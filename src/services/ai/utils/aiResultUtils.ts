@@ -8,10 +8,10 @@ const SHELL_HINT = /^\s*(#!\/|(?:bash|sh|zsh|fish)\b)/m;
 const HTML_HINT = /<\s*(html|body|div|span|section|article|main)\b/i;
 const MARKDOWN_HINT = /^\s{0,3}(#{1,6}|\*|-|\d+\.)\s/m;
 const LOG_HINT = /\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE)\b.*\d{2}:\d{2}:\d{2}/;
-const MERMAID_HINT = /\b(graph\s+(?:LR|RL|TD|BT)|sequenceDiagram|classDiagram|stateDiagram)\b/;
+const MERMAID_HINT =
+    /\b(graph\s+|flowchart\s+|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|zenuml|sankey-beta|xychart-beta|block-beta|packet-beta|quadrantChart|requirementDiagram|c4Context|c4Container|c4Component|c4Dynamic|c4Deployment)\b|```mermaid/;
 const SVG_HINT = /<svg[\s>]/i;
-const CSV_HINT =
-    /^(?:\s*"?[\w\s\-.:\/]+"?(?:\s*,\s*"?[\w\s\-.:\/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
+const CSV_HINT = /^(?:\s*"?[\w\s\-.:\/]+"?(?:\s*,\s*"?[\w\s\-.:\/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
 const CODE_FENCE_HINT = /```(?<lang>[\w+-]+)?\s[\s\S]+```/m;
 const PDF_HINT = /%PDF-|JVBER/i;
 

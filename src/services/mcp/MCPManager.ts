@@ -418,7 +418,13 @@ export class MCPManager {
         mcpId: number,
         toolName: string,
         params: Record<string, any>,
-        options: { taskId?: number; projectId?: number; source?: string } = {}
+        options: {
+            taskId?: number;
+            projectId?: number;
+            source?: string;
+            taskTitle?: string; // Enhanced metadata for logging
+            projectName?: string; // Enhanced metadata for logging
+        } = {}
     ): Promise<MCPResult> {
         const startTime = Date.now();
         const logSource = options.source || 'mcp-manager';
@@ -452,6 +458,8 @@ export class MCPManager {
                 {
                     taskId: options.taskId,
                     projectId: options.projectId,
+                    taskTitle: options.taskTitle,
+                    projectName: options.projectName,
                     mcpId,
                     mcpName: mcpInfo?.name,
                     endpoint: mcpInfo?.endpoint,
@@ -480,6 +488,8 @@ export class MCPManager {
                 {
                     taskId: options.taskId,
                     projectId: options.projectId,
+                    taskTitle: options.taskTitle,
+                    projectName: options.projectName,
                     mcpId,
                     mcpName: mcpInfo?.name,
                     toolName,
@@ -525,6 +535,8 @@ export class MCPManager {
                     {
                         taskId: options.taskId,
                         projectId: options.projectId,
+                        taskTitle: options.taskTitle,
+                        projectName: options.projectName,
                         mcpId,
                         mcpName: mcpInfo?.name,
                         toolName,
@@ -542,6 +554,8 @@ export class MCPManager {
                 {
                     taskId: options.taskId,
                     projectId: options.projectId,
+                    taskTitle: options.taskTitle,
+                    projectName: options.projectName,
                     mcpId,
                     mcpName: mcpInfo?.name,
                     toolName,
@@ -812,6 +826,12 @@ export class MCPManager {
         };
 
         if (runtimeConfig?.command) {
+            console.log(`[MCPManager Debug] Starting MCP #${mcpId} with custom command:`, {
+                command: runtimeConfig.command,
+                args: runtimeConfig.args,
+                envKeys: Object.keys(transportEnv),
+                hasSlackToken: !!transportEnv.SLACK_BOT_TOKEN,
+            });
             const transport = new StdioClientTransport({
                 command: runtimeConfig.command,
                 args: runtimeConfig.args || [],
@@ -820,6 +840,12 @@ export class MCPManager {
             await client.connect(transport);
         } else if (runtimeConfig?.endpoint?.startsWith('stdio://')) {
             const command = runtimeConfig.endpoint.replace('stdio://', '');
+            console.log(`[MCPManager Debug] Starting MCP #${mcpId} with runtime endpoint:`, {
+                command,
+                args: runtimeConfig.args,
+                envKeys: Object.keys(transportEnv),
+                hasSlackToken: !!transportEnv.SLACK_BOT_TOKEN,
+            });
             const transport = new StdioClientTransport({
                 command,
                 args: runtimeConfig.args || [],
@@ -828,6 +854,12 @@ export class MCPManager {
             await client.connect(transport);
         } else if (mcp.endpoint.startsWith('stdio://')) {
             const command = mcp.endpoint.replace('stdio://', '');
+            console.log(`[MCPManager Debug] Starting MCP #${mcpId} with default endpoint:`, {
+                command,
+                args: [],
+                envKeys: Object.keys(transportEnv),
+                hasSlackToken: !!transportEnv.SLACK_BOT_TOKEN,
+            });
             const transport = new StdioClientTransport({
                 command,
                 args: [],

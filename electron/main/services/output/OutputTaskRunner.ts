@@ -158,45 +158,56 @@ export class OutputTaskRunner {
         const inputs: string[] = [];
 
         // 1. Include previous output task result (for accumulation)
-        if (config.localFile?.accumulateResults) {
-            console.log('[OutputTaskRunner] Accumulate mode enabled, reading previous results...');
-            const previousResult =
-                (task as any).result || (task.executionResult as any)?.content || '';
+        const isAppendMode =
+            config.destination === 'local_file' && config.localFile && !config.localFile.overwrite;
 
-            if (previousResult) {
-                // If destination is local_file and result is a file path, read the file
-                if (config.destination === 'local_file' && typeof previousResult === 'string') {
-                    try {
-                        // Check if it's a file path (not actual content)
-                        if (previousResult.includes('/') || previousResult.includes('\\\\')) {
-                            const fileContent = await fs.readFile(previousResult, 'utf-8');
-                            console.log(
-                                `[OutputTaskRunner] Read previous result from file: ${previousResult} (${fileContent.length} bytes)`
+        if (config.localFile?.accumulateResults) {
+            if (isAppendMode) {
+                console.log(
+                    '[OutputTaskRunner] Append mode detected: Skipping aggregation of previous content to prevent duplication.'
+                );
+            } else {
+                console.log(
+                    '[OutputTaskRunner] Accumulate mode enabled, reading previous results...'
+                );
+                const previousResult =
+                    (task as any).result || (task.executionResult as any)?.content || '';
+
+                if (previousResult) {
+                    // If destination is local_file and result is a file path, read the file
+                    if (config.destination === 'local_file' && typeof previousResult === 'string') {
+                        try {
+                            // Check if it's a file path (not actual content)
+                            if (previousResult.includes('/') || previousResult.includes('\\\\')) {
+                                const fileContent = await fs.readFile(previousResult, 'utf-8');
+                                console.log(
+                                    `[OutputTaskRunner] Read previous result from file: ${previousResult} (${fileContent.length} bytes)`
+                                );
+                                inputs.push(fileContent);
+                            } else {
+                                // It's actual content, not a path
+                                console.log(
+                                    `[OutputTaskRunner] Using previous result as content (${previousResult.length} bytes)`
+                                );
+                                inputs.push(previousResult);
+                            }
+                        } catch (err) {
+                            console.warn(
+                                '[OutputTaskRunner] Could not read previous result file:',
+                                err
                             );
-                            inputs.push(fileContent);
-                        } else {
-                            // It's actual content, not a path
-                            console.log(
-                                `[OutputTaskRunner] Using previous result as content (${previousResult.length} bytes)`
-                            );
-                            inputs.push(previousResult);
+                            // If file read fails, still try to use the raw value
+                            if (previousResult.length > 0) {
+                                inputs.push(previousResult);
+                            }
                         }
-                    } catch (err) {
-                        console.warn(
-                            '[OutputTaskRunner] Could not read previous result file:',
-                            err
+                    } else {
+                        // For non-file destinations, use content directly
+                        console.log(
+                            `[OutputTaskRunner] Using previous result content (${previousResult.length} bytes)`
                         );
-                        // If file read fails, still try to use the raw value
-                        if (previousResult.length > 0) {
-                            inputs.push(previousResult);
-                        }
+                        inputs.push(previousResult);
                     }
-                } else {
-                    // For non-file destinations, use content directly
-                    console.log(
-                        `[OutputTaskRunner] Using previous result content (${previousResult.length} bytes)`
-                    );
-                    inputs.push(previousResult);
                 }
             }
         }
@@ -233,8 +244,9 @@ export class OutputTaskRunner {
         );
 
         // Aggregation Strategy
+        let finalOutput = '';
         if (config.aggregation === 'concat' || config.aggregation === 'single') {
-            return inputs.join('\n\n---\n\n');
+            finalOutput = inputs.join('\n\n---\n\n');
         } else if (config.aggregation === 'template') {
             // Template with unified macro support
             if (config.templateConfig?.template) {
@@ -286,11 +298,28 @@ export class OutputTaskRunner {
                     rendered = rendered.replace(/\{\{all_results\}\}/g, inputs.join('\n\n'));
                 }
 
-                return rendered;
+                finalOutput = rendered;
+            } else {
+                finalOutput = inputs.join('\n\n');
             }
-            return inputs.join('\n\n');
+        } else {
+            finalOutput = inputs.join('\n\n');
         }
 
-        return inputs.join('\n\n');
+        // Add Timestamp Header if in Append Mode
+        if (isAppendMode) {
+            const timestamp = new Date().toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            });
+            finalOutput = `\n\n### [${timestamp}]\n\n${finalOutput}`;
+        }
+
+        return finalOutput;
     }
 }

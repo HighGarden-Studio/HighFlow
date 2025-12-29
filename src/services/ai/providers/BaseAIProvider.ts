@@ -60,8 +60,21 @@ export abstract class BaseAIProvider {
     /**
      * Execute with streaming support
      */
+    /**
+     * Helper to extract text prompt from input
+     */
+    protected getPromptText(input: string | AIMessage[]): string {
+        if (typeof input === 'string') return input;
+        // Basic fallback: join non-system messages or take last user message
+        const lastUserMsg = [...input].reverse().find((m) => m.role === 'user');
+        return lastUserMsg?.content || '';
+    }
+
+    /**
+     * Execute with streaming support
+     */
     abstract streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext,

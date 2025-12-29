@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive, computed } from 'vue';
+import { reactive, computed, ref } from 'vue';
 import type { Task, InputTaskConfig } from '@core/types/database';
+import { getAPI } from '../../utils/electron';
 
 interface Props {
     task: Task;
@@ -11,6 +12,8 @@ const emit = defineEmits<{
     (e: 'submit', data: any): void;
     (e: 'cancel'): void;
 }>();
+
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const config = computed<InputTaskConfig | null>(() => {
     if (!props.task.inputConfig) {
@@ -42,6 +45,14 @@ const error = reactive({ message: '' });
 
 const validate = (): boolean => {
     error.message = '';
+
+    if (config.value?.sourceType === 'LOCAL_FILE') {
+        if (!formData.value) {
+            error.message = '파일을 선택해주세요.';
+            return false;
+        }
+        return true;
+    }
 
     if (config.value?.sourceType === 'USER_INPUT' && config.value.userInput) {
         const { required, mode, options, allowCustom } = config.value.userInput;
@@ -82,11 +93,48 @@ const validate = (): boolean => {
     return true;
 };
 
+const triggerFileSelect = async () => {
+    // Try Electron native dialog first
+    try {
+        const result = await getAPI().fs.selectFile();
+        if (result) {
+            formData.value = result;
+            return;
+        }
+    } catch (e) {
+        // Fallback to HTML input
+        console.warn('Native file selection failed, using fallback:', e);
+    }
+
+    // Fallback
+    fileInput.value?.click();
+};
+
+const handleFileChange = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+        const file = input.files[0];
+        if (!file) return;
+
+        // In Electron, File object usually has 'path' property
+        if ('path' in file) {
+            formData.value = (file as any).path;
+        } else {
+            // Web fallback (might not work for backend file reading)
+            formData.value = (file as any).name;
+            error.message =
+                '파일 경로를 가져올 수 없습니다. (브라우저 제한). 직접 경로를 입력해야 할 수도 있습니다.';
+        }
+    }
+};
+
 const handleSubmit = () => {
     if (validate()) {
         let submission: any;
 
-        if (config.value?.userInput?.mode === 'confirm') {
+        if (config.value?.sourceType === 'LOCAL_FILE') {
+            submission = { filePath: formData.value };
+        } else if (config.value?.userInput?.mode === 'confirm') {
             submission = { confirmed: formData.confirmed };
         } else {
             // Determine final value
@@ -250,6 +298,58 @@ const handleSubmit = () => {
                 </div>
             </div>
 
+            <!-- Local File Source -->
+            <div v-if="config.sourceType === 'LOCAL_FILE'">
+                <div class="form-group space-y-4">
+                    <label class="block text-base font-medium text-gray-800 dark:text-gray-200">
+                        파일 선택
+                        <span class="text-red-500">*</span>
+                    </label>
+
+                    <div
+                        class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                        @click="triggerFileSelect"
+                    >
+                        <div v-if="formData.value" class="text-center">
+                            <div class="text-2xl mb-2">📄</div>
+                            <div
+                                class="text-sm font-medium text-gray-900 dark:text-white break-all"
+                            >
+                                {{ formData.value }}
+                            </div>
+                            <div class="text-xs text-blue-500 mt-2">클릭하여 변경</div>
+                        </div>
+                        <div v-else class="text-center">
+                            <div class="text-2xl mb-2">📂</div>
+                            <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                파일을 선택하세요
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                {{
+                                    config.localFile?.acceptedExtensions?.length
+                                        ? `허용: ${config.localFile.acceptedExtensions.join(', ')}`
+                                        : '모든 파일'
+                                }}
+                            </div>
+                        </div>
+                        <input
+                            type="file"
+                            ref="fileInput"
+                            class="hidden"
+                            @change="handleFileChange"
+                            :accept="
+                                config.localFile?.acceptedExtensions
+                                    ?.map((ext) => (ext.startsWith('.') ? ext : '.' + ext))
+                                    .join(',')
+                            "
+                        />
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        * 선택된 파일 경로는 시스템에 의해 자동으로 읽힙니다.
+                    </div>
+                </div>
+            </div>
+
             <!-- Validation Error -->
             <div
                 v-if="error.message"
@@ -279,7 +379,9 @@ const handleSubmit = () => {
                     type="submit"
                     class="px-6 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center gap-2"
                 >
-                    <span>Submit Input</span>
+                    <span>{{
+                        config.sourceType === 'LOCAL_FILE' ? 'Load File' : 'Submit Input'
+                    }}</span>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                             stroke-linecap="round"

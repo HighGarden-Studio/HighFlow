@@ -126,6 +126,18 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             bestFor: ['High Quality Image Generation'],
         },
         {
+            name: 'imagen-3.0-generate-002',
+            provider: 'default-highflow',
+            displayName: 'Imagen 3.0',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            costPerInputToken: 0.04,
+            costPerOutputToken: 0.0,
+            averageLatency: 4000,
+            features: ['vision'],
+            bestFor: ['High Quality Image Generation'],
+        },
+        {
             name: 'imagen-4.0-generate-001',
             provider: 'default-highflow',
             displayName: 'Imagen 4',
@@ -447,6 +459,8 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 ? this.buildSystemPrompt(config, context)
                 : undefined;
 
+            const toolDeclarations = this.mapTools(config.tools);
+
             // Build Gemini API format request
             const request: any = {
                 contents: [
@@ -465,6 +479,26 @@ export class DefaultHighFlowProvider extends GeminiProvider {
 
             if (systemPrompt) {
                 request.systemInstruction = systemPrompt;
+            }
+
+            if (toolDeclarations) {
+                // Transform to snake_case for REST API
+                const sanitizedTools = toolDeclarations.map((td: any) => {
+                    if (td.functionDeclarations) {
+                        return { function_declarations: td.functionDeclarations };
+                    }
+                    return td;
+                });
+                request.tools = sanitizedTools;
+
+                // When tools are present, we should set mode to ANY to force usage if applicable
+                if (config.tools && config.tools.length > 0) {
+                    request.tool_config = {
+                        function_calling_config: {
+                            mode: 'ANY',
+                        },
+                    };
+                }
             }
 
             // Call backend proxy
@@ -563,7 +597,23 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             }
 
             if (toolDeclarations) {
-                request.tools = toolDeclarations;
+                // Transform to snake_case for REST API
+                const sanitizedTools = toolDeclarations.map((td: any) => {
+                    if (td.functionDeclarations) {
+                        return { function_declarations: td.functionDeclarations };
+                    }
+                    return td;
+                });
+                request.tools = sanitizedTools;
+
+                // When tools are present, we should set mode to ANY to force usage if applicable
+                if (config.tools && config.tools.length > 0) {
+                    request.tool_config = {
+                        function_calling_config: {
+                            mode: 'ANY',
+                        },
+                    };
+                }
             }
 
             // Call backend proxy
@@ -618,12 +668,13 @@ export class DefaultHighFlowProvider extends GeminiProvider {
      * Streaming is not supported for Default HighFlow
      */
     async *streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext,
         signal?: AbortSignal
     ): AsyncGenerator<StreamChunk> {
+        const prompt = this.getPromptText(input);
         // Default HighFlow does not support real streaming yet, so we wrap the non-streaming execute
         // and yield the result as a single chunk. This allows it to work with the streaming architecture.
         try {
@@ -678,7 +729,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 );
             }
 
-            const modelName = config.model || 'gemini-3-pro-image-preview';
+            const modelName = config.model || 'gemini-2.5-flash-image';
             console.log(
                 `[DefaultHighFlowProvider] Attempting image generation with model: ${modelName}`
             );

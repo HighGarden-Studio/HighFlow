@@ -134,22 +134,38 @@ const hasPreviousResult = computed(() => {
 });
 
 // Image content detection
+// Image content detection
 const imageContent = computed(() => {
+    const task = props.task as any;
     const content =
-        (props.task.status === 'in_progress'
+        (task.status === 'in_progress'
             ? streamedContent.value
-            : (props.task as any).executionResult?.content || (props.task as any).result) || '';
+            : task.executionResult?.content || task.result || task.output?.aiResult?.value) || '';
 
     if (!content) return null;
 
-    // Check if it looks like an image
+    // 1. Authoritative check: aiResult metadata
+    if (task.output?.aiResult) {
+        if (task.output.aiResult.kind === 'image') {
+            if (content.startsWith('data:image')) return content;
+            const format = task.output.aiResult.format || 'png';
+            // Check if content is actually base64 (no spaces)
+            if (!/\s/.test(content.trim())) {
+                return `data:image/${format};base64,${content}`;
+            }
+        }
+        // If kind is text/markdown, explicitly return null
+        if (task.output.aiResult.kind === 'text' || task.output.aiResult.kind === 'markdown') {
+            return null;
+        }
+    }
+
+    // 2. Check magic bytes / data URI (Safe)
     if (
         content.startsWith('iVBORw0KGgo') || // PNG
         content.startsWith('/9j/') || // JPEG
         content.startsWith('R0lGOD') || // GIF
-        content.startsWith('data:image') ||
-        (props.task as any).outputFormat === 'png' ||
-        outputFormatInfo.value?.label === 'Image'
+        content.startsWith('data:image')
     ) {
         // Add prefix if missing
         if (content.startsWith('data:image')) return content;
@@ -159,6 +175,16 @@ const imageContent = computed(() => {
         else if (content.startsWith('R0lGOD')) mimeType = 'image/gif';
 
         return `data:${mimeType};base64,${content}`;
+    }
+
+    // 3. Last resort: outputFormat check, BUT ONLY if content looks like base64
+    // This prevents "To convert..." text from being treated as base64
+    if (
+        (task.outputFormat === 'png' || outputFormatInfo.value?.label === 'Image') &&
+        !/\s/.test(content.trim()) && // Must not have spaces
+        content.length > 20 // Arbitrary small length check to avoid short garbage
+    ) {
+        return `data:image/png;base64,${content}`;
     }
 
     return null;

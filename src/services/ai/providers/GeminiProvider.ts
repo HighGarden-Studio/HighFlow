@@ -44,10 +44,9 @@ export class GeminiProvider extends BaseAIProvider {
         try {
             if (!this.injectedApiKey) {
                 console.warn('[GeminiProvider] No API key configured, loading from DB cache');
-                const cachedModels =
-                    await import('../../../../electron/main/database/repositories/provider-models-repository')
-                        .then((m) => m.providerModelsRepository)
-                        .getModels('google');
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+                const cachedModels = await providerModelsRepository.getModels('google');
                 return cachedModels;
             }
 
@@ -94,10 +93,9 @@ export class GeminiProvider extends BaseAIProvider {
         } catch (error) {
             console.error('[GeminiProvider] Failed to fetch models from API:', error);
             // Fall back to DB cache
-            const cachedModels =
-                await import('../../../../electron/main/database/repositories/provider-models-repository')
-                    .then((m) => m.providerModelsRepository)
-                    .getModels('google');
+            const { providerModelsRepository } =
+                await import('../../../../electron/main/database/repositories/provider-models-repository');
+            const cachedModels = await providerModelsRepository.getModels('google');
             if (cachedModels.length > 0) {
                 console.log('[GeminiProvider] Using cached models from DB');
                 return cachedModels;
@@ -134,7 +132,7 @@ export class GeminiProvider extends BaseAIProvider {
         const startTime = Date.now();
         const client = this.getClient();
 
-        return this.executeWithRetry(async () => {
+        return this.executeWithGeminiRetry(async () => {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
@@ -173,7 +171,7 @@ export class GeminiProvider extends BaseAIProvider {
                     // Force tool use mode
                     requestConfig.toolConfig = {
                         functionCallingConfig: {
-                            mode: 'AUTO',
+                            mode: 'ANY',
                         },
                     };
                 }
@@ -199,6 +197,19 @@ export class GeminiProvider extends BaseAIProvider {
             const textParts = parts.filter((part) => part.text).map((part) => part.text as string);
 
             const toolCalls = this.extractGeminiToolCalls(parts);
+
+            if (toolDeclarations && toolDeclarations.length > 0) {
+                console.log(
+                    '[GeminiProvider] Raw response parts with tools:',
+                    JSON.stringify(parts, null, 2)
+                );
+                if (!toolCalls || toolCalls.length === 0) {
+                    console.log(
+                        '[GeminiProvider] WARNING: Tools were available but none were called.'
+                    );
+                }
+            }
+
             const finishReason =
                 toolCalls && toolCalls.length > 0
                     ? ('tool_calls' as const)
@@ -251,7 +262,7 @@ export class GeminiProvider extends BaseAIProvider {
         const startTime = Date.now();
         const client = this.getClient();
 
-        return this.executeWithRetry(async () => {
+        return this.executeWithGeminiRetry(async () => {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
@@ -312,57 +323,117 @@ export class GeminiProvider extends BaseAIProvider {
      * Execute with streaming
      */
     async *streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext,
         signal?: AbortSignal
     ): AsyncGenerator<StreamChunk> {
         this.validateConfig(config);
-
         const client = this.getClient();
-        const systemPrompt = config.systemPrompt
-            ? this.buildSystemPrompt(config, context)
-            : undefined;
 
-        const result = await client.models.generateContentStream({
-            model: config.model,
-            contents: prompt,
-            config: {
-                temperature: config.temperature,
-                topP: config.topP,
-                maxOutputTokens: config.maxTokens || 8192,
-                ...(systemPrompt && { systemInstruction: systemPrompt }),
-            },
-        });
+        let contents: any;
+        let systemInstruction: string | undefined;
 
-        let accumulated = '';
-
-        for await (const chunk of result) {
-            // Check if aborted
-            if (signal?.aborted) {
-                throw new Error('Request aborted');
+        if (Array.isArray(input)) {
+            // Extract system prompt if present
+            const systemMsg = input.find((m) => m.role === 'system');
+            if (systemMsg) {
+                systemInstruction = systemMsg.content;
+            } else if (config.systemPrompt) {
+                // Fallback if not in messages
+                systemInstruction = this.buildSystemPrompt(config, context);
             }
 
-            const delta = chunk.text || '';
-            accumulated += delta;
-            onToken(delta);
-
-            yield {
-                delta,
-                accumulated,
-                done: false,
-            };
+            // Build proper Gemini contents (excluding system messages which go to systemInstruction)
+            contents = this.buildGeminiContents(input.filter((m) => m.role !== 'system'));
+        } else {
+            // Legacy string input
+            contents = input;
+            if (config.systemPrompt) {
+                systemInstruction = this.buildSystemPrompt(config, context);
+            }
         }
 
-        yield {
-            delta: '',
-            accumulated,
-            done: true,
-            metadata: {
-                finishReason: 'stop',
-            },
-        };
+        let accumulated = '';
+        let lastError: Error | undefined;
+        const maxRetries = 3;
+        const defaultDelayMs = 1000;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                if (signal?.aborted) {
+                    throw new Error('Request aborted');
+                }
+
+                const result = await client.models.generateContentStream({
+                    model: config.model,
+                    contents,
+                    config: {
+                        temperature: config.temperature,
+                        topP: config.topP,
+                        maxOutputTokens: config.maxTokens ? Math.max(config.maxTokens, 8192) : 8192,
+                        ...(systemInstruction && { systemInstruction }),
+                    },
+                });
+
+                for await (const chunk of result) {
+                    // Check if aborted mid-stream
+                    if (signal?.aborted) {
+                        throw new Error('Request aborted');
+                    }
+
+                    const delta = chunk.text || '';
+                    accumulated += delta;
+                    onToken(delta);
+
+                    yield {
+                        delta,
+                        accumulated,
+                        done: false,
+                    };
+                }
+
+                yield {
+                    delta: '',
+                    accumulated,
+                    done: true,
+                    metadata: {
+                        finishReason: 'stop',
+                    },
+                };
+                return; // Success
+            } catch (error: any) {
+                lastError = error as Error;
+
+                // Check for 429
+                if (
+                    error.status === 429 ||
+                    error.statusCode === 429 ||
+                    error.code === 429 ||
+                    error.message?.includes('429') ||
+                    error.message?.includes('quota')
+                ) {
+                    const delay = this.extractRetryDelay(error);
+                    console.warn(
+                        `[GeminiProvider] Rate limit hit during stream. Waiting ${delay}ms before retry (Attempt ${attempt}/${maxRetries})`
+                    );
+                    await this.delay(delay);
+                    continue;
+                }
+
+                // Don't retry on other fatal errors
+                if (this.shouldNotRetry(error)) {
+                    throw error;
+                }
+
+                if (attempt < maxRetries) {
+                    await this.delay(defaultDelayMs * attempt);
+                }
+            }
+        }
+
+        throw lastError || new Error('Max retries exceeded');
     }
 
     async generateImage(
@@ -372,7 +443,7 @@ export class GeminiProvider extends BaseAIProvider {
         options: Record<string, any> = {},
         signal?: AbortSignal
     ): Promise<AiResult> {
-        try {
+        return this.executeWithGeminiRetry(async () => {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
@@ -528,10 +599,66 @@ export class GeminiProvider extends BaseAIProvider {
                 },
                 raw: response,
             };
-        } catch (error) {
-            console.error(`[GeminiProvider] Image generation error:`, error);
-            throw error;
+        });
+    }
+
+    /**
+     * specialized retry logic for Gemini 429 errors
+     */
+    protected async executeWithGeminiRetry<T>(
+        fn: () => Promise<T>,
+        maxRetries: number = 3,
+        defaultDelayMs: number = 1000
+    ): Promise<T> {
+        let lastError: Error | undefined;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (error: any) {
+                lastError = error as Error;
+
+                // Check for 429
+                if (
+                    error.status === 429 ||
+                    error.statusCode === 429 ||
+                    error.code === 429 ||
+                    error.message?.includes('429') ||
+                    error.message?.includes('quota')
+                ) {
+                    const delay = this.extractRetryDelay(error);
+                    console.warn(
+                        `[GeminiProvider] Rate limit hit. Waiting ${delay}ms before retry (Attempt ${attempt}/${maxRetries})`
+                    );
+                    await this.delay(delay);
+                    continue;
+                }
+
+                // Don't retry on other fatal errors
+                if (this.shouldNotRetry(error)) {
+                    throw error;
+                }
+
+                if (attempt < maxRetries) {
+                    await this.delay(defaultDelayMs * attempt);
+                }
+            }
         }
+
+        throw lastError || new Error('Max retries exceeded');
+    }
+
+    private extractRetryDelay(error: any): number {
+        // Regex to find "retry in X.Xs" or similar
+        // The user log shows: "Please retry in 42.889386014s." inside the error message string.
+        const text = typeof error === 'string' ? error : error.message || JSON.stringify(error);
+        const match = text.match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+        if (match && match[1]) {
+            // Parse seconds, convert to ms, add 1s buffer
+            return Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+        }
+
+        return 5000; // Default fallback for 429 if no time found
     }
 
     async generateVideo(
@@ -541,7 +668,7 @@ export class GeminiProvider extends BaseAIProvider {
         _options: Record<string, any> = {},
         signal?: AbortSignal
     ): Promise<AiResult> {
-        try {
+        return this.executeWithGeminiRetry(async () => {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
@@ -617,10 +744,7 @@ export class GeminiProvider extends BaseAIProvider {
                 },
                 raw: response,
             };
-        } catch (error) {
-            console.error(`[GeminiProvider] Video generation error:`, error);
-            throw error;
-        }
+        });
     }
 
     private mapMimeToSubType(mime: string): AiResult['subType'] {
@@ -813,7 +937,7 @@ export class GeminiProvider extends BaseAIProvider {
         let parts: any[] = [{ text: message.content }];
 
         // Cast message to any to access multiModalContent if it exists at runtime
-        const msgAny = message as any;
+        // const msgAny = message as any;
         if (message.multiModalContent) {
             parts = message.multiModalContent.map((content) => {
                 if (content.type === 'text') {
@@ -833,7 +957,7 @@ export class GeminiProvider extends BaseAIProvider {
         return { role, parts };
     }
 
-    private extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
+    protected extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
         const calls: ToolCall[] = [];
 
         for (const part of parts) {
@@ -849,7 +973,7 @@ export class GeminiProvider extends BaseAIProvider {
         return calls.length > 0 ? calls : undefined;
     }
 
-    private mapTools(tools: any[] | undefined): any[] | undefined {
+    protected mapTools(tools: any[] | undefined): any[] | undefined {
         if (!tools || tools.length === 0) {
             return undefined;
         }
@@ -880,6 +1004,41 @@ export class GeminiProvider extends BaseAIProvider {
         const completionCost = (tokens.completion / 1000000) * 1.5; // ~$1.50 per 1M output tokens
 
         return promptCost + completionCost || 0;
+    }
+
+    private buildGeminiContents(messages: AIMessage[]): any[] {
+        return messages.map((msg) => {
+            const role = msg.role === 'assistant' ? 'model' : 'user';
+            const parts: any[] = [];
+
+            if (msg.multiModalContent && msg.multiModalContent.length > 0) {
+                msg.multiModalContent.forEach((content) => {
+                    if (content.type === 'text') {
+                        parts.push({ text: content.text });
+                    } else if (content.type === 'image' && content.data) {
+                        // Ensure we strip data URI prefix if present
+                        let base64Data = content.data!;
+                        if (base64Data.startsWith('data:')) {
+                            base64Data = base64Data.split(',')[1];
+                        }
+
+                        parts.push({
+                            inlineData: {
+                                mimeType: content.mimeType || 'image/png',
+                                data: base64Data,
+                            },
+                        });
+                    }
+                });
+            } else {
+                parts.push({ text: msg.content });
+            }
+
+            return {
+                role,
+                parts,
+            };
+        });
     }
 
     // Helper to estimate tokens (rough approximation)

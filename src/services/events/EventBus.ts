@@ -284,7 +284,9 @@ export interface MCPRequestEvent extends BaseEvent {
     payload: {
         taskId?: number;
         projectId?: number;
-        mcpId?: number;
+        taskTitle?: string;
+        projectName?: string;
+        mcpId: number;
         mcpName?: string;
         endpoint?: string;
         toolName: string;
@@ -298,11 +300,13 @@ export interface MCPResponseEvent extends BaseEvent {
     payload: {
         taskId?: number;
         projectId?: number;
-        mcpId?: number;
+        taskTitle?: string;
+        projectName?: string;
+        mcpId: number;
         mcpName?: string;
         toolName: string;
         success: boolean;
-        duration: number;
+        duration?: number;
         dataPreview?: string;
         error?: string;
     };

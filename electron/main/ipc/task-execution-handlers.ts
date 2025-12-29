@@ -113,6 +113,43 @@ async function buildDependencyContext(
         }
     }
 
+    // 1.5 Scan Prompt for Macros ({{task.N}}) and add them to dependencies
+    // This allows ad-hoc references even if not in explicit dependsOn
+    const promptText = (task.description || '') + (task.generatedPrompt || '');
+    const macroRegex = /\{\{task\.(\d+)\}\}/g;
+    let match;
+    // We need to resolve Sequence -> ID if needed, so we might need all tasks
+    // To be efficient, we'll collect potential IDs/Sequences first
+    const potentialRefs = new Set<number>();
+    while ((match = macroRegex.exec(promptText)) !== null) {
+        const val = parseInt(match[1], 10);
+        if (!isNaN(val)) potentialRefs.add(val);
+    }
+
+    if (potentialRefs.size > 0) {
+        // Fetch all project tasks to resolve sequences
+        const allTasks = await taskRepository.findByProject(task.projectId);
+        potentialRefs.forEach((ref) => {
+            // Try Sequence
+            const seqMatch = allTasks.find((t) => t.projectSequence === ref);
+            if (seqMatch) {
+                directDeps.add(seqMatch.id);
+                console.log(
+                    `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${seqMatch.id}`
+                );
+            } else {
+                // Try ID
+                const idMatch = allTasks.find((t) => t.id === ref);
+                if (idMatch) {
+                    directDeps.add(idMatch.id);
+                    console.log(
+                        `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${idMatch.id}`
+                    );
+                }
+            }
+        });
+    }
+
     if (directDeps.size === 0) {
         return { dependencyTaskIds: [], previousResults: [] };
     }
@@ -136,7 +173,12 @@ async function buildDependencyContext(
             if (!depTask) continue;
 
             // Process Execution Result
-            if (depTask.status === 'done' && depTask.executionResult) {
+            console.log(
+                `[DependencyContext] Checking Task ${id}: status=${depTask.status}, hasResult=${!!depTask.executionResult}`
+            );
+
+            // Allow results if task is done OR has a result (e.g., in_progress re-run in loop)
+            if (depTask.executionResult) {
                 try {
                     const execResult =
                         typeof depTask.executionResult === 'string'
@@ -146,6 +188,7 @@ async function buildDependencyContext(
                     const now = new Date();
                     resultsMap.set(id, {
                         taskId: depTask.id,
+                        projectSequence: depTask.projectSequence,
                         taskTitle: depTask.title,
                         status: 'success',
                         output: execResult.content || execResult,
@@ -153,10 +196,18 @@ async function buildDependencyContext(
                         endTime: depTask.completedAt || now, // Crucial for sorting
                         duration: execResult.duration || 0,
                         retries: 0,
+                        // Fix for Image Input Injection: Explicitly extract attachments
+                        // Input Tasks store attachments in metadata.attachments
+                        // AI Tasks store attachments in top-level attachments (sometimes) or we need to normalize
+                        attachments:
+                            execResult.attachments || execResult.metadata?.attachments || [],
                         metadata: {
                             provider: execResult.provider,
                             model: execResult.model,
                             files: execResult.files,
+                            // Preserve original attachments in metadata too just in case
+                            attachments:
+                                execResult.attachments || execResult.metadata?.attachments || [],
                         },
                     });
                 } catch (parseErr) {
@@ -1267,8 +1318,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         pkg += `## Task Contract\n`;
                         pkg += `Task ID: ${task.id}\n`;
                         pkg += `Task Name: ${task.title}\n`;
+                        // Task Objective removed from Context Package to prevent duplication
+                        // The description/prompt is already provided as the main user prompt.
                         pkg += `Task Type: ${task.taskType || 'ai'}\n`;
-                        pkg += `Task Objective:\n${task.description || 'See below'}\n\n`;
                         pkg += `---\n\n`;
                         return pkg;
                     };
@@ -2082,7 +2134,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      * Cancel task execution
      */
     ipcMain.handle('taskExecution:cancel', async (_event, taskId: number) => {
-        executor.cancel(taskId);
+        await executor.cancelTask(taskId);
     });
 
     /**

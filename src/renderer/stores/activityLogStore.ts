@@ -9,6 +9,9 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { eventBus, type BaseEvent, type EventCategory } from '../../services/events/EventBus';
 import { getAPI } from '../../utils/electron';
+import { useTaskStore } from './taskStore';
+import { useProjectStore } from './projectStore';
+import { useUIStore } from './uiStore';
 
 export type LogLevel = 'info' | 'success' | 'warning' | 'error' | 'debug';
 
@@ -43,6 +46,23 @@ export const useActivityLogStore = defineStore('activityLog', () => {
     const autoscroll = ref(true);
     const isSubscribed = ref(false);
     const isIPCSubscribed = ref(false);
+
+    // Helpers
+    function resolveTaskName(taskId: number): string {
+        const taskStore = useTaskStore();
+        const projectStore = useProjectStore();
+
+        const task = taskStore.tasks.find((t) => t.id === taskId);
+
+        if (task) {
+            const project = projectStore.projectById(task.projectId);
+            const projectTitle = project ? project.title : 'Unknown Project';
+            const sequence = task.projectSequence || '?';
+            return `[${projectTitle}] #${sequence}`;
+        }
+
+        return `Task #${taskId}`;
+    }
 
     // Computed
     const filteredLogs = computed(() => {
@@ -94,6 +114,44 @@ export const useActivityLogStore = defineStore('activityLog', () => {
         while (logs.value.length > maxLogs.value) {
             logs.value.shift(); // Remove oldest entry
         }
+
+        // Trigger persistent toast for errors
+        if (log.level === 'error') {
+            const uiStore = useUIStore();
+            let toastMessage = log.message;
+
+            // Format: Project - Task - Content
+            const parts: string[] = [];
+
+            // Add Project Name if available
+            if (log.details?.projectName) {
+                parts.push(log.details.projectName as string);
+            } else if (log.details?.projectId) {
+                parts.push(`Project #${log.details.projectId}`);
+            }
+
+            // Add Task Name if available (using resolveTaskName logic or explicit name)
+            if (log.details?.taskTitle) {
+                parts.push(log.details.taskTitle as string);
+            } else if (log.details?.taskId) {
+                parts.push(resolveTaskName(log.details.taskId as number));
+            } else if (typeof log.details?.task === 'string') {
+                parts.push(log.details.task); // Legacy support
+            }
+
+            // Add Content (Error Message)
+            parts.push(log.message);
+
+            if (parts.length > 1) {
+                toastMessage = parts.join(' - ');
+            }
+
+            uiStore.showToast({
+                message: toastMessage,
+                type: 'error',
+                duration: 0, // Persistent until dismissed
+            });
+        }
     }
 
     function addEventLog(event: BaseEvent) {
@@ -143,13 +201,13 @@ export const useActivityLogStore = defineStore('activityLog', () => {
             case 'task.created':
                 return `Task "${payload.title}" created`;
             case 'task.updated':
-                return `Task #${payload.taskId} updated`;
+                return `${resolveTaskName(payload.taskId)} updated`;
             case 'task.status_changed':
-                return `Task #${payload.taskId} status: ${payload.previousStatus} -> ${payload.newStatus}`;
+                return `${resolveTaskName(payload.taskId)} status: ${payload.previousStatus} -> ${payload.newStatus}`;
             case 'task.assigned':
-                return `Task #${payload.taskId} assigned to user #${payload.newAssignee}`;
+                return `${resolveTaskName(payload.taskId)} assigned to user #${payload.newAssignee}`;
             case 'task.deleted':
-                return `Task #${payload.taskId} deleted`;
+                return `${resolveTaskName(payload.taskId)} deleted`;
 
             // Project events
             case 'project.created':
@@ -165,20 +223,21 @@ export const useActivityLogStore = defineStore('activityLog', () => {
             case 'workflow.completed':
                 return `Workflow ${payload.status}: ${payload.successCount} success, ${payload.failureCount} failed`;
             case 'workflow.task_completed':
-                return `Workflow task #${payload.taskId} ${payload.status}`;
+                return `Workflow task ${resolveTaskName(payload.taskId)} ${payload.status}`;
 
             // AI events
             case 'ai.execution_started':
-                return `AI execution started for task #${payload.taskId} (${payload.provider}/${payload.model})`;
+                return `AI execution started for ${resolveTaskName(payload.taskId)} (${payload.provider}/${payload.model})`;
             case 'ai.execution_completed':
-                return `AI execution ${payload.success ? 'completed' : 'failed'} for task #${payload.taskId} (tokens: ${payload.tokensUsed}, cost: ${payload.cost})`;
+                return `AI execution ${payload.success ? 'completed' : 'failed'} for ${resolveTaskName(payload.taskId)} (tokens: ${payload.tokensUsed}, cost: ${payload.cost})`;
             case 'ai.token_stream':
-                return `Token stream for task #${payload.taskId}`;
+                return `Token stream for ${resolveTaskName(payload.taskId)}`;
             case 'ai.prompt_generated': {
                 const provider = payload.provider || 'unknown';
                 const model = payload.model || 'unknown';
                 const preview = truncateText(payload.prompt);
-                return `Prompt prepared for task #${payload.taskId ?? 'n/a'} (${provider}/${model}): ${preview}`;
+                const taskLabel = payload.taskId ? resolveTaskName(payload.taskId) : 'n/a';
+                return `Prompt prepared for ${taskLabel} (${provider}/${model}): ${preview}`;
             }
             case 'ai.mcp_request': {
                 const tool = payload.toolName || 'unknown tool';
@@ -196,7 +255,9 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                 const duration =
                     typeof payload.duration === 'number' ? `${payload.duration}ms` : '';
                 const preview = payload.dataPreview ? ` ${truncateText(payload.dataPreview)}` : '';
-                return `MCP response "${tool}" ${status} ${duration}${preview}`;
+                const errorMessage =
+                    !payload.success && payload.error ? ` Error: ${payload.error}` : '';
+                return `MCP response "${tool}" ${status} ${duration}${preview}${errorMessage}`;
             }
 
             // Automation events
@@ -282,7 +343,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'info',
                     category: 'ipc',
                     type: 'taskExecution.started',
-                    message: `Task #${data.taskId} execution started`,
+                    message: `${resolveTaskName(data.taskId)} execution started`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -294,7 +355,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'debug',
                     category: 'ipc',
                     type: 'taskExecution.progress',
-                    message: `Task #${data.taskId} progress: ${(data as any).progress ?? (data as any).percentage ?? 0}%`,
+                    message: `${resolveTaskName(data.taskId)} progress: ${(data as any).progress ?? (data as any).percentage ?? 0}%`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -306,7 +367,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'success',
                     category: 'ipc',
                     type: 'taskExecution.completed',
-                    message: `Task #${data.taskId} execution completed`,
+                    message: `${resolveTaskName(data.taskId)} execution completed`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -318,7 +379,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'error',
                     category: 'ipc',
                     type: 'taskExecution.failed',
-                    message: `Task #${data.taskId} execution failed: ${data.error}`,
+                    message: `${resolveTaskName(data.taskId)} execution failed: ${data.error}`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -330,7 +391,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'warning',
                     category: 'ipc',
                     type: 'taskExecution.paused',
-                    message: `Task #${data.taskId} execution paused`,
+                    message: `${resolveTaskName(data.taskId)} execution paused`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -342,7 +403,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'info',
                     category: 'ipc',
                     type: 'taskExecution.resumed',
-                    message: `Task #${data.taskId} execution resumed`,
+                    message: `${resolveTaskName(data.taskId)} execution resumed`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -354,7 +415,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'warning',
                     category: 'ipc',
                     type: 'taskExecution.stopped',
-                    message: `Task #${data.taskId} execution stopped`,
+                    message: `${resolveTaskName(data.taskId)} execution stopped`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -366,7 +427,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'warning',
                     category: 'ipc',
                     type: 'taskExecution.approvalRequired',
-                    message: `Task #${data.taskId} needs approval: ${data.question}`,
+                    message: `${resolveTaskName(data.taskId)} needs approval: ${data.question}`,
                     details: data as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: data.taskId,
@@ -382,7 +443,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     level: 'info',
                     category: 'ipc',
                     type: 'task.status-changed',
-                    message: `Task #${eventData.id} status changed to ${eventData.status}`,
+                    message: `${resolveTaskName(eventData.id)} status changed to ${eventData.status}`,
                     details: eventData as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: eventData.id,
@@ -432,7 +493,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                 };
 
                 // We map specific history events to readable log messages
-                let message = `Task #${history.taskId} event: ${history.eventType}`;
+                let message = `${resolveTaskName(history.taskId)} event: ${history.eventType}`;
                 let level: LogLevel = 'info';
 
                 if (history.eventType === 'execution_started') {
@@ -445,13 +506,13 @@ export const useActivityLogStore = defineStore('activityLog', () => {
                     // Already covered
                     return;
                 } else if (history.eventType === 'ai_review_requested') {
-                    message = `AI Review requested for Task #${history.taskId}`;
+                    message = `AI Review requested for ${resolveTaskName(history.taskId)}`;
                 } else if (history.eventType === 'ai_review_completed') {
                     const approved = history.eventData?.approved;
-                    message = `AI Review completed for Task #${history.taskId}: ${approved ? 'Approved' : 'Changes Requested'}`;
+                    message = `AI Review completed for ${resolveTaskName(history.taskId)}: ${approved ? 'Approved' : 'Changes Requested'}`;
                     level = approved ? 'success' : 'warning';
                 } else if (history.eventType === 'prompt_refined') {
-                    message = `Prompt refined for Task #${history.taskId}`;
+                    message = `Prompt refined for ${resolveTaskName(history.taskId)}`;
                 }
 
                 addLog({

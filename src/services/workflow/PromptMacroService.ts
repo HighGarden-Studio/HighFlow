@@ -243,7 +243,15 @@ export class PromptMacroService {
      * 특정 태스크 결과 가져오기
      */
     private static getTaskResult(taskId: number, field: string, context: MacroContext): string {
-        const result = context.previousResults.find((r) => r.taskId === taskId);
+        // 1. Try to find by Task ID (Database ID)
+        let result = context.previousResults.find((r) => r.taskId === taskId);
+
+        // 2. If not found, try by Project Sequence (User-facing ID)
+        if (!result) {
+            result = context.previousResults.find((r) => r.projectSequence === taskId);
+            // Validation: Warn if we found a sequence match but user might have meant ID?
+            // In most cases, users mean Sequence.
+        }
 
         if (!result) {
             return `[Task #${taskId} 결과 없음]`;

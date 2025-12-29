@@ -87,7 +87,9 @@ const taskTypeConfig = computed(() => {
             return { label: 'OUTPUT', class: 'bg-rose-600 text-white border-rose-700' };
         default:
             return {
-                label: props.task.taskType ? props.task.taskType.toUpperCase() : 'UNKNOWN',
+                label: (props.task.taskType as unknown as string)
+                    ? (props.task.taskType as unknown as string).toUpperCase()
+                    : 'UNKNOWN',
                 class: 'bg-gray-600 text-white border-gray-700',
             };
     }

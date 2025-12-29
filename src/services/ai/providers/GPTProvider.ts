@@ -448,7 +448,7 @@ export class GPTProvider extends BaseAIProvider {
      * Execute with streaming
      */
     async *streamExecute(
-        prompt: string,
+        input: string | AIMessage[],
         config: AIConfig,
         onToken: (token: string) => void,
         context?: ExecutionContext
@@ -456,21 +456,27 @@ export class GPTProvider extends BaseAIProvider {
         this.validateConfig(config);
 
         const client = this.getClient();
-        const systemPrompt = this.buildSystemPrompt(config, context);
 
-        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+        // Handle input as messages or text
+        let messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
-        if (systemPrompt) {
+        if (Array.isArray(input)) {
+            // Use existing buildChatMessages to correctly handle multi-modal content
+            messages = this.buildChatMessages(input);
+        } else {
+            // Legacy string support
+            const systemPrompt = this.buildSystemPrompt(config, context);
+            if (systemPrompt) {
+                messages.push({
+                    role: 'system',
+                    content: systemPrompt,
+                });
+            }
             messages.push({
-                role: 'system',
-                content: systemPrompt,
+                role: 'user',
+                content: input,
             });
         }
-
-        messages.push({
-            role: 'user',
-            content: prompt,
-        });
 
         let stream;
         try {
@@ -600,6 +606,16 @@ export class GPTProvider extends BaseAIProvider {
     }
 
     private buildChatMessages(messages: AIMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
+        console.log(
+            '[GPTProvider] buildChatMessages received messages:',
+            messages.map((m) => ({
+                role: m.role,
+                hasMultiModal: !!m.multiModalContent,
+                contentLen: m.content?.length,
+                keys: Object.keys(m),
+            }))
+        );
+
         return messages.map((message) => {
             if (message.role === 'tool') {
                 return {
@@ -627,11 +643,17 @@ export class GPTProvider extends BaseAIProvider {
             }
 
             if (message.role === 'user' && message.multiModalContent) {
+                console.log(
+                    `[GPTProvider] Processing multiModalContent: ${message.multiModalContent.length} parts`
+                );
                 const contentParts: any[] = message.multiModalContent
                     .map((part) => {
                         if (part.type === 'text') {
                             return { type: 'text', text: part.text };
                         } else if (part.type === 'image') {
+                            console.log(
+                                `[GPTProvider] Found image part: mime=${part.mimeType}, dataLen=${part.data?.length}`
+                            );
                             return {
                                 type: 'image_url',
                                 image_url: {
@@ -642,6 +664,10 @@ export class GPTProvider extends BaseAIProvider {
                         return null;
                     })
                     .filter(Boolean);
+
+                console.log(
+                    `[GPTProvider] contentParts constructed: ${contentParts.length} items (Images: ${contentParts.filter((p) => p.type === 'image_url').length})`
+                );
 
                 return {
                     role: 'user',

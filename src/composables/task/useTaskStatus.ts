@@ -187,12 +187,7 @@ export function useTaskStatus(props: { task: Task; missingProvider?: any }) {
                 bgColor: 'bg-slate-100 dark:bg-slate-800',
                 textColor: 'text-slate-700 dark:text-slate-200',
             },
-            mermaid: {
-                label: 'Mermaid',
-                icon: '📈',
-                bgColor: 'bg-teal-100 dark:bg-teal-900/40',
-                textColor: 'text-teal-700 dark:text-teal-200',
-            },
+
             svg: {
                 label: 'SVG',
                 icon: '🖼️',
@@ -235,6 +230,12 @@ export function useTaskStatus(props: { task: Task; missingProvider?: any }) {
                 bgColor: 'bg-slate-100 dark:bg-slate-800',
                 textColor: 'text-slate-700 dark:text-slate-200',
             },
+            mermaid: {
+                label: 'Mermaid',
+                icon: '📊',
+                bgColor: 'bg-indigo-100 dark:bg-indigo-900/40',
+                textColor: 'text-indigo-700 dark:text-indigo-200',
+            },
         };
 
         if (map[lowerFormat]) return map[lowerFormat];
@@ -246,9 +247,23 @@ export function useTaskStatus(props: { task: Task; missingProvider?: any }) {
         };
     }
 
-    const outputFormatInfo = computed(() =>
-        getOutputFormatInfo(props.task.outputFormat || props.task.expectedOutputFormat)
-    );
+    const outputFormatInfo = computed(() => {
+        // 1. Check actual AI result kind first (Authoritative)
+        const output = props.task.output as any;
+        if (output?.aiResult) {
+            const { kind, subType } = output.aiResult;
+            if (kind === 'image') return getOutputFormatInfo('png'); // Or explicit image type
+            if (kind === 'text' || kind === 'markdown') {
+                if (subType === 'markdown') return getOutputFormatInfo('markdown');
+                if (subType === 'json') return getOutputFormatInfo('json');
+                if (subType === 'mermaid') return getOutputFormatInfo('mermaid');
+                return getOutputFormatInfo('text');
+            }
+        }
+
+        // 2. Fallback to persisted outputFormat or expectedOutputFormat
+        return getOutputFormatInfo(props.task.outputFormat || props.task.expectedOutputFormat);
+    });
 
     return {
         priorityColor,

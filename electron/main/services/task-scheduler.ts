@@ -10,9 +10,11 @@ import { tasks } from '../database/schema';
 import { and, isNotNull, sql } from 'drizzle-orm';
 import type { Task, TaskTriggerConfig } from '@core/types/database';
 import { BrowserWindow } from 'electron';
+import { GlobalExecutionService } from './GlobalExecutionService';
 
 interface ScheduledTask {
     taskId: number;
+    projectId: number;
     cronJob: cron.ScheduledTask;
     config: TaskTriggerConfig;
 }
@@ -181,6 +183,7 @@ class TaskScheduler {
 
             this.scheduledTasks.set(task.id, {
                 taskId: task.id,
+                projectId: task.projectId,
                 cronJob,
                 config: task.triggerConfig,
             });
@@ -223,6 +226,17 @@ class TaskScheduler {
         if (!this.mainWindow) {
             console.error('[TaskScheduler] Cannot execute task', taskId, '- no main window');
             return;
+        }
+
+        const scheduled = this.scheduledTasks.get(taskId);
+        if (scheduled) {
+            // Check if Project is Paused
+            if (GlobalExecutionService.getInstance().isProjectPaused(scheduled.projectId)) {
+                console.log(
+                    `[TaskScheduler] Execution skipped for task ${taskId}: Project ${scheduled.projectId} is PAUSED`
+                );
+                return;
+            }
         }
 
         console.log('[TaskScheduler] Triggering auto-execution for task', taskId);
