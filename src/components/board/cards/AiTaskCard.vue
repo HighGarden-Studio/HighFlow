@@ -4,12 +4,13 @@
  * Supports both 'ai' and 'script' task types with in_review workflow
  */
 import { computed, ref, watch, onMounted } from 'vue';
-import type { Task } from '@core/types/database';
+import type { Task, TaskKey } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
 import { useTaskStatus } from '../../../composables/task/useTaskStatus';
 import { useTaskStore } from '../../../renderer/stores/taskStore';
 import { getProviderIcon } from '../../../utils/iconMapping';
+import { taskKeyToString } from '../../../utils/taskKey';
 
 interface Props {
     task: Task;
@@ -43,7 +44,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'execute', task: Task): void;
     (e: 'stop', task: Task): void;
     (e: 'delete', task: Task): void;
@@ -95,17 +96,17 @@ watch(
 
 // Store-bound computed properties
 const streamedContent = computed(() => {
-    const progress = taskStore.executionProgress.get(props.task.id);
+    const progress = taskStore.executionProgress.get(taskKeyToString(props.task));
     return progress?.content || '';
 });
 
 const reviewStreamedContent = computed(() => {
-    const progress = taskStore.reviewProgress.get(props.task.id);
+    const progress = taskStore.reviewProgress.get(taskKeyToString(props.task));
     return progress?.content || '';
 });
 
 const isTaskCurrentlyReviewing = computed(() => {
-    return taskStore.isTaskReviewing(props.task.id);
+    return taskStore.isTaskReviewing(taskKeyToString(props.task));
 });
 
 // Provider Icon helper - uses centralized icon mapping
@@ -116,12 +117,16 @@ const aiProviderIcon = computed(() => {
 });
 
 // Dependency display helper
+// Dependency display helper
 const dependencySequences = computed(() => {
-    const taskIds = props.task.triggerConfig?.dependsOn?.taskIds;
-    if (!taskIds || taskIds.length === 0) return '';
-    return taskIds
-        .map((id) => {
-            const t = taskStore.tasks.find((task) => task.id === id);
+    const taskKeys = props.task.triggerConfig?.dependsOn?.taskKeys;
+    if (!taskKeys || taskKeys.length === 0) return '';
+    return taskKeys
+        .map((key) => {
+            const t = taskStore.tasks.find(
+                (task) =>
+                    task.projectId === key.projectId && task.projectSequence === key.projectSequence
+            );
             return t ? `#${t.projectSequence}` : '';
         })
         .filter(Boolean)
@@ -259,7 +264,7 @@ function hexToRgba(hex: string, alpha: number) {
         @connection-start="(t, e) => emit('connectionStart', t, e)"
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"
-        @operator-drop="(tid, oid) => emit('operatorDrop', tid, oid)"
+        @operator-drop="(pid, seq, oid) => emit('operatorDrop', pid, seq, oid)"
         @delete="(t) => emit('delete', t)"
     >
         <template #header>
@@ -734,7 +739,7 @@ function hexToRgba(hex: string, alpha: number) {
                             이전 결과보기
                         </button>
                         <button
-                            v-if="!task.triggerConfig?.dependsOn?.taskIds?.length"
+                            v-if="!task.triggerConfig?.dependsOn?.taskKeys?.length"
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                             @click="handleExecute"
                         >

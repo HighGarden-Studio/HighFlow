@@ -22,7 +22,8 @@ export function useTaskDragAndDrop(
             event.dataTransfer.setData(
                 'application/x-task-connection',
                 JSON.stringify({
-                    sourceTaskId: props.task.id,
+                    sourceProjectId: props.task.projectId,
+                    sourceTaskSequence: props.task.projectSequence,
                     sourceTaskTitle: props.task.title,
                 })
             );
@@ -56,7 +57,12 @@ export function useTaskDragAndDrop(
             if (data) {
                 try {
                     const parsed = JSON.parse(data);
-                    if (parsed.sourceTaskId !== props.task.id) {
+                    if (
+                        parsed.sourceProjectId === props.task.projectId &&
+                        parsed.sourceTaskSequence === props.task.projectSequence
+                    ) {
+                        // Same task, do not allow drop
+                    } else {
                         isConnectionTarget.value = true;
                     }
                 } catch {
@@ -126,7 +132,7 @@ export function useTaskDragAndDrop(
         if (operatorData) {
             try {
                 const operator = JSON.parse(operatorData);
-                emit('operatorDrop', props.task.id, operator.id);
+                emit('operatorDrop', props.task.projectId, props.task.projectSequence, operator.id);
             } catch (error) {
                 console.error('Failed to parse operator data:', error);
             }

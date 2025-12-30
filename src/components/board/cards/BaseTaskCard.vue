@@ -24,7 +24,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'subdivide', task: Task): void;
     (e: 'delete', task: Task): void;
 }>();
@@ -113,7 +113,12 @@ const taskTypeConfig = computed(() => {
         ]"
         @click="
             () => {
-                console.log('[BaseTaskCard] Card clicked:', task.id, task.title, task.taskType);
+                console.log(
+                    '[BaseTaskCard] Card clicked:',
+                    task.projectSequence,
+                    task.title,
+                    task.taskType
+                );
                 emit('click', task);
             }
         "
@@ -285,7 +290,7 @@ const taskTypeConfig = computed(() => {
             <div v-if="!isExpanded" class="mt-2 space-y-1">
                 <div
                     v-for="subtask in subtasks.slice(0, 3)"
-                    :key="subtask.id"
+                    :key="subtask.projectSequence"
                     class="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700/30 rounded text-xs"
                 >
                     <div class="flex-shrink-0">
@@ -298,7 +303,7 @@ const taskTypeConfig = computed(() => {
                     <span class="flex-1 truncate text-gray-700 dark:text-gray-300">{{
                         subtask.title
                     }}</span>
-                    <span class="text-gray-500">#{{ subtask.id }}</span>
+                    <span class="text-gray-500">#{{ subtask.projectSequence }}</span>
                 </div>
                 <div v-if="subtasks.length > 3" class="text-center text-xs text-gray-400 mt-1">
                     +{{ subtasks.length - 3 }}개 더보기

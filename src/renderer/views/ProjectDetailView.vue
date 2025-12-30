@@ -77,7 +77,7 @@ async function handleUpdateAISettings(settings: {
 }) {
     if (!project.value) return;
     await projectStore.updateProject(project.value.id, {
-        aiProvider: settings.aiProvider,
+        aiProvider: settings.aiProvider as any,
         aiModel: settings.aiModel,
     });
 }
@@ -310,7 +310,7 @@ onMounted(async () => {
                             <div v-else class="space-y-2">
                                 <div
                                     v-for="task in taskStore.tasks.slice(0, 5)"
-                                    :key="task.id"
+                                    :key="task.projectSequence"
                                     class="flex items-center gap-3 p-2 hover:bg-gray-700 rounded-lg transition-colors"
                                 >
                                     <div

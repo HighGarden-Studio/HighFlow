@@ -5,7 +5,7 @@
  * Using SQLite with better-sqlite3 driver
  */
 
-import { sqliteTable, integer, text, real, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, real, index, primaryKey } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ========================================
@@ -184,11 +184,13 @@ export const projectMembers = sqliteTable(
 export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
     'tasks',
     {
-        id: integer('id').primaryKey({ autoIncrement: true }),
+        // ❌ REMOVED: id - 전역 ID는 더 이상 존재하지 않습니다!
+        // ✅ 복합 PRIMARY KEY: (project_id, project_sequence)
         projectId: integer('project_id')
             .notNull()
             .references(() => projects.id, { onDelete: 'cascade' }),
         projectSequence: integer('project_sequence').notNull(), // Project-scoped task number (1, 2, 3...)
+
         title: text('title').notNull(),
         description: text('description'),
         generatedPrompt: text('generated_prompt'),
@@ -204,7 +206,11 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
             onDelete: 'set null',
         }),
         order: integer('order').notNull().default(0),
-        parentTaskId: integer('parent_task_id').references((): any => tasks.id),
+
+        // ✅ 변경: parentTaskId → 복합 FK (parent_project_id, parent_sequence)
+        parentProjectId: integer('parent_project_id'),
+        parentSequence: integer('parent_sequence'),
+
         assigneeId: integer('assignee_id').references(() => users.id, { onDelete: 'set null' }),
         watcherIds: text('watcher_ids', { mode: 'json' }).notNull().default('[]'), // Array of user IDs
         estimatedMinutes: integer('estimated_minutes'),
@@ -216,7 +222,11 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         startedAt: integer('started_at', { mode: 'timestamp' }),
         completedAt: integer('completed_at', { mode: 'timestamp' }),
         blockedReason: text('blocked_reason'),
-        blockedByTaskId: integer('blocked_by_task_id').references((): any => tasks.id),
+
+        // ✅ 변경: blockedByTaskId → 복합 FK (blocked_by_project_id, blocked_by_sequence)
+        blockedByProjectId: integer('blocked_by_project_id'),
+        blockedBySequence: integer('blocked_by_sequence'),
+
         tags: text('tags', { mode: 'json' }).notNull().default('[]'), // Array of strings
         gitCommits: text('git_commits', { mode: 'json' }).notNull().default('[]'), // Array of GitCommit
         deletedAt: integer('deleted_at', { mode: 'timestamp' }),
@@ -236,7 +246,7 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         codeLanguage: text('code_language'), // outputFormat이 'code'일 때 사용할 언어 (typescript, python, java 등)
         // AI 실행 최적화 필드 (인터뷰 기반 자동 생성)
         executionOrder: integer('execution_order'), // 작업 순서 (1부터 시작)
-        dependencies: text('dependencies', { mode: 'json' }).notNull().default('[]'), // 의존하는 태스크 ID 배열
+        dependencies: text('dependencies', { mode: 'json' }).notNull().default('[]'), // projectSequence 배열 (not global IDs!)
         expectedOutputFormat: text('expected_output_format'), // 예상 결과 형식 (markdown, code, json, text 등)
         recommendedProviders: text('recommended_providers', { mode: 'json' })
             .notNull()
@@ -262,13 +272,17 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
+        // ✅ PRIMARY KEY on composite columns
+        // Note: Drizzle에서는 primaryKey() 함수를 사용하여 복합 키 정의
+        pk: primaryKey({ columns: [table.projectId, table.projectSequence] }),
+
+        // Indexes
         projectIdx: index('task_project_idx').on(table.projectId),
         statusIdx: index('task_status_idx').on(table.status),
         assigneeIdx: index('task_assignee_idx').on(table.assigneeId),
         dueDateIdx: index('task_due_date_idx').on(table.dueDate),
         deletedIdx: index('task_deleted_idx').on(table.deletedAt),
-        parentIdx: index('task_parent_idx').on(table.parentTaskId),
-        // Note: Unique constraint for (projectId, projectSequence) is defined in migration SQL
+        parentIdx: index('task_parent_idx').on(table.parentProjectId, table.parentSequence),
         projectSequenceIdx: index('task_project_sequence_idx').on(
             table.projectId,
             table.projectSequence
@@ -280,9 +294,9 @@ export const taskWatchers = sqliteTable(
     'task_watchers',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK (task_project_id, task_sequence)
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -295,44 +309,11 @@ export const taskWatchers = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskUserIdx: index('task_watcher_task_user_idx').on(table.taskId, table.userId),
-    })
-);
-
-export const taskExecutions = sqliteTable(
-    'task_executions',
-    {
-        id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
-        executionNumber: integer('execution_number').notNull().default(1),
-        prompt: text('prompt').notNull(),
-        response: text('response'),
-        context: text('context'),
-        aiProvider: text('ai_provider').notNull(),
-        model: text('model').notNull(),
-        temperature: real('temperature'),
-        maxTokens: integer('max_tokens'),
-        tokensUsed: text('tokens_used', { mode: 'json' }),
-        duration: integer('duration'), // milliseconds
-        cost: real('cost'),
-        status: text('status').notNull().default('running'), // running|success|failed|cancelled
-        errorMessage: text('error_message'),
-        retryCount: integer('retry_count').notNull().default(0),
-        userFeedback: text('user_feedback'),
-        rating: integer('rating'), // 1-5
-        completedAt: integer('completed_at', { mode: 'timestamp' }),
-        createdAt: integer('created_at', { mode: 'timestamp' })
-            .notNull()
-            .default(sql`CURRENT_TIMESTAMP`),
-        updatedAt: integer('updated_at', { mode: 'timestamp' })
-            .notNull()
-            .default(sql`CURRENT_TIMESTAMP`),
-    },
-    (table) => ({
-        taskIdx: index('task_execution_task_idx').on(table.taskId),
-        statusIdx: index('task_execution_status_idx').on(table.status),
+        taskUserIdx: index('task_watcher_task_user_idx').on(
+            table.taskProjectId,
+            table.taskSequence,
+            table.userId
+        ),
     })
 );
 
@@ -340,9 +321,9 @@ export const taskSuggestedSkills = sqliteTable(
     'task_suggested_skills',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         skillId: integer('skill_id')
             .notNull()
             .references(() => skills.id, { onDelete: 'cascade' }),
@@ -355,7 +336,11 @@ export const taskSuggestedSkills = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskSkillIdx: index('task_suggested_skill_task_skill_idx').on(table.taskId, table.skillId),
+        taskSkillIdx: index('task_suggested_skill_task_skill_idx').on(
+            table.taskProjectId,
+            table.taskSequence,
+            table.skillId
+        ),
     })
 );
 
@@ -367,9 +352,9 @@ export const taskHistory = sqliteTable(
     'task_history',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         eventType: text('event_type').notNull(), // execution_started|execution_completed|execution_failed|ai_review_requested|ai_review_completed|prompt_refined|status_changed|paused|resumed|stopped
         eventData: text('event_data', { mode: 'json' }), // Event-specific data (prompt, result, etc.)
         metadata: text('metadata', { mode: 'json' }), // Additional context (provider, model, cost, tokens, duration)
@@ -378,7 +363,7 @@ export const taskHistory = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('task_history_task_idx').on(table.taskId),
+        taskIdx: index('task_history_task_idx').on(table.taskProjectId, table.taskSequence),
         eventTypeIdx: index('task_history_event_type_idx').on(table.eventType),
         createdAtIdx: index('task_history_created_at_idx').on(table.createdAt),
     })
@@ -392,9 +377,9 @@ export const comments: ReturnType<typeof sqliteTable> = sqliteTable(
     'comments',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -413,7 +398,7 @@ export const comments: ReturnType<typeof sqliteTable> = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('comment_task_idx').on(table.taskId),
+        taskIdx: index('comment_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('comment_user_idx').on(table.userId),
         parentIdx: index('comment_parent_idx').on(table.parentCommentId),
         deletedIdx: index('comment_deleted_idx').on(table.deletedAt),
@@ -424,9 +409,9 @@ export const timeEntries = sqliteTable(
     'time_entries',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -445,7 +430,7 @@ export const timeEntries = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('time_entry_task_idx').on(table.taskId),
+        taskIdx: index('time_entry_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('time_entry_user_idx').on(table.userId),
     })
 );
@@ -763,7 +748,9 @@ export const activities = sqliteTable(
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
         projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-        taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+        // ✅ 변경: taskId → 복합 FK
+        taskProjectId: integer('task_project_id'),
+        taskSequence: integer('task_sequence'),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -779,7 +766,7 @@ export const activities = sqliteTable(
     },
     (table) => ({
         projectIdx: index('activity_project_idx').on(table.projectId),
-        taskIdx: index('activity_task_idx').on(table.taskId),
+        taskIdx: index('activity_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('activity_user_idx').on(table.userId),
         typeIdx: index('activity_type_idx').on(table.type),
         createdAtIdx: index('activity_created_at_idx').on(table.createdAt),
@@ -799,9 +786,9 @@ export const notifications = sqliteTable(
         relatedProjectId: integer('related_project_id').references(() => projects.id, {
             onDelete: 'cascade',
         }),
-        relatedTaskId: integer('related_task_id').references(() => tasks.id, {
-            onDelete: 'cascade',
-        }),
+        // ✅ 변경: relatedTaskId → 복합 FK
+        relatedTaskProjectId: integer('related_task_project_id'),
+        relatedTaskSequence: integer('related_task_sequence'),
         isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
         readAt: integer('read_at', { mode: 'timestamp' }),
         actionUrl: text('action_url'),
@@ -814,7 +801,8 @@ export const notifications = sqliteTable(
     },
     (table) => ({
         userIdx: index('notification_user_idx').on(table.userId),
-        isReadIdx: index('notification_is_read_idx').on(table.isRead),
+        typeIdx: index('notification_type_idx').on(table.type),
+        readIdx: index('notification_read_idx').on(table.isRead),
         createdAtIdx: index('notification_created_at_idx').on(table.createdAt),
     })
 );

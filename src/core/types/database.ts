@@ -388,13 +388,13 @@ export interface GitCommit {
 export interface TaskTriggerConfig {
     // 의존성 기반 트리거
     dependsOn?: {
-        taskIds: number[]; // 이 태스크들이 모두 DONE일 때 트리거 (expression이 있으면 인덱싱 용도로만 사용)
+        taskKeys: TaskKey[]; // Dependencies identified by composite key
         operator: 'all' | 'any'; // all: 모두 완료, any: 하나라도 완료 (expression 우선)
         expression?: string; // 복잡한 조건식 (예: "(1 && 2) || 3")
-        executionPolicy?: 'once' | 'repeat'; // 실행 정책 (기본값: 'once')
+        executionPolicy?: 'once' | 'repeat' | 'always'; // 실행 정책 (기본값: 'once')
         // once: TODO 상태일 때만 1회 자동 실행 (기본 동작)
         // repeat: 조건 충족 시 매번 자동 실행 (상태 무관)
-        passResultsFrom?: number[]; // 결과를 컨텍스트로 전달할 태스크 ID 목록 (없으면 taskIds 사용)
+        passResultsFrom?: TaskKey[]; // 결과를 컨텍스트로 전달할 태스크 Key 목록 (없으면 taskKeys 사용)
     };
     // 시간 기반 트리거
     scheduledAt?: {
@@ -505,7 +505,7 @@ export interface ProjectMemory {
 export interface DecisionLog {
     id: string; // UUID or short ID
     date: string;
-    taskId: number;
+    taskKey: TaskKey; // Changed from taskId: number
     summary: string;
     details?: string;
     category?: 'architecture' | 'policy' | 'tech-stack' | 'convention' | 'other';
@@ -525,9 +525,26 @@ export interface ImageGenerationConfig {
     extra?: Record<string, any>;
 }
 
-export interface Task extends BaseEntity {
+/**
+ * Task Composite Key
+ * 태스크는 전역 ID 없이 (projectId, projectSequence) 복합 키로만 식별됩니다.
+ */
+export interface TaskKey {
+    projectId: number;
+    projectSequence: number;
+}
+
+export interface Task {
+    // ❌ REMOVED: id 필드는 더 이상 존재하지 않습니다!
+    // 모든 태스크 참조는 (projectId, projectSequence) 복합 키를 사용해야 합니다.
+
     projectId: number;
     projectSequence: number; // Project-scoped task number (1, 2, 3...)
+
+    // 편의를 위한 가상 복합 키 속성 (computed property)
+    // 실제 DB에는 저장되지 않으며, 코드에서만 사용
+    readonly key?: TaskKey;
+
     title: string;
     description: string | null;
     generatedPrompt: string | null;
@@ -541,7 +558,7 @@ export interface Task extends BaseEntity {
     mcpConfig: MCPConfig | null;
     assignedOperatorId: number | null; // Operator assigned to this task
     order: number;
-    parentTaskId: number | null;
+    parentTaskKey: TaskKey | null; // ✅ 변경: parentTaskId → parentTaskKey
     assigneeId: number | null;
     watcherIds: number[];
     estimatedMinutes: number | null;
@@ -553,10 +570,13 @@ export interface Task extends BaseEntity {
     startedAt: Date | null;
     completedAt: Date | null;
     blockedReason: string | null;
-    blockedByTaskId: number | null;
+    blockedByTaskKey: TaskKey | null; // ✅ 변경: blockedByTaskId → blockedByTaskKey
     tags: string[];
     gitCommits: GitCommit[];
     deletedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+
     // 새로운 필드들
     isPaused: boolean; // IN_PROGRESS 상태에서 일시정지 여부
     autoReview: boolean; // 자동 REVIEW 수행 여부
@@ -570,7 +590,7 @@ export interface Task extends BaseEntity {
 
     // AI 실행 최적화 필드 (인터뷰 기반 자동 생성)
     executionOrder: number | null; // 작업 순서 (1부터 시작)
-    dependencies: number[]; // 의존하는 태스크 ID 배열 (triggerConfig와 별도로 명시적 의존성 표시용)
+    dependencies: number[]; // ✅ 주의: 이것은 projectSequence 배열입니다! (display용)
     expectedOutputFormat: string | null; // 예상 결과 형식 (markdown, code, json, text 등)
     recommendedProviders: string[]; // 추천 AI Provider 목록 (우선순위 순)
     requiredMCPs: string[]; // 필요한 MCP 서버 목록 (filesystem, git, brave-search 등)
@@ -622,7 +642,8 @@ export interface TaskAttachment {
 }
 
 export interface TaskExecution extends BaseEntity {
-    taskId: number;
+    projectId: number;
+    projectSequence: number;
     executionNumber: number;
     prompt: string;
     response: string | null;

@@ -1,4 +1,4 @@
-import type { Task, TaskAttachment } from '@core/types/database';
+import type { Task, TaskAttachment, TaskKey } from '@core/types/database';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from '@core/types/ai';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -6,7 +6,7 @@ export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 // ========== Execution Context ==========
 export interface ExecutionContext {
     workflowId?: string;
-    taskId?: number;
+    taskKey?: TaskKey; // Changed from taskId: number
     userId: number;
     projectId?: number;
     variables?: Record<string, any>;
@@ -45,6 +45,7 @@ export interface ExecutionOptions {
     enabledProviders?: EnabledProviderInfo[];
     mcpServers?: MCPServerRuntimeConfig[];
     onLog?: (level: LogLevel, message: string, details?: any) => void;
+    onProgress?: (chunk: string) => void;
     signal?: AbortSignal;
 }
 
@@ -58,8 +59,8 @@ export interface RetryStrategy {
 
 // ========== Task Result ==========
 export interface TaskResult {
-    taskId: number;
-    projectSequence?: number; // Added to support sequence-based macros
+    taskKey: TaskKey; // Changed from taskId: number
+    projectSequence?: number; // Keep for convenience
     taskTitle?: string; // Optional task title for display in dependency results
     status: 'success' | 'failure' | 'partial' | 'skipped';
     output: any;
@@ -140,15 +141,15 @@ export interface DependencyGraph {
 }
 
 export interface GraphNode {
-    taskId: number;
+    taskKey: TaskKey; // Changed from taskId
     task: Task;
     level: number; // 토폴로지 레벨
     estimatedDuration: number;
 }
 
 export interface GraphEdge {
-    from: number;
-    to: number;
+    from: TaskKey; // Changed from number
+    to: TaskKey; // Changed from number
     type: 'dependency' | 'context' | 'conditional';
 }
 
@@ -157,9 +158,9 @@ export interface Checkpoint {
     id: string;
     workflowId: string;
     timestamp: Date;
-    completedTasks: number[];
+    completedTasks: TaskKey[]; // Changed from number[]
     context: ExecutionContext;
-    nextTaskId?: number;
+    nextTaskKey?: TaskKey; // Changed from nextTaskId
     metadata: Record<string, any>;
 }
 
@@ -175,10 +176,10 @@ export interface Condition {
 
 // ========== Triggers ==========
 export type Trigger =
-    | { type: 'task.status_changed'; from: string; to: string; taskId?: number }
-    | { type: 'task.assigned'; userId: number; taskId?: number }
+    | { type: 'task.status_changed'; from: string; to: string; taskKey?: TaskKey }
+    | { type: 'task.assigned'; userId: number; taskKey?: TaskKey }
     | { type: 'task.created'; projectId: number }
-    | { type: 'comment.created'; taskId: number; mentions?: number[] }
+    | { type: 'comment.created'; taskKey: TaskKey; mentions?: number[] }
     | { type: 'time.elapsed'; duration: number; since: Date }
     | { type: 'time.scheduled'; datetime: string; cron?: string }
     | { type: 'webhook.received'; webhookId: string; payload: any }
@@ -188,10 +189,10 @@ export type Trigger =
 // ========== Actions ==========
 export type Action =
     | { type: 'task.create'; template: TaskTemplate }
-    | { type: 'task.update'; taskId: number; changes: Partial<Task> }
+    | { type: 'task.update'; taskKey: TaskKey; changes: Partial<Task> }
     | {
           type: 'task.execute';
-          taskId: number;
+          taskKey: TaskKey;
           skipBudgetCheck?: boolean;
           options?: ExecutionOptions;
       }
@@ -209,7 +210,7 @@ export type Action =
           headers?: Record<string, string>;
           secret?: string;
       }
-    | { type: 'ai.execute'; taskId: number; provider?: string }
+    | { type: 'ai.execute'; taskKey: TaskKey; provider?: string }
     | { type: 'integration.slack'; channel: string; message: string; webhookUrl?: string }
     | { type: 'workflow.start'; workflowId: string }
     | { type: 'workflow.stop'; workflowId: string }
@@ -282,17 +283,17 @@ export interface PlanVisualization {
     type: 'gantt' | 'dag' | 'timeline';
     data: any;
     stages: VisualizationStage[];
-    criticalPath: number[];
+    criticalPath: TaskKey[]; // Changed from number[]
 }
 
 export interface VisualizationStage {
     id: number;
     name: string;
     tasks: {
-        id: number;
+        taskKey: TaskKey; // Changed from id
         name: string;
         duration: number;
-        dependencies: number[];
+        dependencies: TaskKey[]; // Changed from number[]
     }[];
     startTime: number;
     endTime: number;
@@ -315,7 +316,7 @@ export class WorkflowError extends Error {
     constructor(
         message: string,
         public code: string,
-        public taskId?: number,
+        public taskKey?: TaskKey, // Changed from taskId
         public recoverable: boolean = false
     ) {
         super(message);
@@ -345,10 +346,15 @@ export class BudgetExceededError extends WorkflowError {
 
 export class TimeoutError extends WorkflowError {
     constructor(
-        public taskId: number,
+        public taskKey: TaskKey, // Changed from taskId
         public timeout: number
     ) {
-        super(`Task ${taskId} timed out after ${timeout}ms`, 'TIMEOUT', taskId, true);
+        super(
+            `Task ${taskKey.projectId}:${taskKey.projectSequence} timed out after ${timeout}ms`,
+            'TIMEOUT',
+            taskKey,
+            true
+        );
         this.name = 'TimeoutError';
     }
 }
@@ -358,7 +364,7 @@ export interface WorkerPool {
     maxWorkers: number;
     activeWorkers: number;
     queue: Task[];
-    processing: Map<number, Task>;
+    processing: Map<string, Task>; // Changed from number (taskId) to string (taskKey string)
 }
 
 // ========== Execution State ==========
@@ -366,8 +372,8 @@ export interface ExecutionState {
     workflowId: string;
     status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'partial';
     currentStage: number;
-    completedTasks: Set<number>;
-    failedTasks: Set<number>;
+    completedTasks: Set<string>; // Changed from Set<number> to Set<string> (TaskKey string)
+    failedTasks: Set<string>; // Changed from Set<number>
     context: ExecutionContext;
     checkpoints: Checkpoint[];
     startTime?: Date;

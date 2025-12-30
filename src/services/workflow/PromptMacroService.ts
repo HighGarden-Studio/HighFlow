@@ -583,14 +583,38 @@ export class PromptMacroService {
         // 시스템 매크로
         suggestions.push({
             macro: '{{date}}',
-            description: '오늘 날짜 (YYYY-MM-DD)',
+            description: '오늘 날짜 (시스템 로케일 기본)',
             example: '{{date}}',
             category: 'system',
         });
         suggestions.push({
+            macro: '{{date:YYYY-MM-DD}}',
+            description: '날짜 - ISO 형식',
+            example: '{{date:YYYY-MM-DD}}',
+            category: 'system',
+        });
+        suggestions.push({
+            macro: '{{date:YYYY년 MM월 DD일}}',
+            description: '날짜 - 한국어 형식',
+            example: '{{date:YYYY년 MM월 DD일}}',
+            category: 'system',
+        });
+        suggestions.push({
             macro: '{{datetime}}',
-            description: '현재 날짜/시간 (ISO)',
+            description: '현재 날짜/시간 (시스템 로케일 기본)',
             example: '{{datetime}}',
+            category: 'system',
+        });
+        suggestions.push({
+            macro: '{{datetime:ISO}}',
+            description: '날짜/시간 - ISO 8601',
+            example: '{{datetime:ISO}}',
+            category: 'system',
+        });
+        suggestions.push({
+            macro: '{{datetime:YYYY-MM-DD HH:mm:ss}}',
+            description: '날짜/시간 - 타임스탬프',
+            example: '{{datetime:YYYY-MM-DD HH:mm:ss}}',
             category: 'system',
         });
         suggestions.push({

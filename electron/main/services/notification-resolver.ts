@@ -7,19 +7,23 @@
 
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { NotificationConfig } from '@core/types/notifications';
 
 export class NotificationResolver {
     /**
      * Resolve notification config for a task with 3-tier priority
      */
-    async resolveConfig(taskId: number): Promise<NotificationConfig | null> {
+    async resolveConfig(projectId: number, sequence: number): Promise<NotificationConfig | null> {
         // 1. Get task config
-        const task = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+        const task = await db
+            .select()
+            .from(tasks)
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, sequence)))
+            .limit(1);
 
         if (!task[0]) {
-            console.error(`[NotificationResolver] Task ${taskId} not found`);
+            console.error(`[NotificationResolver] Task ${projectId}:${sequence} not found`);
             return null;
         }
 
@@ -31,7 +35,7 @@ export class NotificationResolver {
                 const config = JSON.parse(taskData.notificationConfig as string);
                 if (this.isConfigValid(config)) {
                     console.log(
-                        `[NotificationResolver] Using task-level config for task ${taskId}`
+                        `[NotificationResolver] Using task-level config for task ${projectId}:${sequence}`
                     );
                     return config;
                 }
@@ -53,7 +57,7 @@ export class NotificationResolver {
                     const config = JSON.parse(project[0].notificationConfig as string);
                     if (this.isConfigValid(config)) {
                         console.log(
-                            `[NotificationResolver] Using project-level config for task ${taskId}`
+                            `[NotificationResolver] Using project-level config for task ${projectId}:${sequence}`
                         );
                         return config;
                     }
@@ -71,14 +75,18 @@ export class NotificationResolver {
                 await settingsRepository.getJSON<NotificationConfig>('notification.global');
 
             if (globalConfig && this.isConfigValid(globalConfig)) {
-                console.log(`[NotificationResolver] Using global config for task ${taskId}`);
+                console.log(
+                    `[NotificationResolver] Using global config for task ${projectId}:${sequence}`
+                );
                 return globalConfig;
             }
         } catch (error) {
             console.error(`[NotificationResolver] Failed to load global config:`, error);
         }
 
-        console.log(`[NotificationResolver] No notification config found for task ${taskId}`);
+        console.log(
+            `[NotificationResolver] No notification config found for task ${projectId}:${sequence}`
+        );
         return null;
     }
 
@@ -96,22 +104,25 @@ export class NotificationResolver {
         const hasWebhook =
             config.webhook?.enabled && config.webhook?.url && config.webhook?.events?.length > 0;
 
-        return hasSlack || hasWebhook;
+        return !!(hasSlack || hasWebhook);
     }
 
     /**
      * Get Slack config for task
      */
-    async getSlackConfig(taskId: number) {
-        const config = await this.resolveConfig(taskId);
+    /**
+     * Get Slack config for task
+     */
+    async getSlackConfig(projectId: number, sequence: number) {
+        const config = await this.resolveConfig(projectId, sequence);
         return config?.slack?.enabled ? config.slack : null;
     }
 
     /**
      * Get Webhook config for task
      */
-    async getWebhookConfig(taskId: number) {
-        const config = await this.resolveConfig(taskId);
+    async getWebhookConfig(projectId: number, sequence: number) {
+        const config = await this.resolveConfig(projectId, sequence);
         return config?.webhook?.enabled ? config.webhook : null;
     }
 }
