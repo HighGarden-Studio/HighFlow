@@ -740,7 +740,11 @@ export const useTaskStore = defineStore('tasks', () => {
                 })
             );
 
-            const result = await api.taskExecution.execute(taskId, payload);
+            const result = await api.taskExecution.execute(
+                task.projectId,
+                task.projectSequence,
+                payload
+            );
 
             if (!result.success) {
                 // 실패 시 상태 롤백

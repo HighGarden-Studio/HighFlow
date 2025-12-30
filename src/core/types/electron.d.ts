@@ -384,12 +384,22 @@ export interface ApprovalRequest {
 export interface TaskExecutionAPI {
     // Execution control
     execute: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         options?: TaskExecutionOptions
-    ) => Promise<{ success: boolean; result?: unknown; error?: string; stopped?: boolean }>;
-    pause: (taskId: number) => Promise<{ success: boolean; error?: string }>;
-    resume: (taskId: number) => Promise<{ success: boolean; error?: string }>;
-    stop: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    ) => Promise<{ success: boolean; error?: string }>;
+    pause: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
+    resume: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
+    stop: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
     submitInput: (taskId: number, input: unknown) => Promise<{ success: boolean; error?: string }>;
 
     // Status queries
