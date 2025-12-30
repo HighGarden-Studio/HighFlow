@@ -772,8 +772,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
         'taskExecution:execute',
         async (
             _event,
-            projectId: number,
-            projectSequence: number,
+            taskId: number,
             options?: {
                 streaming?: boolean;
                 timeout?: number;
@@ -789,13 +788,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 mcpServers?: MCPServerRuntimeConfig[];
             }
         ) => {
-            // Get task from database using composite key
-            const task = await taskRepository.findByKey(projectId, projectSequence);
+            // Get task from database first to check project ID
+            const task = await taskRepository.findById(taskId);
             if (!task) {
-                throw new Error(`Task ${projectId}-${projectSequence} not found`);
+                throw new Error(`Task ${taskId} not found`);
             }
-            // For internal usage in this function scope only - will be removed
-            const taskId = task.id;
 
             // Project Pause Check for manual execution
             if (GlobalExecutionService.getInstance().isProjectPaused(task.projectId)) {
@@ -804,8 +801,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Notify frontend
                 getMainWindow()?.webContents.send('taskExecution:failed', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
+                    taskId,
                     error: errorMsg,
                 });
 
@@ -913,8 +909,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         status: initialStatus,
                     });
                     getMainWindow()?.webContents.send('taskExecution:started', {
-                        projectId: task.projectId,
-                        projectSequence: task.projectSequence,
+                        taskId,
                         startedAt: executionState.startedAt,
                     });
 
@@ -1024,8 +1019,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             const win = getMainWindow();
                             if (win) {
                                 win.webContents.send('taskExecution:failed', {
-                                    projectId: task.projectId,
-                                    projectSequence: task.projectSequence,
+                                    taskId,
                                     error: executionState.error,
                                 });
 
@@ -1102,8 +1096,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     status: finalStatus,
                                 });
                                 getMainWindow()?.webContents.send('taskExecution:completed', {
-                                    projectId: task.projectId,
-                                    projectSequence: task.projectSequence,
+                                    taskId,
                                     result: executionResult,
                                 });
 
@@ -1133,8 +1126,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             await taskRepository.update(taskId, { status: 'todo' });
                             getMainWindow()?.webContents.send('taskExecution:failed', {
-                                projectId: task.projectId,
-                                projectSequence: task.projectSequence,
+                                taskId,
                                 error: executionState.error,
                             });
                             throw error;
@@ -1226,8 +1218,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         });
 
                         getMainWindow()?.webContents.send('taskExecution:failed', {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
+                            taskId,
                             error: executionState.error,
                         });
 
@@ -1261,8 +1252,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     status: 'in_progress',
                 });
                 getMainWindow()?.webContents.send('taskExecution:started', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
+                    taskId,
                     startedAt: executionState.startedAt,
                 });
 
@@ -1496,8 +1486,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 if (state) state.streamContent += chunk;
 
                                 getMainWindow()?.webContents.send('taskExecution:progress', {
-                                    projectId: task.projectId,
-                                    projectSequence: task.projectSequence,
+                                    taskId,
                                     progress: state?.progress || 0,
                                     phase: 'generating',
                                     delta: chunk,
@@ -1565,8 +1554,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 status: finalStatus,
                             });
                             getMainWindow()?.webContents.send('taskExecution:completed', {
-                                projectId: task.projectId,
-                                projectSequence: task.projectSequence,
+                                taskId,
                                 result: executionResult,
                             });
 
@@ -1680,10 +1668,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         const state = activeExecutions.get(taskId);
                         if (state) state.streamContent += token;
                         getMainWindow()?.webContents.send('taskExecution:progress', {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
-                            progress: state?.progress || 0,
-                            phase: 'processing',
+                            taskId,
+                            progress: state?.progress ?? 50,
+                            phase: 'streaming',
                             delta: token,
                             content: state?.streamContent ?? token,
                         });
@@ -1697,8 +1684,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         const state = activeExecutions.get(taskId);
                         if (state) state.currentPhase = progress.phase;
                         getMainWindow()?.webContents.send('taskExecution:progress', {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
+                            taskId,
                             progress: state?.progress ?? 50,
                             phase: progress.phase,
                         });
@@ -1728,10 +1714,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             id: taskId,
                             status: 'todo',
                         });
-                        getMainWindow()?.webContents.send('taskExecution:stopped', {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
-                        });
+                        getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
                         activeExecutions.delete(taskId);
                         return { success: false, stopped: true };
                     }
@@ -1789,8 +1772,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             status: finalStatus,
                         });
                         getMainWindow()?.webContents.send('taskExecution:completed', {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
+                            taskId,
                             result: executionResult,
                         });
 
@@ -1906,8 +1888,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 status: 'in_review',
                             });
                             win.webContents.send('taskExecution:failed', {
-                                projectId: task.projectId,
-                                projectSequence: task.projectSequence,
+                                taskId,
                                 error: shortError,
                             });
                             console.log(
@@ -1934,8 +1915,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         status: 'in_review',
                     });
                     getMainWindow()?.webContents.send('taskExecution:failed', {
-                        projectId: task.projectId,
-                        projectSequence: task.projectSequence,
+                        taskId,
                         error: error instanceof Error ? error.message : String(error),
                     });
 
@@ -1964,8 +1944,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     status: 'in_review',
                 });
                 getMainWindow()?.webContents.send('taskExecution:failed', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
+                    taskId,
                     error: error instanceof Error ? error.message : String(error),
                 });
 
@@ -1985,158 +1964,124 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     );
 
     /**
-     * Pause a running task
+     * Pause task execution
      */
-    ipcMain.handle(
-        'taskExecution:pause',
-        async (_event, projectId: number, projectSequence: number) => {
-            const task = await taskRepository.findByKey(projectId, projectSequence);
-            if (!task) {
-                throw new Error(`Task ${projectId}-${projectSequence} not found`);
+    ipcMain.handle('taskExecution:pause', async (_event, taskId: number) => {
+        try {
+            const state = activeExecutions.get(taskId);
+            if (!state) {
+                throw new Error(`No active execution for task ${taskId}`);
             }
-            const taskId = task.id; // Temporary for internal use
-            try {
-                const state = activeExecutions.get(taskId);
-                if (!state) {
-                    throw new Error(`No active execution for task ${taskId}`);
-                }
 
-                if (state.status !== 'running') {
-                    throw new Error(
-                        `Task ${taskId} is not running (current status: ${state.status})`
-                    );
-                }
-
-                state.status = 'paused';
-                state.pausedAt = new Date();
-
-                getMainWindow()?.webContents.send('taskExecution:paused', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
-                    pausedAt: state.pausedAt,
-                });
-
-                // Log paused to history
-                await taskHistoryRepository.logPaused(taskId);
-
-                return { success: true };
-            } catch (error) {
-                console.error('Error pausing task:', error);
-                throw error;
+            if (state.status !== 'running') {
+                throw new Error(`Task ${taskId} is not running (current status: ${state.status})`);
             }
+
+            state.status = 'paused';
+            state.pausedAt = new Date();
+
+            getMainWindow()?.webContents.send('taskExecution:paused', {
+                taskId,
+                pausedAt: state.pausedAt,
+            });
+
+            // Log paused to history
+            await taskHistoryRepository.logPaused(taskId);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error pausing task:', error);
+            throw error;
         }
-    );
+    });
 
     /**
-     * Resume a paused task
+     * Resume paused task execution
      */
-    ipcMain.handle(
-        'taskExecution:resume',
-        async (_event, projectId: number, projectSequence: number) => {
-            const task = await taskRepository.findByKey(projectId, projectSequence);
-            if (!task) {
-                throw new Error(`Task ${projectId}-${projectSequence} not found`);
+    ipcMain.handle('taskExecution:resume', async (_event, taskId: number) => {
+        try {
+            const state = activeExecutions.get(taskId);
+            if (!state) {
+                throw new Error(`No active execution for task ${taskId}`);
             }
-            const taskId = task.id; // Temporary for internal use
-            try {
-                const state = activeExecutions.get(taskId);
-                if (!state) {
-                    throw new Error(`No active execution for task ${taskId}`);
-                }
 
-                if (state.status !== 'paused') {
-                    throw new Error(
-                        `Task ${taskId} is not paused (current status: ${state.status})`
-                    );
-                }
-
-                state.status = 'running';
-                state.pausedAt = undefined;
-
-                getMainWindow()?.webContents.send('taskExecution:resumed', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
-                });
-
-                // Log resumed to history
-                await taskHistoryRepository.logResumed(taskId);
-
-                return { success: true };
-            } catch (error) {
-                console.error('Error resuming task:', error);
-                throw error;
+            if (state.status !== 'paused') {
+                throw new Error(`Task ${taskId} is not paused (current status: ${state.status})`);
             }
+
+            state.status = 'running';
+            state.pausedAt = undefined;
+
+            getMainWindow()?.webContents.send('taskExecution:resumed', { taskId });
+
+            // Log resumed to history
+            await taskHistoryRepository.logResumed(taskId);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error resuming task:', error);
+            throw error;
         }
-    );
+    });
 
     /**
-     * Stop a running task
+     * Stop task execution and revert to TODO
      */
-    ipcMain.handle(
-        'taskExecution:stop',
-        async (_event, projectId: number, projectSequence: number) => {
-            const task = await taskRepository.findByKey(projectId, projectSequence);
-            if (!task) {
-                throw new Error(`Task ${projectId}-${projectSequence} not found`);
+    ipcMain.handle('taskExecution:stop', async (_event, taskId: number) => {
+        try {
+            const aiCancelled = await executor.cancelTask(taskId);
+            if (aiCancelled) {
+                console.log(`[TaskExecution] Sent cancel signal to AI provider for task ${taskId}`);
+            } else {
+                console.warn(
+                    `[TaskExecution] No active AI execution found to cancel for task ${taskId}`
+                );
             }
-            const taskId = task.id; // Temporary for internal use
+
+            // Terminate Local Agent session if exists
             try {
-                const aiCancelled = await executor.cancelTask(taskId);
-                if (aiCancelled) {
+                const { sessionManager } = await import('../services/local-agent-session');
+                const sessionTerminated = await sessionManager.terminateTaskSession(taskId);
+                if (sessionTerminated) {
                     console.log(
-                        `[TaskExecution] Sent cancel signal to AI provider for task ${taskId}`
-                    );
-                } else {
-                    console.warn(
-                        `[TaskExecution] No active AI execution found to cancel for task ${taskId}`
+                        `[TaskExecution] Terminated Local Agent session for task ${taskId}`
                     );
                 }
-
-                // Terminate Local Agent session if exists
-                try {
-                    const { sessionManager } = await import('../services/local-agent-session');
-                    const sessionTerminated = await sessionManager.terminateTaskSession(taskId);
-                    if (sessionTerminated) {
-                        console.log(
-                            `[TaskExecution] Terminated Local Agent session for task ${taskId}`
-                        );
-                    }
-                } catch (error) {
-                    // Session manager might not be available or session doesn't exist
-                    console.debug(
-                        `[TaskExecution] No Local Agent session to terminate for task ${taskId}`
-                    );
-                }
-
-                const state = activeExecutions.get(taskId);
-                if (state) {
-                    state.status = 'stopped';
-                    state.currentPhase = 'stopped';
-                }
-
-                // Update task status to todo and clear inputSubStatus
-                await taskRepository.update(taskId, {
-                    status: 'todo',
-                    inputSubStatus: null,
-                });
-                getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
-                    status: 'todo',
-                });
-                getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
-
-                // Log stopped to history
-                await taskHistoryRepository.logStopped(taskId);
-
-                activeExecutions.delete(taskId);
-
-                return { success: true };
             } catch (error) {
-                console.error('Error stopping task:', error);
-                throw error;
+                // Session manager might not be available or session doesn't exist
+                console.debug(
+                    `[TaskExecution] No Local Agent session to terminate for task ${taskId}`
+                );
             }
+
+            const state = activeExecutions.get(taskId);
+            if (state) {
+                state.status = 'stopped';
+                state.currentPhase = 'stopped';
+            }
+
+            // Update task status to todo and clear inputSubStatus
+            await taskRepository.update(taskId, {
+                status: 'todo',
+                inputSubStatus: null,
+            });
+            getMainWindow()?.webContents.send('task:status-changed', {
+                id: taskId,
+                status: 'todo',
+            });
+            getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
+
+            // Log stopped to history
+            await taskHistoryRepository.logStopped(taskId);
+
+            activeExecutions.delete(taskId);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error stopping task:', error);
+            throw error;
         }
-    );
+    });
 
     /**
      * Get execution status for a task
@@ -2948,9 +2893,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     currentState.status = 'failed';
                     currentState.error = reviewResult.error || 'Unknown error';
 
-                    getMainWindow()?.webContents.send('taskExecution:failed', {
-                        projectId: task.projectId,
-                        projectSequence: task.projectSequence,
+                    win?.webContents.send('taskReview:failed', {
+                        taskId,
                         error: currentState.error,
                     });
 
