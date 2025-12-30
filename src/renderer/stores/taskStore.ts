@@ -964,7 +964,7 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             if (api?.taskExecution) {
-                await api.taskExecution.stop(taskId).catch(() => {
+                await api.taskExecution.stop(task.projectId, task.projectSequence).catch(() => {
                     // Ignore IPC errors - execution might not exist
                 });
             }
