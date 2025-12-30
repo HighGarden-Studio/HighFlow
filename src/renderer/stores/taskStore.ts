@@ -815,7 +815,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     : { success: false, error: error.value || 'Failed to pause task' };
             }
 
-            const result = await api.taskExecution.pause(taskId);
+            const result = await api.taskExecution.pause(task.projectId, task.projectSequence);
             if (!result.success) {
                 // If no active execution, just update local state
                 console.warn('No active execution found, updating local state only');
@@ -866,7 +866,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     : { success: false, error: error.value || 'Failed to resume task' };
             }
 
-            const result = await api.taskExecution.resume(taskId);
+            const result = await api.taskExecution.resume(task.projectId, task.projectSequence);
             if (!result.success) {
                 return { success: false, error: 'Failed to resume task' };
             }
@@ -1458,12 +1458,19 @@ export const useTaskStore = defineStore('tasks', () => {
         if (api.taskExecution) {
             // Execution started
             const unsubscribeStarted = api.taskExecution.onStarted(
-                (data: { taskId: number; startedAt: Date }) => {
+                (data: { projectId: number; projectSequence: number; startedAt: Date }) => {
                     console.log('[TaskStore] Execution started:', data);
-                    executingTaskIds.value.add(data.taskId);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+
+                    executingTaskIds.value.add(task.id);
                     // Create new Map for Vue reactivity
                     const newMap = new Map(executionProgress.value);
-                    newMap.set(data.taskId, {
+                    newMap.set(task.id, {
                         progress: 0,
                         phase: 'starting',
                         content: '',
@@ -1471,7 +1478,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     executionProgress.value = newMap;
 
                     // Also update task status in local state
-                    const index = tasks.value.findIndex((t) => t.id === data.taskId);
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
                     if (index >= 0) {
                         tasks.value[index] = {
                             ...tasks.value[index],
@@ -1486,10 +1493,24 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Progress updates with streaming content
             const unsubscribeProgress = api.taskExecution.onProgress(
-                (data: TaskExecutionProgressPayload) => {
+                (data: {
+                    projectId: number;
+                    projectSequence: number;
+                    progress?: number;
+                    phase?: string;
+                    delta?: string;
+                    content?: string;
+                }) => {
                     // Verbose logging removed - only start/completion summaries logged
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+
                     const progressValue = data.progress ?? data.percentage ?? 0;
-                    const existing = executionProgress.value.get(data.taskId) || {
+                    const existing = executionProgress.value.get(task.id) || {
                         progress: 0,
                         phase: 'executing',
                         content: '',
@@ -1513,7 +1534,7 @@ export const useTaskStore = defineStore('tasks', () => {
                         newContent += data.content;
                     }
 
-                    newMap.set(data.taskId, {
+                    newMap.set(task.id, {
                         progress: progressValue,
                         phase: data.phase || existing.phase,
                         content: newContent,
@@ -1527,15 +1548,22 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Execution completed
             const unsubscribeCompleted = api.taskExecution.onCompleted(
-                (data: { taskId: number; result: any }) => {
+                (data: { projectId: number; projectSequence: number; result: any }) => {
                     console.log('[TaskStore] Execution completed:', data);
-                    executingTaskIds.value.delete(data.taskId);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+
+                    executingTaskIds.value.delete(task.id);
 
                     // Update progress with Vue reactivity
                     const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(data.taskId);
+                    const existing = newMap.get(task.id);
                     if (existing) {
-                        newMap.set(data.taskId, {
+                        newMap.set(task.id, {
                             ...existing,
                             percentage: 100,
                             phase: 'completed',
@@ -1555,13 +1583,13 @@ export const useTaskStore = defineStore('tasks', () => {
                               aiResult?: any;
                           }
                         | undefined;
-                    const index = tasks.value.findIndex((t) => t.id === data.taskId);
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
                     if (index >= 0) {
-                        const task = tasks.value[index];
+                        const currentTaskInStore = tasks.value[index];
                         const existingExecution =
-                            (task as any).executionResult &&
-                            typeof (task as any).executionResult === 'object'
-                                ? { ...(task as any).executionResult }
+                            (currentTaskInStore as any).executionResult &&
+                            typeof (currentTaskInStore as any).executionResult === 'object'
+                                ? { ...(currentTaskInStore as any).executionResult }
                                 : {};
                         const normalizedAiResult = result?.aiResult
                             ? normalizeAiResult(result.aiResult)
@@ -1578,25 +1606,25 @@ export const useTaskStore = defineStore('tasks', () => {
                         };
                         // Determine new status based on task type and auto-approve setting
                         let newStatus: TaskStatus = 'in_review';
-                        if (task.taskType === 'input') {
+                        if (currentTaskInStore.taskType === 'input') {
                             newStatus = 'done';
-                        } else if (task.autoApprove) {
+                        } else if (currentTaskInStore.autoApprove) {
                             newStatus = 'done';
                         }
 
                         tasks.value[index] = {
-                            ...task,
+                            ...currentTaskInStore,
                             status: newStatus,
                             executionResult,
                             inputSubStatus: null, // Clear input waiting status
                         } as Task;
 
                         // Dispatch custom event to notify views (especially DAGView)
-                        if (task.taskType === 'input') {
+                        if (currentTaskInStore.taskType === 'input') {
                             window.dispatchEvent(
                                 new CustomEvent('task:input-status-changed', {
                                     detail: {
-                                        taskId: data.taskId,
+                                        taskId: task.id,
                                         inputSubStatus: null,
                                     },
                                 })
@@ -1604,14 +1632,14 @@ export const useTaskStore = defineStore('tasks', () => {
                         }
 
                         // Trigger auto-review if enabled
-                        if (task.autoReview) {
+                        if (currentTaskInStore.autoReview) {
                             console.log(
                                 '[TaskStore] Auto-review enabled, starting review for task:',
-                                data.taskId
+                                task.id
                             );
                             // Defer to next tick to ensure state is updated
                             setTimeout(() => {
-                                startAutoReview(data.taskId).catch((err) => {
+                                startAutoReview(task.id).catch((err) => {
                                     console.error('[TaskStore] Failed to start auto-review:', err);
                                 });
                             }, 100);
@@ -1623,23 +1651,31 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Execution failed
             const unsubscribeFailed = api.taskExecution.onFailed(
-                (data: { taskId: number; error: string }) => {
+                (data: { projectId: number; projectSequence: number; error: string }) => {
                     console.log('[TaskStore] Execution failed:', data);
-                    executingTaskIds.value.delete(data.taskId);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+
+                    executingTaskIds.value.delete(task.id);
 
                     // Update progress with Vue reactivity
                     const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(data.taskId);
+                    const existing = newMap.get(task.id);
                     if (existing) {
-                        newMap.set(data.taskId, {
+                        newMap.set(task.id, {
                             ...existing,
                             phase: 'failed',
+                            content: existing.content + `\n\nError: ${data.error}`,
                         });
                     }
                     executionProgress.value = newMap;
 
-                    // Update task status back to todo on failure
-                    const index = tasks.value.findIndex((t) => t.id === data.taskId);
+                    // Find task in store and update state
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
                     if (index >= 0) {
                         tasks.value[index] = { ...tasks.value[index], status: 'in_review' } as Task;
                     }
@@ -1650,71 +1686,96 @@ export const useTaskStore = defineStore('tasks', () => {
             cleanupFns.push(unsubscribeFailed);
 
             // Execution paused
-            const unsubscribePaused = api.taskExecution.onPaused((data: { taskId: number }) => {
-                console.log('[TaskStore] Execution paused:', data);
+            const unsubscribePaused = api.taskExecution.onPaused(
+                (data: { projectId: number; projectSequence: number; pausedAt: Date }) => {
+                    console.log('[TaskStore] Execution paused:', data);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
 
-                // Update progress with Vue reactivity
-                const newMap = new Map(executionProgress.value);
-                const existing = newMap.get(data.taskId);
-                if (existing) {
-                    newMap.set(data.taskId, {
-                        ...existing,
-                        phase: 'paused',
-                    });
-                }
-                executionProgress.value = newMap;
+                    // Update progress with Vue reactivity
+                    const newMap = new Map(executionProgress.value);
+                    const existing = newMap.get(task.id);
+                    if (existing) {
+                        newMap.set(task.id, {
+                            ...existing,
+                            phase: 'paused',
+                        });
+                    }
+                    executionProgress.value = newMap;
 
-                // Update task isPaused flag
-                const index = tasks.value.findIndex((t) => t.id === data.taskId);
-                if (index >= 0) {
-                    tasks.value[index] = { ...tasks.value[index], isPaused: true } as Task;
+                    // Update task isPaused flag
+                    if (index >= 0) {
+                        tasks.value[index] = { ...tasks.value[index], isPaused: true } as Task;
+                    }
                 }
-            });
+            );
             cleanupFns.push(unsubscribePaused);
 
             // Execution resumed
-            const unsubscribeResumed = api.taskExecution.onResumed((data: { taskId: number }) => {
-                console.log('[TaskStore] Execution resumed:', data);
+            const unsubscribeResumed = api.taskExecution.onResumed(
+                (data: { projectId: number; projectSequence: number }) => {
+                    console.log('[TaskStore] Execution resumed:', data);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
 
-                // Update progress with Vue reactivity
-                const newMap = new Map(executionProgress.value);
-                const existing = newMap.get(data.taskId);
-                if (existing) {
-                    newMap.set(data.taskId, {
-                        ...existing,
-                        phase: 'executing',
-                    });
-                }
-                executionProgress.value = newMap;
+                    // Update progress with Vue reactivity
+                    const newMap = new Map(executionProgress.value);
+                    const existing = newMap.get(task.id);
+                    if (existing) {
+                        newMap.set(task.id, {
+                            ...existing,
+                            phase: 'executing',
+                        });
+                    }
+                    executionProgress.value = newMap;
 
-                // Update task isPaused flag
-                const index = tasks.value.findIndex((t) => t.id === data.taskId);
-                if (index >= 0) {
-                    tasks.value[index] = { ...tasks.value[index], isPaused: false } as Task;
+                    // Update task isPaused flag
+                    if (index >= 0) {
+                        tasks.value[index] = { ...tasks.value[index], isPaused: false } as Task;
+                    }
                 }
-            });
+            );
             cleanupFns.push(unsubscribeResumed);
 
             // Execution stopped
-            const unsubscribeStopped = api.taskExecution.onStopped((data: { taskId: number }) => {
-                console.log('[TaskStore] Execution stopped:', data);
-                executingTaskIds.value.delete(data.taskId);
+            const unsubscribeStopped = api.taskExecution.onStopped(
+                (data: { projectId: number; projectSequence: number }) => {
+                    console.log('[TaskStore] Execution stopped:', data);
+                    const task = tasks.value.find(
+                        (t) =>
+                            t.projectId === data.projectId &&
+                            t.projectSequence === data.projectSequence
+                    );
+                    if (!task) return;
+                    const index = tasks.value.findIndex((t) => t.id === task.id);
+                    executingTaskIds.value.delete(task.id);
 
-                // Clear progress with Vue reactivity
-                const newMap = new Map(executionProgress.value);
-                newMap.delete(data.taskId);
-                executionProgress.value = newMap;
+                    // Clear progress with Vue reactivity
+                    const newMap = new Map(executionProgress.value);
+                    newMap.delete(task.id);
+                    executionProgress.value = newMap;
 
-                // Update task status back to todo
-                const index = tasks.value.findIndex((t) => t.id === data.taskId);
-                if (index >= 0) {
-                    tasks.value[index] = {
-                        ...tasks.value[index],
-                        status: 'todo',
-                        isPaused: false,
-                    } as Task;
+                    // Update task status back to todo
+                    const index = tasks.value.findIndex((t) => t.id === data.taskId);
+                    if (index >= 0) {
+                        tasks.value[index] = {
+                            ...tasks.value[index],
+                            status: 'todo',
+                            isPaused: false,
+                        } as Task;
+                    }
                 }
-            });
+            );
             cleanupFns.push(unsubscribeStopped);
 
             // Approval required
