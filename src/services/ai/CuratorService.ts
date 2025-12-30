@@ -1,4 +1,4 @@
-import { Project, ProjectMemory, DecisionLog, TaskKey } from '../../core/types/database';
+import { Project, ProjectMemory, DecisionLog } from '../../core/types/database';
 import { eventBus } from '../events/EventBus';
 import type { ProviderApiKeys } from './providers/ProviderFactory';
 import type {
@@ -39,21 +39,19 @@ export class CuratorService {
      * This should be called asynchronously after task completion.
      */
     async runCurator(
-        taskKey: TaskKey,
+        taskId: number,
         taskTitle: string,
         taskOutput: string,
         project: Project,
         executionService: any, // Not used directly but kept for interface compatibility
         repo: any // Pass repository
     ): Promise<void> {
-        console.log(
-            `[Curator] Starting memory update for task ${taskKey.projectId}:${taskKey.projectSequence}...`
-        );
+        console.log(`[Curator] Starting memory update for task ${taskId}...`);
 
         eventBus.emit<CuratorStartedEvent>(
             'ai.curator_started',
             {
-                taskKey,
+                taskId,
                 projectId: project.id,
                 taskTitle,
             },
@@ -73,7 +71,7 @@ export class CuratorService {
             // 1. Construct Prompt
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskKey, step: 'analyzing', detail: 'Constructing context from project memory' },
+                { taskId, step: 'analyzing', detail: 'Constructing context from project memory' },
                 'curator-service'
             );
 
@@ -107,7 +105,7 @@ Glossary: ${JSON.stringify(currentMemory.glossary || {}, null, 2)}
 `;
 
             const taskContext = `
-Task: ${taskKey.projectId}-${taskKey.projectSequence}
+Task ID: ${taskId}
 Task Title: ${taskTitle}
 Task Output:
 ${taskOutput.substring(0, 3000)}${taskOutput.length > 3000 ? '\n[... truncated ...]' : ''}
@@ -122,7 +120,7 @@ ${taskContext}
 IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
 {
   "summaryUpdate": "string or null if no update needed",
-  "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text", "taskKey": {"projectId": number, "projectSequence": number}}],
+  "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text", "taskId": number}],
   "glossaryUpdates": {"term": "definition"},
   "conflicts": ["list of conflicts if any"]
 }
@@ -131,7 +129,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 2. Execute AI using cost-effective model from configured providers
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskKey, step: 'extracting', detail: 'Running AI analysis on task output' },
+                { taskId, step: 'extracting', detail: 'Running AI analysis on task output' },
                 'curator-service'
             );
             let aiResponse: string | null = null;
@@ -206,7 +204,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             } catch (aiError) {
                 console.warn('[Curator] AI execution failed, using fallback:', aiError);
                 // Fallback: Simple extraction without AI
-                aiResponse = this.extractDecisionsSimple(taskKey, taskTitle, taskOutput);
+                aiResponse = this.extractDecisionsSimple(taskTitle, taskOutput);
             }
 
             if (!aiResponse) {
@@ -249,13 +247,13 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 4. Update Project Memory
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskKey, step: 'updating', detail: 'Merging new insights into project memory' },
+                { taskId, step: 'updating', detail: 'Merging new insights into project memory' },
                 'curator-service'
             );
             const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => ({
                 date: d.date || new Date().toISOString().split('T')[0],
                 summary: d.summary,
-                taskKey: d.taskKey || taskKey,
+                taskId: d.taskId || taskId,
             }));
 
             const updatedMemory: ProjectMemory = {
@@ -265,7 +263,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                     ...newDecisions,
                 ],
                 glossary: { ...(currentMemory.glossary || {}), ...(parsed.glossaryUpdates || {}) },
-                lastUpdatedTaskKey: taskKey,
+                lastUpdatedTask: taskId,
                 lastUpdatedAt: new Date().toISOString(),
             };
 
@@ -277,7 +275,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 5. Save to DB
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskKey, step: 'saving', detail: 'Persisting updates to database' },
+                { taskId, step: 'saving', detail: 'Persisting updates to database' },
                 'curator-service'
             );
             await repo.update(project.id, { memory: updatedMemory });
@@ -285,7 +283,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             eventBus.emit<CuratorCompletedEvent>(
                 'ai.curator_completed',
                 {
-                    taskKey,
+                    taskId,
                     summaryUpdate: parsed.summaryUpdate,
                     newDecisionsCount: newDecisions.length,
                     glossaryUpdatesCount: Object.keys(parsed.glossaryUpdates || {}).length,
@@ -305,11 +303,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
     /**
      * Simple fallback extraction without AI
      */
-    private extractDecisionsSimple(
-        taskKey: TaskKey,
-        taskTitle: string,
-        taskOutput: string
-    ): string {
+    private extractDecisionsSimple(taskTitle: string, taskOutput: string): string {
         // Extract decisions from common patterns
         const decisionPatterns = [
             /decision[s]?:?\s*([^.]+\.)/gi,
@@ -332,7 +326,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             newDecisions: decisions.slice(0, 3).map((d) => ({
                 date: new Date().toISOString().split('T')[0],
                 summary: `[From ${taskTitle}] ${d}`,
-                taskKey: taskKey,
+                taskId: 0,
             })),
             glossaryUpdates: {},
             conflicts: [],

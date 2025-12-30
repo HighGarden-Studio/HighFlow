@@ -32,7 +32,6 @@ import type { MCPManager } from '../mcp/MCPManager';
 import { isMCPPermissionError } from '../mcp/errors';
 import { eventBus } from '../events/EventBus';
 import type { AIPromptGeneratedEvent } from '../events/EventBus';
-import { taskKeyToString } from '../../utils/taskKey';
 
 // ========================================
 // Types
@@ -365,11 +364,7 @@ export class AIServiceManager {
         options: AIExecutionOptions = {}
     ): Promise<AIExecutionResult> {
         const startTime = Date.now();
-        const taskKey = { projectId: task.projectId, projectSequence: task.projectSequence };
-        const validKey = task ? taskKeyToString(task) : `unknown-${Date.now()}`;
-
-        // Use composite key for tracking
-        const executionId = `exec-${validKey}-${Date.now()}`;
+        const executionId = `exec-${task.id}-${startTime}`;
         const abortController = new AbortController();
         this.activeExecutions.set(executionId, abortController);
 
@@ -408,13 +403,8 @@ export class AIServiceManager {
         const hasTaskOverrides = Boolean(
             effectiveMcpConfig && Object.keys(effectiveMcpConfig).length > 0 && mcpManager
         );
-        const taskKeyString = taskKeyToString({
-            projectId: task.projectId,
-            projectSequence: task.projectSequence,
-        });
         if (hasTaskOverrides && mcpManager) {
-            // Use taskKeyString for overrides instead of numeric ID
-            mcpManager.setTaskOverrides(taskKeyString as any, effectiveMcpConfig);
+            mcpManager.setTaskOverrides(task.id, effectiveMcpConfig);
         }
 
         try {
@@ -439,7 +429,7 @@ export class AIServiceManager {
                     'debug',
                     '[AIServiceManager] MCP auto-detection skipped (explicit configuration present or feature disabled)',
                     {
-                        taskKey,
+                        taskId: task.id,
                         hasExplicitMCPs: explicitMCPs.length > 0,
                         autoDetectEnabled: this.autoDetectMCPsEnabled,
                     }
@@ -451,7 +441,7 @@ export class AIServiceManager {
                         detectedMCPs.length ? detectedMCPs.join(', ') : 'none'
                     }`,
                     {
-                        taskKey,
+                        taskId: task.id,
                         detectedMCPs,
                     }
                 );
@@ -465,7 +455,7 @@ export class AIServiceManager {
                     allRequiredMCPs.length ? allRequiredMCPs.join(', ') : 'none'
                 }`,
                 {
-                    taskKey,
+                    taskId: task.id,
                     requiredMCPs: allRequiredMCPs,
                     detectedMCPs,
                 }
@@ -514,8 +504,7 @@ export class AIServiceManager {
 
             if (task.dependencies && task.dependencies.length > 0 && context.previousResults) {
                 const depResults = context.previousResults.filter((r) =>
-                    // dependencies array contains projectSequences now
-                    task.dependencies.includes(r.projectSequence || 0)
+                    task.dependencies.includes(r.taskId)
                 );
                 for (const res of depResults) {
                     if (res.attachments && res.attachments.length > 0) {
@@ -613,7 +602,7 @@ export class AIServiceManager {
                 'info',
                 `[AIServiceManager] Generated prompt for task #${task.projectSequence}`,
                 {
-                    taskKey,
+                    taskId: task.id,
                     systemPromptLength: aiConfig.systemPrompt?.length,
                     userPromptLength: userPrompt.length,
                     model: aiConfig.model,
@@ -627,7 +616,7 @@ export class AIServiceManager {
                     'warn',
                     `[AIServiceManager] No MCP tools available for task #${task.projectSequence} despite required list`,
                     {
-                        taskKey,
+                        taskId: task.id,
                         requiredMCPs: allRequiredMCPs,
                     }
                 );
@@ -636,7 +625,7 @@ export class AIServiceManager {
                     'info',
                     `[AIServiceManager] Collected ${toolCount} MCP tools for task #${task.projectSequence}`,
                     {
-                        taskKey,
+                        taskId: task.id,
                         toolNames: (aiConfig.tools ?? []).map((t) => t.name),
                     }
                 );
@@ -654,7 +643,7 @@ export class AIServiceManager {
                         'info',
                         '[AIServiceManager] System Prompt updated with MCP Context details',
                         {
-                            taskKey,
+                            taskId: task.id,
                             contextCount: mcpContext.length,
                         }
                     );
@@ -703,7 +692,7 @@ export class AIServiceManager {
                 options.onLog?.(
                     'warn',
                     '[AIServiceManager] Input images detected for an Image Output task. Switching to Vision Analysis mode (Text Generation) to ensure input is analyzed.',
-                    { taskKey }
+                    { taskId: task.id }
                 );
                 isImageTask = false;
 
@@ -718,7 +707,7 @@ export class AIServiceManager {
                     options.onLog?.(
                         'info',
                         `[AIServiceManager] Switching model from ${model} to ${newModel} for Vision Analysis`,
-                        { taskKey }
+                        { taskId: task.id }
                     );
                     // Update the aiConfig model to the new chat-capable model
                     aiConfig.model = newModel;
@@ -886,16 +875,7 @@ export class AIServiceManager {
         } finally {
             this.activeExecutions.delete(executionId);
             if (hasTaskOverrides && mcpManager) {
-                // Clear any manual overrides for this task (using composite key)
-                const mcpManager = this.getMCPManager();
-                if (mcpManager) {
-                    mcpManager.clearTaskOverrides(
-                        taskKeyToString({
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
-                        })
-                    );
-                }
+                mcpManager.clearTaskOverrides(task.id);
             }
         }
     }
@@ -1220,11 +1200,9 @@ export class AIServiceManager {
             details?: Record<string, any>
         ) => {
             options?.onLog?.(level, message, {
-                taskId: task.projectSequence, // Use sequence for logging or composite?
-                projectId: task.projectId,
-                taskSequence: task.projectSequence,
+                taskId: task.id,
                 ...details,
-            } as any);
+            });
         };
 
         const fail = (message: string) => {
@@ -1284,14 +1262,12 @@ export class AIServiceManager {
             let execution;
             try {
                 execution = await mcpManager.executeMCPTool(mcp.id, toolName, args, {
-                    // taskId: task.id, // Removed global ID
+                    taskId: task.id,
                     projectId: task.projectId,
-                    taskId: task.projectSequence, // Temporarily map sequence to taskId for compatibility if strict type
-                    // taskSequence: task.projectSequence, // Add sequence if supported
                     taskTitle: task.title,
                     projectName: (task as any).projectName, // Try to pass project name if available
                     source: 'ai-service',
-                } as any);
+                });
             } catch (error) {
                 if (isMCPPermissionError(error)) {
                     throw error;
@@ -1645,15 +1621,7 @@ export class AIServiceManager {
      */
     cancelExecution(taskId: number): boolean {
         for (const [key, controller] of this.activeExecutions) {
-            // Note: key format is exec-${projectId}-${sequence}-${executionNumber} or similar
-            // We need to check if the key corresponds to the task.
-            // However, taskId passed here is likely sequence.
-            // Ideally explicit projectId should be passed.
-            // Assuming taskId is sequence for now, but really we need projectId.
-            // FIXME: This needs to accept TaskKey or projectId+sequence.
             if (key.includes(`exec-${taskId}-`)) {
-                // This is risky if taskId is unique only within project
-                // Let's defer strict fix until signature update
                 controller.abort();
                 this.activeExecutions.delete(key);
                 return true;
@@ -1827,8 +1795,7 @@ export class AIServiceManager {
                 let tools: MCPToolDefinition[] = [];
                 try {
                     tools = (await mcpManager.listTools(mcp.id, {
-                        taskId: task.projectSequence,
-                        projectId: task.projectId,
+                        taskId: task.id,
                     })) as MCPToolDefinition[];
                     console.log(
                         `[MCP Tools] Found ${tools.length} tools in ${mcpName}:`,
@@ -1984,7 +1951,7 @@ ${
         // unless they are macros (which are already resolved in aiPrompt).
         if (task.dependencies && task.dependencies.length > 0 && context?.previousResults) {
             const dependencyResults = context.previousResults.filter((r) =>
-                task.dependencies.includes(r.taskKey.projectSequence)
+                task.dependencies.includes(r.taskId)
             );
 
             if (dependencyResults.length > 0) {
@@ -2000,8 +1967,7 @@ ${
                             continue;
                         }
 
-                        const depTitle =
-                            result.taskTitle || `Task #${result.taskKey.projectSequence}`;
+                        const depTitle = result.taskTitle || `Task #${result.taskId}`;
                         prompt += `### Output from ${depTitle}\n`;
 
                         if (typeof result.output === 'string') {
@@ -2089,7 +2055,7 @@ ${
         mcpContext: MCPContextInsight[] = []
     ): AIExecutionContext {
         return {
-            taskId: task.projectSequence,
+            taskId: task.id,
             projectId: task.projectId,
             userId: context.userId,
             previousExecutions: context.previousResults?.map((r) => ({
@@ -2120,7 +2086,7 @@ ${
         eventBus.emit<AIPromptGeneratedEvent>(
             'ai.prompt_generated',
             {
-                taskId: task.projectSequence,
+                taskId: task.id,
                 projectId: task.projectId,
                 provider,
                 model,
@@ -2147,7 +2113,7 @@ ${
             'info',
             `[AI] Prompt prepared for task #${task.projectSequence} (${provider}/${model}): ${this.truncateString(prompt, 200)}`,
             {
-                taskId: task.projectSequence,
+                taskId: task.id,
                 projectId: task.projectId,
                 provider,
                 model,
@@ -2403,8 +2369,7 @@ ${
                 let tools: MCPToolDefinition[] = [];
                 try {
                     tools = (await mcpManager.listTools(mcp.id, {
-                        taskId: task.projectSequence,
-                        projectId: task.projectId,
+                        taskId: task.id,
                     })) as MCPToolDefinition[];
                 } catch (error) {
                     console.warn(
@@ -2441,7 +2406,7 @@ ${
                             specializedCall.name,
                             specializedCall.params,
                             {
-                                taskId: task.projectSequence,
+                                taskId: task.id,
                                 projectId: task.projectId,
                                 source: 'ai-service',
                             }
@@ -2474,10 +2439,10 @@ ${
                             {
                                 query: `${task.title}\n${task.description || ''}`.slice(0, 500),
                                 projectId: task.projectId,
-                                taskId: task.projectSequence,
+                                taskId: task.id,
                             },
                             {
-                                taskId: task.projectSequence,
+                                taskId: task.id,
                                 projectId: task.projectId,
                                 source: 'ai-service',
                             }
@@ -2508,7 +2473,7 @@ ${
                                 defaultCall.name,
                                 defaultCall.params,
                                 {
-                                    taskId: task.projectSequence,
+                                    taskId: task.id,
                                     projectId: task.projectId,
                                     source: 'ai-service',
                                 }

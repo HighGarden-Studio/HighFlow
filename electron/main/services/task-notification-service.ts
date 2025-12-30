@@ -8,7 +8,7 @@ import { BrowserWindow } from 'electron';
 import { notificationResolver } from './notification-resolver';
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Task } from '../database/schema';
 import type { TaskExecutionMetadata, NotificationEvent } from '@core/types/notifications';
 import {
@@ -29,13 +29,8 @@ export class TaskNotificationService {
     /**
      * Notify task status change
      */
-    async notifyStatusChange(
-        projectId: number,
-        sequence: number,
-        oldStatus: string,
-        newStatus: string
-    ) {
-        const config = await notificationResolver.resolveConfig(projectId, sequence);
+    async notifyStatusChange(taskId: number, oldStatus: string, newStatus: string) {
+        const config = await notificationResolver.resolveConfig(taskId);
         if (!config) return;
 
         const shouldNotify =
@@ -44,7 +39,7 @@ export class TaskNotificationService {
 
         if (!shouldNotify) return;
 
-        const task = await this.getTask(projectId, sequence);
+        const task = await this.getTask(taskId);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -69,7 +64,7 @@ export class TaskNotificationService {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.status-changed',
                 task: {
-                    id: `${task.projectId}-${task.projectSequence}`,
+                    id: task.id,
                     title: task.title,
                     status: newStatus,
                     oldStatus,
@@ -83,16 +78,11 @@ export class TaskNotificationService {
     /**
      * Notify task completion with results
      */
-    async notifyCompletion(
-        projectId: number,
-        sequence: number,
-        result: string,
-        metadata?: TaskExecutionMetadata
-    ) {
-        const config = await notificationResolver.resolveConfig(projectId, sequence);
+    async notifyCompletion(taskId: number, result: string, metadata?: TaskExecutionMetadata) {
+        const config = await notificationResolver.resolveConfig(taskId);
 
         console.log(
-            `[TaskNotificationService] notifyCompletion config for ${projectId}:${sequence}:`,
+            `[TaskNotificationService] notifyCompletion config for ${taskId}:`,
             JSON.stringify(config, null, 2)
         );
 
@@ -111,7 +101,7 @@ export class TaskNotificationService {
             return;
         }
 
-        const task = await this.getTask(projectId, sequence);
+        const task = await this.getTask(taskId);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -147,7 +137,7 @@ export class TaskNotificationService {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.completed',
                 task: {
-                    id: `${task.projectId}-${task.projectSequence}`,
+                    id: task.id,
                     title: task.title,
                     status: task.status,
                     projectId: task.projectId,
@@ -162,11 +152,11 @@ export class TaskNotificationService {
     /**
      * Notify task in review
      */
-    async notifyReviewReady(projectId: number, sequence: number, result: string) {
-        const config = await notificationResolver.resolveConfig(projectId, sequence);
+    async notifyReviewReady(taskId: number, result: string) {
+        const config = await notificationResolver.resolveConfig(taskId);
 
         console.log(
-            `[TaskNotificationService] notifyReviewReady config for ${projectId}:${sequence}:`,
+            `[TaskNotificationService] notifyReviewReady config for ${taskId}:`,
             JSON.stringify(config, null, 2)
         );
 
@@ -187,7 +177,7 @@ export class TaskNotificationService {
             return;
         }
 
-        const task = await this.getTask(projectId, sequence);
+        const task = await this.getTask(taskId);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -221,7 +211,7 @@ export class TaskNotificationService {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.in-review',
                 task: {
-                    id: `${task.projectId}-${task.projectSequence}`,
+                    id: task.id,
                     title: task.title,
                     status: task.status,
                     projectId: task.projectId,
@@ -235,8 +225,8 @@ export class TaskNotificationService {
     /**
      * Notify task failure
      */
-    async notifyFailure(projectId: number, sequence: number, error: string) {
-        const config = await notificationResolver.resolveConfig(projectId, sequence);
+    async notifyFailure(taskId: number, error: string) {
+        const config = await notificationResolver.resolveConfig(taskId);
         if (!config) return;
 
         const shouldNotify =
@@ -245,7 +235,7 @@ export class TaskNotificationService {
 
         if (!shouldNotify) return;
 
-        const task = await this.getTask(projectId, sequence);
+        const task = await this.getTask(taskId);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -267,7 +257,7 @@ export class TaskNotificationService {
             await this.sendWebhookNotification(config.webhook, {
                 event: 'task.failed',
                 task: {
-                    id: `${task.projectId}-${task.projectSequence}`,
+                    id: task.id,
                     title: task.title,
                     status: task.status,
                     projectId: task.projectId,
@@ -501,12 +491,8 @@ export class TaskNotificationService {
     /**
      * Get task from database
      */
-    private async getTask(projectId: number, sequence: number): Promise<Task | null> {
-        const result = await db
-            .select()
-            .from(tasks)
-            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, sequence)))
-            .limit(1);
+    private async getTask(taskId: number): Promise<Task | null> {
+        const result = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
 
         return (result[0] as Task) || null;
     }
@@ -524,20 +510,17 @@ export class TaskNotificationService {
      * Send test notification
      */
     async sendTestNotification(
-        projectId: number,
-        sequence: number,
+        taskId: number,
         config: any,
         taskInfo: { taskName?: string; taskDescription?: string | null }
     ) {
-        console.log(
-            `[TaskNotificationService] Sending test notification for task ${projectId}:${sequence}`
-        );
+        console.log(`[TaskNotificationService] Sending test notification for task ${taskId}`);
 
         const testPayload = {
             event: 'test',
             task: {
-                id: `${projectId}-${sequence}`,
-                name: taskInfo.taskName || `Task ${projectId}-${sequence}`,
+                id: taskId,
+                name: taskInfo.taskName || `Task ${taskId}`,
                 description: taskInfo.taskDescription || '테스트 알림입니다.',
             },
             message:
@@ -552,8 +535,8 @@ export class TaskNotificationService {
             promises.push(
                 this.sendSlackNotification(config.slack, {
                     task: {
-                        id: `${projectId}-${sequence}`,
-                        title: taskInfo.taskName || `Task ${projectId}-${sequence}`,
+                        id: taskId,
+                        title: taskInfo.taskName || `Task ${taskId}`,
                         description: taskInfo.taskDescription,
                     } as any,
                     project: null,

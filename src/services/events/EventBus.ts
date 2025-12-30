@@ -65,8 +65,6 @@ class BrowserEventEmitter {
 // Event Types
 // ========================================
 
-import { TaskKey } from '../../core/types/database';
-
 export type EventCategory =
     | 'task'
     | 'project'
@@ -101,8 +99,8 @@ export interface TaskCreatedEvent extends BaseEvent {
     category: 'task';
     type: 'task.created';
     payload: {
-        taskKey: TaskKey;
-        projectId: number; // Redundant but kept for convenience
+        taskId: number;
+        projectId: number;
         title: string;
         status: string;
         priority: string;
@@ -114,7 +112,7 @@ export interface TaskUpdatedEvent extends BaseEvent {
     category: 'task';
     type: 'task.updated';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         changes: Record<string, { old: any; new: any }>;
         updatedBy: number;
@@ -125,7 +123,7 @@ export interface TaskStatusChangedEvent extends BaseEvent {
     category: 'task';
     type: 'task.status_changed';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         previousStatus: string;
         newStatus: string;
@@ -137,7 +135,7 @@ export interface TaskAssignedEvent extends BaseEvent {
     category: 'task';
     type: 'task.assigned';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         previousAssignee?: number;
         newAssignee: number;
@@ -149,7 +147,7 @@ export interface TaskDeletedEvent extends BaseEvent {
     category: 'task';
     type: 'task.deleted';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         deletedBy: number;
     };
@@ -221,7 +219,7 @@ export interface WorkflowTaskCompletedEvent extends BaseEvent {
     type: 'workflow.task_completed';
     payload: {
         workflowId: string;
-        taskKey: TaskKey;
+        taskId: number;
         status: 'success' | 'failure';
         duration: number;
         cost?: number;
@@ -234,7 +232,7 @@ export interface AIExecutionStartedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.execution_started';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         provider: string;
         model: string;
     };
@@ -244,7 +242,7 @@ export interface AIExecutionCompletedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.execution_completed';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         provider: string;
         model: string;
         tokensUsed: number;
@@ -258,7 +256,7 @@ export interface AITokenStreamEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.token_stream';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         token: string;
         accumulated: string;
     };
@@ -268,7 +266,7 @@ export interface AIPromptGeneratedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.prompt_generated';
     payload: {
-        taskKey?: TaskKey;
+        taskId?: number;
         projectId?: number;
         provider: string;
         model: string;
@@ -284,7 +282,7 @@ export interface MCPRequestEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_request';
     payload: {
-        taskKey?: TaskKey;
+        taskId?: number;
         projectId?: number;
         taskTitle?: string;
         projectName?: string;
@@ -300,7 +298,7 @@ export interface MCPResponseEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_response';
     payload: {
-        taskKey?: TaskKey;
+        taskId?: number;
         projectId?: number;
         taskTitle?: string;
         projectName?: string;
@@ -318,7 +316,7 @@ export interface CuratorStartedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_started';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         taskTitle: string;
     };
@@ -328,7 +326,7 @@ export interface CuratorStepEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_step';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         step: 'analyzing' | 'extracting' | 'updating' | 'saving';
         detail: string;
     };
@@ -338,7 +336,7 @@ export interface CuratorCompletedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_completed';
     payload: {
-        taskKey: TaskKey;
+        taskId: number;
         summaryUpdate?: string;
         newDecisionsCount: number;
         glossaryUpdatesCount: number;
@@ -375,7 +373,7 @@ export interface CommentCreatedEvent extends BaseEvent {
     type: 'comment.created';
     payload: {
         commentId: number;
-        taskKey: TaskKey;
+        taskId: number;
         projectId: number;
         userId: number;
         content: string;

@@ -8,14 +8,10 @@
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
-import { useTaskStore, type TaskStatus, type Task, type TaskKey } from '../stores/taskStore';
-
-// ... (skipping lines)
-
+import { useTaskStore, type TaskStatus, type Task } from '../stores/taskStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
 import { getAPI } from '../../utils/electron';
-import { taskKeyToString } from '../../utils/taskKey';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import TaskCard from '../../components/board/TaskCard.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
@@ -55,21 +51,13 @@ const projectId = computed(() => Number(route.params.id));
 const isMounted = ref(true);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
-const draggedTaskSequence = ref<number | null>(null);
-const selectedTaskSequence = ref<number | null>(null);
+const draggedTask = ref<number | null>(null);
+const selectedTaskId = ref<number | null>(null);
 const selectedTask = computed(() => {
-    if (!selectedTaskSequence.value) return null; // 호환성을 위해 유지하되 아래 로직 수정
-    // 만약 selectedTaskId가 sequence라면? 변수명 혼란을 줄이기 위해 selectedTaskSequence 사용 권장
-    // 하지만 템플릿 등에서 selectedTaskId를 참조할 수 있으므로, 여기서는 selectedTaskSequence로 변경하고,
-    // 기존 selectedTaskId 참조를 모두 함께 수정해야 함.
-    return (
-        taskStore.tasks.find(
-            (t) =>
-                t.projectId === projectId.value && t.projectSequence === selectedTaskSequence.value
-        ) || null
-    );
+    if (!selectedTaskId.value) return null;
+    // Directly access tasks array to get stable object reference
+    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
 });
-// selectedTaskId 변수명 변경 적용 필요. ReplacementChunk 범위를 넓혀서 한번에 수정.
 const showDetailPanel = ref(false);
 
 // Subdivision modal state
@@ -92,33 +80,15 @@ const editingTask = ref<Task | null>(null);
 // Result preview state
 // Result preview state
 const showResultPreview = ref(false);
-const previewTaskSequence = ref<number | null>(null);
+const previewTaskId = ref<number | null>(null);
 const resultPreviewTask = computed(() => {
-    if (!previewTaskSequence.value) return null;
-    const task = taskStore.tasks.find(
-        (t) => t.projectId === projectId.value && t.projectSequence === previewTaskSequence.value
-    );
+    if (!previewTaskId.value) return null;
+    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
     if (!task) return null;
 
     // Augment with execution progress if available
-    // ExecutionProgress Map 키가 무엇인지 확인 필요. ID였으면 sequence로 변경?
-    // taskStore에서 executionProgress 타입을 확인해야 함. 일단은 projectId/sequence 조합이 키가 아닐 가능성.
-    // 임시로 task 객체 전체를 키로 쓰거나 별도 처리 필요하지만, 일단 기존 id 참조를 제거.
-    // 만약 executionProgress가 Map<number, ...> 라면 sequence를 키로 쓰도록 taskStore도 수정되었어야 함.
-    // taskStore.ts를 다시 봐야겠지만, 일단 여기서 컴파일 에러를 막기 위해 ...
-
-    // taskStore.ts에서 taskExecutionProgressPayload가 수정되었음.
-    // 하지만 executionProgress Map의 키는? 확인하지 못함.
-    // 일단 주석 처리 또는 안전하게 접근.
-
-    // FIXME: executionProgress Key migration
-    // Use composite key string for map lookup
-    const key = taskKeyToString({
-        projectId: task.projectId,
-        projectSequence: task.projectSequence,
-    });
-    const progress = taskStore.executionProgress.get(key);
-    const reviewProgressEntry = taskStore.reviewProgress.get(key);
+    const progress = taskStore.executionProgress.get(task.id);
+    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
 
     return {
         ...task,
@@ -154,7 +124,7 @@ function toggleConnectionMode() {
     if (!isConnectionMode.value) {
         connectionLineStart.value = null;
         connectionLineEnd.value = null;
-        draggedTaskSequence.value = null;
+        draggedTask.value = null;
     }
 }
 
@@ -171,7 +141,6 @@ const columns: { id: TaskStatus; title: string; color: string; icon?: string }[]
 ];
 
 // Cache for missing provider info with operator check
-// Key: sequence (since it's per project view)
 const missingProviderCache = ref<Map<number, MissingProviderInfo | null>>(new Map());
 
 // Update cache when tasks change
@@ -181,7 +150,7 @@ watch(
         if (!isMounted.value) return;
         const newCache = new Map<number, MissingProviderInfo | null>();
         for (const task of taskStore.tasks) {
-            newCache.set(task.projectSequence, await getMissingProviderForTask(task));
+            newCache.set(task.id, await getMissingProviderForTask(task));
         }
         missingProviderCache.value = newCache;
     },
@@ -214,27 +183,23 @@ function handleTaskSaved() {
     taskStore.fetchTasks(projectId.value);
 }
 
-function handleDragStart(sequence: number) {
-    draggedTaskSequence.value = sequence;
+function handleDragStart(taskId: number) {
+    draggedTask.value = taskId;
 }
 
 function handleDragEnd() {
-    draggedTaskSequence.value = null;
+    draggedTask.value = null;
 }
 
 async function handleDrop(status: TaskStatus) {
-    if (draggedTaskSequence.value === null) return;
+    if (draggedTask.value === null) return;
 
-    // Use taskBySequence helper or find manually
-    const task = taskStore.tasks.find(
-        (t) => t.projectId === projectId.value && t.projectSequence === draggedTaskSequence.value
-    );
-
+    const task = taskStore.taskById(draggedTask.value);
     if (task && task.status !== status) {
-        await taskStore.updateTask(projectId.value, draggedTaskSequence.value, { status });
+        await taskStore.updateTask(draggedTask.value, { status });
     }
 
-    draggedTaskSequence.value = null;
+    draggedTask.value = null;
 }
 
 // getPriorityColor is available if needed for custom styling
@@ -249,22 +214,18 @@ async function handleDrop(status: TaskStatus) {
 // };
 
 function openTaskDetail(task: Task) {
+    console.log('[KanbanBoardView] openTaskDetail called with task:', task.id, task.title);
     console.log(
-        '[KanbanBoardView] openTaskDetail called with task:',
-        task.projectSequence,
-        task.title
-    );
-    console.log(
-        '[KanbanBoardView] Before - selectedTaskSequence:',
-        selectedTaskSequence.value,
+        '[KanbanBoardView] Before - selectedTaskId:',
+        selectedTaskId.value,
         'showDetailPanel:',
         showDetailPanel.value
     );
-    selectedTaskSequence.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
     console.log(
-        '[KanbanBoardView] After - selectedTaskSequence:',
-        selectedTaskSequence.value,
+        '[KanbanBoardView] After - selectedTaskId:',
+        selectedTaskId.value,
         'showDetailPanel:',
         showDetailPanel.value
     );
@@ -272,17 +233,17 @@ function openTaskDetail(task: Task) {
 
 function closeDetailPanel() {
     showDetailPanel.value = false;
-    selectedTaskSequence.value = null;
+    selectedTaskId.value = null;
 }
 
 async function handleTaskSave(task: Task) {
-    await taskStore.updateTask(task.projectId, task.projectSequence, task);
+    await taskStore.updateTask(task.id, task);
 }
 
 async function handleTaskExecute(task: Task) {
-    console.log('Execute task:', task.projectId, task.projectSequence);
+    console.log('Execute task:', task.id);
 
-    const result = await taskStore.executeTask(task.projectId, task.projectSequence);
+    const result = await taskStore.executeTask(task.id);
     if (!result.success) {
         console.error('Failed to execute task:', result.error);
         // Show warning notification for validation errors
@@ -303,19 +264,7 @@ async function handleTaskExecute(task: Task) {
 }
 
 async function handleTaskApprove(task: Task) {
-    // approveTask가 taskStore에 없으므로 changeStatus나 updateTask 사용
-    // 기존 코드에서는 completeReview라고 되어있었음 (taskStore.ts 에는 completeReview가 없음..?)
-    // taskStore.ts를 보니 approve 관련 코드가 안보였음. changeStatus로 대체하거나 확인 필요.
-    // 일단 changeStatus로 구현.
-    const result = await taskStore.changeStatus(
-        task.projectId,
-        task.projectSequence,
-        'in_progress',
-        {
-            approvalResponse: 'Approved by user',
-        }
-    );
-
+    const result = await taskStore.completeReview(task.id);
     if (!result.success) {
         console.error('Failed to approve task:', result.error);
         uiStore.showToast({
@@ -332,7 +281,7 @@ async function handleTaskApprove(task: Task) {
 }
 
 async function handleTaskReject(task: Task, feedback: string) {
-    await taskStore.updateTask(task.projectId, task.projectSequence, {
+    await taskStore.updateTask(task.id, {
         status: 'todo',
         description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
     });
@@ -373,12 +322,12 @@ async function confirmSubdivision() {
                 priority: subtask.priority || 'medium',
                 tags: subtask.tags,
                 estimatedMinutes: subtask.estimatedMinutes || undefined,
-                parentTaskId: parentTask.projectSequence, // Use sequence for parent reference within project
-            } as any); // Cast to any if type mismatch persists momentarily
+                parentTaskId: parentTask.id,
+            });
         }
 
         // Mark parent task as subdivided
-        await taskStore.updateTask(parentTask.projectId, parentTask.projectSequence, {
+        await taskStore.updateTask(parentTask.id, {
             isSubdivided: true,
         });
 
@@ -399,15 +348,14 @@ function closeSubdivisionModal() {
 }
 
 // Additional TaskCard event handlers
-// Additional TaskCard event handlers
 async function handleEnhancePrompt(task: Task) {
     // TODO: Implement prompt enhancement with AI
-    console.log('Enhance prompt for task:', task.projectSequence);
+    console.log('Enhance prompt for task:', task.id);
 }
 
 function handlePreviewPrompt(task: Task) {
     // Open task detail panel with prompt preview
-    selectedTaskSequence.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
@@ -418,61 +366,48 @@ function handlePreviewResult(task: Task) {
 
 async function handleRetry(task: Task) {
     // Retry task execution
-    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
+    await taskStore.updateTask(task.id, { status: 'todo' });
     // Immediately execute the task after resetting to todo
-    await taskStore.executeTask(task.projectId, task.projectSequence);
-    console.log('Retry task executed:', task.projectSequence);
+    await taskStore.executeTask(task.id);
+    console.log('Retry task executed:', task.id);
 }
 
 function handleViewHistory(task: Task) {
     // Open task detail panel with history view
-    selectedTaskSequence.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 function handleViewProgress(task: Task) {
     // Open task detail panel with progress view
-    selectedTaskSequence.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 function handleViewStepHistory(task: Task) {
     // Open task detail panel with step history view
-    selectedTaskSequence.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
 async function handlePause(task: Task) {
-    const result = await taskStore.pauseTask(task.projectId, task.projectSequence);
+    const result = await taskStore.pauseTask(task.id);
     if (!result.success) {
         console.error('Failed to pause task:', result.error);
     }
 }
 
 async function handleResume(task: Task) {
-    // executeTask handles resume if status calls for it, or we need dedicated resume
-    // taskStore.executeTask has logic to resume? Or we might need resumeTask action.
-    // Assuming executeTask handles it or we add resumeTask.
-    // taskStore has pauseTask but maybe not resumeTask?
-    // Let's use updateTask to remove paused state and set to in_progress
-    const result = await taskStore.updateTask(task.projectId, task.projectSequence, {
-        isPaused: false,
-        status: 'in_progress',
-    });
-    if (!result) {
-        console.error('Failed to resume task');
+    const result = await taskStore.resumeTask(task.id);
+    if (!result.success) {
+        console.error('Failed to resume task:', result.error);
     }
 }
 
 async function handleStop(task: Task) {
-    // Stop: maybe set to blocked or todo? or just pause?
-    // Assuming 'stop' means convert to todo or failed.
-    const result = await taskStore.updateTask(task.projectId, task.projectSequence, {
-        status: 'todo',
-        isPaused: false,
-    });
-    if (!result) {
-        console.error('Failed to stop task');
+    const result = await taskStore.stopTask(task.id);
+    if (!result.success) {
+        console.error('Failed to stop task:', result.error);
     }
 }
 
@@ -489,30 +424,18 @@ function closeEditModal() {
 
 async function handleEditModalSave(updates: Partial<Task>) {
     if (!editingTask.value) return;
-    await taskStore.updateTask(
-        editingTask.value.projectId,
-        editingTask.value.projectSequence,
-        updates
-    );
+    await taskStore.updateTask(editingTask.value.id, updates);
     closeEditModal();
 }
 
 async function handleEditModalDelete(taskId: number) {
-    // taskId here is likely sequence from template pass.
-    // However, cleaner is to pass task object or ensure we have context
-    // But from template: @delete="handleDeleteTask" passes task object usually.
-    // Wait, handleEditModalDelete is called from where?
-    // It seems it was not in the file view extensively or I missed it.
-    // Let's assume editingTask.value is available.
-    if (!editingTask.value) return;
-
-    await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
+    await taskStore.deleteTask(taskId);
     closeEditModal();
 }
 
 // Result Preview handlers
 async function openResultPreview(task: Task) {
-    previewTaskSequence.value = task.projectSequence;
+    previewTaskId.value = task.id;
     showResultPreview.value = true;
 
     // Attempt to fetch latest details to ensure we have the result
@@ -525,7 +448,7 @@ async function openResultPreview(task: Task) {
 
 function closeResultPreview() {
     showResultPreview.value = false;
-    previewTaskSequence.value = null;
+    previewTaskId.value = null;
 }
 
 // Live Streaming Preview handlers
@@ -540,13 +463,7 @@ function closeLivePreview() {
 }
 
 async function handleResultApprove(task: Task) {
-    // same as handleTaskApprove
-    const result = await taskStore.changeStatus(
-        task.projectId,
-        task.projectSequence,
-        'in_progress',
-        { approvalResponse: 'Approved' }
-    );
+    const result = await taskStore.completeReview(task.id);
     if (!result.success) {
         console.error('Failed to approve task:', result.error);
     }
@@ -567,15 +484,7 @@ async function handleProjectNameUpdate(newName: string) {
 
 async function handleDeleteTask(task: Task) {
     const dependentTasks = taskStore.tasks.filter(
-        // Check dependencies (now using keys)
-        (t) =>
-            t.projectId === task.projectId && // Same project
-            t.projectSequence !== task.projectSequence &&
-            Array.isArray(t.triggerConfig?.dependsOn?.taskKeys) &&
-            t.triggerConfig?.dependsOn?.taskKeys.some(
-                (k: TaskKey) =>
-                    k.projectId === task.projectId && k.projectSequence === task.projectSequence
-            )
+        (t) => t.id !== task.id && Array.isArray(t.dependencies) && t.dependencies.includes(task.id)
     );
 
     if (dependentTasks.length > 0) {
@@ -586,70 +495,34 @@ async function handleDeleteTask(task: Task) {
         }
 
         for (const dependent of dependentTasks) {
-            const updatedDependencies = (dependent.triggerConfig?.dependsOn?.taskKeys || []).filter(
-                (k: TaskKey) =>
-                    !(k.projectId === task.projectId && k.projectSequence === task.projectSequence)
+            const updatedDependencies = (dependent.dependencies || []).filter(
+                (depId: number) => depId !== task.id
             );
-
-            // Update dependencies
-            const newTriggerConfig = {
-                ...dependent.triggerConfig,
-                dependsOn: {
-                    ...dependent.triggerConfig?.dependsOn,
-                    taskKeys: updatedDependencies,
-                    // Keep existing properties
-                    operator: dependent.triggerConfig?.dependsOn?.operator,
-                    expression: dependent.triggerConfig?.dependsOn?.expression,
-                    executionPolicy: dependent.triggerConfig?.dependsOn?.executionPolicy,
-                    passResultsFrom: (
-                        dependent.triggerConfig?.dependsOn?.passResultsFrom || []
-                    ).filter(
-                        (k: TaskKey) =>
-                            !(
-                                k.projectId === task.projectId &&
-                                k.projectSequence === task.projectSequence
-                            )
-                    ),
-                },
-            };
-
-            await taskStore.updateTask(dependent.projectId, dependent.projectSequence, {
-                triggerConfig: newTriggerConfig as any, // Cast if needed
+            await taskStore.updateTask(dependent.id, {
+                dependencies: updatedDependencies,
             });
         }
     } else if (!confirm(`정말 "${task.title}" 테스크를 삭제하시겠습니까?`)) {
         return;
     }
 
-    await taskStore.deleteTask(task.projectId, task.projectSequence);
+    await taskStore.deleteTask(task.id);
 }
 
 // Subtask helper - get subtasks for a parent task
-function getSubtasks(parentTaskSequence: number): Task[] {
-    return taskStore.tasks.filter(
-        (t) =>
-            t.parentTaskKey?.projectSequence === parentTaskSequence &&
-            t.parentTaskKey?.projectId === projectId.value
-    );
+function getSubtasks(parentTaskId: number): Task[] {
+    return taskStore.tasks.filter((t) => t.parentTaskId === parentTaskId);
 }
 
 const liveStreamingContent = computed(() => {
     if (!livePreviewTask.value) return '';
-    const key = taskKeyToString({
-        projectId: livePreviewTask.value.projectId,
-        projectSequence: livePreviewTask.value.projectSequence,
-    });
-    const progress = taskStore.executionProgress.get(key);
+    const progress = taskStore.executionProgress.get(livePreviewTask.value.id);
     return progress?.content || '';
 });
 
 const liveReviewContent = computed(() => {
     if (!livePreviewTask.value) return '';
-    const key = taskKeyToString({
-        projectId: livePreviewTask.value.projectId,
-        projectSequence: livePreviewTask.value.projectSequence,
-    });
-    const progress = taskStore.reviewProgress.get(key);
+    const progress = taskStore.reviewProgress.get(livePreviewTask.value.id);
     return progress?.content || '';
 });
 
@@ -764,8 +637,8 @@ function formatJson(json: string): string {
 /**
  * Get cached missing provider info for a task
  */
-function getCachedMissingProvider(sequence: number): MissingProviderInfo | null {
-    return missingProviderCache.value.get(sequence) || null;
+function getCachedMissingProvider(taskId: number): MissingProviderInfo | null {
+    return missingProviderCache.value.get(taskId) || null;
 }
 
 /**
@@ -877,7 +750,7 @@ function handleConnectionStart(task: Task, event: DragEvent) {
     // 전역 마우스 이동 추적
     document.addEventListener('dragover', handleGlobalDragOver);
 
-    console.log('Connection started from task:', task.projectSequence, task.title);
+    console.log('Connection started from task:', task.id, task.title);
 }
 
 function handleGlobalDragOver(event: DragEvent) {
@@ -921,10 +794,7 @@ async function handleConnectionEnd(targetTask: Task) {
     const sourceTask = connectionSourceTask.value;
 
     // 자기 자신에게 연결 불가
-    if (
-        sourceTask.projectId === targetTask.projectId &&
-        sourceTask.projectSequence === targetTask.projectSequence
-    ) {
+    if (sourceTask.id === targetTask.id) {
         connectionProcessing = false;
         handleConnectionDragEnd();
         return;
@@ -932,16 +802,8 @@ async function handleConnectionEnd(targetTask: Task) {
 
     // 이미 연결되어 있으면 무시
     const existingDependsOn = sourceTask.triggerConfig?.dependsOn;
-    const existingTaskKeys = existingDependsOn?.taskKeys || [];
-
-    // Check if key already exists
-    const isAlreadyConnected = existingTaskKeys.some(
-        (key) =>
-            key.projectId === targetTask.projectId &&
-            key.projectSequence === targetTask.projectSequence
-    );
-
-    if (isAlreadyConnected) {
+    const existingTaskIds = existingDependsOn?.taskIds || [];
+    if (existingTaskIds.includes(targetTask.id)) {
         connectionProcessing = false;
         handleConnectionDragEnd();
         return;
@@ -949,33 +811,27 @@ async function handleConnectionEnd(targetTask: Task) {
 
     console.log('Connection created:', sourceTask.title, '→', targetTask.title);
     console.log(
-        `Source task #${sourceTask.projectId}:${sourceTask.projectSequence}`,
-        `Target task #${targetTask.projectId}:${targetTask.projectSequence}`
+        'Source task #' + sourceTask.projectSequence + ' (ID:',
+        sourceTask.id + '), Target task #' + targetTask.projectSequence + ' (ID:',
+        targetTask.id + ')'
     );
+    console.log('Existing taskIds:', existingTaskIds);
 
     const existingPassResultsFrom = existingDependsOn?.passResultsFrom || [];
 
     const newTriggerConfig = {
         ...sourceTask.triggerConfig,
         dependsOn: {
-            taskKeys: [
-                ...existingTaskKeys,
-                { projectId: targetTask.projectId, projectSequence: targetTask.projectSequence },
-            ],
+            taskIds: [...existingTaskIds, targetTask.id],
             operator: existingDependsOn?.operator || ('all' as const),
-            expression: existingDependsOn?.expression,
-            executionPolicy: existingDependsOn?.executionPolicy,
-            passResultsFrom: [
-                ...existingPassResultsFrom,
-                { projectId: targetTask.projectId, projectSequence: targetTask.projectSequence },
-            ],
+            passResultsFrom: Array.from(new Set([...existingPassResultsFrom, targetTask.id])),
         },
     };
 
     console.log('New trigger config:', JSON.stringify(newTriggerConfig, null, 2));
 
-    await taskStore.updateTask(sourceTask.projectId, sourceTask.projectSequence, {
-        triggerConfig: newTriggerConfig as any,
+    await taskStore.updateTask(sourceTask.id, {
+        triggerConfig: newTriggerConfig,
     });
 
     console.log('✅ Dependency saved successfully');
@@ -1002,12 +858,7 @@ async function handleApproveTask() {
     approvalProcessing.value = true;
     try {
         // Approve: move back to IN_PROGRESS to continue execution
-        const result = await taskStore.changeStatus(
-            approvalTask.value.projectId,
-            approvalTask.value.projectSequence,
-            'in_progress',
-            { approvalResponse: 'Approved' }
-        );
+        const result = await taskStore.approveTask(approvalTask.value.id);
         if (!result.success) {
             console.error('Failed to approve task:', result.error);
         }
@@ -1025,22 +876,9 @@ async function handleRejectTask() {
     approvalProcessing.value = true;
     try {
         // Reject: cancel the task and move to TODO
-        // Using updateTask since rejectTask helper incomplete
-        const result = await taskStore.updateTask(
-            approvalTask.value.projectId,
-            approvalTask.value.projectSequence,
-            {
-                status: 'todo',
-                // description: append rejection reason... (handled in handleTaskReject) (but this is modal handler)
-                // handleTaskReject adds feedback. Here we just reset? Or we should use handleTaskReject.
-            }
-        );
-
-        // Actually we should append reason.
-        // But for minimal disturbance, let's just reset status.
-
-        if (!result) {
-            console.error('Failed to reject task');
+        const result = await taskStore.rejectTask(approvalTask.value.id);
+        if (!result.success) {
+            console.error('Failed to reject task:', result.error);
         }
         closeApprovalModal();
     } catch (error) {
@@ -1051,15 +889,9 @@ async function handleRejectTask() {
 }
 
 // Operator assignment handler
-async function handleOperatorDrop(
-    targetProjectId: number,
-    taskSequence: number,
-    operatorId: number
-) {
+async function handleOperatorDrop(taskId: number, operatorId: number) {
     try {
-        await taskStore.updateTask(targetProjectId, taskSequence, {
-            assignedOperatorId: operatorId,
-        });
+        await taskStore.updateTask(taskId, { assignedOperatorId: operatorId });
         uiStore.showToast({
             type: 'success',
             message: 'Operator assigned successfully',
@@ -1088,11 +920,7 @@ async function handleInputSubmit(data: any) {
     if (!inputTask.value) return;
 
     try {
-        const result = await taskStore.submitInput(
-            inputTask.value.projectId,
-            inputTask.value.projectSequence,
-            data
-        );
+        const result = await taskStore.submitInput(inputTask.value.id, data);
         if (result.success) {
             uiStore.showToast({
                 type: 'success',
@@ -1307,26 +1135,24 @@ onMounted(async () => {
                         <!-- Use full-featured TaskCard component -->
                         <div
                             v-for="task in groupedTasks[column.id]"
-                            :key="task.projectSequence"
+                            :key="task.id"
                             draggable="true"
-                            @dragstart="handleDragStart(task.projectSequence)"
+                            @dragstart="handleDragStart(task.id)"
                             @dragend="handleDragEnd"
                             :class="[
                                 'transition-all',
-                                draggedTaskSequence === task.projectSequence
-                                    ? 'opacity-50 scale-95'
-                                    : '',
+                                draggedTask === task.id ? 'opacity-50 scale-95' : '',
                             ]"
                         >
                             <TaskCard
                                 :task="task"
-                                :subtasks="getSubtasks(task.projectSequence)"
+                                :subtasks="getSubtasks(task.id)"
                                 :show-assignee="true"
                                 :show-due-date="true"
                                 :show-priority="true"
                                 :show-tags="true"
-                                :is-dragging="draggedTaskSequence === task.projectSequence"
-                                :missing-provider="getCachedMissingProvider(task.projectSequence)"
+                                :is-dragging="draggedTask === task.id"
+                                :missing-provider="getCachedMissingProvider(task.id)"
                                 :hide-prompt-actions="true"
                                 @click="(t) => openTaskDetail(t)"
                                 @edit="handleEditTask"

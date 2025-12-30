@@ -56,7 +56,7 @@ function closeTaskDetail() {
 
 async function handleExecuteTask(task: Task) {
     try {
-        await taskStore.executeTask(task.projectId, task.projectSequence);
+        await taskStore.executeTask(task.id);
     } catch (error) {
         console.error('Failed to execute task:', error);
     }
@@ -64,9 +64,7 @@ async function handleExecuteTask(task: Task) {
 
 async function handleApproveTask(task: Task) {
     try {
-        await taskStore.changeStatus(task.projectId, task.projectSequence, 'in_progress', {
-            approvalResponse: 'Approved',
-        });
+        await taskStore.approveTask(task.id);
     } catch (error) {
         console.error('Failed to approve task:', error);
     }

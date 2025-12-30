@@ -11,7 +11,6 @@ import type {
     Condition,
     ExecutionState,
 } from './types';
-import { TaskKey, taskKeyToString } from '../../utils/taskKey';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig, AiResult } from '@core/types/ai';
 import { buildPlainTextResult } from '../ai/utils/aiResultUtils';
 import { RetryableError, TimeoutError, BudgetExceededError } from './types';
@@ -22,7 +21,7 @@ export class AdvancedTaskExecutor {
     private aiServiceManager: AIServiceManager;
     private executionStates: Map<string, ExecutionState> = new Map();
     private checkpoints: Map<string, Checkpoint[]> = new Map();
-    private activeTaskExecutions: Map<string, AbortController> = new Map(); // Changed key to string (TaskKey)
+    private activeTaskExecutions: Map<number, AbortController> = new Map();
 
     constructor() {
         this.aiServiceManager = new AIServiceManager();
@@ -61,14 +60,10 @@ export class AdvancedTaskExecutor {
     ): Promise<TaskResult> {
         const startTime = new Date();
         const { onLog } = options;
-        const taskKeyString = taskKeyToString({
-            projectId: task.projectId,
-            projectSequence: task.projectSequence,
-        });
 
         // Create AbortController for this task
         const abortController = new AbortController();
-        this.activeTaskExecutions.set(taskKeyString, abortController);
+        this.activeTaskExecutions.set(task.id, abortController);
 
         try {
             // If external signal is provided, link it
@@ -84,8 +79,7 @@ export class AdvancedTaskExecutor {
                     'info',
                     `[AdvancedTaskExecutor] Starting execution for task #${task.projectSequence}: ${task.title}`,
                     {
-                        projectId: task.projectId,
-                        projectSequence: task.projectSequence,
+                        taskId: task.id,
                         contextKeys: Object.keys(context),
                     }
                 );
@@ -97,8 +91,7 @@ export class AdvancedTaskExecutor {
                     `Task #${task.projectSequence} is subdivided and cannot be executed directly. Skipping...`
                 );
                 return {
-                    taskKey: { projectId: task.projectId, projectSequence: task.projectSequence },
-                    projectSequence: task.projectSequence,
+                    taskId: task.id,
                     status: 'skipped',
                     output: {
                         message: 'Task is subdivided into subtasks and cannot be executed directly',
@@ -133,8 +126,7 @@ export class AdvancedTaskExecutor {
                     const timeout = options.timeout || 300000; // 기본 5분
                     if (onLog) {
                         onLog('debug', `[AdvancedTaskExecutor] Delegating to AIServiceManager`, {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
+                            taskId: task.id,
                             provider: context.metadata?.provider,
                             model: context.metadata?.model,
                         });
@@ -163,16 +155,10 @@ export class AdvancedTaskExecutor {
                             provider: aiResult.provider,
                             model: aiResult.model,
                         });
-                    const attachments = this.buildAttachmentsFromAiResult(
-                        taskKeyString,
-                        finalAiResult
-                    ); // Need to check signature of buildAttachmentsFromAiResult
+                    const attachments = this.buildAttachmentsFromAiResult(task.id, finalAiResult);
 
                     return {
-                        taskKey: {
-                            projectId: task.projectId,
-                            projectSequence: task.projectSequence,
-                        },
+                        taskId: task.id,
                         projectSequence: task.projectSequence,
                         status: 'success',
                         output: {
@@ -239,7 +225,7 @@ export class AdvancedTaskExecutor {
             // 모든 재시도 실패
             const endTime = new Date();
             return {
-                taskKey: { projectId: task.projectId, projectSequence: task.projectSequence },
+                taskId: task.id,
                 projectSequence: task.projectSequence,
                 status: 'failure',
                 output: null,
@@ -251,7 +237,7 @@ export class AdvancedTaskExecutor {
                 metadata: {},
             };
         } finally {
-            this.activeTaskExecutions.delete(taskKeyString);
+            this.activeTaskExecutions.delete(task.id);
         }
     }
 
@@ -267,19 +253,7 @@ export class AdvancedTaskExecutor {
         return Promise.race([
             this.executeTaskLogic(task, context, options),
             new Promise((_, reject) =>
-                setTimeout(
-                    () =>
-                        reject(
-                            new TimeoutError(
-                                {
-                                    projectId: task.projectId,
-                                    projectSequence: task.projectSequence,
-                                },
-                                timeout
-                            )
-                        ),
-                    timeout
-                )
+                setTimeout(() => reject(new TimeoutError(task.id, timeout)), timeout)
             ),
         ]);
     }
@@ -370,8 +344,7 @@ export class AdvancedTaskExecutor {
                 // Verbose logging removed - only start/completion summaries logged
                 if (progress.phase === 'completed') {
                     onLog?.('info', `[AdvancedTaskExecutor] Task execution completed`, {
-                        projectId: task.projectId,
-                        projectSequence: task.projectSequence,
+                        taskId: task.id,
                         provider: progress.provider,
                         model: progress.model,
                         tokensGenerated: progress.tokensGenerated,
@@ -429,10 +402,10 @@ export class AdvancedTaskExecutor {
         try {
             // AI 서비스 매니저를 통해 리뷰 실행
             const context: ExecutionContext = {
-                workflowId: `review-${task.projectId}-${task.projectSequence}`,
-                taskKey: { projectId: task.projectId, projectSequence: task.projectSequence },
-                userId: 1, // 시스템 사용자
+                workflowId: `review-${task.id}`,
+                taskId: task.id,
                 projectId: task.projectId,
+                userId: 1, // 시스템 사용자
                 variables: {},
                 previousResults: [],
                 metadata: {
@@ -558,14 +531,14 @@ export class AdvancedTaskExecutor {
                 // 결과 처리
                 for (const result of stageResults) {
                     if (result.status === 'success') {
-                        state.completedTasks.add(taskKeyToString(result.taskKey));
+                        state.completedTasks.add(result.taskId);
                         if (result.cost) totalCost += result.cost;
                         if (result.tokens) totalTokens += result.tokens;
 
                         // 컨텍스트에 결과 추가
                         (state.context.previousResults ??= []).push(result);
                     } else {
-                        state.failedTasks.add(taskKeyToString(result.taskKey));
+                        state.failedTasks.add(result.taskId);
                     }
                 }
 
@@ -670,7 +643,7 @@ export class AdvancedTaskExecutor {
      * Task 재시도 (사용자 피드백 포함)
      */
     async retryTask(
-        _taskKey: TaskKey,
+        _taskId: number,
         userFeedback: string,
         retryStrategy: RetryStrategy,
         task: Task,
@@ -727,16 +700,12 @@ export class AdvancedTaskExecutor {
     /**
      * 특정 태스크 실행 취소
      */
-    /**
-     * 특정 태스크 실행 취소
-     */
-    async cancelTask(taskKey: TaskKey): Promise<boolean> {
-        const keyStr = taskKeyToString(taskKey);
-        const controller = this.activeTaskExecutions.get(keyStr);
+    async cancelTask(taskId: number): Promise<boolean> {
+        const controller = this.activeTaskExecutions.get(taskId);
         if (controller) {
             controller.abort();
-            this.activeTaskExecutions.delete(keyStr);
-            console.log(`[AdvancedTaskExecutor] Cancelled task ${keyStr}`);
+            this.activeTaskExecutions.delete(taskId);
+            console.log(`[AdvancedTaskExecutor] Cancelled task ${taskId}`);
             return true;
         }
         return false;
@@ -749,7 +718,7 @@ export class AdvancedTaskExecutor {
         switch (condition.type) {
             case 'task_status': {
                 const task = context.previousResults?.find(
-                    (r) => r.projectSequence === Number(condition.field) // Assuming field refers to projectSequence
+                    (r) => r.taskId === Number(condition.field)
                 );
                 if (!task) return false;
                 return this.evaluateOperator(task.status, condition.operator, condition.value);
@@ -810,18 +779,14 @@ export class AdvancedTaskExecutor {
     /**
      * 실행 컨텍스트 빌드
      */
-    /**
-     * 실행 컨텍스트 빌드
-     */
     buildExecutionContext(task: Task, previousResults: TaskResult[]): ExecutionContext {
         return {
             workflowId: `wf-${Date.now()}`,
-            taskKey: { projectId: task.projectId, projectSequence: task.projectSequence },
+            taskId: task.id,
             userId: task.assigneeId || 1,
             projectId: task.projectId,
             variables: {
-                projectId: task.projectId,
-                projectSequence: task.projectSequence, // task_id 대체
+                task_id: task.id,
                 task_title: task.title,
                 task_priority: task.priority,
             },

@@ -9,41 +9,9 @@ import { db, schema } from '../electron/main/database/client';
 import { eq } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import Database from 'better-sqlite3';
 
 async function seed() {
     console.log('🌱 Seeding database...');
-
-    // First, run migrations to ensure schema exists
-    const dbDir = path.join(process.cwd(), '.dev-data');
-    const dbPath = path.join(dbDir, 'workflow-manager.db');
-
-    try {
-        console.log('Checking if schema needs to be created...');
-        const sqlite = new Database(dbPath);
-
-        // Check if users table exists
-        const tables = sqlite
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-            .all();
-
-        if (tables.length === 0) {
-            console.log('Schema not found, running migrations...');
-            const drizzleDb = require('drizzle-orm/better-sqlite3').drizzle(sqlite);
-            const migrationsFolder = path.join(process.cwd(), 'electron/main/database/migrations');
-            migrate(drizzleDb, { migrationsFolder });
-            console.log('✅ Migrations completed');
-        } else {
-            console.log('Schema already exists');
-        }
-
-        // Close the temporary connection
-        sqlite.close();
-    } catch (migrationError) {
-        console.error('Migration check failed:', migrationError);
-        // Continue anyway, db connection from client might work
-    }
 
     try {
         // Create demo user

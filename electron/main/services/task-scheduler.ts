@@ -13,14 +13,14 @@ import { BrowserWindow } from 'electron';
 import { GlobalExecutionService } from './GlobalExecutionService';
 
 interface ScheduledTask {
-    sequence: number;
+    taskId: number;
     projectId: number;
     cronJob: cron.ScheduledTask;
     config: TaskTriggerConfig;
 }
 
 class TaskScheduler {
-    private scheduledTasks: Map<string, ScheduledTask> = new Map();
+    private scheduledTasks: Map<number, ScheduledTask> = new Map();
     private mainWindow: BrowserWindow | null = null;
     private isInitialized = false;
 
@@ -90,16 +90,12 @@ class TaskScheduler {
      */
     registerTask(task: Task) {
         if (!task.triggerConfig?.scheduledAt) {
-            console.warn(
-                '[TaskScheduler] Task',
-                `${task.projectId}:${task.projectSequence}`,
-                'has no scheduledAt config'
-            );
+            console.warn('[TaskScheduler] Task', task.id, 'has no scheduledAt config');
             return;
         }
 
         // Unregister existing schedule if any
-        this.unregisterTask(task.projectId, task.projectSequence);
+        this.unregisterTask(task.id);
 
         const { type, datetime, cron: cronExpr, timezone } = task.triggerConfig.scheduledAt;
 
@@ -114,7 +110,7 @@ class TaskScheduler {
                 if (scheduledDate <= now) {
                     console.log(
                         '[TaskScheduler] Task',
-                        `${task.projectId}:${task.projectSequence}`,
+                        task.id,
                         'scheduled time is in the past, skipping'
                     );
                     return;
@@ -125,8 +121,8 @@ class TaskScheduler {
 
                 // Use setTimeout for one-time execution
                 const timeoutId = setTimeout(() => {
-                    this.executeTask(task.projectId, task.projectSequence);
-                    this.unregisterTask(task.projectId, task.projectSequence);
+                    this.executeTask(task.id);
+                    this.unregisterTask(task.id);
                 }, delay);
 
                 // Wrap timeout in a cron-like interface for consistency
@@ -137,7 +133,7 @@ class TaskScheduler {
 
                 console.log(
                     '[TaskScheduler] Registered one-time task',
-                    `${task.projectId}:${task.projectSequence}`,
+                    task.id,
                     'for',
                     scheduledDate.toISOString()
                 );
@@ -146,17 +142,14 @@ class TaskScheduler {
                 if (!cron.validate(cronExpr)) {
                     console.error(
                         '[TaskScheduler] Invalid cron expression for task',
-                        `${task.projectId}:${task.projectSequence}`,
+                        task.id,
                         ':',
                         cronExpr
                     );
                     return;
                 }
 
-                console.log(
-                    '[TaskScheduler] Creating recurring schedule for task',
-                    `${task.projectId}:${task.projectSequence}`
-                );
+                console.log('[TaskScheduler] Creating recurring schedule for task', task.id);
                 console.log('[TaskScheduler] Cron expression:', cronExpr);
                 console.log('[TaskScheduler] Timezone:', timezone || 'Asia/Seoul');
 
@@ -165,11 +158,11 @@ class TaskScheduler {
                     () => {
                         console.log(
                             '[TaskScheduler] CRON TRIGGERED for task',
-                            `${task.projectId}:${task.projectSequence}`,
+                            task.id,
                             'at',
                             new Date().toISOString()
                         );
-                        this.executeTask(task.projectId, task.projectSequence);
+                        this.executeTask(task.id);
                     },
                     {
                         timezone: timezone || 'Asia/Seoul',
@@ -179,48 +172,38 @@ class TaskScheduler {
                 cronJob.start();
                 console.log(
                     '[TaskScheduler] Registered recurring task',
-                    `${task.projectId}:${task.projectSequence}`,
+                    task.id,
                     'with cron:',
                     cronExpr
                 );
             } else {
-                console.error(
-                    '[TaskScheduler] Invalid schedule type for task',
-                    `${task.projectId}:${task.projectSequence}`
-                );
+                console.error('[TaskScheduler] Invalid schedule type for task', task.id);
                 return;
             }
 
-            const key = `${task.projectId}:${task.projectSequence}`;
-            this.scheduledTasks.set(key, {
-                sequence: task.projectSequence,
+            this.scheduledTasks.set(task.id, {
+                taskId: task.id,
                 projectId: task.projectId,
                 cronJob,
                 config: task.triggerConfig,
             });
         } catch (error) {
-            console.error(
-                '[TaskScheduler] Failed to register task',
-                `${task.projectId}:${task.projectSequence}`,
-                ':',
-                error
-            );
+            console.error('[TaskScheduler] Failed to register task', task.id, ':', error);
         }
     }
 
     /**
      * Unregister a task from scheduled execution
      */
-    unregisterTask(projectId: number, sequence: number) {
-        const key = `${projectId}:${sequence}`;
-        const scheduled = this.scheduledTasks.get(key);
+    unregisterTask(taskId: number) {
+        const scheduled = this.scheduledTasks.get(taskId);
         if (scheduled) {
             try {
                 scheduled.cronJob.stop();
-                this.scheduledTasks.delete(key);
-                console.log('[TaskScheduler] Unregistered task', key);
+                this.scheduledTasks.delete(taskId);
+                console.log('[TaskScheduler] Unregistered task', taskId);
             } catch (error) {
-                console.error('[TaskScheduler] Failed to unregister task', key, ':', error);
+                console.error('[TaskScheduler] Failed to unregister task', taskId, ':', error);
             }
         }
     }
@@ -232,40 +215,34 @@ class TaskScheduler {
         if (task.triggerConfig?.scheduledAt) {
             this.registerTask(task);
         } else {
-            this.unregisterTask(task.projectId, task.projectSequence);
+            this.unregisterTask(task.id);
         }
     }
 
     /**
      * Execute a task by sending IPC event to renderer
      */
-    private executeTask(projectId: number, sequence: number) {
+    private executeTask(taskId: number) {
         if (!this.mainWindow) {
-            console.error(
-                '[TaskScheduler] Cannot execute task',
-                `${projectId}:${sequence}`,
-                '- no main window'
-            );
+            console.error('[TaskScheduler] Cannot execute task', taskId, '- no main window');
             return;
         }
 
-        const key = `${projectId}:${sequence}`;
-        const scheduled = this.scheduledTasks.get(key);
+        const scheduled = this.scheduledTasks.get(taskId);
         if (scheduled) {
             // Check if Project is Paused
             if (GlobalExecutionService.getInstance().isProjectPaused(scheduled.projectId)) {
                 console.log(
-                    `[TaskScheduler] Execution skipped for task ${key}: Project ${scheduled.projectId} is PAUSED`
+                    `[TaskScheduler] Execution skipped for task ${taskId}: Project ${scheduled.projectId} is PAUSED`
                 );
                 return;
             }
         }
 
-        console.log('[TaskScheduler] Triggering auto-execution for task', key);
+        console.log('[TaskScheduler] Triggering auto-execution for task', taskId);
 
         // Send event to renderer to trigger execution
-        // We now send projectId and sequence
-        this.mainWindow.webContents.send('task:triggerAutoExecution', { projectId, sequence });
+        this.mainWindow.webContents.send('task:triggerAutoExecution', taskId);
     }
 
     /**
@@ -274,11 +251,11 @@ class TaskScheduler {
     shutdown() {
         console.log('[TaskScheduler] Shutting down scheduler...');
 
-        for (const [key, scheduled] of this.scheduledTasks.entries()) {
+        for (const [taskId, scheduled] of this.scheduledTasks.entries()) {
             try {
                 scheduled.cronJob.stop();
             } catch (error) {
-                console.error('[TaskScheduler] Error stopping task', key, ':', error);
+                console.error('[TaskScheduler] Error stopping task', taskId, ':', error);
             }
         }
 

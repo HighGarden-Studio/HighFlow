@@ -61,7 +61,7 @@ const showDetailPanel = ref(false);
 const selectedTaskId = ref<number | null>(null);
 const selectedTask = computed(() => {
     if (!selectedTaskId.value) return null;
-    return taskStore.tasks.find((t) => t.projectSequence === selectedTaskId.value) || null;
+    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
 });
 const showProjectInfoModal = ref(false);
 const showCreateModal = ref(false);
@@ -82,7 +82,7 @@ const showExecutionModal = ref(false);
 const executionTaskId = ref<number | null>(null);
 const executionTask = computed(() => {
     if (!executionTaskId.value) return null;
-    return taskStore.tasks.find((t) => t.projectSequence === executionTaskId.value) || null;
+    return taskStore.tasks.find((t) => t.id === executionTaskId.value) || null;
 });
 
 // Input Modal State
@@ -94,13 +94,12 @@ const showResultPreview = ref(false);
 const previewTaskId = ref<number | null>(null);
 const resultPreviewTask = computed(() => {
     if (!previewTaskId.value) return null;
-    const task = taskStore.tasks.find((t) => t.projectSequence === previewTaskId.value);
+    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
     if (!task) return null;
 
     // Augment with execution progress if available
-    const taskKey = `${task.projectId}-${task.projectSequence}`;
-    const progress = taskStore.executionProgress.get(taskKey);
-    const reviewProgressEntry = taskStore.reviewProgress.get(taskKey);
+    const progress = taskStore.executionProgress.get(task.id);
+    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
 
     return {
         ...task,
@@ -200,10 +199,10 @@ function buildGraph(shouldFit = false) {
     tasks.value.forEach((task) => {
         // Generate unique key that changes when critical task properties change
         // This forces TaskCard remount only when needed
-        const taskKey = `${task.projectId}-${task.projectSequence}-${task.status}-${task.inputSubStatus || 'none'}`;
+        const taskKey = `${task.id}-${task.status}-${task.inputSubStatus || 'none'}`;
 
         taskNodes.push({
-            id: String(task.projectSequence),
+            id: String(task.id),
             type: 'taskCard',
             position: { x: 0, y: 0 }, // Will be set by layout
             data: { task, taskKey },
@@ -216,12 +215,8 @@ function buildGraph(shouldFit = false) {
         const dependencies = new Set<number>();
 
         // 1. Trigger Config IDs
-        if (task.triggerConfig?.dependsOn?.taskKeys) {
-            task.triggerConfig.dependsOn.taskKeys.forEach((key) => {
-                if (key.projectId === projectId.value) {
-                    dependencies.add(key.projectSequence);
-                }
-            });
+        if (task.triggerConfig?.dependsOn?.taskIds) {
+            task.triggerConfig.dependsOn.taskIds.forEach((id) => dependencies.add(id));
         }
 
         // 2. Explicit Dependencies (Task model field)
@@ -231,11 +226,7 @@ function buildGraph(shouldFit = false) {
 
         // 3. Data Dependencies (passResultsFrom)
         if (task.triggerConfig?.dependsOn?.passResultsFrom) {
-            task.triggerConfig.dependsOn.passResultsFrom.forEach((key) => {
-                if (key.projectId === projectId.value) {
-                    dependencies.add(key.projectSequence);
-                }
-            });
+            task.triggerConfig.dependsOn.passResultsFrom.forEach((id) => dependencies.add(id));
         }
 
         // 4. Parse IDs (or Sequences) from expression
@@ -253,14 +244,12 @@ function buildGraph(shouldFit = false) {
                 // Try to find by projectSequence first (User mostly types sequences)
                 const taskBySeq = tasks.value.find((t) => t.projectSequence === val);
                 if (taskBySeq) {
-                    dependencies.add(taskBySeq.projectSequence);
+                    dependencies.add(taskBySeq.id);
                 } else {
-                    // Fallback: Check if it's a raw Task ID (deprecated logic but keeping for safety if ID usage remains elsewhere?)
-                    // Actually, if val is number, it's likely sequence now in user expression.
-                    // Let's assume sequence.
-                    const taskBySeqFallback = tasks.value.find((t) => t.projectSequence === val);
-                    if (taskBySeqFallback) {
-                        dependencies.add(taskBySeqFallback.projectSequence);
+                    // Fallback: Check if it's a raw Task ID
+                    const taskById = tasks.value.find((t) => t.id === val);
+                    if (taskById) {
+                        dependencies.add(taskById.id);
                     }
                 }
             });
@@ -268,12 +257,11 @@ function buildGraph(shouldFit = false) {
 
         dependencies.forEach((depId: number) => {
             // Only create edge if dependency task exists
-            const sourceTask = tasks.value.find((t) => t.projectSequence === depId);
+            const sourceTask = tasks.value.find((t) => t.id === depId);
             if (sourceTask) {
                 // Get output type label from SOURCE task (dependency)
                 // Use expectedOutputFormat (AI-generated) if available, fallback to outputType
-                const outputFormat =
-                    sourceTask.expectedOutputFormat || (sourceTask as any).outputType;
+                const outputFormat = sourceTask.expectedOutputFormat || sourceTask.outputType;
                 const formatInfo = getOutputFormatInfo(outputFormat);
 
                 // Verbose logging disabled to reduce console noise
@@ -318,7 +306,7 @@ function buildGraph(shouldFit = false) {
                 taskEdges.push({
                     id: `e${depId}-${task.id}`,
                     source: String(depId),
-                    target: String(task.projectSequence),
+                    target: String(task.id),
                     type: 'custom', // Use custom edge with delete button
                     animated: task.status === 'in_progress' && isActivePath, // Only animate active paths
                     style: {
@@ -360,12 +348,8 @@ function buildGraph(shouldFit = false) {
 
     // Override positions for tasks that have saved positions in metadata
     const finalNodes = layoutedNodes.map((node) => {
-        const task = tasks.value.find((t) => String(t.projectSequence) === node.id);
-        if (
-            task?.metadata &&
-            typeof task.metadata === 'object' &&
-            'dagPosition' in (task.metadata as any)
-        ) {
+        const task = tasks.value.find((t) => String(t.id) === node.id);
+        if (task?.metadata && typeof task.metadata === 'object' && 'dagPosition' in task.metadata) {
             const savedPosition = (task.metadata as any).dagPosition;
             if (
                 savedPosition &&
@@ -374,7 +358,10 @@ function buildGraph(shouldFit = false) {
             ) {
                 return {
                     ...node,
-                    position: savedPosition,
+                    position: {
+                        x: savedPosition.x,
+                        y: savedPosition.y,
+                    },
                 };
             }
         }
@@ -428,7 +415,7 @@ function updateNodesDataSmooth() {
 
     // Update each node's data using VueFlow's API
     taskStore.tasks.forEach((task) => {
-        const nodeId = String(task.projectSequence);
+        const nodeId = String(task.id);
         updateNodeData(nodeId, { task: { ...task } });
     });
 
@@ -473,6 +460,7 @@ function getOutputFormatInfo(
         'c',
         'cpp',
         'c++',
+        'c#',
         'csharp',
         'rust',
         'ruby',
@@ -656,7 +644,7 @@ function getSegmentStats(
 
     for (const idStr of matches) {
         const id = parseInt(idStr, 10);
-        const task = allTasks.find((t) => t.projectSequence === id);
+        const task = allTasks.find((t) => t.id === id);
 
         // If any task in an AND group is NOT done, the group is False.
         // (Ignoring !NOT logic for visualization simplicity for now)
@@ -675,8 +663,8 @@ function getSegmentStats(
 }
 
 function handleNodeClick(task: Task) {
-    console.log('🖱️ [DAGView] handleNodeClick called', task.projectSequence);
-    selectedTaskId.value = task.projectSequence;
+    console.log('🖱️ [DAGView] handleNodeClick called', task.id);
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
@@ -699,9 +687,8 @@ onConnect(async (params) => {
     // }
 
     // Update task dependencies
-    const sourceTask = tasks.value.find((t) => t.projectSequence === sourceId);
-    const targetTask = tasks.value.find((t) => t.projectSequence === targetId);
-    if (!sourceTask || !targetTask) return;
+    const targetTask = tasks.value.find((t) => t.id === targetId);
+    if (!targetTask) return;
 
     // SAFEGUARD: Block DnD if expression logic is used
     if (targetTask.triggerConfig?.dependsOn?.expression) {
@@ -713,15 +700,8 @@ onConnect(async (params) => {
         return;
     }
 
-    const existingDeps = targetTask.triggerConfig?.dependsOn?.taskKeys || [];
-    if (
-        existingDeps.some(
-            (k) =>
-                k.projectId === sourceTask.projectId &&
-                k.projectSequence === sourceTask.projectSequence
-        )
-    ) {
-        // ✅ Check by projectSequence
+    const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
+    if (existingDeps.includes(sourceId)) {
         console.warn('Dependency already exists');
         return;
     }
@@ -730,15 +710,11 @@ onConnect(async (params) => {
         ...targetTask.triggerConfig,
         dependsOn: {
             ...targetTask.triggerConfig?.dependsOn,
-            taskKeys: [
-                ...existingDeps,
-                { projectId: sourceTask.projectId, projectSequence: sourceTask.projectSequence },
-            ],
-            operator: targetTask.triggerConfig?.dependsOn?.operator || 'all',
+            taskIds: [...existingDeps, sourceId],
         },
     };
 
-    await taskStore.updateTask(targetTask.projectId, targetId, {
+    await taskStore.updateTask(targetId, {
         triggerConfig: updatedTriggerConfig,
     });
 
@@ -754,7 +730,7 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
         const sourceId = Number(edge.source);
         const targetId = Number(edge.target);
 
-        const targetTask = tasks.value.find((t) => t.projectSequence === targetId);
+        const targetTask = tasks.value.find((t) => t.id === targetId);
         if (!targetTask) continue;
 
         // SAFEGUARD: Block removal if expression logic is used
@@ -767,26 +743,18 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
             continue; // Skip this edge
         }
 
-        const existingDeps = targetTask.triggerConfig?.dependsOn?.taskKeys || [];
-        const sourceTask = tasks.value.find((t) => t.projectSequence === sourceId);
-        const updatedDeps = existingDeps.filter(
-            (key) =>
-                !(
-                    key.projectId === sourceTask?.projectId &&
-                    key.projectSequence === sourceTask?.projectSequence
-                )
-        );
+        const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
+        const updatedDeps = existingDeps.filter((depId: number) => depId !== sourceId);
 
         const updatedTriggerConfig = {
             ...targetTask.triggerConfig,
             dependsOn: {
                 ...targetTask.triggerConfig?.dependsOn,
-                taskKeys: updatedDeps,
-                operator: targetTask.triggerConfig?.dependsOn?.operator || 'all',
+                taskIds: updatedDeps,
             },
         };
 
-        await taskStore.updateTask(targetTask.projectId, targetId, {
+        await taskStore.updateTask(targetId, {
             triggerConfig: updatedTriggerConfig,
         });
     }
@@ -808,8 +776,8 @@ function wouldCreateCircularDependency(sourceId: number, targetId: number): bool
         if (visited.has(current)) continue;
 
         visited.add(current);
-        const task = tasks.value.find((t) => t.projectSequence === current);
-        const deps = task?.triggerConfig?.dependsOn?.taskKeys?.map((k) => k.projectSequence) || [];
+        const task = tasks.value.find((t) => t.id === current);
+        const deps = task?.triggerConfig?.dependsOn?.taskIds || [];
         queue.push(...deps);
     }
 
@@ -842,7 +810,7 @@ function openCreateModal(status: TaskStatus = 'todo') {
  * Handle task execution result
  */
 async function handleTaskExecute(task: Task) {
-    const result = await taskStore.executeTask(task.projectId, task.projectSequence);
+    const result = await taskStore.executeTask(task.id);
     if (!result.success) {
         console.error('Failed to execute task:', result.error);
         if (result.validationError) {
@@ -877,21 +845,12 @@ function closeEditModal() {
 
 async function handleEditModalSave(updates: Partial<Task>) {
     if (!editingTask.value) return;
-    await taskStore.updateTask(
-        editingTask.value.projectId,
-        editingTask.value.projectSequence,
-        updates
-    );
+    await taskStore.updateTask(editingTask.value.id, updates);
     closeEditModal();
 }
 
 async function handleEditModalDelete(taskId: number) {
-    // taskId here is sequence because we replaced id with sequence in loop?
-    // Wait, editingTask.value.id might still be global ID if we didn't change what is passed to modal.
-    // However, store expects projectId + sequence.
-    if (editingTask.value) {
-        await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
-    }
+    await taskStore.deleteTask(taskId);
     closeEditModal();
 }
 
@@ -930,14 +889,11 @@ async function confirmSubdivision() {
                 priority: subtask.priority || 'medium',
                 tags: subtask.tags,
                 estimatedMinutes: subtask.estimatedMinutes || undefined,
-                parentTaskKey: {
-                    projectId: parentTask.projectId,
-                    projectSequence: parentTask.projectSequence,
-                },
+                parentTaskId: parentTask.id,
             });
         }
 
-        await taskStore.updateTask(parentTask.projectId, parentTask.projectSequence, {
+        await taskStore.updateTask(parentTask.id, {
             isSubdivided: true,
         });
 
@@ -961,7 +917,7 @@ function closeSubdivisionModal() {
  * Handle Task Pause/Resume/Stop
  */
 async function handlePause(task: Task) {
-    const result = await taskStore.pauseTask(task.projectId, task.projectSequence);
+    const result = await taskStore.pauseTask(task.id);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to pause task: ${result.error}`,
@@ -971,7 +927,7 @@ async function handlePause(task: Task) {
 }
 
 async function handleResume(task: Task) {
-    const result = await taskStore.resumeTask(task.projectId, task.projectSequence);
+    const result = await taskStore.resumeTask(task.id);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to resume task: ${result.error}`,
@@ -981,7 +937,7 @@ async function handleResume(task: Task) {
 }
 
 async function handleStop(task: Task) {
-    const result = await taskStore.stopTask(task.projectId, task.projectSequence);
+    const result = await taskStore.stopTask(task.id);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to stop task: ${result.error}`,
@@ -991,15 +947,15 @@ async function handleStop(task: Task) {
 }
 
 async function handleTaskRetry(task: Task) {
-    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
-    await taskStore.executeTask(task.projectId, task.projectSequence);
+    await taskStore.updateTask(task.id, { status: 'todo' });
+    await taskStore.executeTask(task.id);
 }
 
 /**
  * Handle Task Approval/Rejection (from Detail Panel or Card)
  */
 async function handleTaskApprove(task: Task) {
-    const result = await taskStore.completeReview(task.projectId, task.projectSequence);
+    const result = await taskStore.completeReview(task.id);
     if (!result.success) {
         uiStore.showToast({
             type: 'error',
@@ -1015,7 +971,7 @@ async function handleTaskApprove(task: Task) {
 }
 
 async function handleTaskReject(task: Task, feedback: string) {
-    await taskStore.updateTask(task.projectId, task.projectSequence, {
+    await taskStore.updateTask(task.id, {
         status: 'todo',
         description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
     });
@@ -1024,25 +980,25 @@ async function handleTaskReject(task: Task, feedback: string) {
 
 async function handleTaskSave(task: Task) {
     // This is called from Detail Panel for saving edits
-    await taskStore.updateTask(task.projectId, task.projectSequence, task);
+    await taskStore.updateTask(task.id, task);
     // Detail panel stays open, but graph might need update if structural generic props changed
     // updateNodesDataSmooth(); // Optional
 }
 
 function handlePreviewResult(task: Task) {
-    previewTaskId.value = task.projectSequence;
+    previewTaskId.value = task.id;
     showResultPreview.value = true;
 }
 
 function handlePreviewStream(task: Task) {
-    console.log('🎥 [DAGView] handlePreviewStream called', task.projectSequence);
-    executionTaskId.value = task.projectSequence;
+    console.log('🎥 [DAGView] handlePreviewStream called', task.id);
+    executionTaskId.value = task.id;
     showExecutionModal.value = true;
     console.log('🎥 [DAGView] Opening execution modal for task:', executionTaskId.value);
 }
 
 function handleViewHistory(task: Task) {
-    selectedTaskId.value = task.projectSequence;
+    selectedTaskId.value = task.id;
     showDetailPanel.value = true;
 }
 
@@ -1056,11 +1012,7 @@ async function handleInputSubmit(data: any) {
     if (!inputTask.value) return;
 
     try {
-        const result = await taskStore.submitInput(
-            inputTask.value.projectId,
-            inputTask.value.projectSequence,
-            data
-        );
+        const result = await taskStore.submitInput(inputTask.value.id, data);
         if (result.success) {
             uiStore.showToast({
                 type: 'success',
@@ -1107,8 +1059,9 @@ async function handleTaskDelete(task: Task) {
     }
 
     try {
-        await taskStore.deleteTask(task.projectId, task.projectSequence);
-        console.log('Task deleted successfully:', task.projectSequence);
+        const api = (window as any).electron;
+        await api.tasks.deleteTask(task.id);
+        console.log('Task deleted successfully:', task.id);
 
         // Rebuild graph to remove deleted task node
         await nextTick();
@@ -1123,11 +1076,8 @@ async function handleTaskDelete(task: Task) {
 const structureKey = computed(() => {
     return tasks.value
         .map((t) => {
-            const deps = (t.triggerConfig?.dependsOn?.taskKeys?.map((k) => k.projectSequence) || [])
-                .slice()
-                .sort()
-                .join(',');
-            return `${t.projectSequence}:${deps}`;
+            const deps = (t.triggerConfig?.dependsOn?.taskIds || []).slice().sort().join(',');
+            return `${t.id}:${deps}`;
         })
         .sort()
         .join('|');
@@ -1160,9 +1110,8 @@ watch(
 async function handleOperatorDrop(taskId: number, operatorId: number) {
     console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
     try {
-        const targetTask = taskStore.tasks.find((t) => t.projectSequence === taskId); // taskId is sequence
-        if (!targetTask) return;
-        const taskTitle = targetTask.title || `Task ${taskId}`;
+        const task = taskStore.tasks.find((t) => t.id === taskId);
+        const taskTitle = task?.title || `Task ${taskId}`;
 
         // Fetch operator name from API
         let operatorName = 'Operator';
@@ -1176,8 +1125,7 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
 
         // Use updateTaskWithHistory for undo/redo support
         await taskStore.updateTaskWithHistory(
-            targetTask.projectId,
-            targetTask.projectSequence,
+            taskId,
             { assignedOperatorId: operatorId },
             `Assign "${operatorName}" to "${taskTitle}"`
         );
@@ -1187,7 +1135,7 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
         await taskStore.fetchTasks(projectId.value);
 
         // Log the updated task
-        const updatedTask = taskStore.tasks.find((t) => t.projectSequence === taskId);
+        const updatedTask = taskStore.tasks.find((t) => t.id === taskId);
         console.log('🟢 Updated task from store:', updatedTask);
         console.log('🟢 Assigned Operator ID in task:', updatedTask?.assignedOperatorId);
 

@@ -64,7 +64,7 @@ const emit = defineEmits<{
     (e: 'connectionEnd', task: Task): void; // 연결 대상
     (e: 'connectionCancel'): void; // 연결 취소
     (e: 'connectProvider', providerId: string): void; // Provider 연동
-    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void; // Operator 할당
+    (e: 'operatorDrop', taskId: number, operatorId: number): void; // Operator 할당
     (e: 'provideInput', task: Task): void; // 입력 제공
     (e: 'approve', task: Task): void; // 승인
 }>();
@@ -160,7 +160,7 @@ const cardComponent = computed(() => {
                 (t: Task) => {
                     console.log(
                         '[TaskCard] Click event received for task:',
-                        t.projectSequence,
+                        t.id,
                         t.title,
                         t.taskType
                     );
@@ -186,9 +186,7 @@ const cardComponent = computed(() => {
             @connectionEnd="(t: Task) => emit('connectionEnd', t)"
             @connectionCancel="emit('connectionCancel')"
             @connectProvider="(id: string) => emit('connectProvider', id)"
-            @operatorDrop="
-                (pid: number, seq: number, oid: number) => emit('operatorDrop', pid, seq, oid)
-            "
+            @operatorDrop="(tid: number, oid: number) => emit('operatorDrop', tid, oid)"
             @provideInput="(t: Task) => emit('provideInput', t)"
             @approve="
                 (t: Task) => {

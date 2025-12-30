@@ -155,7 +155,10 @@ export const useProjectStore = defineStore('projects', () => {
     /**
      * Update an existing project
      */
-    async function updateProject(id: number, data: Partial<Project>): Promise<Project | null> {
+    async function updateProject(
+        id: number,
+        data: Partial<{ title: string; description: string; status: string; aiGuidelines: string }>
+    ): Promise<Project | null> {
         loading.value = true;
         error.value = null;
 

@@ -1,11 +1,10 @@
 import { taskRepository } from '../../database/repositories/task-repository';
-import { OutputTaskConfig, TaskKey } from '@core/types/database';
+import { OutputTaskConfig } from '@core/types/database';
 import { ConnectorRegistry } from './ConnectorRegistry';
 import { Task, projects } from '../../database/schema';
 import { db } from '../../database/client';
 import { eq } from 'drizzle-orm';
 import * as fs from 'fs/promises';
-import { TaskKey as DBTaskKey } from '../../database/helpers/task-key';
 
 import { OutputResult } from './OutputConnector';
 
@@ -19,14 +18,11 @@ export class OutputTaskRunner {
     /**
      * Execute an Output Task
      */
-    async execute(taskKey: TaskKey): Promise<OutputResult> {
-        const { projectId, projectSequence } = taskKey;
-        console.log(
-            `[OutputTaskRunner] Starting execution for task ${projectId}:${projectSequence}`
-        );
+    async execute(taskId: number): Promise<OutputResult> {
+        console.log(`[OutputTaskRunner] Starting execution for task ${taskId}`);
 
         // 1. Load Task
-        const task = await taskRepository.findByKey(projectId, projectSequence);
+        const task = await taskRepository.findById(taskId);
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -57,7 +53,7 @@ export class OutputTaskRunner {
         // 4. Aggregate Content
         let contentToOutput = '';
         try {
-            console.log(`[OutputTaskRunner] Aggregating content for task...`);
+            console.log(`[OutputTaskRunner] Aggregating content for task ${taskId}...`);
             contentToOutput = await this.aggregateContent(task, config);
             console.log(
                 `[OutputTaskRunner] Aggregation complete. Content length: ${contentToOutput.length}`
@@ -70,6 +66,11 @@ export class OutputTaskRunner {
         if (!contentToOutput) {
             console.error('[OutputTaskRunner] ERROR: Aggregated content is empty!');
             console.error(`[OutputTaskRunner] Config:`, JSON.stringify(config, null, 2));
+            console.error(`[OutputTaskRunner] Task dependencies:`, task.dependencies);
+            console.error(
+                `[OutputTaskRunner] Task triggerConfig:`,
+                JSON.stringify(task.triggerConfig, null, 2)
+            );
             return { success: false, error: 'Aggregated content is empty' };
         }
 
@@ -77,8 +78,7 @@ export class OutputTaskRunner {
         try {
             console.log(`[OutputTaskRunner] executing connector ${connector.id}`);
             const result = await connector.execute(config, contentToOutput, {
-                // Legacy ID support removed/ignored, passing 0 or sequence if needed
-                taskId: 0,
+                taskId: task.id,
                 projectId: task.projectId,
                 taskTitle: task.title,
                 projectName: project?.title || 'Unknown Project',
@@ -88,31 +88,37 @@ export class OutputTaskRunner {
 
             // 5. Save Result Metadata
             if (result.success) {
+                // For local files, store the path not the content
+                // This allows streaming and prevents DB bloat
                 const isLocalFile = config.destination === 'local_file';
 
-                await taskRepository.update(task.projectId, task.projectSequence, {
+                await taskRepository.update(task.id, {
                     executionResult: {
+                        // For local files, store metadata with file path
+                        // For other outputs (Slack, etc.), store the content
                         content: isLocalFile ? undefined : contentToOutput,
                         filePath: isLocalFile ? result.metadata?.path : undefined,
                         metadata: result.metadata,
                         provider: connector.id,
                         status: 'success',
-                    } as any, // Cast to avoid strict type issues with JSON
+                    },
+                    // For local files, store path in result for preview to read file
+                    // For other outputs, store the actual content
                     result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
                 });
 
                 console.log('[OutputTaskRunner] Task updated with result:', {
-                    key: `${task.projectId}:${task.projectSequence}`,
+                    taskId: task.id,
                     resultPath: isLocalFile ? result.metadata?.path : '[content]',
+                    filePathInExecutionResult: isLocalFile ? result.metadata?.path : undefined,
                 });
             } else {
-                await taskRepository.updateStatus(
-                    task.projectId,
-                    task.projectSequence,
-                    'in_progress'
-                );
+                await taskRepository.update(task.id, {
+                    status: 'in_progress', // Or fail?
+                    // Ideally we might want 'failed' status but 'todo' is safe fallback or 'in_progress' with error
+                });
             }
 
             return result;
@@ -127,28 +133,18 @@ export class OutputTaskRunner {
      */
     private async aggregateContent(task: Task, config: OutputTaskConfig): Promise<string> {
         // MVP: Only support 'concat' strategy or simple 'single' (implicitly concat)
-        // Check dependencies (Project Sequences)
+        // Check dependencies
         let dependencies: number[] = [];
 
-        // Use triggerConfig.dependsOn.taskIds (Sequences) if available
-        const taskTrigger =
-            typeof task.triggerConfig === 'string'
-                ? JSON.parse(task.triggerConfig)
-                : task.triggerConfig;
+        // Use triggerConfig.dependsOn.taskIds if available, otherwise explicit dependencies
+        const taskTrigger = task.triggerConfig as any;
         if (taskTrigger?.dependsOn?.taskIds) {
             dependencies = taskTrigger.dependsOn.taskIds;
         } else if (task.dependencies && Array.isArray(task.dependencies)) {
-            // Deprecated: task.dependencies was Global IDs.
-            // If data is migrated, this field should be empty or contain sequences?
-            // Migration plan says we map this to sequences.
-            // Assuming task.dependencies now holds SEQUENCES after migration?
-            // Actually, schema change said we kept it?
-            // Phase 3 migration updated tasks.dependencies to be array of sequences?
-            // Let's assume yes or rely on triggerConfig which is safer.
             dependencies = task.dependencies;
         }
 
-        // Deduplicate dependencies
+        // Deduplicate dependencies to prevent content duplication
         dependencies = [...new Set(dependencies)];
 
         if (dependencies.length === 0) {
@@ -158,70 +154,112 @@ export class OutputTaskRunner {
             return '';
         }
 
+        // Fetch previous results first if accumulate mode is enabled
         const inputs: string[] = [];
+
+        // 1. Include previous output task result (for accumulation)
         const isAppendMode =
             config.destination === 'local_file' && config.localFile && !config.localFile.overwrite;
 
-        // 1. Accumulate previous results
         if (config.localFile?.accumulateResults) {
             if (isAppendMode) {
-                // Skip
+                console.log(
+                    '[OutputTaskRunner] Append mode detected: Skipping aggregation of previous content to prevent duplication.'
+                );
             } else {
+                console.log(
+                    '[OutputTaskRunner] Accumulate mode enabled, reading previous results...'
+                );
                 const previousResult =
                     (task as any).result || (task.executionResult as any)?.content || '';
 
                 if (previousResult) {
+                    // If destination is local_file and result is a file path, read the file
                     if (config.destination === 'local_file' && typeof previousResult === 'string') {
                         try {
+                            // Check if it's a file path (not actual content)
                             if (previousResult.includes('/') || previousResult.includes('\\\\')) {
                                 const fileContent = await fs.readFile(previousResult, 'utf-8');
+                                console.log(
+                                    `[OutputTaskRunner] Read previous result from file: ${previousResult} (${fileContent.length} bytes)`
+                                );
                                 inputs.push(fileContent);
                             } else {
+                                // It's actual content, not a path
+                                console.log(
+                                    `[OutputTaskRunner] Using previous result as content (${previousResult.length} bytes)`
+                                );
                                 inputs.push(previousResult);
                             }
                         } catch (err) {
-                            if (previousResult.length > 0) inputs.push(previousResult);
+                            console.warn(
+                                '[OutputTaskRunner] Could not read previous result file:',
+                                err
+                            );
+                            // If file read fails, still try to use the raw value
+                            if (previousResult.length > 0) {
+                                inputs.push(previousResult);
+                            }
                         }
                     } else {
+                        // For non-file destinations, use content directly
+                        console.log(
+                            `[OutputTaskRunner] Using previous result content (${previousResult.length} bytes)`
+                        );
                         inputs.push(previousResult);
                     }
                 }
             }
         }
 
-        // 2. Fetch dependency tasks (by Sequence)
-        for (const seq of dependencies) {
-            const depTask = await taskRepository.findByKey(task.projectId, seq);
+        // 2. Fetch dependency tasks and add new results
+        console.log(`[OutputTaskRunner] Fetching ${dependencies.length} dependency task(s)...`);
+        for (const depId of dependencies) {
+            const depTask = await taskRepository.findById(depId);
             if (depTask) {
+                console.log(
+                    `[OutputTaskRunner] Dependency task ${depId}: status=${depTask.status}`
+                );
+                // Determine what content to use
+                // 1. Result field
+                // 2. ExecutionResult.content
+                // 3. Output field (future)
                 const content =
                     (depTask as any).result ||
                     (depTask.executionResult as any)?.content ||
-                    depTask.generatedPrompt ||
+                    depTask.generatedPrompt || // Fallback?
                     '';
+
+                console.log(
+                    `[OutputTaskRunner] Dependency ${depId} content length: ${content?.length || 0}`
+                );
                 if (content) {
                     inputs.push(content);
                 }
             }
         }
 
+        console.log(
+            `[OutputTaskRunner] Aggregated ${inputs.length} content items (accumulate: ${config.localFile?.accumulateResults || false})`
+        );
+
         // Aggregation Strategy
         let finalOutput = '';
         if (config.aggregation === 'concat' || config.aggregation === 'single') {
             finalOutput = inputs.join('\n\n---\n\n');
         } else if (config.aggregation === 'template') {
+            // Template with unified macro support
             if (config.templateConfig?.template) {
                 let rendered = config.templateConfig.template;
 
-                // For macros, we need all tasks for context
+                // Build macro context for template
                 const depTasks = await taskRepository.findByProject(task.projectId);
-
-                // Map dependencies to results
                 const dependencyResults = dependencies
-                    .map((seq) => {
-                        const depTask = depTasks.find((t) => t.projectSequence === seq);
+                    .map((depId) => {
+                        const depTask = depTasks.find((t) => t.id === depId);
                         return depTask
-                            ? ({
-                                  taskId: depTask.projectSequence, // Use sequence as "ID" for macros
+                            ? {
+                                  taskId: depTask.id,
                                   taskTitle: depTask.title,
                                   status:
                                       depTask.status === 'done'
@@ -230,28 +268,32 @@ export class OutputTaskRunner {
                                   output: (depTask as any).result || depTask.generatedPrompt || '',
                                   startTime: depTask.startedAt || new Date(),
                                   endTime: depTask.completedAt || new Date(),
+                                  duration: 0,
+                                  retries: 0,
                                   metadata: {},
-                              } as any) // Cast to Partial<TaskResult>
+                              }
                             : null;
                     })
                     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-                // Use PromptMacroService
-                // Fix import path to src
                 const { PromptMacroService } =
                     await import('../../../../src/services/workflow/PromptMacroService');
 
                 const macroContext = {
                     previousResults: dependencyResults,
-                    variables: { projectId: task.projectId },
+                    variables: {},
                 };
 
+                // Replace unified macros: {{prev}}, {{prev.1}}, {{task.23}}, etc.
                 rendered = PromptMacroService.replaceMacros(rendered, macroContext);
 
+                // Legacy support: {{inputN}} macros
                 inputs.forEach((input, idx) => {
                     rendered = rendered.replace(new RegExp(`{{input${idx + 1}}}`, 'g'), input);
                 });
 
+                // Legacy support: {{all_results}} is already handled by PromptMacroService
+                // But also support direct replacement for compatibility
                 if (rendered.includes('{{all_results}}')) {
                     rendered = rendered.replace(/\{\{all_results\}\}/g, inputs.join('\n\n'));
                 }
@@ -264,8 +306,17 @@ export class OutputTaskRunner {
             finalOutput = inputs.join('\n\n');
         }
 
+        // Add Timestamp Header if in Append Mode
         if (isAppendMode) {
-            const timestamp = new Date().toLocaleString('ko-KR');
+            const timestamp = new Date().toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            });
             finalOutput = `\n\n### [${timestamp}]\n\n${finalOutput}`;
         }
 

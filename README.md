@@ -163,100 +163,17 @@ See [TECH_STACK_RATIONALE.md](./TECH_STACK_RATIONALE.md) for detailed explanatio
 
 ## 🧪 Testing
 
-**Test Coverage: 98.8% (81/82 tests passing) ✅**
-
-### Quick Start
-
 ```bash
-# Run all tests
+# Run unit tests
 pnpm test
 
-# Run critical tests only
-pnpm test tests/unit/{core-features,task-dependencies,macro-system}.spec.ts
+# Run unit tests with UI
+pnpm test --ui
 
-# Watch mode
-pnpm test:watch
-
-# Coverage report
-pnpm test:coverage
-
-# E2E tests
+# Run E2E tests
 pnpm test:e2e
-```
 
-### Test Documentation
-
-- **[Test Summary](./docs/TEST_SUMMARY.md)** - Quick overview of all test validations
-- **[Testing Guide for AI](./docs/TESTING.md)** - Comprehensive guide for AI developers
-- **[Test Details](./tests/README.md)** - Detailed test specifications
-
-### What's Tested
-
-✅ **Core Features (10/10)**
-
-- ProjectSequence-based dependency management
-- Macro resolution ({{prev}}, {{task.N}}, {{project.*}})
-- Format detection and conversion
-
-✅ **Task Dependencies (17/17)**
-
-- Export/import compatibility ⭐
-- Dependency chains (simple, multi-level, diamond)
-- Circular dependency detection
-- Execution policies (once, repeat)
-
-✅ **Integration Workflows (6/6)**
-
-- End-to-end data pipelines
-- Marketplace template sharing
-- Auto-execution triggers
-
-✅ **Macro System (7/7)**
-
-- All macro types
-- String escaping
-- Input format conversion
-
-✅ **AI Providers (15/16)**
-
-- Text generation, token tracking
-- Error handling
-- Result propagation
-
-✅ **Input/Output Tasks (26/26)**
-
-- All input types (files, API, database)
-- All output types (files, API, notifications)
-
-### Critical Validation
-
-**Export/Import Compatibility:** Ensures workflow templates work across different projects and installations. This is what enables the marketplace feature.
-
-```typescript
-// Dependencies use projectSequence, not global IDs
-{ projectSequence: 8, dependencies: [5] }
-
-// After Export → Import with new IDs: STILL WORKS ✅
-{ id: 101, projectSequence: 8, dependencies: [5] }
-```
-
-### For AI Developers
-
-When modifying code, **always run tests**:
-
-```bash
-# Before committing
-pnpm test
-
-# Focus on critical tests
-pnpm test tests/unit/{core-features,task-dependencies}.spec.ts
-```
-
-See [docs/TESTING.md](./docs/TESTING.md) for patterns and best practices.
-
-### Type Checking
-
-```bash
+# Type checking
 pnpm type-check
 ```
 

@@ -2,135 +2,13 @@
  * Macro Resolver for Script Tasks
  *
  * Resolves macro placeholders in script code before execution
- * Supports: {{task.N}}, {{prev}}, {{prev.N}}, {{project.name}}, {{date}}, {{datetime}}, etc.
+ * Supports: {{task.N}}, {{prev}}, {{prev.N}}, {{project.name}}, etc.
  */
 
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { Task } from '@core/types/database';
-
-/**
- * Format date with custom format tokens
- * Supports: YYYY, YY, MM, M, DD, D, HH, H, mm, m, ss, s
- */
-function formatDate(date: Date, format: string): string {
-    const tokens: Record<string, string> = {
-        YYYY: date.getFullYear().toString(),
-        YY: date.getFullYear().toString().slice(-2),
-        MM: String(date.getMonth() + 1).padStart(2, '0'),
-        M: String(date.getMonth() + 1),
-        DD: String(date.getDate()).padStart(2, '0'),
-        D: String(date.getDate()),
-        HH: String(date.getHours()).padStart(2, '0'),
-        H: String(date.getHours()),
-        mm: String(date.getMinutes()).padStart(2, '0'),
-        m: String(date.getMinutes()),
-        ss: String(date.getSeconds()).padStart(2, '0'),
-        s: String(date.getSeconds()),
-    };
-
-    let result = format;
-    // Sort by length descending to replace longer tokens first (e.g., YYYY before YY)
-    const sortedTokens = Object.keys(tokens).sort((a, b) => b.length - a.length);
-    for (const token of sortedTokens) {
-        const value = tokens[token];
-        if (value) {
-            result = result.replace(new RegExp(token, 'g'), value);
-        }
-    }
-    return result;
-}
-
-/**
- * Resolve {{date}} or {{date:FORMAT}} macro
- */
-function resolveDateMacro(format?: string): string {
-    const now = new Date();
-
-    if (!format) {
-        // Use locale default
-        return now.toLocaleDateString();
-    }
-
-    // Custom format
-    return formatDate(now, format);
-}
-
-/**
- * Resolve {{datetime}} or {{datetime:FORMAT}} macro
- */
-function resolveDateTimeMacro(format?: string): string {
-    const now = new Date();
-
-    if (!format) {
-        // Use locale default with time
-        return now.toLocaleString();
-    }
-
-    if (format.toUpperCase() === 'ISO') {
-        return now.toISOString();
-    }
-
-    // Custom format
-    return formatDate(now, format);
-}
-
-/**
- * Convert projectSequence numbers to global task IDs
- * Used for dependency resolution when dependencies are stored as projectSequence
- * @internal - Exported for testing
- */
-export async function convertProjectSequencesToGlobalIds(
-    projectId: number,
-    sequences: number[]
-): Promise<number[]> {
-    if (sequences.length === 0) return [];
-
-    const result = await db
-        .select()
-        .from(tasks)
-        .where(
-            sql`${tasks.projectId} = ${projectId} AND ${tasks.projectSequence} IN (${sql.join(
-                sequences.map((seq) => sql`${seq}`),
-                sql`, `
-            )})`
-        );
-
-    return result.map((t) => t.id);
-}
-
-/**
- * Detect if dependency IDs are global IDs or projectSequences
- * Heuristic: if all IDs exist in the current project as projectSequences, treat as projectSequence
- * Otherwise, treat as global IDs (legacy format)
- * @internal - Exported for testing
- */
-export async function detectDependencyFormat(
-    projectId: number,
-    dependencyIds: number[]
-): Promise<'global' | 'projectSequence'> {
-    if (dependencyIds.length === 0) return 'projectSequence';
-
-    // Check if all IDs exist as projectSequence in current project
-    const matchingTasks = await db
-        .select()
-        .from(tasks)
-        .where(
-            sql`${tasks.projectId} = ${projectId} AND ${tasks.projectSequence} IN (${sql.join(
-                dependencyIds.map((id) => sql`${id}`),
-                sql`, `
-            )})`
-        );
-
-    // If all IDs have matching projectSequence, assume new format
-    if (matchingTasks.length === dependencyIds.length) {
-        return 'projectSequence';
-    }
-
-    // Otherwise, assume legacy global ID format
-    return 'global';
-}
 
 /**
  * Resolve macro patterns like {{prev}}, {{prev.N}}, {{task.N}} in code
@@ -146,20 +24,7 @@ export async function resolveMacrosInCode(
     const project = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
     const projectData = project[0];
 
-    // 1. Resolve {{date}} and {{datetime}} macros
-    // Match {{date}}, {{date:FORMAT}}, {{datetime}}, {{datetime:FORMAT}}
-    resolved = resolved.replace(/\{\{date(?::([^}]+))?\}\}/g, (match, format) => {
-        const dateStr = resolveDateMacro(format);
-        // If we're inside quotes in code, return escaped; otherwise wrap in quotes
-        return JSON.stringify(dateStr);
-    });
-
-    resolved = resolved.replace(/\{\{datetime(?::([^}]+))?\}\}/g, (match, format) => {
-        const datetimeStr = resolveDateTimeMacro(format);
-        return JSON.stringify(datetimeStr);
-    });
-
-    // 2. Resolve {{project.field}} macros
+    // 1. Resolve {{project.field}} macros
     if (projectData) {
         resolved = resolved.replace(/\{\{project\.name\}\}/g, JSON.stringify(projectData.title));
         resolved = resolved.replace(
@@ -172,7 +37,7 @@ export async function resolveMacrosInCode(
         );
     }
 
-    // 3. Get dependency chain tasks (only tasks this task depends on)
+    // 2. Get dependency chain tasks (only tasks this task depends on)
     let dependencyTaskIds: number[] = [];
 
     // Parse dependencies from triggerConfig (where UI stores them)
@@ -204,31 +69,16 @@ export async function resolveMacrosInCode(
         }
     }
 
-    // Detect format and convert if necessary
-    let globalDependencyIds = dependencyTaskIds;
-    if (dependencyTaskIds.length > 0) {
-        const format = await detectDependencyFormat(projectId, dependencyTaskIds);
-        if (format === 'projectSequence') {
-            console.log(
-                `[MacroResolver] Task #${task.projectSequence} dependencies are in projectSequence format, converting...`
-            );
-            globalDependencyIds = await convertProjectSequencesToGlobalIds(
-                projectId,
-                dependencyTaskIds
-            );
-        }
-    }
-
     // Build readable dependency list with projectSequence
     const dependencySeqList =
-        globalDependencyIds.length > 0
+        dependencyTaskIds.length > 0
             ? await (async () => {
                   const depTasks = await db
                       .select()
                       .from(tasks)
                       .where(
                           sql`${tasks.id} IN (${sql.join(
-                              globalDependencyIds.map((id) => sql`${id}`),
+                              dependencyTaskIds.map((id) => sql`${id}`),
                               sql`, `
                           )})`
                       );
@@ -241,13 +91,13 @@ export async function resolveMacrosInCode(
     // Fetch only dependency tasks that are completed
     let previousTasks: any[] = [];
 
-    if (globalDependencyIds.length > 0) {
+    if (dependencyTaskIds.length > 0) {
         const dependencyTasks = await db
             .select()
             .from(tasks)
             .where(
                 sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
-                    globalDependencyIds.map((id) => sql`${id}`),
+                    dependencyTaskIds.map((id) => sql`${id}`),
                     sql`, `
                 )}) AND ${tasks.status} = 'done'`
             );
@@ -343,7 +193,7 @@ export async function resolveMacrosInCode(
         }
     };
 
-    // 4. Resolve {{prev}} and {{prev.N}} macros using simple string replacement
+    // 3. Resolve {{prev}} and {{prev.N}} macros using simple string replacement
     if (previousTasks.length > 0) {
         // {{prev}} = last completed task
         const lastTask = previousTasks[previousTasks.length - 1];
@@ -387,13 +237,9 @@ export async function resolveMacrosInCode(
                 }
             }
         }
-    } else {
-        console.log(
-            `[MacroResolver] Task #${task.projectSequence} has no dependencies, {{prev}} will be null`
-        );
     }
 
-    // 5. Resolve {{task.N}} macros (N = projectSequence within project)
+    // 4. Resolve {{task.N}} macros (N = projectSequence within project)
     const taskMacroPattern = /\{\{task\.(\d+)(?:\.(\w+))?\}\}/g;
     const taskMatches = Array.from(code.matchAll(taskMacroPattern));
 
@@ -474,9 +320,8 @@ export async function prepareMacroData(
                 typeof task.triggerConfig === 'string'
                     ? JSON.parse(task.triggerConfig)
                     : task.triggerConfig;
-            // Check dependsOn.taskIds (actual structure from UI)
-            if (config.dependsOn?.taskIds && Array.isArray(config.dependsOn.taskIds)) {
-                dependencyTaskIds = config.dependsOn.taskIds;
+            if (config.dependencyTaskIds && Array.isArray(config.dependencyTaskIds)) {
+                dependencyTaskIds = config.dependencyTaskIds;
             }
         } catch (e) {
             console.warn('[MacroResolver] prepareMacroData: Failed to parse triggerConfig:', e);
@@ -496,27 +341,15 @@ export async function prepareMacroData(
         }
     }
 
-    // Detect format and convert if necessary
-    let globalDependencyIds = dependencyTaskIds;
-    if (dependencyTaskIds.length > 0) {
-        const format = await detectDependencyFormat(projectId, dependencyTaskIds);
-        if (format === 'projectSequence') {
-            globalDependencyIds = await convertProjectSequencesToGlobalIds(
-                projectId,
-                dependencyTaskIds
-            );
-        }
-    }
-
     let previousTasks: any[] = [];
 
-    if (globalDependencyIds.length > 0) {
+    if (dependencyTaskIds.length > 0) {
         const dependencyTasks = await db
             .select()
             .from(tasks)
             .where(
                 sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
-                    globalDependencyIds.map((id) => sql`${id}`),
+                    dependencyTaskIds.map((id) => sql`${id}`),
                     sql`, `
                 )}) AND ${tasks.status} = 'done'`
             );

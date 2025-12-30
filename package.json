@@ -163,7 +163,6 @@
         "electron-updater": "^6.6.2",
         "eslint": "^8.57.0",
         "eslint-plugin-vue": "^9.22.0",
-        "jsdom": "^27.4.0",
         "lucide-vue-next": "^0.344.0",
         "monaco-editor": "^0.47.0",
         "playwright": "^1.42.0",

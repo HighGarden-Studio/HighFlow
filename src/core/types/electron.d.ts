@@ -42,7 +42,17 @@ export interface ProjectsAPI {
         baseDevFolder?: string | null;
         projectGuidelines?: string | null;
     }) => Promise<Project>;
-    update: (id: number, data: Partial<Project>) => Promise<Project>;
+    update: (
+        id: number,
+        data: Partial<{
+            title: string;
+            description: string;
+            status: string;
+            emoji?: string | null;
+            baseDevFolder?: string | null;
+            projectGuidelines?: string | null;
+        }>
+    ) => Promise<Project>;
     delete: (id: number) => Promise<void>;
     export: (id: number) => Promise<unknown>;
     import: (data: unknown) => Promise<Project>;
@@ -51,19 +61,15 @@ export interface ProjectsAPI {
 
 export interface TasksAPI {
     list: (projectId: number, filters?: TaskFilters) => Promise<Task[]>;
-    get: (projectId: number, sequence: number) => Promise<Task | null>;
+    get: (id: number) => Promise<Task | null>;
     create: (data: Partial<NewTask> & { projectId: number; title: string }) => Promise<Task>;
     update: (
-        projectId: number,
-        sequence: number,
+        id: number,
         data: Partial<{ title: string; description: string; status: string; priority: string }>
     ) => Promise<Task>;
-    delete: (projectId: number, sequence: number) => Promise<void>;
-    reorder: (projectId: number, sequences: number[]) => Promise<void>;
-    executeScript: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{
+    delete: (id: number) => Promise<void>;
+    reorder: (projectId: number, taskIds: number[]) => Promise<void>;
+    executeScript: (taskId: number) => Promise<{
         success: boolean;
         output: string;
         error?: string;
@@ -378,26 +384,17 @@ export interface ApprovalRequest {
 export interface TaskExecutionAPI {
     // Execution control
     execute: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         options?: TaskExecutionOptions
     ) => Promise<{ success: boolean; result?: unknown; error?: string; stopped?: boolean }>;
-    pause: (projectId: number, sequence: number) => Promise<{ success: boolean; error?: string }>;
-    resume: (projectId: number, sequence: number) => Promise<{ success: boolean; error?: string }>;
-    stop: (projectId: number, sequence: number) => Promise<{ success: boolean; error?: string }>;
-    submitInput: (
-        projectId: number,
-        sequence: number,
-        input: unknown
-    ) => Promise<{ success: boolean; error?: string }>;
+    pause: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    resume: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    stop: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    submitInput: (taskId: number, input: unknown) => Promise<{ success: boolean; error?: string }>;
 
     // Status queries
-    getStatus: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{
-        projectId: number;
-        projectSequence: number;
+    getStatus: (taskId: number) => Promise<{
+        taskId: number;
         status: TaskExecutionStatus;
         startedAt: Date;
         pausedAt?: Date;
@@ -408,8 +405,7 @@ export interface TaskExecutionAPI {
     } | null>;
     getAllActive: () => Promise<
         Array<{
-            projectId: number;
-            projectSequence: number;
+            taskId: number;
             status: string;
             startedAt: Date;
             progress: number;
@@ -419,146 +415,83 @@ export interface TaskExecutionAPI {
 
     // Approval flow
     requestApproval: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         data: ApprovalRequest
     ) => Promise<{ success: boolean; error?: string }>;
-    approve: (
-        projectId: number,
-        sequence: number,
-        response?: string
-    ) => Promise<{ success: boolean; error?: string }>;
-    reject: (projectId: number, sequence: number) => Promise<{ success: boolean; error?: string }>;
+    approve: (taskId: number, response?: string) => Promise<{ success: boolean; error?: string }>;
+    reject: (taskId: number) => Promise<{ success: boolean; error?: string }>;
 
     // Review flow
-    completeReview: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{ success: boolean; error?: string }>;
+    completeReview: (taskId: number) => Promise<{ success: boolean; error?: string }>;
     requestChanges: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         refinementPrompt: string
     ) => Promise<{ success: boolean; error?: string }>;
     requestAdditionalWork: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         additionalWorkPrompt: string
     ) => Promise<{ success: boolean; error?: string }>;
 
     // Block flow
-    block: (
-        projectId: number,
-        sequence: number,
-        reason?: string
-    ) => Promise<{ success: boolean; error?: string }>;
-    unblock: (projectId: number, sequence: number) => Promise<{ success: boolean; error?: string }>;
+    block: (taskId: number, reason?: string) => Promise<{ success: boolean; error?: string }>;
+    unblock: (taskId: number) => Promise<{ success: boolean; error?: string }>;
 
     // Progress updates
     updateProgress: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         progress: ExecutionProgress
     ) => Promise<{ success: boolean; error?: string }>;
 
     // Recovery methods
     clearAll: () => Promise<{ success: boolean; cleared: number }>;
     resetStuck: () => Promise<{ success: boolean; reset: number }>;
-    forceClear: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{ success: boolean; hadExecution: boolean }>;
+    forceClear: (taskId: number) => Promise<{ success: boolean; hadExecution: boolean }>;
 
     // Auto AI Review methods
     startAutoReview: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         options?: TaskExecutionOptions
     ) => Promise<{ success: boolean; result?: unknown; error?: string }>;
-    getReviewStatus: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{
-        projectId: number;
-        projectSequence: number;
+    getReviewStatus: (taskId: number) => Promise<{
+        taskId: number;
         status: string;
         startedAt: Date;
         progress: number;
         streamContent: string;
         error?: string;
     } | null>;
-    cancelReview: (
-        projectId: number,
-        sequence: number
-    ) => Promise<{ success: boolean; hadReview: boolean }>;
+    cancelReview: (taskId: number) => Promise<{ success: boolean; hadReview: boolean }>;
 
     // Event listeners
-    onStarted: (
-        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
-    ) => () => void;
-    onProgress: (
-        callback: (data: { projectId: number; projectSequence: number } & ExecutionProgress) => void
-    ) => () => void;
+    onStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => () => void;
+    onProgress: (callback: (data: { taskId: number } & ExecutionProgress) => void) => () => void;
     onCompleted: (
-        callback: (data: {
-            projectId: number;
-            projectSequence: number;
-            result: ExecutionResult;
-        }) => void
+        callback: (data: { taskId: number; result: ExecutionResult }) => void
     ) => () => void;
-    onFailed: (
-        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
-    ) => () => void;
-    onPaused: (
-        callback: (data: { projectId: number; projectSequence: number; pausedAt: Date }) => void
-    ) => () => void;
-    onResumed: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
-    onStopped: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
+    onFailed: (callback: (data: { taskId: number; error: string }) => void) => () => void;
+    onPaused: (callback: (data: { taskId: number; pausedAt: Date }) => void) => () => void;
+    onResumed: (callback: (data: { taskId: number }) => void) => () => void;
+    onStopped: (callback: (data: { taskId: number }) => void) => () => void;
     onApprovalRequired: (
-        callback: (data: { projectId: number; projectSequence: number } & ApprovalRequest) => void
+        callback: (data: { taskId: number } & ApprovalRequest) => void
     ) => () => void;
-    onApproved: (
-        callback: (data: { projectId: number; projectSequence: number; response?: string }) => void
-    ) => () => void;
-    onRejected: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
-    onReviewCompleted: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
+    onApproved: (callback: (data: { taskId: number; response?: string }) => void) => () => void;
+    onRejected: (callback: (data: { taskId: number }) => void) => () => void;
+    onReviewCompleted: (callback: (data: { taskId: number }) => void) => () => void;
     onChangesRequested: (
-        callback: (data: {
-            projectId: number;
-            projectSequence: number;
-            refinementPrompt: string;
-        }) => void
+        callback: (data: { taskId: number; refinementPrompt: string }) => void
     ) => () => void;
     onAdditionalWorkRequested: (
-        callback: (data: {
-            projectId: number;
-            projectSequence: number;
-            additionalWorkPrompt: string;
-        }) => void
+        callback: (data: { taskId: number; additionalWorkPrompt: string }) => void
     ) => () => void;
-    onBlocked: (
-        callback: (data: { projectId: number; projectSequence: number; reason?: string }) => void
-    ) => () => void;
-    onUnblocked: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
+    onBlocked: (callback: (data: { taskId: number; reason?: string }) => void) => () => void;
+    onUnblocked: (callback: (data: { taskId: number }) => void) => () => void;
 
     // Auto AI Review event listeners
-    onReviewStarted: (
-        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
-    ) => () => void;
+    onReviewStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => () => void;
     onReviewProgress: (
         callback: (data: {
-            projectId: number;
-            projectSequence: number;
+            taskId: number;
             progress?: number;
             phase?: string;
             content?: string;
@@ -566,28 +499,22 @@ export interface TaskExecutionAPI {
     ) => () => void;
     onAutoReviewCompleted: (
         callback: (data: {
-            projectId: number;
-            projectSequence: number;
+            taskId: number;
             result: unknown;
             passed: boolean;
             score: number;
         }) => void
     ) => () => void;
-    onReviewFailed: (
-        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
-    ) => () => void;
-    onReviewCancelled: (
-        callback: (data: { projectId: number; projectSequence: number }) => void
-    ) => () => void;
+    onReviewFailed: (callback: (data: { taskId: number; error: string }) => void) => () => void;
+    onReviewCancelled: (callback: (data: { taskId: number }) => void) => () => void;
 }
 
 export interface TaskHistoryAPI {
-    getByTaskId: (projectId: number, sequence: number, limit?: number) => Promise<unknown[]>;
-    getByEventType: (projectId: number, sequence: number, eventType: string) => Promise<unknown[]>;
-    getLatest: (projectId: number, sequence: number) => Promise<unknown | null>;
+    getByTaskId: (taskId: number, limit?: number) => Promise<unknown[]>;
+    getByEventType: (taskId: number, eventType: string) => Promise<unknown[]>;
+    getLatest: (taskId: number) => Promise<unknown | null>;
     add: (
-        projectId: number,
-        sequence: number,
+        taskId: number,
         eventType: string,
         eventData?: unknown,
         metadata?: unknown

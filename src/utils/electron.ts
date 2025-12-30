@@ -405,8 +405,7 @@ export const mockElectronAPI = {
     },
     taskExecution: {
         execute: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _options?: {
                 streaming?: boolean;
                 timeout?: number;
@@ -420,49 +419,37 @@ export const mockElectronAPI = {
                 };
             }
         ): Promise<{ success: boolean; result?: unknown; error?: string; stopped?: boolean }> => {
-            console.log(`[Mock] Executing task ${projectId}-${sequence}`);
+            console.log(`[Mock] Executing task ${taskId}`);
             // Simulate task execution in mock mode
-            const task = mockTasks.find(
-                (t) => t.projectId === projectId && (t as any).projectSequence === sequence
-            ); // Mock doesn't fully support sequential keys yet usually, but just logging
-            // Assuming mockTasks has id as number still for simplicity in mock data unless we change that too.
-            // But preserving "taskId" is removed from interface properly.
-            // Let's just find by some logic or strict match if we updated mockTasks.. we didn't update mockTasks schema yet in this file.
-            // Just doing a best effort mock update.
-
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'in_progress';
+                task.startedAt = new Date();
+                // Simulate completion after a delay in real usage
+                setTimeout(() => {
+                    task.status = 'in_review';
+                }, 2000);
+            }
             return { success: true };
         },
-        pause: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Pausing task ${projectId}-${sequence}`);
+        pause: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Pausing task ${taskId}`);
             return { success: true };
         },
-        resume: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Resuming task ${projectId}-${sequence}`);
+        resume: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Resuming task ${taskId}`);
             return { success: true };
         },
-        stop: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Stopping task ${projectId}-${sequence}`);
+        stop: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Stopping task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'todo';
+            }
             return { success: true };
         },
-        submitInput: async (
-            projectId: number,
-            sequence: number,
-            input: unknown
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Submitting input task ${projectId}-${sequence}`, input);
-            return { success: true };
-        },
-        getStatus: async (projectId: number, sequence: number) => {
-            console.log(`[Mock] Getting status for task ${projectId}-${sequence}`);
+        getStatus: async (taskId: number) => {
+            console.log(`[Mock] Getting status for task ${taskId}`);
             return null;
         },
         getAllActive: async () => {
@@ -470,69 +457,83 @@ export const mockElectronAPI = {
             return [];
         },
         requestApproval: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _data: { question: string; options?: string[]; context?: unknown }
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Requesting approval for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Requesting approval for task ${taskId}`);
             return { success: true };
         },
         approve: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _response?: string
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Approving task ${projectId}-${sequence}`);
+            console.log(`[Mock] Approving task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'in_progress';
+            }
             return { success: true };
         },
-        reject: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Rejecting task ${projectId}-${sequence}`);
+        reject: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Rejecting task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'todo';
+            }
             return { success: true };
         },
-        completeReview: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Completing review for task ${projectId}-${sequence}`);
+        completeReview: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Completing review for task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'done';
+                task.completedAt = new Date();
+            }
             return { success: true };
         },
         requestChanges: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _refinementPrompt: string
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Requesting changes for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Requesting changes for task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'in_progress';
+            }
             return { success: true };
         },
         requestAdditionalWork: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _additionalWorkPrompt: string
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Requesting additional work for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Requesting additional work for task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'in_progress';
+            }
             return { success: true };
         },
         block: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _reason?: string
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Blocking task ${projectId}-${sequence}`);
+            console.log(`[Mock] Blocking task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'blocked';
+            }
             return { success: true };
         },
-        unblock: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Unblocking task ${projectId}-${sequence}`);
+        unblock: async (taskId: number): Promise<{ success: boolean; error?: string }> => {
+            console.log(`[Mock] Unblocking task ${taskId}`);
+            const task = mockTasks.find((t) => t.id === taskId);
+            if (task) {
+                task.status = 'todo';
+            }
             return { success: true };
         },
         updateProgress: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _progress: {
                 percentage: number;
                 phase: string;
@@ -542,7 +543,7 @@ export const mockElectronAPI = {
                 cost?: number;
             }
         ): Promise<{ success: boolean; error?: string }> => {
-            console.log(`[Mock] Updating progress for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Updating progress for task ${taskId}`);
             return { success: true };
         },
         // Recovery methods
@@ -555,17 +556,15 @@ export const mockElectronAPI = {
             return { success: true, reset: 0 };
         },
         forceClear: async (
-            projectId: number,
-            sequence: number
+            taskId: number
         ): Promise<{ success: boolean; hadExecution: boolean }> => {
-            console.log(`[Mock] Force clearing task ${projectId}-${sequence}`);
+            console.log(`[Mock] Force clearing task ${taskId}`);
             return { success: true, hadExecution: false };
         },
 
         // Auto AI Review methods
         startAutoReview: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             _options?: {
                 streaming?: boolean;
                 apiKeys?: {
@@ -577,47 +576,33 @@ export const mockElectronAPI = {
                 };
             }
         ): Promise<{ success: boolean; result?: unknown; error?: string }> => {
-            console.log(`[Mock] Starting auto review for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Starting auto review for task ${taskId}`);
             return { success: true };
         },
         getReviewStatus: async (
-            projectId: number,
-            sequence: number
+            taskId: number
         ): Promise<{
-            projectId: number;
-            projectSequence: number;
+            taskId: number;
             status: string;
             startedAt: Date;
             progress: number;
             streamContent: string;
             error?: string;
         } | null> => {
-            console.log(`[Mock] Getting review status for task ${projectId}-${sequence}`);
+            console.log(`[Mock] Getting review status for task ${taskId}`);
             return null;
         },
-        cancelReview: async (
-            projectId: number,
-            sequence: number
-        ): Promise<{ success: boolean; hadReview: boolean }> => {
-            console.log(`[Mock] Cancelling review for task ${projectId}-${sequence}`);
+        cancelReview: async (taskId: number): Promise<{ success: boolean; hadReview: boolean }> => {
+            console.log(`[Mock] Cancelling review for task ${taskId}`);
             return { success: true, hadReview: false };
         },
 
         // Event listeners (no-op in mock mode)
-        onStarted:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    startedAt: Date;
-                }) => void
-            ) =>
-            () => {},
+        onStarted: (_callback: (data: { taskId: number; startedAt: Date }) => void) => () => {},
         onProgress:
             (
                 _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
+                    taskId: number;
                     progress: number;
                     phase: string;
                     content?: string;
@@ -626,106 +611,39 @@ export const mockElectronAPI = {
                 }) => void
             ) =>
             () => {},
-        onCompleted:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    result: unknown;
-                }) => void
-            ) =>
-            () => {},
-        onFailed:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    error: string;
-                }) => void
-            ) =>
-            () => {},
-        onPaused:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    pausedAt: Date;
-                }) => void
-            ) =>
-            () => {},
-        onResumed:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
-        onStopped:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
+        onCompleted: (_callback: (data: { taskId: number; result: unknown }) => void) => () => {},
+        onFailed: (_callback: (data: { taskId: number; error: string }) => void) => () => {},
+        onPaused: (_callback: (data: { taskId: number; pausedAt: Date }) => void) => () => {},
+        onResumed: (_callback: (data: { taskId: number }) => void) => () => {},
+        onStopped: (_callback: (data: { taskId: number }) => void) => () => {},
         onApprovalRequired:
             (
                 _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
+                    taskId: number;
                     question: string;
                     options?: string[];
                     context?: unknown;
                 }) => void
             ) =>
             () => {},
-        onApproved:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    response?: string;
-                }) => void
-            ) =>
-            () => {},
-        onRejected:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
-        onReviewCompleted:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
+        onApproved: (_callback: (data: { taskId: number; response?: string }) => void) => () => {},
+        onRejected: (_callback: (data: { taskId: number }) => void) => () => {},
+        onReviewCompleted: (_callback: (data: { taskId: number }) => void) => () => {},
         onChangesRequested:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    refinementPrompt: string;
-                }) => void
-            ) =>
-            () => {},
+            (_callback: (data: { taskId: number; refinementPrompt: string }) => void) => () => {},
         onAdditionalWorkRequested:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    additionalWorkPrompt: string;
-                }) => void
-            ) =>
+            (_callback: (data: { taskId: number; additionalWorkPrompt: string }) => void) =>
             () => {},
-        onBlocked:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    reason?: string;
-                }) => void
-            ) =>
-            () => {},
-        onUnblocked:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
+        onBlocked: (_callback: (data: { taskId: number; reason?: string }) => void) => () => {},
+        onUnblocked: (_callback: (data: { taskId: number }) => void) => () => {},
 
         // Auto AI Review event listeners (no-op in mock mode)
         onReviewStarted:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    startedAt: Date;
-                }) => void
-            ) =>
-            () => {},
+            (_callback: (data: { taskId: number; startedAt: Date }) => void) => () => {},
         onReviewProgress:
             (
                 _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
+                    taskId: number;
                     progress?: number;
                     phase?: string;
                     content?: string;
@@ -733,69 +651,41 @@ export const mockElectronAPI = {
             ) =>
             () => {},
         onAutoReviewCompleted:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    result: unknown;
-                }) => void
-            ) =>
-            () => {},
-        onReviewFailed:
-            (
-                _callback: (data: {
-                    projectId: number;
-                    projectSequence: number;
-                    error: string;
-                }) => void
-            ) =>
-            () => {},
-        onReviewCancelled:
-            (_callback: (data: { projectId: number; projectSequence: number }) => void) => () => {},
+            (_callback: (data: { taskId: number; result: unknown }) => void) => () => {},
+        onReviewFailed: (_callback: (data: { taskId: number; error: string }) => void) => () => {},
+        onReviewCancelled: (_callback: (data: { taskId: number }) => void) => () => {},
     },
 
     // Task History API
     taskHistory: {
-        getByTaskId: async (
-            projectId: number,
-            sequence: number,
-            limit?: number
-        ): Promise<unknown[]> => {
+        getByTaskId: async (taskId: number, limit?: number): Promise<unknown[]> => {
+            console.log(`[Mock] Getting task history for task ${taskId}, limit: ${limit}`);
+            return [];
+        },
+        getByEventType: async (taskId: number, eventType: string): Promise<unknown[]> => {
             console.log(
-                `[Mock] Getting task history for task ${projectId}-${sequence}, limit: ${limit}`
+                `[Mock] Getting task history by event type ${eventType} for task ${taskId}`
             );
             return [];
         },
-        getByEventType: async (
-            projectId: number,
-            sequence: number,
-            eventType: string
-        ): Promise<unknown[]> => {
-            console.log(
-                `[Mock] Getting task history by event type ${eventType} for task ${projectId}-${sequence}`
-            );
-            return [];
-        },
-        getLatest: async (projectId: number, sequence: number): Promise<unknown | null> => {
-            console.log(`[Mock] Getting latest task history for task ${projectId}-${sequence}`);
+        getLatest: async (taskId: number): Promise<unknown | null> => {
+            console.log(`[Mock] Getting latest task history for task ${taskId}`);
             return null;
         },
         add: async (
-            projectId: number,
-            sequence: number,
+            taskId: number,
             eventType: string,
             eventData?: unknown,
             metadata?: unknown
         ): Promise<unknown> => {
-            console.log(`[Mock] Adding task history for task ${projectId}-${sequence}:`, {
+            console.log(`[Mock] Adding task history for task ${taskId}:`, {
                 eventType,
                 eventData,
                 metadata,
             });
             return {
                 id: Date.now(),
-                projectId,
-                sequence,
+                taskId,
                 eventType,
                 eventData,
                 metadata,
