@@ -7,6 +7,10 @@
 
 import type { AiResult } from './ai';
 
+// TaskKey - Composite Key for Task Identification
+export type { TaskKey } from '../../utils/taskKey';
+export { taskKeyToString, stringToTaskKey, taskKeyEquals } from '../../utils/taskKey';
+
 // ========================================
 // Enum Types
 // ========================================

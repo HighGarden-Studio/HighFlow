@@ -463,35 +463,72 @@ export interface TaskExecutionAPI {
     cancelReview: (taskId: number) => Promise<{ success: boolean; hadReview: boolean }>;
 
     // Event listeners
-    onStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => () => void;
-    onProgress: (callback: (data: { taskId: number } & ExecutionProgress) => void) => () => void;
+    onStarted: (
+        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
+    ) => () => void;
+    onProgress: (
+        callback: (data: { projectId: number; projectSequence: number } & ExecutionProgress) => void
+    ) => () => void;
     onCompleted: (
-        callback: (data: { taskId: number; result: ExecutionResult }) => void
+        callback: (data: {
+            projectId: number;
+            projectSequence: number;
+            result: ExecutionResult;
+        }) => void
     ) => () => void;
-    onFailed: (callback: (data: { taskId: number; error: string }) => void) => () => void;
-    onPaused: (callback: (data: { taskId: number; pausedAt: Date }) => void) => () => void;
-    onResumed: (callback: (data: { taskId: number }) => void) => () => void;
-    onStopped: (callback: (data: { taskId: number }) => void) => () => void;
+    onFailed: (
+        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
+    ) => () => void;
+    onPaused: (
+        callback: (data: { projectId: number; projectSequence: number; pausedAt: Date }) => void
+    ) => () => void;
+    onResumed: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
+    onStopped: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
     onApprovalRequired: (
-        callback: (data: { taskId: number } & ApprovalRequest) => void
+        callback: (data: { projectId: number; projectSequence: number } & ApprovalRequest) => void
     ) => () => void;
-    onApproved: (callback: (data: { taskId: number; response?: string }) => void) => () => void;
-    onRejected: (callback: (data: { taskId: number }) => void) => () => void;
-    onReviewCompleted: (callback: (data: { taskId: number }) => void) => () => void;
+    onApproved: (
+        callback: (data: { projectId: number; projectSequence: number; response?: string }) => void
+    ) => () => void;
+    onRejected: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
+    onReviewCompleted: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
     onChangesRequested: (
-        callback: (data: { taskId: number; refinementPrompt: string }) => void
+        callback: (data: {
+            projectId: number;
+            projectSequence: number;
+            refinementPrompt: string;
+        }) => void
     ) => () => void;
     onAdditionalWorkRequested: (
-        callback: (data: { taskId: number; additionalWorkPrompt: string }) => void
+        callback: (data: {
+            projectId: number;
+            projectSequence: number;
+            additionalWorkPrompt: string;
+        }) => void
     ) => () => void;
-    onBlocked: (callback: (data: { taskId: number; reason?: string }) => void) => () => void;
-    onUnblocked: (callback: (data: { taskId: number }) => void) => () => void;
+    onBlocked: (
+        callback: (data: { projectId: number; projectSequence: number; reason?: string }) => void
+    ) => () => void;
+    onUnblocked: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
 
     // Auto AI Review event listeners
-    onReviewStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => () => void;
+    onReviewStarted: (
+        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
+    ) => () => void;
     onReviewProgress: (
         callback: (data: {
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             progress?: number;
             phase?: string;
             content?: string;
@@ -499,14 +536,19 @@ export interface TaskExecutionAPI {
     ) => () => void;
     onAutoReviewCompleted: (
         callback: (data: {
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             result: unknown;
             passed: boolean;
             score: number;
         }) => void
     ) => () => void;
-    onReviewFailed: (callback: (data: { taskId: number; error: string }) => void) => () => void;
-    onReviewCancelled: (callback: (data: { taskId: number }) => void) => () => void;
+    onReviewFailed: (
+        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
+    ) => () => void;
+    onReviewCancelled: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => () => void;
 }
 
 export interface TaskHistoryAPI {

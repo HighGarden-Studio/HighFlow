@@ -68,13 +68,34 @@ export class TaskRepository {
     }
 
     /**
-     * Find task by ID
+     * Find task by ID (DEPRECATED - use findByKey instead)
+     * @deprecated Global IDs will be removed. Use findByKey(projectId, projectSequence) instead.
      */
     async findById(id: number): Promise<Task | undefined> {
         const [result] = await db
             .select()
             .from(tasks)
             .where(and(eq(tasks.id, id), isNull(tasks.deletedAt)))
+            .limit(1);
+
+        return result;
+    }
+
+    /**
+     * Find task by composite key (projectId, projectSequence)
+     * This is the PRIMARY method for task lookup going forward.
+     */
+    async findByKey(projectId: number, projectSequence: number): Promise<Task | undefined> {
+        const [result] = await db
+            .select()
+            .from(tasks)
+            .where(
+                and(
+                    eq(tasks.projectId, projectId),
+                    eq(tasks.projectSequence, projectSequence),
+                    isNull(tasks.deletedAt)
+                )
+            )
             .limit(1);
 
         return result;
@@ -149,7 +170,8 @@ export class TaskRepository {
     }
 
     /**
-     * Update existing task
+     * Update existing task (DEPRECATED - use updateByKey instead)
+     * @deprecated Use updateByKey(projectId, projectSequence, data) instead
      */
     async update(id: number, data: Partial<Task>): Promise<Task> {
         // Ensure date fields are Date objects (fix for value.getTime error)
@@ -180,7 +202,43 @@ export class TaskRepository {
     }
 
     /**
-     * Update task status
+     * Update existing task by composite key
+     */
+    async updateByKey(
+        projectId: number,
+        projectSequence: number,
+        data: Partial<Task>
+    ): Promise<Task> {
+        // Ensure date fields are Date objects
+        const safeData = { ...data };
+        const dateFields = ['dueDate', 'startedAt', 'completedAt', 'pausedAt', 'deletedAt'];
+
+        for (const field of dateFields) {
+            if (typeof (safeData as any)[field] === 'string') {
+                (safeData as any)[field] = new Date((safeData as any)[field]);
+            }
+        }
+
+        const updatedResult = await db
+            .update(tasks)
+            .set({
+                ...safeData,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence)))
+            .returning();
+
+        const updated = firstRow(updatedResult);
+        if (!updated) {
+            throw new Error('Task not found');
+        }
+
+        return updated;
+    }
+
+    /**
+     * Update task status (DEPRECATED - use updateStatusByKey instead)
+     * @deprecated Use updateStatusByKey(projectId, projectSequence, status) instead
      */
     async updateStatus(id: number, status: TaskStatus): Promise<Task> {
         const updateData: Partial<Task> = { status };
@@ -195,7 +253,27 @@ export class TaskRepository {
     }
 
     /**
-     * Soft delete task
+     * Update task status by composite key
+     */
+    async updateStatusByKey(
+        projectId: number,
+        projectSequence: number,
+        status: TaskStatus
+    ): Promise<Task> {
+        const updateData: Partial<Task> = { status };
+
+        if (status === 'in_progress') {
+            updateData.startedAt = new Date();
+        } else if (status === 'done') {
+            updateData.completedAt = new Date();
+        }
+
+        return await this.updateByKey(projectId, projectSequence, updateData);
+    }
+
+    /**
+     * Soft delete task (DEPRECATED - use deleteByKey instead)
+     * @deprecated Use deleteByKey(projectId, projectSequence) instead
      */
     async delete(id: number): Promise<void> {
         await db
@@ -205,6 +283,19 @@ export class TaskRepository {
                 updatedAt: new Date(),
             })
             .where(eq(tasks.id, id));
+    }
+
+    /**
+     * Soft delete task by composite key
+     */
+    async deleteByKey(projectId: number, projectSequence: number): Promise<void> {
+        await db
+            .update(tasks)
+            .set({
+                deletedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence)));
     }
 
     /**
