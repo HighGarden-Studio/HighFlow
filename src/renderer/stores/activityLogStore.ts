@@ -48,11 +48,22 @@ export const useActivityLogStore = defineStore('activityLog', () => {
     const isIPCSubscribed = ref(false);
 
     // Helpers
-    function resolveTaskName(taskId: number): string {
+    function resolveTaskName(
+        taskId?: number,
+        projectId?: number,
+        projectSequence?: number
+    ): string {
         const taskStore = useTaskStore();
         const projectStore = useProjectStore();
 
-        const task = taskStore.tasks.find((t) => t.id === taskId);
+        let task;
+        if (taskId) {
+            task = taskStore.tasks.find((t) => t.id === taskId);
+        } else if (projectId && projectSequence) {
+            task = taskStore.tasks.find(
+                (t) => t.projectId === projectId && t.projectSequence === projectSequence
+            );
+        }
 
         if (task) {
             const project = projectStore.projectById(task.projectId);
@@ -61,7 +72,13 @@ export const useActivityLogStore = defineStore('activityLog', () => {
             return `[${projectTitle}] #${sequence}`;
         }
 
-        return `Task #${taskId}`;
+        if (projectId && projectSequence) {
+            const project = projectStore.projectById(projectId);
+            const projectTitle = project ? project.title : 'Unknown Project';
+            return `[${projectTitle}] #${projectSequence}`;
+        }
+
+        return `Task #${taskId || '?'}`;
     }
 
     // Computed
@@ -338,115 +355,135 @@ export const useActivityLogStore = defineStore('activityLog', () => {
 
         // Task execution events
         if (api.taskExecution) {
-            api.taskExecution.onStarted((data) => {
-                addLog({
-                    level: 'info',
-                    category: 'ipc',
-                    type: 'taskExecution.started',
-                    message: `${resolveTaskName(data.taskId)} execution started`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+            // Task execution events
+            if (api.taskExecution) {
+                api.taskExecution.onStarted((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'info',
+                        category: 'ipc',
+                        type: 'taskExecution.started',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution started`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onProgress((data) => {
-                addLog({
-                    level: 'debug',
-                    category: 'ipc',
-                    type: 'taskExecution.progress',
-                    message: `${resolveTaskName(data.taskId)} progress: ${(data as any).progress ?? (data as any).percentage ?? 0}%`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onProgress((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'debug',
+                        category: 'ipc',
+                        type: 'taskExecution.progress',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} progress: ${d.progress ?? d.percentage ?? 0}%`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onCompleted((data) => {
-                addLog({
-                    level: 'success',
-                    category: 'ipc',
-                    type: 'taskExecution.completed',
-                    message: `${resolveTaskName(data.taskId)} execution completed`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onCompleted((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'success',
+                        category: 'ipc',
+                        type: 'taskExecution.completed',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution completed`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onFailed((data) => {
-                addLog({
-                    level: 'error',
-                    category: 'ipc',
-                    type: 'taskExecution.failed',
-                    message: `${resolveTaskName(data.taskId)} execution failed: ${data.error}`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onFailed((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'error',
+                        category: 'ipc',
+                        type: 'taskExecution.failed',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution failed: ${d.error}`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onPaused((data) => {
-                addLog({
-                    level: 'warning',
-                    category: 'ipc',
-                    type: 'taskExecution.paused',
-                    message: `${resolveTaskName(data.taskId)} execution paused`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onPaused((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'warning',
+                        category: 'ipc',
+                        type: 'taskExecution.paused',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution paused`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onResumed((data) => {
-                addLog({
-                    level: 'info',
-                    category: 'ipc',
-                    type: 'taskExecution.resumed',
-                    message: `${resolveTaskName(data.taskId)} execution resumed`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onResumed((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'info',
+                        category: 'ipc',
+                        type: 'taskExecution.resumed',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution resumed`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onStopped((data) => {
-                addLog({
-                    level: 'warning',
-                    category: 'ipc',
-                    type: 'taskExecution.stopped',
-                    message: `${resolveTaskName(data.taskId)} execution stopped`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onStopped((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'warning',
+                        category: 'ipc',
+                        type: 'taskExecution.stopped',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} execution stopped`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
 
-            api.taskExecution.onApprovalRequired((data) => {
-                addLog({
-                    level: 'warning',
-                    category: 'ipc',
-                    type: 'taskExecution.approvalRequired',
-                    message: `${resolveTaskName(data.taskId)} needs approval: ${data.question}`,
-                    details: data as unknown as Record<string, unknown>,
-                    source: 'ipc',
-                    taskId: data.taskId,
+                api.taskExecution.onApprovalRequired((data) => {
+                    const d = data as any;
+                    addLog({
+                        level: 'warning',
+                        category: 'ipc',
+                        type: 'taskExecution.approvalRequired',
+                        message: `${resolveTaskName(d.taskId, d.projectId, d.projectSequence)} needs approval: ${d.question}`,
+                        details: d,
+                        source: 'ipc',
+                        taskId: d.taskId,
+                        projectId: d.projectId,
+                    });
                 });
-            });
+            }
         }
 
         // General events
         if (api.events) {
             api.events.on('task:status-changed', (data: unknown) => {
-                const eventData = data as { id: number; status: string };
+                const eventData = data as any;
                 addLog({
                     level: 'info',
                     category: 'ipc',
                     type: 'task.status-changed',
-                    message: `${resolveTaskName(eventData.id)} status changed to ${eventData.status}`,
+                    message: `${resolveTaskName(eventData.id, eventData.projectId, eventData.projectSequence)} status changed to ${eventData.status}`,
                     details: eventData as unknown as Record<string, unknown>,
                     source: 'ipc',
                     taskId: eventData.id,
+                    projectId: eventData.projectId,
                 });
             });
 

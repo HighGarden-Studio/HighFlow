@@ -19,7 +19,8 @@ import type {
 function transformHistoryEntry(record: any): TaskHistoryEntry {
     return {
         id: record.id,
-        taskId: record.taskId,
+        taskProjectId: record.taskProjectId,
+        taskSequence: record.taskSequence,
         eventType: record.eventType as TaskHistoryEventType,
         eventData: record.eventData
             ? typeof record.eventData === 'string'
@@ -42,38 +43,58 @@ export function registerTaskHistoryHandlers(): void {
     /**
      * Get all history entries for a task
      */
-    ipcMain.handle('taskHistory:getByTaskId', async (_event, taskId: number, limit?: number) => {
-        try {
-            const entries = await taskHistoryRepository.findByTaskId(taskId, limit);
-            return entries.map(transformHistoryEntry);
-        } catch (error) {
-            console.error('Error getting task history:', error);
-            throw error;
+    ipcMain.handle(
+        'taskHistory:getByTaskId',
+        async (_event, projectId: number, projectSequence: number, limit?: number) => {
+            try {
+                const entries = await taskHistoryRepository.findByTask(
+                    projectId,
+                    projectSequence,
+                    limit
+                );
+                return entries.map(transformHistoryEntry);
+            } catch (error) {
+                console.error('Error getting task history:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     /**
      * Alias for getByTaskId to match preload
      */
-    ipcMain.handle('taskHistory:getByTask', async (_event, taskId: number, limit?: number) => {
-        try {
-            const entries = await taskHistoryRepository.findByTaskId(taskId, limit);
-            return entries.map(transformHistoryEntry);
-        } catch (error) {
-            console.error('Error getting task history:', error);
-            throw error;
+    ipcMain.handle(
+        'taskHistory:getByTask',
+        async (_event, projectId: number, projectSequence: number, limit?: number) => {
+            try {
+                const entries = await taskHistoryRepository.findByTask(
+                    projectId,
+                    projectSequence,
+                    limit
+                );
+                return entries.map(transformHistoryEntry);
+            } catch (error) {
+                console.error('Error getting task history:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     /**
      * Get history entries by event type
      */
     ipcMain.handle(
         'taskHistory:getByEventType',
-        async (_event, taskId: number, eventType: TaskHistoryEventType) => {
+        async (
+            _event,
+            projectId: number,
+            projectSequence: number,
+            eventType: TaskHistoryEventType
+        ) => {
             try {
-                const entries = await taskHistoryRepository.findByTaskIdAndEventType(
-                    taskId,
+                const entries = await taskHistoryRepository.findByTaskAndEventType(
+                    projectId,
+                    projectSequence,
                     eventType
                 );
                 return entries.map(transformHistoryEntry);
@@ -87,15 +108,18 @@ export function registerTaskHistoryHandlers(): void {
     /**
      * Get the latest history entry for a task
      */
-    ipcMain.handle('taskHistory:getLatest', async (_event, taskId: number) => {
-        try {
-            const entry = await taskHistoryRepository.getLatest(taskId);
-            return entry ? transformHistoryEntry(entry) : null;
-        } catch (error) {
-            console.error('Error getting latest task history:', error);
-            throw error;
+    ipcMain.handle(
+        'taskHistory:getLatest',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                const entry = await taskHistoryRepository.getLatest(projectId, projectSequence);
+                return entry ? transformHistoryEntry(entry) : null;
+            } catch (error) {
+                console.error('Error getting latest task history:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     /**
      * Add a history entry
@@ -104,14 +128,16 @@ export function registerTaskHistoryHandlers(): void {
         'taskHistory:add',
         async (
             _event,
-            taskId: number,
+            projectId: number,
+            projectSequence: number,
             eventType: TaskHistoryEventType,
             eventData?: TaskHistoryEventData,
             metadata?: TaskHistoryMetadata
         ) => {
             try {
                 const entry = await taskHistoryRepository.create(
-                    taskId,
+                    projectId,
+                    projectSequence,
                     eventType,
                     eventData,
                     metadata

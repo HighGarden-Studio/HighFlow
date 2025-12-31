@@ -568,7 +568,7 @@ export class LocalAgentSession extends EventEmitter {
  */
 export class LocalAgentSessionManager {
     private sessions: Map<string, LocalAgentSession> = new Map();
-    private taskSessions: Map<number, string> = new Map(); // taskId → sessionId
+    private taskSessions: Map<string, string> = new Map(); // taskKey (projectId-sequence) → sessionId
     private static instance: LocalAgentSessionManager;
 
     static getInstance(): LocalAgentSessionManager {
@@ -585,7 +585,8 @@ export class LocalAgentSessionManager {
         agentType: 'claude' | 'codex' | 'antigravity',
         workingDirectory: string,
         sessionId?: string,
-        taskId?: number
+        projectId?: number,
+        projectSequence?: number
     ): Promise<SessionInfo> {
         const session = new LocalAgentSession(agentType, workingDirectory, sessionId);
 
@@ -597,8 +598,9 @@ export class LocalAgentSessionManager {
         session.on('closed', () => {
             this.sessions.delete(session.id);
             // Clean up task mapping if exists
-            if (taskId !== undefined) {
-                this.taskSessions.delete(taskId);
+            if (projectId !== undefined && projectSequence !== undefined) {
+                const taskKey = `${projectId}-${projectSequence}`;
+                this.taskSessions.delete(taskKey);
             }
         });
 
@@ -606,9 +608,10 @@ export class LocalAgentSessionManager {
         this.sessions.set(session.id, session);
 
         // Register task-session mapping
-        if (taskId !== undefined) {
-            this.taskSessions.set(taskId, session.id);
-            console.log(`[SessionManager] Registered session ${session.id} for task ${taskId}`);
+        if (projectId !== undefined && projectSequence !== undefined) {
+            const taskKey = `${projectId}-${projectSequence}`;
+            this.taskSessions.set(taskKey, session.id);
+            console.log(`[SessionManager] Registered session ${session.id} for task ${taskKey}`);
         }
 
         return session.getInfo();
@@ -659,12 +662,13 @@ export class LocalAgentSessionManager {
      * Terminate session for a specific task
      * Used when task is stopped/cancelled
      */
-    async terminateTaskSession(taskId: number): Promise<boolean> {
-        const sessionId = this.taskSessions.get(taskId);
+    async terminateTaskSession(projectId: number, projectSequence: number): Promise<boolean> {
+        const taskKey = `${projectId}-${projectSequence}`;
+        const sessionId = this.taskSessions.get(taskKey);
         if (sessionId) {
-            console.log(`[SessionManager] Terminating session ${sessionId} for task ${taskId}`);
+            console.log(`[SessionManager] Terminating session ${sessionId} for task ${taskKey}`);
             await this.closeSession(sessionId);
-            this.taskSessions.delete(taskId);
+            this.taskSessions.delete(taskKey);
             return true;
         }
         return false;

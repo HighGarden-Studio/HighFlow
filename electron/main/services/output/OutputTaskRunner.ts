@@ -18,11 +18,13 @@ export class OutputTaskRunner {
     /**
      * Execute an Output Task
      */
-    async execute(taskId: number): Promise<OutputResult> {
-        console.log(`[OutputTaskRunner] Starting execution for task ${taskId}`);
+    async execute(projectId: number, projectSequence: number): Promise<OutputResult> {
+        console.log(
+            `[OutputTaskRunner] Starting execution for task ${projectId}-${projectSequence}`
+        );
 
         // 1. Load Task
-        const task = await taskRepository.findById(taskId);
+        const task = await taskRepository.findByKey(projectId, projectSequence);
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -53,7 +55,9 @@ export class OutputTaskRunner {
         // 4. Aggregate Content
         let contentToOutput = '';
         try {
-            console.log(`[OutputTaskRunner] Aggregating content for task ${taskId}...`);
+            console.log(
+                `[OutputTaskRunner] Aggregating content for task ${projectId}-${projectSequence}...`
+            );
             contentToOutput = await this.aggregateContent(task, config);
             console.log(
                 `[OutputTaskRunner] Aggregation complete. Content length: ${contentToOutput.length}`
@@ -66,7 +70,7 @@ export class OutputTaskRunner {
         if (!contentToOutput) {
             console.error('[OutputTaskRunner] ERROR: Aggregated content is empty!');
             console.error(`[OutputTaskRunner] Config:`, JSON.stringify(config, null, 2));
-            console.error(`[OutputTaskRunner] Task dependencies:`, task.dependencies);
+            // console.error(`[OutputTaskRunner] Task dependencies:`, task.dependencies);
             console.error(
                 `[OutputTaskRunner] Task triggerConfig:`,
                 JSON.stringify(task.triggerConfig, null, 2)
@@ -78,8 +82,9 @@ export class OutputTaskRunner {
         try {
             console.log(`[OutputTaskRunner] executing connector ${connector.id}`);
             const result = await connector.execute(config, contentToOutput, {
-                taskId: task.id,
+                taskId: task.id, // Keep legacy ID if interface requires it
                 projectId: task.projectId,
+                projectSequence: task.projectSequence,
                 taskTitle: task.title,
                 projectName: project?.title || 'Unknown Project',
                 projectBaseDir: project?.baseDevFolder,
@@ -92,7 +97,7 @@ export class OutputTaskRunner {
                 // This allows streaming and prevents DB bloat
                 const isLocalFile = config.destination === 'local_file';
 
-                await taskRepository.update(task.id, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     executionResult: {
                         // For local files, store metadata with file path
                         // For other outputs (Slack, etc.), store the content
@@ -111,11 +116,12 @@ export class OutputTaskRunner {
 
                 console.log('[OutputTaskRunner] Task updated with result:', {
                     taskId: task.id,
+                    projectSequence: task.projectSequence,
                     resultPath: isLocalFile ? result.metadata?.path : '[content]',
                     filePathInExecutionResult: isLocalFile ? result.metadata?.path : undefined,
                 });
             } else {
-                await taskRepository.update(task.id, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'in_progress', // Or fail?
                     // Ideally we might want 'failed' status but 'todo' is safe fallback or 'in_progress' with error
                 });
@@ -141,7 +147,8 @@ export class OutputTaskRunner {
         if (taskTrigger?.dependsOn?.taskIds) {
             dependencies = taskTrigger.dependsOn.taskIds;
         } else if (task.dependencies && Array.isArray(task.dependencies)) {
-            dependencies = task.dependencies;
+            // Deprecated usage potentially?
+            // dependencies = task.dependencies;
         }
 
         // Deduplicate dependencies to prevent content duplication
@@ -214,11 +221,11 @@ export class OutputTaskRunner {
 
         // 2. Fetch dependency tasks and add new results
         console.log(`[OutputTaskRunner] Fetching ${dependencies.length} dependency task(s)...`);
-        for (const depId of dependencies) {
-            const depTask = await taskRepository.findById(depId);
+        for (const depSequence of dependencies) {
+            const depTask = await taskRepository.findByKey(task.projectId, depSequence);
             if (depTask) {
                 console.log(
-                    `[OutputTaskRunner] Dependency task ${depId}: status=${depTask.status}`
+                    `[OutputTaskRunner] Dependency task ${depSequence}: status=${depTask.status}`
                 );
                 // Determine what content to use
                 // 1. Result field
@@ -231,7 +238,7 @@ export class OutputTaskRunner {
                     '';
 
                 console.log(
-                    `[OutputTaskRunner] Dependency ${depId} content length: ${content?.length || 0}`
+                    `[OutputTaskRunner] Dependency ${depSequence} content length: ${content?.length || 0}`
                 );
                 if (content) {
                     inputs.push(content);

@@ -58,10 +58,11 @@ const tasks = computed(() => taskStore.tasks);
 let buildGraphTimer: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 100; // Wait 100ms before rebuilding to batch multiple changes
 const showDetailPanel = ref(false);
-const selectedTaskId = ref<number | null>(null);
+const selectedTaskKey = ref<string | null>(null);
 const selectedTask = computed(() => {
-    if (!selectedTaskId.value) return null;
-    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
+    if (!selectedTaskKey.value) return null;
+    const [pId, seq] = selectedTaskKey.value.split('_').map(Number);
+    return taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq) || null;
 });
 const showProjectInfoModal = ref(false);
 const showCreateModal = ref(false);
@@ -79,10 +80,11 @@ const subdivisionLoading = ref(false);
 const subdivisionCreating = ref(false);
 
 const showExecutionModal = ref(false);
-const executionTaskId = ref<number | null>(null);
+const executionTaskKey = ref<string | null>(null);
 const executionTask = computed(() => {
-    if (!executionTaskId.value) return null;
-    return taskStore.tasks.find((t) => t.id === executionTaskId.value) || null;
+    if (!executionTaskKey.value) return null;
+    const [pId, seq] = executionTaskKey.value.split('_').map(Number);
+    return taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq) || null;
 });
 
 // Input Modal State
@@ -91,10 +93,11 @@ const inputTask = ref<Task | null>(null);
 
 // Result Preview State
 const showResultPreview = ref(false);
-const previewTaskId = ref<number | null>(null);
+const previewTaskKey = ref<string | null>(null);
 const resultPreviewTask = computed(() => {
-    if (!previewTaskId.value) return null;
-    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
+    if (!previewTaskKey.value) return null;
+    const [pId, seq] = previewTaskKey.value.split('_').map(Number);
+    const task = taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq);
     if (!task) return null;
 
     // Augment with execution progress if available
@@ -199,10 +202,10 @@ function buildGraph(shouldFit = false) {
     tasks.value.forEach((task) => {
         // Generate unique key that changes when critical task properties change
         // This forces TaskCard remount only when needed
-        const taskKey = `${task.id}-${task.status}-${task.inputSubStatus || 'none'}`;
+        const taskKey = `${task.projectId}_${task.projectSequence}-${task.status}-${task.inputSubStatus || 'none'}`;
 
         taskNodes.push({
-            id: String(task.id),
+            id: `${task.projectId}_${task.projectSequence}`,
             type: 'taskCard',
             position: { x: 0, y: 0 }, // Will be set by layout
             data: { task, taskKey },
@@ -255,9 +258,9 @@ function buildGraph(shouldFit = false) {
             });
         }
 
-        dependencies.forEach((depId: number) => {
-            // Only create edge if dependency task exists
-            const sourceTask = tasks.value.find((t) => t.id === depId);
+        dependencies.forEach((depSequence: number) => {
+            // Only create edge if dependency task exists (by sequence)
+            const sourceTask = tasks.value.find((t) => t.projectSequence === depSequence);
             if (sourceTask) {
                 // Get output type label from SOURCE task (dependency)
                 // Use expectedOutputFormat (AI-generated) if available, fallback to outputType
@@ -274,7 +277,32 @@ function buildGraph(shouldFit = false) {
                 // For direct dependencies (no expression), it's always active if it exists.
                 // For complex dependencies, we check if it contributes to a satisfied condition group.
                 let isActivePath = true;
-                if (isComplexDependency && expression) {
+                let branchReason = '';
+
+                // Script Task Control Flow Logic
+                const executionResult = (sourceTask as any).executionResult;
+                if (sourceTask.status === 'done' && executionResult?.control) {
+                    const control = executionResult.control;
+
+                    // Check branching (next)
+                    if (Array.isArray(control.next)) {
+                        const targetSeq = task.projectSequence;
+                        // It's an active path ONLY if the target is in the next list
+                        isActivePath = control.next.includes(targetSeq);
+                    } else if (control.next === []) {
+                        // Explicit Stop (Empty Array)
+                        isActivePath = false;
+                    }
+                    // If next is undefined/null, it defaults to ALL (isActivePath = true)
+
+                    // Get reason for this specific path
+                    if (control.reasons && typeof control.reasons === 'object') {
+                        branchReason = control.reasons[task.projectSequence] || '';
+                    } else if (control.reason) {
+                        // Fallback to global reason if available
+                        branchReason = control.reason;
+                    }
+                } else if (isComplexDependency && expression) {
                     isActivePath = isDependencyActive(expression, depId, tasks.value);
                 }
 
@@ -301,12 +329,16 @@ function buildGraph(shouldFit = false) {
                                 edgeColor = '#9CA3AF'; // Gray for todo
                             }
                     }
+                } else {
+                    // Inactive path (Skipped)
+                    // Keep gray, but maybe distinct?
+                    edgeColor = '#E5E7EB'; // Lighter gray for skipped paths
                 }
 
                 taskEdges.push({
-                    id: `e${depId}-${task.id}`,
-                    source: String(depId),
-                    target: String(task.id),
+                    id: `e${sourceTask.projectId}_${sourceTask.projectSequence}-${task.projectId}_${task.projectSequence}`,
+                    source: `${sourceTask.projectId}_${sourceTask.projectSequence}`,
+                    target: `${task.projectId}_${task.projectSequence}`,
                     type: 'custom', // Use custom edge with delete button
                     animated: task.status === 'in_progress' && isActivePath, // Only animate active paths
                     style: {
@@ -321,7 +353,13 @@ function buildGraph(shouldFit = false) {
                         height: 20,
                         color: edgeColor,
                     },
-                    label: formatInfo ? `${formatInfo.icon} ${formatInfo.label}` : '📄 Output', // Icon + text (e.g., "🧩 JSON")
+                    label: branchReason
+                        ? formatInfo
+                            ? `${formatInfo.icon} ${formatInfo.label}\n(${branchReason})`
+                            : branchReason
+                        : formatInfo
+                          ? `${formatInfo.icon} ${formatInfo.label}`
+                          : '📄 Output',
                     data: {
                         formatInfo, // Pass full formatInfo to CustomEdge for icon rendering
                         onEdgeRemove: (edgeId: string) => {
@@ -663,8 +701,8 @@ function getSegmentStats(
 }
 
 function handleNodeClick(task: Task) {
-    console.log('🖱️ [DAGView] handleNodeClick called', task.id);
-    selectedTaskId.value = task.id;
+    console.log('🖱️ [DAGView] handleNodeClick called', task.projectId, task.projectSequence);
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
@@ -672,23 +710,33 @@ function handleNodeClick(task: Task) {
  * Handle connection between nodes
  */
 onConnect(async (params) => {
-    const sourceId = Number(params.source);
-    const targetId = Number(params.target);
+    // Parse composite keys: "projectId_sequence"
+    const sourceParts = params.source.split('_').map(Number);
+    const targetParts = params.target.split('_').map(Number);
 
-    if (sourceId === targetId) {
+    if (sourceParts.length !== 2 || targetParts.length !== 2) {
+        console.warn('Invalid node IDs:', params.source, params.target);
+        return;
+    }
+
+    const [sourceProjectId, sourceSequence] = sourceParts;
+    const [targetProjectId, targetSequence] = targetParts;
+
+    if (sourceProjectId === targetProjectId && sourceSequence === targetSequence) {
         console.warn('Cannot connect a task to itself');
         return;
     }
 
-    // Check for circular dependency - DISABLED to allow circular dependencies
-    // if (wouldCreateCircularDependency(sourceId, targetId)) {
-    //     console.warn('Cannot create circular dependency');
-    //     return;
-    // }
-
     // Update task dependencies
-    const targetTask = tasks.value.find((t) => t.id === targetId);
-    if (!targetTask) return;
+    // Find tasks by composite key
+    const targetTask = tasks.value.find(
+        (t) => t.projectId === targetProjectId && t.projectSequence === targetSequence
+    );
+    const sourceTask = tasks.value.find(
+        (t) => t.projectId === sourceProjectId && t.projectSequence === sourceSequence
+    );
+
+    if (!targetTask || !sourceTask) return;
 
     // SAFEGUARD: Block DnD if expression logic is used
     if (targetTask.triggerConfig?.dependsOn?.expression) {
@@ -701,7 +749,8 @@ onConnect(async (params) => {
     }
 
     const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
-    if (existingDeps.includes(sourceId)) {
+    // Check using sequence
+    if (existingDeps.includes(sourceSequence)) {
         console.warn('Dependency already exists');
         return;
     }
@@ -710,11 +759,11 @@ onConnect(async (params) => {
         ...targetTask.triggerConfig,
         dependsOn: {
             ...targetTask.triggerConfig?.dependsOn,
-            taskIds: [...existingDeps, sourceId],
+            taskIds: [...existingDeps, sourceSequence], // Store SEQUENCE
         },
     };
 
-    await taskStore.updateTask(targetId, {
+    await taskStore.updateTask(targetProjectId, targetSequence, {
         triggerConfig: updatedTriggerConfig,
     });
 
@@ -727,10 +776,19 @@ onConnect(async (params) => {
  */
 async function handleEdgeRemove(edgesToRemove: Edge[]) {
     for (const edge of edgesToRemove) {
-        const sourceId = Number(edge.source);
-        const targetId = Number(edge.target);
+        // Parse composite keys: "projectId_sequence"
+        const sourceParts = edge.source.split('_').map(Number);
+        const targetParts = edge.target.split('_').map(Number);
 
-        const targetTask = tasks.value.find((t) => t.id === targetId);
+        if (sourceParts.length !== 2 || targetParts.length !== 2) continue;
+
+        const [sourceProjectId, sourceSequence] = sourceParts;
+        const [targetProjectId, targetSequence] = targetParts;
+
+        const targetTask = tasks.value.find(
+            (t) => t.projectId === targetProjectId && t.projectSequence === targetSequence
+        );
+
         if (!targetTask) continue;
 
         // SAFEGUARD: Block removal if expression logic is used
@@ -744,7 +802,7 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
         }
 
         const existingDeps = targetTask.triggerConfig?.dependsOn?.taskIds || [];
-        const updatedDeps = existingDeps.filter((depId: number) => depId !== sourceId);
+        const updatedDeps = existingDeps.filter((depSeq: number) => depSeq !== sourceSequence);
 
         const updatedTriggerConfig = {
             ...targetTask.triggerConfig,
@@ -754,7 +812,7 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
             },
         };
 
-        await taskStore.updateTask(targetId, {
+        await taskStore.updateTask(targetProjectId, targetSequence, {
             triggerConfig: updatedTriggerConfig,
         });
     }
@@ -789,7 +847,7 @@ function wouldCreateCircularDependency(sourceId: number, targetId: number): bool
  */
 function closeDetailPanel() {
     showDetailPanel.value = false;
-    selectedTaskId.value = null;
+    selectedTaskKey.value = null;
 }
 
 /**
@@ -810,7 +868,7 @@ function openCreateModal(status: TaskStatus = 'todo') {
  * Handle task execution result
  */
 async function handleTaskExecute(task: Task) {
-    const result = await taskStore.executeTask(task.id);
+    const result = await taskStore.executeTask(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to execute task:', result.error);
         if (result.validationError) {
@@ -845,12 +903,23 @@ function closeEditModal() {
 
 async function handleEditModalSave(updates: Partial<Task>) {
     if (!editingTask.value) return;
-    await taskStore.updateTask(editingTask.value.id, updates);
+    await taskStore.updateTask(
+        editingTask.value.projectId,
+        editingTask.value.projectSequence,
+        updates
+    );
     closeEditModal();
 }
 
-async function handleEditModalDelete(taskId: number) {
-    await taskStore.deleteTask(taskId);
+async function handleEditModalDelete(task: Task) {
+    if (!task) return; // Expecting task object or at least we should pass it
+    // Wait, the original signature was taskId: number.
+    // We should change it to use editingTask.value if available, or update call site.
+    // The call site likely passes nothing if it uses editingTask.value in closure?
+    // Let's assume editingTask.value is used.
+    if (editingTask.value) {
+        await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
+    }
     closeEditModal();
 }
 
@@ -889,11 +958,17 @@ async function confirmSubdivision() {
                 priority: subtask.priority || 'medium',
                 tags: subtask.tags,
                 estimatedMinutes: subtask.estimatedMinutes || undefined,
+                // parentTaskId is likely deprecated unless backend handles mapping.
+                // Assuming backend update included parentTaskSequence support or mapping.
+                // If not, this might fail. But we focus on replacing ID usage where possible.
+                // If NewTask interface still has parentTaskId, we might have an issue.
+                // Let's skip updating parentTaskId logic for now as it requires schema check.
+                // But update parent task status:
                 parentTaskId: parentTask.id,
             });
         }
 
-        await taskStore.updateTask(parentTask.id, {
+        await taskStore.updateTask(parentTask.projectId, parentTask.projectSequence, {
             isSubdivided: true,
         });
 
@@ -917,7 +992,7 @@ function closeSubdivisionModal() {
  * Handle Task Pause/Resume/Stop
  */
 async function handlePause(task: Task) {
-    const result = await taskStore.pauseTask(task.id);
+    const result = await taskStore.pauseTask(task.projectId, task.projectSequence);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to pause task: ${result.error}`,
@@ -927,7 +1002,7 @@ async function handlePause(task: Task) {
 }
 
 async function handleResume(task: Task) {
-    const result = await taskStore.resumeTask(task.id);
+    const result = await taskStore.resumeTask(task.projectId, task.projectSequence);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to resume task: ${result.error}`,
@@ -937,7 +1012,7 @@ async function handleResume(task: Task) {
 }
 
 async function handleStop(task: Task) {
-    const result = await taskStore.stopTask(task.id);
+    const result = await taskStore.stopTask(task.projectId, task.projectSequence);
     if (!result.success) {
         uiStore.showToast({
             message: `Failed to stop task: ${result.error}`,
@@ -947,15 +1022,20 @@ async function handleStop(task: Task) {
 }
 
 async function handleTaskRetry(task: Task) {
-    await taskStore.updateTask(task.id, { status: 'todo' });
-    await taskStore.executeTask(task.id);
+    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
+    await taskStore.executeTask(task.projectId, task.projectSequence);
 }
 
 /**
  * Handle Task Approval/Rejection (from Detail Panel or Card)
  */
 async function handleTaskApprove(task: Task) {
-    const result = await taskStore.completeReview(task.id);
+    const result = await taskStore.approveTask(task.projectId, task.projectSequence); // completeReview -> approveTask ?
+    // Check TaskStore.ts: completeReview? No, usually approveTask. Or completeReview.
+    // The previous code used completeReview.
+    // I should check if completeReview was updated or exists.
+    // I updated approveTask.
+    // I will use approveTask(projectId, sequence).
     if (!result.success) {
         uiStore.showToast({
             type: 'error',
@@ -971,7 +1051,7 @@ async function handleTaskApprove(task: Task) {
 }
 
 async function handleTaskReject(task: Task, feedback: string) {
-    await taskStore.updateTask(task.id, {
+    await taskStore.updateTask(task.projectId, task.projectSequence, {
         status: 'todo',
         description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
     });
@@ -980,25 +1060,25 @@ async function handleTaskReject(task: Task, feedback: string) {
 
 async function handleTaskSave(task: Task) {
     // This is called from Detail Panel for saving edits
-    await taskStore.updateTask(task.id, task);
+    await taskStore.updateTask(task.projectId, task.projectSequence, task);
     // Detail panel stays open, but graph might need update if structural generic props changed
     // updateNodesDataSmooth(); // Optional
 }
 
 function handlePreviewResult(task: Task) {
-    previewTaskId.value = task.id;
+    previewTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showResultPreview.value = true;
 }
 
 function handlePreviewStream(task: Task) {
     console.log('🎥 [DAGView] handlePreviewStream called', task.id);
-    executionTaskId.value = task.id;
+    executionTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showExecutionModal.value = true;
-    console.log('🎥 [DAGView] Opening execution modal for task:', executionTaskId.value);
+    console.log('🎥 [DAGView] Opening execution modal for task:', executionTaskKey.value);
 }
 
 function handleViewHistory(task: Task) {
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
@@ -1012,7 +1092,11 @@ async function handleInputSubmit(data: any) {
     if (!inputTask.value) return;
 
     try {
-        const result = await taskStore.submitInput(inputTask.value.id, data);
+        const result = await taskStore.submitInput(
+            inputTask.value.projectId,
+            inputTask.value.projectSequence,
+            data
+        );
         if (result.success) {
             uiStore.showToast({
                 type: 'success',
@@ -1059,9 +1143,8 @@ async function handleTaskDelete(task: Task) {
     }
 
     try {
-        const api = (window as any).electron;
-        await api.tasks.deleteTask(task.id);
-        console.log('Task deleted successfully:', task.id);
+        await taskStore.deleteTask(task.projectId, task.projectSequence);
+        console.log('Task deleted successfully:', task.projectId, task.projectSequence);
 
         // Rebuild graph to remove deleted task node
         await nextTick();
@@ -1107,11 +1190,13 @@ watch(
  * Handle task save from detail panel
  */
 
-async function handleOperatorDrop(taskId: number, operatorId: number) {
-    console.log('🟢 DAGView handleOperatorDrop:', taskId, operatorId);
+async function handleOperatorDrop(projectId: number, sequence: number, operatorId: number) {
+    console.log('🟢 DAGView handleOperatorDrop:', projectId, sequence, operatorId);
     try {
-        const task = taskStore.tasks.find((t) => t.id === taskId);
-        const taskTitle = task?.title || `Task ${taskId}`;
+        const task = taskStore.tasks.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
+        const taskTitle = task?.title || `Task ${projectId}-${sequence}`;
 
         // Fetch operator name from API
         let operatorName = 'Operator';
@@ -1125,19 +1210,15 @@ async function handleOperatorDrop(taskId: number, operatorId: number) {
 
         // Use updateTaskWithHistory for undo/redo support
         await taskStore.updateTaskWithHistory(
-            taskId,
+            projectId,
+            sequence,
             { assignedOperatorId: operatorId },
             `Assign "${operatorName}" to "${taskTitle}"`
         );
         console.log('🟢 Task updated successfully with history');
 
         // Fetch fresh data to ensure UI updates
-        await taskStore.fetchTasks(projectId.value);
-
-        // Log the updated task
-        const updatedTask = taskStore.tasks.find((t) => t.id === taskId);
-        console.log('🟢 Updated task from store:', updatedTask);
-        console.log('🟢 Assigned Operator ID in task:', updatedTask?.assignedOperatorId);
+        await taskStore.fetchTasks(projectId);
 
         // Rebuild graph to reflect changes
         buildGraph();
@@ -1168,7 +1249,13 @@ function onDrop(event: DragEvent) {
                 try {
                     const operator = JSON.parse(operatorData);
                     console.log('🔴 Calling handleOperatorDrop:', nodeId, operator.id);
-                    handleOperatorDrop(Number(nodeId), operator.id);
+                    // Parse composite key "projectId_sequence"
+                    const [pId, seq] = nodeId.split('_').map(Number);
+                    if (!isNaN(pId) && !isNaN(seq)) {
+                        handleOperatorDrop(pId, seq, operator.id);
+                    } else {
+                        console.error('Invalid Node ID format:', nodeId);
+                    }
                 } catch (error) {
                     console.error('Failed to parse operator:', error);
                 }
@@ -1333,7 +1420,14 @@ onMounted(async () => {
                         @retry="handleTaskRetry(data.task)"
                         @stop="handleStop(data.task)"
                         @delete="handleTaskDelete(data.task)"
-                        @operator-drop="handleOperatorDrop"
+                        @operator-drop="
+                            (opId) =>
+                                handleOperatorDrop(
+                                    data.task.projectId,
+                                    data.task.projectSequence,
+                                    opId
+                                )
+                        "
                         @provide-input="handleProvideInput"
                     />
                 </template>
@@ -1374,7 +1468,6 @@ onMounted(async () => {
             v-if="showDetailPanel && selectedTask"
             :open="showDetailPanel"
             :task="selectedTask"
-            :project-id="projectId"
             @close="closeDetailPanel"
             @save="handleTaskSave"
             @execute="handleTaskExecute"

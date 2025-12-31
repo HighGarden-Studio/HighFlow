@@ -337,9 +337,9 @@ async function registerIpcHandlers(): Promise<void> {
         }
     );
 
-    ipcMain.handle('tasks:get', async (_event, id: number) => {
+    ipcMain.handle('tasks:get', async (_event, projectId: number, sequence: number) => {
         try {
-            return await taskRepo.findById(id);
+            return await taskRepo.findByKey(projectId, sequence);
         } catch (error) {
             console.error('Error getting task:', error);
             throw error;
@@ -368,59 +368,78 @@ async function registerIpcHandlers(): Promise<void> {
         }
     );
 
-    ipcMain.handle('tasks:update', async (_event, id: number, data: Partial<Task>) => {
-        try {
-            // Get previous task state to check for status changes
-            const previousTask = await taskRepo.findById(id);
-            const previousStatus = previousTask?.status;
+    ipcMain.handle(
+        'tasks:update',
+        async (_event, projectId: number, sequence: number, data: Partial<Task>) => {
+            try {
+                // Get previous task state to check for status changes
+                const previousTask = await taskRepo.findByKey(projectId, sequence);
+                const previousStatus = previousTask?.status;
 
-            const task = await taskRepo.update(id, data);
-            mainWindow?.webContents.send('task:updated', task);
+                // Sanitize data to prevent overwriting identity fields
+                const updateData = { ...data };
+                delete (updateData as any).id;
+                delete (updateData as any).projectId;
+                delete (updateData as any).projectSequence;
+                delete (updateData as any).sequence; // This was likely the culprit
 
-            // Update scheduler if trigger config changed
-            if (data.triggerConfig !== undefined) {
-                await taskScheduler.updateTask(task);
-            }
+                const task = await taskRepo.updateByKey(projectId, sequence, updateData);
+                mainWindow?.webContents.send('task:updated', task);
 
-            // Check if status actually changed
-            const statusChanged = data.status && data.status !== previousStatus;
-
-            console.log(`[TaskStore] Update task ${id}:`, {
-                newStatus: data.status,
-                prevStatus: previousStatus,
-                statusChanged,
-            });
-
-            if (statusChanged) {
-                mainWindow?.webContents.send('task:status-changed', { id, status: data.status });
-
-                // Send notification for status change
-                if (
-                    data.status === 'done' ||
-                    data.status === 'in_review' ||
-                    data.status === 'blocked'
-                ) {
-                    await taskNotificationService.notifyStatusChange(id, task.status, data.status);
+                // Update scheduler if trigger config changed
+                if (data.triggerConfig !== undefined) {
+                    await taskScheduler.updateTask(task);
                 }
 
-                // Check for dependent tasks ONLY if status changed to 'done'
-                if (data.status === 'done') {
-                    await checkAndExecuteDependentTasks(id, task);
+                // Check if status actually changed
+                const statusChanged = data.status && data.status !== previousStatus;
+
+                console.log(`[TaskStore] Update task ${projectId}-${sequence}:`, {
+                    newStatus: data.status,
+                    prevStatus: previousStatus,
+                    statusChanged,
+                });
+
+                if (statusChanged) {
+                    mainWindow?.webContents.send('task:status-changed', {
+                        projectId,
+                        sequence,
+                        status: data.status,
+                    });
+
+                    // Send notification for status change
+                    if (
+                        data.status === 'done' ||
+                        data.status === 'in_review' ||
+                        data.status === 'blocked'
+                    ) {
+                        await taskNotificationService.notifyStatusChange(
+                            projectId,
+                            sequence,
+                            task.status,
+                            data.status
+                        );
+                    }
+
+                    // Check for dependent tasks ONLY if status changed to 'done'
+                    if (data.status === 'done') {
+                        await checkAndExecuteDependentTasks(projectId, sequence, task);
+                    }
                 }
+                return task;
+            } catch (error) {
+                console.error('Error updating task:', error);
+                throw error;
             }
-            return task;
-        } catch (error) {
-            console.error('Error updating task:', error);
-            throw error;
         }
-    });
+    );
 
     // Update task notification config
     ipcMain.handle(
         'tasks:update-notification-config',
-        async (_event, taskId: number, config: any) => {
+        async (_event, projectId: number, sequence: number, config: any) => {
             try {
-                const task = await taskRepo.update(taskId, {
+                const task = await taskRepo.updateByKey(projectId, sequence, {
                     notificationConfig: config ? JSON.stringify(config) : null,
                 });
                 mainWindow?.webContents.send('task:updated', task);
@@ -433,43 +452,46 @@ async function registerIpcHandlers(): Promise<void> {
     );
 
     // Send test notification
-    ipcMain.handle('tasks:send-test-notification', async (_event, taskId: number, config: any) => {
-        try {
-            const { taskNotificationService } =
-                await import('./services/task-notification-service');
+    ipcMain.handle(
+        'tasks:send-test-notification',
+        async (_event, projectId: number, sequence: number, config: any) => {
+            try {
+                const { taskNotificationService } =
+                    await import('./services/task-notification-service');
 
-            // Get task info for display
-            const task = await taskRepo.findById(taskId);
-            if (!task) {
-                throw new Error(`Task ${taskId} not found`);
+                // Get task info for display
+                const task = await taskRepo.findByKey(projectId, sequence);
+                if (!task) {
+                    throw new Error(`Task ${projectId}-${sequence} not found`);
+                }
+
+                // Send test notification
+                await taskNotificationService.sendTestNotification(projectId, sequence, config, {
+                    taskName: task.title, // Fixed: task.name might be wrong? schema says title
+                    taskDescription: task.description,
+                });
+
+                return { success: true };
+            } catch (error) {
+                console.error('Error sending test notification:', error);
+                throw error;
             }
-
-            // Send test notification
-            await taskNotificationService.sendTestNotification(taskId, config, {
-                taskName: task.name,
-                taskDescription: task.description,
-            });
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error sending test notification:', error);
-            throw error;
         }
-    });
+    );
 
-    ipcMain.handle('tasks:delete', async (_event, id: number) => {
+    ipcMain.handle('tasks:delete', async (_event, projectId: number, sequence: number) => {
         try {
-            await taskRepo.delete(id);
-            mainWindow?.webContents.send('task:deleted', id);
+            await taskRepo.deleteByKey(projectId, sequence);
+            mainWindow?.webContents.send('task:deleted', { projectId, sequence });
         } catch (error) {
             console.error('Error deleting task:', error);
             throw error;
         }
     });
 
-    ipcMain.handle('tasks:reorder', async (_event, projectId: number, taskIds: number[]) => {
+    ipcMain.handle('tasks:reorder', async (_event, projectId: number, taskSequences: number[]) => {
         try {
-            await taskRepo.reorder(projectId, taskIds);
+            await taskRepo.reorder(projectId, taskSequences);
         } catch (error) {
             console.error('Error reordering tasks:', error);
             throw error;

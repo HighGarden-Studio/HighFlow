@@ -8,7 +8,7 @@ import { BrowserWindow } from 'electron';
 import { notificationResolver } from './notification-resolver';
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { Task } from '../database/schema';
 import type { TaskExecutionMetadata, NotificationEvent } from '@core/types/notifications';
 import {
@@ -29,8 +29,13 @@ export class TaskNotificationService {
     /**
      * Notify task status change
      */
-    async notifyStatusChange(taskId: number, oldStatus: string, newStatus: string) {
-        const config = await notificationResolver.resolveConfig(taskId);
+    async notifyStatusChange(
+        projectId: number,
+        sequence: number,
+        oldStatus: string,
+        newStatus: string
+    ) {
+        const config = await notificationResolver.resolveConfig(projectId, sequence);
         if (!config) return;
 
         const shouldNotify =
@@ -39,7 +44,7 @@ export class TaskNotificationService {
 
         if (!shouldNotify) return;
 
-        const task = await this.getTask(taskId);
+        const task = await this.getTask(projectId, sequence);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -78,11 +83,16 @@ export class TaskNotificationService {
     /**
      * Notify task completion with results
      */
-    async notifyCompletion(taskId: number, result: string, metadata?: TaskExecutionMetadata) {
-        const config = await notificationResolver.resolveConfig(taskId);
+    async notifyCompletion(
+        projectId: number,
+        sequence: number,
+        result: string,
+        metadata?: TaskExecutionMetadata
+    ) {
+        const config = await notificationResolver.resolveConfig(projectId, sequence);
 
         console.log(
-            `[TaskNotificationService] notifyCompletion config for ${taskId}:`,
+            `[TaskNotificationService] notifyCompletion config for ${projectId}-${sequence}:`,
             JSON.stringify(config, null, 2)
         );
 
@@ -101,7 +111,7 @@ export class TaskNotificationService {
             return;
         }
 
-        const task = await this.getTask(taskId);
+        const task = await this.getTask(projectId, sequence);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -152,11 +162,11 @@ export class TaskNotificationService {
     /**
      * Notify task in review
      */
-    async notifyReviewReady(taskId: number, result: string) {
-        const config = await notificationResolver.resolveConfig(taskId);
+    async notifyReviewReady(projectId: number, sequence: number, result: string) {
+        const config = await notificationResolver.resolveConfig(projectId, sequence);
 
         console.log(
-            `[TaskNotificationService] notifyReviewReady config for ${taskId}:`,
+            `[TaskNotificationService] notifyReviewReady config for ${projectId}-${sequence}:`,
             JSON.stringify(config, null, 2)
         );
 
@@ -177,7 +187,7 @@ export class TaskNotificationService {
             return;
         }
 
-        const task = await this.getTask(taskId);
+        const task = await this.getTask(projectId, sequence);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -225,8 +235,8 @@ export class TaskNotificationService {
     /**
      * Notify task failure
      */
-    async notifyFailure(taskId: number, error: string) {
-        const config = await notificationResolver.resolveConfig(taskId);
+    async notifyFailure(projectId: number, sequence: number, error: string) {
+        const config = await notificationResolver.resolveConfig(projectId, sequence);
         if (!config) return;
 
         const shouldNotify =
@@ -235,7 +245,7 @@ export class TaskNotificationService {
 
         if (!shouldNotify) return;
 
-        const task = await this.getTask(taskId);
+        const task = await this.getTask(projectId, sequence);
         if (!task) return;
 
         const project = task.projectId ? await this.getProject(task.projectId) : null;
@@ -491,8 +501,12 @@ export class TaskNotificationService {
     /**
      * Get task from database
      */
-    private async getTask(taskId: number): Promise<Task | null> {
-        const result = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    private async getTask(projectId: number, sequence: number): Promise<Task | null> {
+        const result = await db
+            .select()
+            .from(tasks)
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, sequence)))
+            .limit(1);
 
         return (result[0] as Task) || null;
     }
@@ -510,17 +524,20 @@ export class TaskNotificationService {
      * Send test notification
      */
     async sendTestNotification(
-        taskId: number,
+        projectId: number,
+        sequence: number,
         config: any,
         taskInfo: { taskName?: string; taskDescription?: string | null }
     ) {
-        console.log(`[TaskNotificationService] Sending test notification for task ${taskId}`);
+        console.log(
+            `[TaskNotificationService] Sending test notification for task ${projectId}-${sequence}`
+        );
 
         const testPayload = {
             event: 'test',
             task: {
-                id: taskId,
-                name: taskInfo.taskName || `Task ${taskId}`,
+                id: `${projectId}-${sequence}`,
+                name: taskInfo.taskName || `Task ${projectId}-${sequence}`,
                 description: taskInfo.taskDescription || '테스트 알림입니다.',
             },
             message:
@@ -535,8 +552,8 @@ export class TaskNotificationService {
             promises.push(
                 this.sendSlackNotification(config.slack, {
                     task: {
-                        id: taskId,
-                        title: taskInfo.taskName || `Task ${taskId}`,
+                        id: `${projectId}-${sequence}`,
+                        title: taskInfo.taskName || `Task ${projectId}-${sequence}`,
                         description: taskInfo.taskDescription,
                     } as any,
                     project: null,

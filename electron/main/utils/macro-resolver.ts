@@ -77,8 +77,8 @@ export async function resolveMacrosInCode(
                       .select()
                       .from(tasks)
                       .where(
-                          sql`${tasks.id} IN (${sql.join(
-                              dependencyTaskIds.map((id) => sql`${id}`),
+                          sql`${tasks.projectId} = ${projectId} AND ${tasks.projectSequence} IN (${sql.join(
+                              dependencyTaskIds.map((seqId) => sql`${seqId}`),
                               sql`, `
                           )})`
                       );
@@ -96,14 +96,14 @@ export async function resolveMacrosInCode(
             .select()
             .from(tasks)
             .where(
-                sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
-                    dependencyTaskIds.map((id) => sql`${id}`),
+                sql`${tasks.projectId} = ${projectId} AND ${tasks.projectSequence} IN (${sql.join(
+                    dependencyTaskIds.map((seqId) => sql`${seqId}`),
                     sql`, `
                 )}) AND ${tasks.status} = 'done'`
             );
 
-        // Sort by ID to maintain consistent ordering
-        previousTasks = dependencyTasks.sort((a, b) => a.id - b.id);
+        // Sort by projectSequence to maintain consistent ordering
+        previousTasks = dependencyTasks.sort((a, b) => a.projectSequence - b.projectSequence);
 
         console.log(
             `[MacroResolver] Found ${previousTasks.length} completed dependency tasks for Task #${task.projectSequence}`
@@ -348,13 +348,13 @@ export async function prepareMacroData(
             .select()
             .from(tasks)
             .where(
-                sql`${tasks.projectId} = ${projectId} AND ${tasks.id} IN (${sql.join(
-                    dependencyTaskIds.map((id) => sql`${id}`),
+                sql`${tasks.projectId} = ${projectId} AND ${tasks.projectSequence} IN (${sql.join(
+                    dependencyTaskIds.map((seqId) => sql`${seqId}`),
                     sql`, `
                 )}) AND ${tasks.status} = 'done'`
             );
 
-        previousTasks = dependencyTasks.sort((a, b) => a.id - b.id);
+        previousTasks = dependencyTasks.sort((a, b) => a.projectSequence - b.projectSequence);
     }
 
     const getResult = (t: any) => {

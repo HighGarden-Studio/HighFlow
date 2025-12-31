@@ -178,9 +178,10 @@ watch(
     () => taskStore.tasks,
     async () => {
         if (!isMounted.value) return;
-        const newCache = new Map<number, MissingProviderInfo | null>();
+        const newCache = new Map<string, MissingProviderInfo | null>();
         for (const task of taskStore.tasks) {
-            newCache.set(task.id, await getMissingProviderForTask(task));
+            const key = `${task.projectId}_${task.projectSequence}`;
+            newCache.set(key, await getMissingProviderForTask(task));
         }
         missingProviderCache.value = newCache;
     },
@@ -294,7 +295,7 @@ function closeDetailPanel() {
 }
 
 async function handleTaskSave(task: Task) {
-    await taskStore.updateTask(task.id, task);
+    await taskStore.updateTask(task.projectId, task.projectSequence, task);
 }
 
 async function handleTaskExecute(task: Task) {
@@ -321,7 +322,7 @@ async function handleTaskExecute(task: Task) {
 }
 
 async function handleTaskApprove(task: Task) {
-    const result = await taskStore.completeReview(task.id);
+    const result = await taskStore.completeReview(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to approve task:', result.error);
         uiStore.showToast({
@@ -338,7 +339,7 @@ async function handleTaskApprove(task: Task) {
 }
 
 async function handleTaskReject(task: Task, feedback: string) {
-    await taskStore.updateTask(task.id, {
+    await taskStore.updateTask(task.projectId, task.projectSequence, {
         status: 'todo',
         description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
     });
@@ -384,7 +385,7 @@ async function confirmSubdivision() {
         }
 
         // Mark parent task as subdivided
-        await taskStore.updateTask(parentTask.id, {
+        await taskStore.updateTask(parentTask.projectId, parentTask.projectSequence, {
             isSubdivided: true,
         });
 
@@ -423,10 +424,10 @@ function handlePreviewResult(task: Task) {
 
 async function handleRetry(task: Task) {
     // Retry task execution
-    await taskStore.updateTask(task.id, { status: 'todo' });
+    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
     // Immediately execute the task after resetting to todo
-    await taskStore.executeTask(task.id);
-    console.log('Retry task executed:', task.id);
+    await taskStore.executeTask(task.projectId, task.projectSequence);
+    console.log('Retry task executed:', task.projectId, task.projectSequence);
 }
 
 function handleViewHistory(task: Task) {
@@ -448,21 +449,21 @@ function handleViewStepHistory(task: Task) {
 }
 
 async function handlePause(task: Task) {
-    const result = await taskStore.pauseTask(task.id);
+    const result = await taskStore.pauseTask(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to pause task:', result.error);
     }
 }
 
 async function handleResume(task: Task) {
-    const result = await taskStore.resumeTask(task.id);
+    const result = await taskStore.resumeTask(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to resume task:', result.error);
     }
 }
 
 async function handleStop(task: Task) {
-    const result = await taskStore.stopTask(task.id);
+    const result = await taskStore.stopTask(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to stop task:', result.error);
     }
@@ -481,7 +482,11 @@ function closeEditModal() {
 
 async function handleEditModalSave(updates: Partial<Task>) {
     if (!editingTask.value) return;
-    await taskStore.updateTask(editingTask.value.id, updates);
+    await taskStore.updateTask(
+        editingTask.value.projectId,
+        editingTask.value.projectSequence,
+        updates
+    );
     closeEditModal();
 }
 
@@ -523,7 +528,7 @@ function closeLivePreview() {
 }
 
 async function handleResultApprove(task: Task) {
-    const result = await taskStore.completeReview(task.id);
+    const result = await taskStore.completeReview(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to approve task:', result.error);
     }
@@ -544,7 +549,10 @@ async function handleProjectNameUpdate(newName: string) {
 
 async function handleDeleteTask(task: Task) {
     const dependentTasks = taskStore.tasks.filter(
-        (t) => t.id !== task.id && Array.isArray(t.dependencies) && t.dependencies.includes(task.id)
+        (t) =>
+            (t.projectId !== task.projectId || t.projectSequence !== task.projectSequence) &&
+            Array.isArray(t.dependencies) &&
+            t.dependencies.includes(task.projectSequence)
     );
 
     if (dependentTasks.length > 0) {
@@ -556,9 +564,9 @@ async function handleDeleteTask(task: Task) {
 
         for (const dependent of dependentTasks) {
             const updatedDependencies = (dependent.dependencies || []).filter(
-                (depId: number) => depId !== task.id
+                (depId: number) => depId !== task.projectSequence
             );
-            await taskStore.updateTask(dependent.id, {
+            await taskStore.updateTask(dependent.projectId, dependent.projectSequence, {
                 dependencies: updatedDependencies,
             });
         }
@@ -566,12 +574,14 @@ async function handleDeleteTask(task: Task) {
         return;
     }
 
-    await taskStore.deleteTask(task.id);
+    await taskStore.deleteTask(task.projectId, task.projectSequence);
 }
 
 // Subtask helper - get subtasks for a parent task
-function getSubtasks(parentTaskId: number): Task[] {
-    return taskStore.tasks.filter((t) => t.parentTaskId === parentTaskId);
+function getSubtasks(projectId: number, parentSequence: number): Task[] {
+    return taskStore.tasks.filter(
+        (t) => t.parentTaskId === parentSequence && t.projectId === projectId
+    );
 }
 
 const liveStreamingContent = computed(() => {
@@ -601,6 +611,17 @@ const liveResponseContent = computed(() => {
         ''
     );
 });
+
+// Helper to get tasks for a column, potentially merging statuses
+function getTasksForColumn(columnId: string) {
+    if (columnId === 'blocked') {
+        const blocked = groupedTasks.value.blocked || [];
+        const failed = groupedTasks.value.failed || [];
+        // Combine and sort by order
+        return [...blocked, ...failed].sort((a, b) => a.order - b.order);
+    }
+    return groupedTasks.value[columnId as keyof typeof groupedTasks.value] || [];
+}
 
 const liveResponseType = computed(() => {
     const task = livePreviewTask.value as any;
@@ -697,8 +718,9 @@ function formatJson(json: string): string {
 /**
  * Get cached missing provider info for a task
  */
-function getCachedMissingProvider(taskId: number): MissingProviderInfo | null {
-    return missingProviderCache.value.get(taskId) || null;
+function getCachedMissingProvider(projectId: number, sequence: number): MissingProviderInfo | null {
+    const key = `${projectId}_${sequence}`;
+    return missingProviderCache.value.get(key) || null;
 }
 
 /**
@@ -854,7 +876,10 @@ async function handleConnectionEnd(targetTask: Task) {
     const sourceTask = connectionSourceTask.value;
 
     // 자기 자신에게 연결 불가
-    if (sourceTask.id === targetTask.id) {
+    if (
+        sourceTask.projectId === targetTask.projectId &&
+        sourceTask.projectSequence === targetTask.projectSequence
+    ) {
         connectionProcessing = false;
         handleConnectionDragEnd();
         return;
@@ -863,7 +888,7 @@ async function handleConnectionEnd(targetTask: Task) {
     // 이미 연결되어 있으면 무시
     const existingDependsOn = sourceTask.triggerConfig?.dependsOn;
     const existingTaskIds = existingDependsOn?.taskIds || [];
-    if (existingTaskIds.includes(targetTask.id)) {
+    if (existingTaskIds.includes(targetTask.projectSequence)) {
         connectionProcessing = false;
         handleConnectionDragEnd();
         return;
@@ -871,26 +896,29 @@ async function handleConnectionEnd(targetTask: Task) {
 
     console.log('Connection created:', sourceTask.title, '→', targetTask.title);
     console.log(
-        'Source task #' + sourceTask.projectSequence + ' (ID:',
-        sourceTask.id + '), Target task #' + targetTask.projectSequence + ' (ID:',
-        targetTask.id + ')'
+        'Source task #' +
+            sourceTask.projectSequence +
+            ', Target task #' +
+            targetTask.projectSequence
     );
-    console.log('Existing taskIds:', existingTaskIds);
+    console.log('Existing taskIds (sequences):', existingTaskIds);
 
     const existingPassResultsFrom = existingDependsOn?.passResultsFrom || [];
 
     const newTriggerConfig = {
         ...sourceTask.triggerConfig,
         dependsOn: {
-            taskIds: [...existingTaskIds, targetTask.id],
+            taskIds: [...existingTaskIds, targetTask.projectSequence],
             operator: existingDependsOn?.operator || ('all' as const),
-            passResultsFrom: Array.from(new Set([...existingPassResultsFrom, targetTask.id])),
+            passResultsFrom: Array.from(
+                new Set([...existingPassResultsFrom, targetTask.projectSequence])
+            ),
         },
     };
 
     console.log('New trigger config:', JSON.stringify(newTriggerConfig, null, 2));
 
-    await taskStore.updateTask(sourceTask.id, {
+    await taskStore.updateTask(sourceTask.projectId, sourceTask.projectSequence, {
         triggerConfig: newTriggerConfig,
     });
 
@@ -918,7 +946,10 @@ async function handleApproveTask() {
     approvalProcessing.value = true;
     try {
         // Approve: move back to IN_PROGRESS to continue execution
-        const result = await taskStore.approveTask(approvalTask.value.id);
+        const result = await taskStore.approveTask(
+            approvalTask.value.projectId,
+            approvalTask.value.projectSequence
+        );
         if (!result.success) {
             console.error('Failed to approve task:', result.error);
         }
@@ -980,7 +1011,11 @@ async function handleInputSubmit(data: any) {
     if (!inputTask.value) return;
 
     try {
-        const result = await taskStore.submitInput(inputTask.value.id, data);
+        const result = await taskStore.submitInput(
+            inputTask.value.projectId,
+            inputTask.value.projectSequence,
+            data
+        );
         if (result.success) {
             uiStore.showToast({
                 type: 'success',
@@ -1162,12 +1197,12 @@ onMounted(async () => {
                             <span
                                 class="text-sm px-2 rounded-full"
                                 :class="
-                                    groupedTasks[column.id]?.length > 0
+                                    getTasksForColumn(column.id)?.length > 0
                                         ? 'text-gray-900 bg-gray-200 dark:text-gray-200 dark:bg-gray-700'
                                         : 'text-gray-500 bg-gray-100 dark:bg-gray-800'
                                 "
                             >
-                                {{ groupedTasks[column.id]?.length || 0 }}
+                                {{ getTasksForColumn(column.id)?.length || 0 }}
                             </span>
                         </div>
                         <button
@@ -1194,8 +1229,8 @@ onMounted(async () => {
                     <div class="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-3">
                         <!-- Use full-featured TaskCard component -->
                         <div
-                            v-for="task in groupedTasks[column.id]"
-                            :key="task.id"
+                            v-for="task in getTasksForColumn(column.id)"
+                            :key="`${task.projectId}_${task.projectSequence}`"
                             draggable="true"
                             @dragstart="handleDragStart(task)"
                             @dragend="handleDragEnd"
@@ -1206,13 +1241,15 @@ onMounted(async () => {
                         >
                             <TaskCard
                                 :task="task"
-                                :subtasks="getSubtasks(task.id)"
+                                :subtasks="getSubtasks(task.projectId, task.projectSequence)"
                                 :show-assignee="true"
                                 :show-due-date="true"
                                 :show-priority="true"
                                 :show-tags="true"
                                 :is-dragging="isTaskDragging(task)"
-                                :missing-provider="getCachedMissingProvider(task.id)"
+                                :missing-provider="
+                                    getCachedMissingProvider(task.projectId, task.projectSequence)
+                                "
                                 :hide-prompt-actions="true"
                                 @click="(t) => openTaskDetail(t)"
                                 @edit="handleEditTask"

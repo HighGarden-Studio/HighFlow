@@ -14,6 +14,10 @@ export interface ScriptExecutionResult {
     error?: string;
     logs: string[];
     duration: number;
+    control?: {
+        next?: number[] | null;
+        reason?: string;
+    };
 }
 
 export class ScriptExecutor {
@@ -149,10 +153,71 @@ export class ScriptExecutor {
 
             const result = vm.run(wrappedCode);
 
+            // Parse ScriptTaskReturn format
+            let output: string;
+            let control: { next?: number[] | null; reason?: string } | undefined;
+
+            try {
+                // Check if result is ScriptTaskReturn format
+                if (result && typeof result === 'object' && 'result' in result) {
+                    // ScriptTaskReturn format
+                    output = String(result.result || '');
+
+                    if (result.control) {
+                        // Validate control flow
+                        const ctrl = result.control;
+                        if (ctrl.next !== undefined && ctrl.next !== null) {
+                            if (!Array.isArray(ctrl.next)) {
+                                logs.push(
+                                    'WARN: control.next must be an array, ignoring control flow'
+                                );
+                            } else if (!ctrl.next.every((id: any) => typeof id === 'number')) {
+                                logs.push(
+                                    'WARN: control.next must contain only numbers, ignoring control flow'
+                                );
+                            } else {
+                                control = {
+                                    next: ctrl.next,
+                                    reason: ctrl.reason ? String(ctrl.reason) : undefined,
+                                };
+                                logs.push(
+                                    `Control flow: next=[${ctrl.next.join(', ')}], reason="${ctrl.reason || ''}"`
+                                );
+                            }
+                        } else {
+                            // Explicit terminal node
+                            control = {
+                                next: ctrl.next,
+                                reason: ctrl.reason ? String(ctrl.reason) : undefined,
+                            };
+                            logs.push(`Control flow: STOP (reason: "${ctrl.reason || 'none'}")`);
+                        }
+                    }
+                } else {
+                    // Invalid format - we enforce ScriptTaskReturn now
+                    const type = typeof result;
+                    const valStr = type === 'object' ? JSON.stringify(result) : String(result);
+
+                    throw new Error(
+                        `Invalid script return format. Expected object with 'result' property.\n` +
+                            `Received (${type}): ${valStr}\n\n` +
+                            `Required format:\n` +
+                            `return {\n` +
+                            `  result: "your output",\n` +
+                            `  // control: { ... } // Optional\n` +
+                            `};`
+                    );
+                }
+            } catch (e: any) {
+                logs.push(`ERROR: Script return value verification failed: ${e.message}`);
+                throw new Error(`Script return value verification failed: ${e.message}`);
+            }
+
             return {
                 success: true,
-                output: String(result || ''),
+                output,
                 logs,
+                control,
                 duration: 0, // Will be set by caller
             };
         } catch (error: any) {

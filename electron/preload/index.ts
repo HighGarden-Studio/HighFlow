@@ -73,24 +73,25 @@ const tasksAPI = {
     create: (data: any) => ipcRenderer.invoke('tasks:create', data),
 
     update: (
-        id: number,
+        projectId: number,
+        sequence: number,
         data: Partial<{ title: string; description: string; status: string; priority: string }>
-    ) => ipcRenderer.invoke('tasks:update', id, data),
+    ) => ipcRenderer.invoke('tasks:update', projectId, sequence, data),
 
-    delete: (id: number) => ipcRenderer.invoke('tasks:delete', id),
+    delete: (projectId: number, sequence: number) =>
+        ipcRenderer.invoke('tasks:delete', projectId, sequence),
 
-    reorder: (projectId: number, taskIds: number[]) =>
-        ipcRenderer.invoke('tasks:reorder', projectId, taskIds),
+    reorder: (projectId: number, sequences: number[]) =>
+        ipcRenderer.invoke('tasks:reorder', projectId, sequences),
 
-    executeScript: (taskId: number) => ipcRenderer.invoke('tasks:execute-script', taskId),
+    stopTask: (projectId: number, sequence: number) =>
+        ipcRenderer.invoke('taskExecution:stop', projectId, sequence),
 
-    stopTask: (taskId: number) => ipcRenderer.invoke('taskExecution:stop', taskId),
+    sendTestNotification: (projectId: number, sequence: number, config: any) =>
+        ipcRenderer.invoke('tasks:send-test-notification', projectId, sequence, config),
 
-    sendTestNotification: (taskId: number, config: any) =>
-        ipcRenderer.invoke('tasks:send-test-notification', taskId, config),
-
-    updateNotificationConfig: (taskId: number, config: any) =>
-        ipcRenderer.invoke('tasks:update-notification-config', taskId, config),
+    updateNotificationConfig: (projectId: number, sequence: number, config: any) =>
+        ipcRenderer.invoke('tasks:update-notification-config', projectId, sequence, config),
 };
 
 // ========================================
@@ -236,6 +237,7 @@ const eventsAPI = {
             // Activity Logging
             'activity:log',
             // Curator Events
+            'task-history:created',
             'curator:started',
             'curator:step',
             'curator:completed',
@@ -653,17 +655,21 @@ interface ProgressData {
 
 const taskExecutionAPI = {
     // Core execution control
-    execute: (taskId: number, options?: ExecutionOptions): Promise<ExecutionResult> =>
-        ipcRenderer.invoke('taskExecution:execute', taskId, options),
+    execute: (
+        projectId: number,
+        sequence: number,
+        options?: ExecutionOptions
+    ): Promise<ExecutionResult> =>
+        ipcRenderer.invoke('taskExecution:execute', projectId, sequence, options),
 
-    pause: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:pause', taskId),
+    pause: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:pause', projectId, sequence),
 
-    resume: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:resume', taskId),
+    resume: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:resume', projectId, sequence),
 
-    stop: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:stop', taskId),
+    stop: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:stop', projectId, sequence),
 
     // Global Execution Control
     pauseAll: (): Promise<boolean> => ipcRenderer.invoke('taskExecution:pauseAll'),
@@ -672,8 +678,8 @@ const taskExecutionAPI = {
         ipcRenderer.invoke('taskExecution:getGlobalPauseStatus'),
 
     // Status queries
-    getStatus: (taskId: number): Promise<ExecutionStatus | null> =>
-        ipcRenderer.invoke('taskExecution:getStatus', taskId),
+    getStatus: (projectId: number, sequence: number): Promise<ExecutionStatus | null> =>
+        ipcRenderer.invoke('taskExecution:getStatus', projectId, sequence),
 
     getAllActive: (): Promise<
         Array<{
@@ -687,45 +693,65 @@ const taskExecutionAPI = {
 
     // NEEDS_APPROVAL state handlers
     requestApproval: (
-        taskId: number,
+        projectId: number,
+        sequence: number,
         data: { question: string; options?: string[]; context?: unknown }
     ): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:requestApproval', taskId, data),
+        ipcRenderer.invoke('taskExecution:requestApproval', projectId, sequence, data),
 
-    approve: (taskId: number, response?: string): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:approve', taskId, response),
+    approve: (
+        projectId: number,
+        sequence: number,
+        response?: string
+    ): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:approve', projectId, sequence, response),
 
-    reject: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:reject', taskId),
+    reject: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:reject', projectId, sequence),
 
     // Input task handlers
-    submitInput: (taskId: number, payload: any): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('task:submitInput', taskId, payload),
+    submitInput: (
+        projectId: number,
+        sequence: number,
+        payload: any
+    ): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:submitInput', projectId, sequence, payload),
 
     // IN_REVIEW state handlers
-    completeReview: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:completeReview', taskId),
+    completeReview: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:completeReview', projectId, sequence),
 
-    requestChanges: (taskId: number, refinementPrompt: string): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:requestChanges', taskId, refinementPrompt),
+    requestChanges: (
+        projectId: number,
+        sequence: number,
+        refinementPrompt: string
+    ): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:requestChanges', projectId, sequence, refinementPrompt),
 
     // DONE state handlers
     requestAdditionalWork: (
-        taskId: number,
+        projectId: number,
+        sequence: number,
         additionalWorkPrompt: string
     ): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:requestAdditionalWork', taskId, additionalWorkPrompt),
+        ipcRenderer.invoke(
+            'taskExecution:requestAdditionalWork',
+            projectId,
+            sequence,
+            additionalWorkPrompt
+        ),
 
     // BLOCKED state handlers
-    block: (taskId: number, reason?: string): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:block', taskId, reason),
+    block: (projectId: number, sequence: number, reason?: string): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:block', projectId, sequence, reason),
 
-    unblock: (taskId: number): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:unblock', taskId),
+    unblock: (projectId: number, sequence: number): Promise<{ success: boolean }> =>
+        ipcRenderer.invoke('taskExecution:unblock', projectId, sequence),
 
     // Progress update
     updateProgress: (
-        taskId: number,
+        projectId: number,
+        sequence: number,
         progress: {
             percentage: number;
             phase: string;
@@ -734,7 +760,7 @@ const taskExecutionAPI = {
             cost?: number;
         }
     ): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('taskExecution:updateProgress', taskId, progress),
+        ipcRenderer.invoke('taskExecution:updateProgress', projectId, sequence, progress),
 
     // ========================================
     // Recovery Methods
@@ -749,8 +775,11 @@ const taskExecutionAPI = {
         ipcRenderer.invoke('taskExecution:resetStuck'),
 
     // Force clear a specific task execution and reset to todo
-    forceClear: (taskId: number): Promise<{ success: boolean; hadExecution: boolean }> =>
-        ipcRenderer.invoke('taskExecution:forceClear', taskId),
+    forceClear: (
+        projectId: number,
+        sequence: number
+    ): Promise<{ success: boolean; hadExecution: boolean }> =>
+        ipcRenderer.invoke('taskExecution:forceClear', projectId, sequence),
 
     // ========================================
     // Auto AI Review Methods
@@ -758,37 +787,49 @@ const taskExecutionAPI = {
 
     // Start auto AI review for a task in IN_REVIEW status
     startAutoReview: (
-        taskId: number,
+        projectId: number,
+        sequence: number,
         options?: ExecutionOptions
     ): Promise<{ success: boolean; result?: unknown; error?: string }> =>
-        ipcRenderer.invoke('taskExecution:startAutoReview', taskId, options),
+        ipcRenderer.invoke('taskExecution:startAutoReview', projectId, sequence, options),
 
     // Get review status for a task
     getReviewStatus: (
-        taskId: number
+        projectId: number,
+        sequence: number
     ): Promise<{
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         status: string;
         startedAt: Date;
         progress: number;
         streamContent: string;
         error?: string;
-    } | null> => ipcRenderer.invoke('taskExecution:getReviewStatus', taskId),
+    } | null> => ipcRenderer.invoke('taskExecution:getReviewStatus', projectId, sequence),
 
     // Cancel ongoing AI review
-    cancelReview: (taskId: number): Promise<{ success: boolean; hadReview: boolean }> =>
-        ipcRenderer.invoke('taskExecution:cancelReview', taskId),
+    cancelReview: (
+        projectId: number,
+        sequence: number
+    ): Promise<{ success: boolean; hadReview: boolean }> =>
+        ipcRenderer.invoke('taskExecution:cancelReview', projectId, sequence),
 
     // ========================================
     // Event Listeners
     // ========================================
 
-    onStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => {
+    onStarted: (
+        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; startedAt: Date }
+            data: { projectId: number; projectSequence: number; startedAt: Date }
         ) => {
-            console.log('[Preload] taskExecution:started received:', data.taskId);
+            console.log(
+                '[Preload] taskExecution:started received:',
+                data.projectId,
+                data.projectSequence
+            );
             callback(data);
         };
         ipcRenderer.on('taskExecution:started', handler);
@@ -804,53 +845,68 @@ const taskExecutionAPI = {
         return () => ipcRenderer.removeListener('taskExecution:progress', handler);
     },
 
-    onCompleted: (callback: (data: { taskId: number; result: unknown }) => void) => {
+    onCompleted: (
+        callback: (data: { projectId: number; projectSequence: number; result: unknown }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; result: unknown }
+            data: { projectId: number; projectSequence: number; result: unknown }
         ) => {
-            console.log('[Preload] taskExecution:completed received:', data.taskId);
+            console.log(
+                '[Preload] taskExecution:completed received:',
+                data.projectId,
+                data.projectSequence
+            );
             callback(data);
         };
         ipcRenderer.on('taskExecution:completed', handler);
         return () => ipcRenderer.removeListener('taskExecution:completed', handler);
     },
 
-    onFailed: (callback: (data: { taskId: number; error: string }) => void) => {
+    onFailed: (
+        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; error: string }
+            data: { projectId: number; projectSequence: number; error: string }
         ) => callback(data);
         ipcRenderer.on('taskExecution:failed', handler);
         return () => ipcRenderer.removeListener('taskExecution:failed', handler);
     },
 
-    onPaused: (callback: (data: { taskId: number; pausedAt: Date }) => void) => {
+    onPaused: (
+        callback: (data: { projectId: number; projectSequence: number; pausedAt: Date }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; pausedAt: Date }
+            data: { projectId: number; projectSequence: number; pausedAt: Date }
         ) => callback(data);
         ipcRenderer.on('taskExecution:paused', handler);
         return () => ipcRenderer.removeListener('taskExecution:paused', handler);
     },
 
-    onResumed: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onResumed: (callback: (data: { projectId: number; projectSequence: number }) => void) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskExecution:resumed', handler);
         return () => ipcRenderer.removeListener('taskExecution:resumed', handler);
     },
 
-    onStopped: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onStopped: (callback: (data: { projectId: number; projectSequence: number }) => void) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskExecution:stopped', handler);
         return () => ipcRenderer.removeListener('taskExecution:stopped', handler);
     },
 
     onApprovalRequired: (
         callback: (data: {
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             question: string;
             options?: string[];
             context?: unknown;
@@ -858,69 +914,95 @@ const taskExecutionAPI = {
     ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; question: string; options?: string[]; context?: unknown }
+            data: {
+                projectId: number;
+                projectSequence: number;
+                question: string;
+                options?: string[];
+                context?: unknown;
+            }
         ) => callback(data);
         ipcRenderer.on('taskExecution:approvalRequired', handler);
         return () => ipcRenderer.removeListener('taskExecution:approvalRequired', handler);
     },
 
-    onApproved: (callback: (data: { taskId: number; response?: string }) => void) => {
+    onApproved: (
+        callback: (data: { projectId: number; projectSequence: number; response?: string }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; response?: string }
+            data: { projectId: number; projectSequence: number; response?: string }
         ) => callback(data);
         ipcRenderer.on('taskExecution:approved', handler);
         return () => ipcRenderer.removeListener('taskExecution:approved', handler);
     },
 
-    onRejected: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onRejected: (callback: (data: { projectId: number; projectSequence: number }) => void) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskExecution:rejected', handler);
         return () => ipcRenderer.removeListener('taskExecution:rejected', handler);
     },
 
-    onReviewCompleted: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onReviewCompleted: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskExecution:reviewCompleted', handler);
         return () => ipcRenderer.removeListener('taskExecution:reviewCompleted', handler);
     },
 
     onChangesRequested: (
-        callback: (data: { taskId: number; refinementPrompt: string }) => void
+        callback: (data: {
+            projectId: number;
+            projectSequence: number;
+            refinementPrompt: string;
+        }) => void
     ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; refinementPrompt: string }
+            data: { projectId: number; projectSequence: number; refinementPrompt: string }
         ) => callback(data);
         ipcRenderer.on('taskExecution:changesRequested', handler);
         return () => ipcRenderer.removeListener('taskExecution:changesRequested', handler);
     },
 
     onAdditionalWorkRequested: (
-        callback: (data: { taskId: number; additionalWorkPrompt: string }) => void
+        callback: (data: {
+            projectId: number;
+            projectSequence: number;
+            additionalWorkPrompt: string;
+        }) => void
     ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; additionalWorkPrompt: string }
+            data: { projectId: number; projectSequence: number; additionalWorkPrompt: string }
         ) => callback(data);
         ipcRenderer.on('taskExecution:additionalWorkRequested', handler);
         return () => ipcRenderer.removeListener('taskExecution:additionalWorkRequested', handler);
     },
 
-    onBlocked: (callback: (data: { taskId: number; reason?: string }) => void) => {
+    onBlocked: (
+        callback: (data: { projectId: number; projectSequence: number; reason?: string }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; reason?: string }
+            data: { projectId: number; projectSequence: number; reason?: string }
         ) => callback(data);
         ipcRenderer.on('taskExecution:blocked', handler);
         return () => ipcRenderer.removeListener('taskExecution:blocked', handler);
     },
 
-    onUnblocked: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onUnblocked: (callback: (data: { projectId: number; projectSequence: number }) => void) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskExecution:unblocked', handler);
         return () => ipcRenderer.removeListener('taskExecution:unblocked', handler);
     },
@@ -929,12 +1011,18 @@ const taskExecutionAPI = {
     // Auto AI Review Event Listeners
     // ========================================
 
-    onReviewStarted: (callback: (data: { taskId: number; startedAt: Date }) => void) => {
+    onReviewStarted: (
+        callback: (data: { projectId: number; projectSequence: number; startedAt: Date }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; startedAt: Date }
+            data: { projectId: number; projectSequence: number; startedAt: Date }
         ) => {
-            console.log('[Preload] taskReview:started received:', data.taskId);
+            console.log(
+                '[Preload] taskReview:started received:',
+                data.projectId,
+                data.projectSequence
+            );
             callback(data);
         };
         ipcRenderer.on('taskReview:started', handler);
@@ -943,7 +1031,8 @@ const taskExecutionAPI = {
 
     onReviewProgress: (
         callback: (data: {
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             progress: number;
             phase: string;
             content?: string;
@@ -952,7 +1041,8 @@ const taskExecutionAPI = {
         const handler = (
             _event: Electron.IpcRendererEvent,
             data: {
-                taskId: number;
+                projectId: number;
+                projectSequence: number;
                 progress: number;
                 phase: string;
                 content?: string;
@@ -960,7 +1050,8 @@ const taskExecutionAPI = {
         ) => {
             console.log(
                 '[Preload] taskReview:progress received:',
-                data.taskId,
+                data.projectId,
+                data.projectSequence,
                 data.phase,
                 data.content?.slice(0, 30)
             );
@@ -972,7 +1063,8 @@ const taskExecutionAPI = {
 
     onAutoReviewCompleted: (
         callback: (data: {
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             result: unknown;
             passed: boolean;
             score: number;
@@ -980,11 +1072,18 @@ const taskExecutionAPI = {
     ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; result: unknown; passed: boolean; score: number }
+            data: {
+                projectId: number;
+                projectSequence: number;
+                result: unknown;
+                passed: boolean;
+                score: number;
+            }
         ) => {
             console.log(
                 '[Preload] taskReview:completed received:',
-                data.taskId,
+                data.projectId,
+                data.projectSequence,
                 'passed:',
                 data.passed,
                 'score:',
@@ -996,18 +1095,24 @@ const taskExecutionAPI = {
         return () => ipcRenderer.removeListener('taskReview:completed', handler);
     },
 
-    onReviewFailed: (callback: (data: { taskId: number; error: string }) => void) => {
+    onReviewFailed: (
+        callback: (data: { projectId: number; projectSequence: number; error: string }) => void
+    ) => {
         const handler = (
             _event: Electron.IpcRendererEvent,
-            data: { taskId: number; error: string }
+            data: { projectId: number; projectSequence: number; error: string }
         ) => callback(data);
         ipcRenderer.on('taskReview:failed', handler);
         return () => ipcRenderer.removeListener('taskReview:failed', handler);
     },
 
-    onReviewCancelled: (callback: (data: { taskId: number }) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, data: { taskId: number }) =>
-            callback(data);
+    onReviewCancelled: (
+        callback: (data: { projectId: number; projectSequence: number }) => void
+    ) => {
+        const handler = (
+            _event: Electron.IpcRendererEvent,
+            data: { projectId: number; projectSequence: number }
+        ) => callback(data);
         ipcRenderer.on('taskReview:cancelled', handler);
         return () => ipcRenderer.removeListener('taskReview:cancelled', handler);
     },
@@ -1019,25 +1124,21 @@ const taskExecutionAPI = {
 
 const taskHistoryAPI = {
     // Get all history entries for a task
-    getByTask: (taskId: number) => ipcRenderer.invoke('taskHistory:getByTask', taskId),
-
-    getByTaskId: (taskId: number, limit?: number) =>
-        ipcRenderer.invoke('taskHistory:getByTaskId', taskId, limit),
-
-    // Get history entries by event type
-    getByEventType: (taskId: number, eventType: string) =>
-        ipcRenderer.invoke('taskHistory:getByEventType', taskId, eventType),
+    getByTask: (projectId: number, sequence: number) =>
+        ipcRenderer.invoke('taskHistory:getByTask', projectId, sequence),
 
     // Get the latest history entry for a task
-    getLatest: (taskId: number) => ipcRenderer.invoke('taskHistory:getLatest', taskId),
+    getLatest: (projectId: number, sequence: number) =>
+        ipcRenderer.invoke('taskHistory:getLatest', projectId, sequence),
 
     // Add a history entry
     add: (
-        taskId: number,
+        projectId: number,
+        sequence: number,
         eventType: string,
         eventData?: Record<string, unknown>,
         metadata?: Record<string, unknown>
-    ) => ipcRenderer.invoke('taskHistory:add', taskId, eventType, eventData, metadata),
+    ) => ipcRenderer.invoke('taskHistory:add', projectId, sequence, eventType, eventData, metadata),
 };
 
 // ========================================

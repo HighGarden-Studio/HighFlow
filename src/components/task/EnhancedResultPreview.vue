@@ -326,7 +326,10 @@ const fetchHistory = async () => {
     if (!props.task?.id) return;
     try {
         console.log('[EnhancedResultPreview] Fetching history entries for task:', props.task.id);
-        const entries = await (window as any).electron.taskHistory.getByTask(props.task.id);
+        const entries = await (window as any).electron.taskHistory.getByTask(
+            props.task.projectId,
+            props.task.projectSequence
+        );
         console.log('[EnhancedResultPreview] Received history entries:', {
             totalEntries: entries?.length || 0,
             entries: entries?.map((e: any) => ({

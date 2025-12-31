@@ -64,18 +64,22 @@ export interface TasksAPI {
     get: (id: number) => Promise<Task | null>;
     create: (data: Partial<NewTask> & { projectId: number; title: string }) => Promise<Task>;
     update: (
-        id: number,
+        projectId: number,
+        sequence: number,
         data: Partial<{ title: string; description: string; status: string; priority: string }>
     ) => Promise<Task>;
-    delete: (id: number) => Promise<void>;
-    reorder: (projectId: number, taskIds: number[]) => Promise<void>;
-    executeScript: (taskId: number) => Promise<{
-        success: boolean;
-        output: string;
-        error?: string;
-        logs: string[];
-        duration: number;
-    }>;
+    delete: (projectId: number, sequence: number) => Promise<void>;
+    reorder: (projectId: number, sequences: number[]) => Promise<void>;
+    stopTask: (
+        projectId: number,
+        sequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
+    sendTestNotification: (
+        projectId: number,
+        sequence: number,
+        config: any
+    ) => Promise<{ success: boolean }>;
+    updateNotificationConfig: (projectId: number, sequence: number, config: any) => Promise<Task>;
 }
 
 export interface AppAPI {
@@ -400,11 +404,19 @@ export interface TaskExecutionAPI {
         projectId: number,
         projectSequence: number
     ) => Promise<{ success: boolean; error?: string }>;
-    submitInput: (taskId: number, input: unknown) => Promise<{ success: boolean; error?: string }>;
+    submitInput: (
+        projectId: number,
+        projectSequence: number,
+        input: unknown
+    ) => Promise<{ success: boolean; error?: string }>;
 
     // Status queries
-    getStatus: (taskId: number) => Promise<{
-        taskId: number;
+    getStatus: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{
+        projectId: number;
+        projectSequence: number;
         status: TaskExecutionStatus;
         startedAt: Date;
         pausedAt?: Date;
@@ -415,7 +427,8 @@ export interface TaskExecutionAPI {
     } | null>;
     getAllActive: () => Promise<
         Array<{
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             status: string;
             startedAt: Date;
             progress: number;
@@ -425,30 +438,51 @@ export interface TaskExecutionAPI {
 
     // Approval flow
     requestApproval: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         data: ApprovalRequest
     ) => Promise<{ success: boolean; error?: string }>;
-    approve: (taskId: number, response?: string) => Promise<{ success: boolean; error?: string }>;
-    reject: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    approve: (
+        projectId: number,
+        projectSequence: number,
+        response?: string
+    ) => Promise<{ success: boolean; error?: string }>;
+    reject: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
 
     // Review flow
-    completeReview: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    completeReview: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
     requestChanges: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         refinementPrompt: string
     ) => Promise<{ success: boolean; error?: string }>;
     requestAdditionalWork: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         additionalWorkPrompt: string
     ) => Promise<{ success: boolean; error?: string }>;
 
     // Block flow
-    block: (taskId: number, reason?: string) => Promise<{ success: boolean; error?: string }>;
-    unblock: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+    block: (
+        projectId: number,
+        projectSequence: number,
+        reason?: string
+    ) => Promise<{ success: boolean; error?: string }>;
+    unblock: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; error?: string }>;
 
     // Progress updates
     updateProgress: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         progress: ExecutionProgress
     ) => Promise<{ success: boolean; error?: string }>;
 
@@ -459,18 +493,26 @@ export interface TaskExecutionAPI {
 
     // Auto AI Review methods
     startAutoReview: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         options?: TaskExecutionOptions
     ) => Promise<{ success: boolean; result?: unknown; error?: string }>;
-    getReviewStatus: (taskId: number) => Promise<{
-        taskId: number;
+    getReviewStatus: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{
+        projectId: number;
+        projectSequence: number;
         status: string;
         startedAt: Date;
         progress: number;
         streamContent: string;
         error?: string;
     } | null>;
-    cancelReview: (taskId: number) => Promise<{ success: boolean; hadReview: boolean }>;
+    cancelReview: (
+        projectId: number,
+        projectSequence: number
+    ) => Promise<{ success: boolean; hadReview: boolean }>;
 
     // Event listeners
     onStarted: (
@@ -562,11 +604,14 @@ export interface TaskExecutionAPI {
 }
 
 export interface TaskHistoryAPI {
-    getByTaskId: (taskId: number, limit?: number) => Promise<unknown[]>;
-    getByEventType: (taskId: number, eventType: string) => Promise<unknown[]>;
-    getLatest: (taskId: number) => Promise<unknown | null>;
+    getByTask: (projectId: number, projectSequence: number) => Promise<unknown[]>;
+    // Consolidated getByTaskId into getByTask, removing getByTaskId
+    // getByEventType not typically used by frontend in this form, maybe remove or update if needed
+    // getByEventType: (taskId: number, eventType: string) => Promise<unknown[]>;
+    getLatest: (projectId: number, projectSequence: number) => Promise<unknown | null>;
     add: (
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         eventType: string,
         eventData?: unknown,
         metadata?: unknown

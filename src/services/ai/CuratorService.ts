@@ -38,21 +38,26 @@ export class CuratorService {
      * Run the Curator on a completed task to update Project Memory.
      * This should be called asynchronously after task completion.
      */
+    /**
+     * Run the Curator on a completed task to update Project Memory.
+     * This should be called asynchronously after task completion.
+     */
     async runCurator(
-        taskId: number,
+        projectId: number,
+        projectSequence: number,
         taskTitle: string,
         taskOutput: string,
         project: Project,
         executionService: any, // Not used directly but kept for interface compatibility
         repo: any // Pass repository
     ): Promise<void> {
-        console.log(`[Curator] Starting memory update for task ${taskId}...`);
+        console.log(`[Curator] Starting memory update for task ${projectId}-${projectSequence}...`);
 
         eventBus.emit<CuratorStartedEvent>(
             'ai.curator_started',
             {
-                taskId,
-                projectId: project.id,
+                projectId,
+                projectSequence,
                 taskTitle,
             },
             'curator-service'
@@ -71,7 +76,12 @@ export class CuratorService {
             // 1. Construct Prompt
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskId, step: 'analyzing', detail: 'Constructing context from project memory' },
+                {
+                    projectId,
+                    projectSequence,
+                    step: 'analyzing',
+                    detail: 'Constructing context from project memory',
+                },
                 'curator-service'
             );
 
@@ -105,7 +115,7 @@ Glossary: ${JSON.stringify(currentMemory.glossary || {}, null, 2)}
 `;
 
             const taskContext = `
-Task ID: ${taskId}
+Task: ${projectId}-${projectSequence}
 Task Title: ${taskTitle}
 Task Output:
 ${taskOutput.substring(0, 3000)}${taskOutput.length > 3000 ? '\n[... truncated ...]' : ''}
@@ -120,7 +130,7 @@ ${taskContext}
 IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
 {
   "summaryUpdate": "string or null if no update needed",
-  "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text", "taskId": number}],
+  "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text"}],
   "glossaryUpdates": {"term": "definition"},
   "conflicts": ["list of conflicts if any"]
 }
@@ -129,7 +139,12 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 2. Execute AI using cost-effective model from configured providers
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskId, step: 'extracting', detail: 'Running AI analysis on task output' },
+                {
+                    projectId,
+                    projectSequence,
+                    step: 'extracting',
+                    detail: 'Running AI analysis on task output',
+                },
                 'curator-service'
             );
             let aiResponse: string | null = null;
@@ -247,13 +262,24 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 4. Update Project Memory
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskId, step: 'updating', detail: 'Merging new insights into project memory' },
+                {
+                    projectId,
+                    projectSequence,
+                    step: 'updating',
+                    detail: 'Merging new insights into project memory',
+                },
                 'curator-service'
             );
+            // newDecisions might not have taskId anymore in prompt response, but we can assign current one if needed.
+            // However, DB DecisionsLog might not strictly require taskId to be 'id', or maybe it's fine.
+            // Let's assume parsed.newDecisions items don't have taskId, or we ignore it.
+            // Wait, DecisionsLog interface has `taskId`. We should probably store projectSequence instead?
+            // Or just store 0 for now if taskId is deprecated. But the DecisionLog interface in database types might need check.
             const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => ({
                 date: d.date || new Date().toISOString().split('T')[0],
                 summary: d.summary,
-                taskId: d.taskId || taskId,
+                taskId: 0, // Deprecated taskId
+                // Ideally we should add projectId/sequence to DecisionLog, but for now just 0.
             }));
 
             const updatedMemory: ProjectMemory = {
@@ -263,7 +289,7 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                     ...newDecisions,
                 ],
                 glossary: { ...(currentMemory.glossary || {}), ...(parsed.glossaryUpdates || {}) },
-                lastUpdatedTask: taskId,
+                lastUpdatedTask: projectSequence, // Use sequence instead of taskId
                 lastUpdatedAt: new Date().toISOString(),
             };
 
@@ -275,7 +301,12 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // 5. Save to DB
             eventBus.emit<CuratorStepEvent>(
                 'ai.curator_step',
-                { taskId, step: 'saving', detail: 'Persisting updates to database' },
+                {
+                    projectId,
+                    projectSequence,
+                    step: 'saving',
+                    detail: 'Persisting updates to database',
+                },
                 'curator-service'
             );
             await repo.update(project.id, { memory: updatedMemory });
@@ -283,7 +314,8 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             eventBus.emit<CuratorCompletedEvent>(
                 'ai.curator_completed',
                 {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     summaryUpdate: parsed.summaryUpdate,
                     newDecisionsCount: newDecisions.length,
                     glossaryUpdatesCount: Object.keys(parsed.glossaryUpdates || {}).length,

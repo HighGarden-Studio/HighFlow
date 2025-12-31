@@ -5,7 +5,15 @@
  * Using SQLite with better-sqlite3 driver
  */
 
-import { sqliteTable, integer, text, real, index } from 'drizzle-orm/sqlite-core';
+import {
+    sqliteTable,
+    integer,
+    text,
+    real,
+    index,
+    primaryKey,
+    foreignKey,
+} from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ========================================
@@ -184,7 +192,6 @@ export const projectMembers = sqliteTable(
 export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
     'tasks',
     {
-        id: integer('id').primaryKey({ autoIncrement: true }),
         projectId: integer('project_id')
             .notNull()
             .references(() => projects.id, { onDelete: 'cascade' }),
@@ -204,7 +211,8 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
             onDelete: 'set null',
         }),
         order: integer('order').notNull().default(0),
-        parentTaskId: integer('parent_task_id').references((): any => tasks.id),
+        parentProjectId: integer('parent_project_id'),
+        parentSequence: integer('parent_sequence'),
         assigneeId: integer('assignee_id').references(() => users.id, { onDelete: 'set null' }),
         watcherIds: text('watcher_ids', { mode: 'json' }).notNull().default('[]'), // Array of user IDs
         estimatedMinutes: integer('estimated_minutes'),
@@ -216,11 +224,12 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
         startedAt: integer('started_at', { mode: 'timestamp' }),
         completedAt: integer('completed_at', { mode: 'timestamp' }),
         blockedReason: text('blocked_reason'),
-        blockedByTaskId: integer('blocked_by_task_id').references((): any => tasks.id),
+        blockedByProjectId: integer('blocked_by_project_id'),
+        blockedBySequence: integer('blocked_by_sequence'),
         tags: text('tags', { mode: 'json' }).notNull().default('[]'), // Array of strings
         gitCommits: text('git_commits', { mode: 'json' }).notNull().default('[]'), // Array of GitCommit
         deletedAt: integer('deleted_at', { mode: 'timestamp' }),
-        // 새로운 필드들
+        // ... new fields ...
         isPaused: integer('is_paused', { mode: 'boolean' }).notNull().default(false), // IN_PROGRESS 일시정지
         autoReview: integer('auto_review', { mode: 'boolean' }).notNull().default(false), // 자동 REVIEW 수행
         autoReviewed: integer('auto_reviewed', { mode: 'boolean' }).notNull().default(false), // AI 자동 검토 완료
@@ -262,17 +271,25 @@ export const tasks: ReturnType<typeof sqliteTable> = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
+        pk: primaryKey({ columns: [table.projectId, table.projectSequence] }),
         projectIdx: index('task_project_idx').on(table.projectId),
         statusIdx: index('task_status_idx').on(table.status),
         assigneeIdx: index('task_assignee_idx').on(table.assigneeId),
         dueDateIdx: index('task_due_date_idx').on(table.dueDate),
         deletedIdx: index('task_deleted_idx').on(table.deletedAt),
-        parentIdx: index('task_parent_idx').on(table.parentTaskId),
-        // Note: Unique constraint for (projectId, projectSequence) is defined in migration SQL
         projectSequenceIdx: index('task_project_sequence_idx').on(
             table.projectId,
             table.projectSequence
         ),
+        parentIdx: index('task_parent_idx').on(table.parentProjectId, table.parentSequence),
+        blockedByFk: foreignKey({
+            columns: [table.blockedByProjectId, table.blockedBySequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('set null'),
+        parentFk: foreignKey({
+            columns: [table.parentProjectId, table.parentSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('set null'),
     })
 );
 
@@ -280,9 +297,8 @@ export const taskWatchers = sqliteTable(
     'task_watchers',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -295,7 +311,15 @@ export const taskWatchers = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskUserIdx: index('task_watcher_task_user_idx').on(table.taskId, table.userId),
+        taskUserIdx: index('task_watcher_task_user_idx').on(
+            table.taskProjectId,
+            table.taskSequence,
+            table.userId
+        ),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -303,9 +327,8 @@ export const taskExecutions = sqliteTable(
     'task_executions',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         executionNumber: integer('execution_number').notNull().default(1),
         prompt: text('prompt').notNull(),
         response: text('response'),
@@ -331,8 +354,12 @@ export const taskExecutions = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('task_execution_task_idx').on(table.taskId),
+        taskIdx: index('task_execution_task_idx').on(table.taskProjectId, table.taskSequence),
         statusIdx: index('task_execution_status_idx').on(table.status),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -340,9 +367,8 @@ export const taskSuggestedSkills = sqliteTable(
     'task_suggested_skills',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         skillId: integer('skill_id')
             .notNull()
             .references(() => skills.id, { onDelete: 'cascade' }),
@@ -355,7 +381,15 @@ export const taskSuggestedSkills = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskSkillIdx: index('task_suggested_skill_task_skill_idx').on(table.taskId, table.skillId),
+        taskSkillIdx: index('task_suggested_skill_task_skill_idx').on(
+            table.taskProjectId,
+            table.taskSequence,
+            table.skillId
+        ),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -367,9 +401,8 @@ export const taskHistory = sqliteTable(
     'task_history',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         eventType: text('event_type').notNull(), // execution_started|execution_completed|execution_failed|ai_review_requested|ai_review_completed|prompt_refined|status_changed|paused|resumed|stopped
         eventData: text('event_data', { mode: 'json' }), // Event-specific data (prompt, result, etc.)
         metadata: text('metadata', { mode: 'json' }), // Additional context (provider, model, cost, tokens, duration)
@@ -378,9 +411,13 @@ export const taskHistory = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('task_history_task_idx').on(table.taskId),
+        taskIdx: index('task_history_task_idx').on(table.taskProjectId, table.taskSequence),
         eventTypeIdx: index('task_history_event_type_idx').on(table.eventType),
         createdAtIdx: index('task_history_created_at_idx').on(table.createdAt),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -392,9 +429,8 @@ export const comments: ReturnType<typeof sqliteTable> = sqliteTable(
     'comments',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -413,10 +449,14 @@ export const comments: ReturnType<typeof sqliteTable> = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('comment_task_idx').on(table.taskId),
+        taskIdx: index('comment_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('comment_user_idx').on(table.userId),
         parentIdx: index('comment_parent_idx').on(table.parentCommentId),
         deletedIdx: index('comment_deleted_idx').on(table.deletedAt),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -424,9 +464,8 @@ export const timeEntries = sqliteTable(
     'time_entries',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        taskId: integer('task_id')
-            .notNull()
-            .references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id').notNull(),
+        taskSequence: integer('task_sequence').notNull(),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -445,8 +484,12 @@ export const timeEntries = sqliteTable(
             .default(sql`CURRENT_TIMESTAMP`),
     },
     (table) => ({
-        taskIdx: index('time_entry_task_idx').on(table.taskId),
+        taskIdx: index('time_entry_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('time_entry_user_idx').on(table.userId),
+        fk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -763,7 +806,8 @@ export const activities = sqliteTable(
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
         projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-        taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+        taskProjectId: integer('task_project_id'),
+        taskSequence: integer('task_sequence'),
         userId: integer('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -779,10 +823,14 @@ export const activities = sqliteTable(
     },
     (table) => ({
         projectIdx: index('activity_project_idx').on(table.projectId),
-        taskIdx: index('activity_task_idx').on(table.taskId),
+        taskIdx: index('activity_task_idx').on(table.taskProjectId, table.taskSequence),
         userIdx: index('activity_user_idx').on(table.userId),
         typeIdx: index('activity_type_idx').on(table.type),
         createdAtIdx: index('activity_created_at_idx').on(table.createdAt),
+        taskFk: foreignKey({
+            columns: [table.taskProjectId, table.taskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 
@@ -799,9 +847,8 @@ export const notifications = sqliteTable(
         relatedProjectId: integer('related_project_id').references(() => projects.id, {
             onDelete: 'cascade',
         }),
-        relatedTaskId: integer('related_task_id').references(() => tasks.id, {
-            onDelete: 'cascade',
-        }),
+        relatedTaskProjectId: integer('related_task_project_id'),
+        relatedTaskSequence: integer('related_task_sequence'),
         isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
         readAt: integer('read_at', { mode: 'timestamp' }),
         actionUrl: text('action_url'),
@@ -816,6 +863,10 @@ export const notifications = sqliteTable(
         userIdx: index('notification_user_idx').on(table.userId),
         isReadIdx: index('notification_is_read_idx').on(table.isRead),
         createdAtIdx: index('notification_created_at_idx').on(table.createdAt),
+        taskFk: foreignKey({
+            columns: [table.relatedTaskProjectId, table.relatedTaskSequence],
+            foreignColumns: [tasks.projectId, tasks.projectSequence],
+        }).onDelete('cascade'),
     })
 );
 

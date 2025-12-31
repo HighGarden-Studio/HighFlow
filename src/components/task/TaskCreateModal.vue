@@ -92,7 +92,9 @@ async function handleCreateTask() {
 
             // Update status if needed (default from store is usually 'todo')
             if (props.initialStatus && props.initialStatus !== 'todo') {
-                await taskStore.updateTask(task.id, { status: props.initialStatus });
+                await taskStore.updateTask(task.projectId, task.projectSequence, {
+                    status: props.initialStatus,
+                });
             }
 
             emit('saved');
@@ -106,9 +108,68 @@ async function handleCreateTask() {
 
 function getScriptTemplate(language: 'javascript' | 'typescript' | 'python'): string {
     const templates = {
-        javascript: `// JavaScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
-        typescript: `// TypeScript Script\n// 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nconsole.log('Script started');\n\n// Your code here\n\nconsole.log('Script completed');\n`,
-        python: `# Python Script\n# 매크로: {{task:N}}, {{task:N.output}}, {{project.name}}\n\nprint('Script started')\n\n# Your code here\n\nprint('Script completed')\n`,
+        javascript: `// Script Task - JavaScript
+// Must return: { result: any, control?: ControlFlow }
+//
+// Available Variables:
+// - prev: Result of last dependency
+// - prev_0, prev_1: Previous results (0=latest)
+// - task_N: Result of task #N
+// - project: { name, description, baseDevFolder }
+//
+// Macros: {{prev}}, {{task.N}}
+
+console.log('Script started');
+
+const myResult = "Hello from JavaScript";
+
+// REQUIRED: Return object with 'result' property
+return {
+    result: myResult,
+    // control: { next: [5] }  // Optional: control flow (next must be array)
+};`,
+        typescript: `// Script Task - TypeScript
+// Must return: { result: any, control?: ControlFlow }
+//
+// Available Variables: prev, prev_0, task_N, project
+// Macros: {{prev}}, {{task.N}}
+
+console.log('Script started');
+
+interface ScriptTaskReturn {
+    result: any;
+    control?: {
+        next?: number[];  // Execute task #N next (must be array)
+        skip?: number;    // Skip N tasks in sequence
+    };
+}
+
+const myResult: string = "Hello from TypeScript";
+
+// REQUIRED: Return ScriptTaskReturn format
+return {
+    result: myResult,
+} as ScriptTaskReturn;`,
+        python: `# Script Task - Python
+# Must return: { "result": any, "control": ControlFlow }
+#
+# Available Variables:
+# - prev: Result of last dependency
+# - prev_0, prev_1: Previous results
+# - task_N: Result of task #N
+# - project: {"name", "description", "baseDevFolder"}
+#
+# Macros: {{prev}}, {{task.N}}
+
+print('Script started')
+
+my_result = "Hello from Python"
+
+# REQUIRED: Return dict with 'result' key
+return {
+    "result": my_result,
+    # "control": {"next": [5]}  # Optional: control flow (next must be list)
+}`,
     };
     return templates[language];
 }

@@ -43,7 +43,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'execute', task: Task): void;
     (e: 'stop', task: Task): void;
     (e: 'delete', task: Task): void;
@@ -121,7 +121,7 @@ const dependencySequences = computed(() => {
     if (!taskIds || taskIds.length === 0) return '';
     return taskIds
         .map((id) => {
-            const t = taskStore.tasks.find((task) => task.id === id);
+            const t = taskStore.tasks.find((task) => task.projectSequence === id);
             return t ? `#${t.projectSequence}` : '';
         })
         .filter(Boolean)
@@ -259,7 +259,7 @@ function hexToRgba(hex: string, alpha: number) {
         @connection-start="(t, e) => emit('connectionStart', t, e)"
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"
-        @operator-drop="(tid, oid) => emit('operatorDrop', tid, oid)"
+        @operator-drop="(pid, seq, oid) => emit('operatorDrop', pid, seq, oid)"
         @delete="(t) => emit('delete', t)"
     >
         <template #header>

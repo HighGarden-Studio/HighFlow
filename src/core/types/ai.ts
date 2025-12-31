@@ -350,6 +350,7 @@ export interface AIConfig {
 export interface ExecutionContext {
     taskId?: number;
     projectId?: number;
+    projectSequence?: number;
     userId: number;
     previousExecutions?: Array<{
         prompt: string;

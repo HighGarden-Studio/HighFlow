@@ -33,7 +33,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'execute', task: Task): void;
     (e: 'stop', task: Task): void;
     (e: 'delete', task: Task): void;
@@ -89,7 +89,7 @@ const dependencySequences = computed(() => {
     // Find sequences for these IDs
     return taskIds
         .map((id) => {
-            const t = taskStore.tasks.find((task) => task.id === id);
+            const t = taskStore.tasks.find((task) => task.projectSequence === id);
             return t ? `#${t.projectSequence}` : '';
         })
         .filter(Boolean)
@@ -122,7 +122,7 @@ function handleViewScript(event: Event) {
         @connection-start="(t, e) => emit('connectionStart', t, e)"
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"
-        @operator-drop="(tid, oid) => emit('operatorDrop', tid, oid)"
+        @operator-drop="(pid, seq, oid) => emit('operatorDrop', pid, seq, oid)"
         @delete="(t) => emit('delete', t)"
     >
         <template #header>
@@ -325,6 +325,60 @@ function handleViewScript(event: Event) {
                                       })
                                     : task.triggerConfig.scheduledAt.cron
                             }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Flow Info (If present) -->
+            <div
+                v-if="(task as any).executionResult?.control && task.status === 'done'"
+                class="mb-3 p-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded text-xs"
+            >
+                <div class="flex items-start gap-2">
+                    <svg
+                        class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                    </svg>
+                    <div class="flex-1">
+                        <p class="font-medium text-emerald-700 dark:text-emerald-300 mb-0.5">
+                            제어 흐름
+                        </p>
+                        <p
+                            v-if="
+                                (task as any).executionResult.control.next &&
+                                (task as any).executionResult.control.next.length > 0
+                            "
+                            class="text-[10px] text-emerald-600 dark:text-emerald-400 leading-tight"
+                        >
+                            → Task #{{ (task as any).executionResult.control.next.join(', #') }}
+                            <span
+                                v-if="(task as any).executionResult.control.reason"
+                                class="block mt-0.5 text-emerald-500 dark:text-emerald-300"
+                            >
+                                {{ (task as any).executionResult.control.reason }}
+                            </span>
+                        </p>
+                        <p
+                            v-else
+                            class="text-[10px] text-emerald-600 dark:text-emerald-400 leading-tight"
+                        >
+                            🛑 워크플로우 종료
+                            <span
+                                v-if="(task as any).executionResult.control.reason"
+                                class="block mt-0.5 text-emerald-500 dark:text-emerald-300"
+                            >
+                                {{ (task as any).executionResult.control.reason }}
+                            </span>
                         </p>
                     </div>
                 </div>

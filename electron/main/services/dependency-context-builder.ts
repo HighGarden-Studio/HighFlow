@@ -104,7 +104,10 @@ export async function buildDependencyContext(
         const { id, depth } = queue.shift()!;
 
         try {
-            const depTask = await taskRepository.findById(id);
+            // NOTE: Dependencies are stored as projectSequence in taskIds
+            // We need to resolve sequence to (projectId, projectSequence)
+            // Assumptions: all dependencies are in the same project as the current task
+            const depTask = await taskRepository.findByKey(task.projectId, id);
             if (!depTask) continue;
 
             // Process Execution Result

@@ -122,6 +122,7 @@ const activeTab = ref<'prompt' | 'settings' | 'details' | 'notifications' | 'com
 );
 const promptText = ref('');
 const scriptCode = ref('');
+const showScriptGuide = ref(false);
 const scriptLanguage = ref<ScriptLanguage>('javascript');
 const aiProvider = ref<AIProvider | null>(null);
 const aiModel = ref<string | null>(null);
@@ -203,7 +204,9 @@ function cancelEditTitle() {
 async function saveTitle() {
     if (!props.task || !editedTitle.value.trim()) return;
     try {
-        await taskStore.updateTask(props.task.id, { title: editedTitle.value });
+        await taskStore.updateTask(props.task.projectId, props.task.projectSequence, {
+            title: editedTitle.value,
+        });
         isEditingTitle.value = false;
     } catch (error) {
         console.error('Failed to update task title:', error);
@@ -314,46 +317,31 @@ const scheduledDatetime = ref('');
 const cronExpression = ref('');
 const timezone = ref('Asia/Seoul');
 
-// Helper: Convert task IDs to project sequences for display
-const taskIdsToSequences = (taskIds: number[]): string => {
-    const projectId = props.task?.projectId;
-    if (!projectId) return taskIds.join(', ');
-
-    const projectTasks = taskStore.tasks.filter((t) => t.projectId === projectId);
-    return taskIds
-        .map((id) => {
-            const task = projectTasks.find((t) => t.id === id);
-            return task?.projectSequence?.toString() || id.toString();
-        })
-        .join(', ');
+// Helper: Convert task IDs (sequences) to string for display
+const taskIdsToSequences = (taskIds: number[] | undefined): string => {
+    if (!taskIds || !Array.isArray(taskIds)) return '';
+    return taskIds.join(', ');
 };
 
-// Helper: Convert project sequences to task IDs for saving
+// Helper: Convert string sequences to task IDs (sequences) for saving
 const sequencesToTaskIds = (sequences: string): number[] => {
-    const projectId = props.task?.projectId;
-    if (!projectId) return [];
-
-    const projectTasks = taskStore.tasks.filter((t) => t.projectId === projectId);
+    if (!sequences) return [];
     return sequences
         .split(',')
         .map((seq) => parseInt(seq.trim()))
-        .filter((seq) => !isNaN(seq))
-        .map((seq) => {
-            const task = projectTasks.find((t) => t.projectSequence === seq);
-            return task?.id;
-        })
-        .filter((id): id is number => id !== undefined);
+        .filter((seq) => !isNaN(seq));
 };
 
 // Watch for task changes
 const isInitializing = ref(false);
-const previousTaskId = ref<number | null>(null);
+const previousTaskId = ref<string | null>(null);
 const isSavingInternally = ref(false); // Track internal saves to prevent re-initialization
 
 // Watch for task changes
 watch(
     () => props.task,
-    (newTask) => {
+    async (newTask) => {
+        if (!props.open) return;
         if (newTask) {
             // Skip re-initialization if this update is from our own save
             if (isSavingInternally.value) {
@@ -365,12 +353,13 @@ watch(
 
             // Only re-initialize if this is a different task
             // For the same task, Vue's reactivity will handle updates
-            if (previousTaskId.value === newTask.id) {
+            const newTaskKey = `${newTask.projectId}_${newTask.projectSequence}`;
+            if (previousTaskId.value === newTaskKey) {
                 // Same task - skip re-initialization to prevent loops
                 return;
             }
 
-            previousTaskId.value = newTask.id;
+            previousTaskId.value = newTaskKey;
             isInitializing.value = true;
             try {
                 localTask.value = { ...newTask };
@@ -460,18 +449,17 @@ watch(
                 assignedOperatorId.value = newTask.assignedOperatorId || null;
                 estimatedMinutes.value = newTask.estimatedMinutes || 0;
                 dueDate.value = newTask.dueDate
-                    ? new Date(newTask.dueDate).toISOString().slice(0, 16)
+                    ? typeof newTask.dueDate === 'string'
+                        ? newTask.dueDate
+                        : new Date(newTask.dueDate).toISOString()
                     : '';
 
-                // 히스토리 탭이 열려있으면 히스토리 새로고침
-                if (activeTab.value === 'history') {
-                    loadTaskHistory();
-                }
+                // Load History
+                await loadTaskHistory();
+            } catch (error) {
+                console.error('Failed to initialize task detail panel:', error);
             } finally {
-                // Use nextTick to ensure watchers have fired and been ignored
-                setTimeout(() => {
-                    isInitializing.value = false;
-                }, 0);
+                isInitializing.value = false;
             }
         } else {
             previousTaskId.value = null;
@@ -629,6 +617,33 @@ watch(
 watch(activeTab, (newTab) => {
     if (newTab === 'history' && localTask.value?.id) {
         loadTaskHistory();
+    }
+});
+
+// Listen for new history events to refresh list
+onMounted(() => {
+    if (window.electron.events) {
+        window.electron.events.on('task-history:created', (data: any) => {
+            console.log('📜 [TaskDetailPanel] Received task-history:created event:', data);
+
+            // Handle both schema property names (taskProjectId) and potential standard names (projectId)
+            const pId = data.taskProjectId || data.projectId;
+            const seq = data.taskSequence || data.projectSequence;
+
+            if (
+                localTask.value &&
+                pId === localTask.value.projectId &&
+                seq === localTask.value.projectSequence
+            ) {
+                console.log('📜 [TaskDetailPanel] Refreshing history for task');
+                // Always reload if it matches current task, regardless of tab (so it's ready when switched)
+                // Or only if active? If we don't reload now, `watch(activeTab)` will reload when we switch.
+                // But if we ARE on history tab, we must reload.
+                if (activeTab.value === 'history') {
+                    loadTaskHistory();
+                }
+            }
+        });
     }
 });
 
@@ -1217,12 +1232,18 @@ async function handleExecute() {
                 return;
             }
 
-            const result = await api.execute(localTask.value.id);
-
-            if (result.success) {
-                console.log('Script execution completed:', result);
+            if (localTask.value.projectId && localTask.value.projectSequence) {
+                const result = await api.execute(
+                    localTask.value.projectId,
+                    localTask.value.projectSequence
+                );
+                if (result.success) {
+                    console.log('Script execution completed:', result);
+                } else {
+                    console.error('Script execution failed:', result.error);
+                }
             } else {
-                console.error('Script execution failed:', result.error);
+                alert('Task execution failed: Missing project ID or sequence.');
             }
         } else {
             // Execute AI task (existing logic)
@@ -1271,7 +1292,11 @@ async function handleUpdateNotificationConfig(config: any) {
         console.log('[TaskDetailPanel] Saving notification config:', config);
 
         // @ts-ignore - API method exists
-        const updatedTask = await api.tasks.updateNotificationConfig(localTask.value.id, config);
+        const updatedTask = await api.tasks.updateNotificationConfig(
+            localTask.value.projectId,
+            localTask.value.projectSequence,
+            config
+        );
 
         // 업데이트된 태스크로 localTask 갱신
         if (updatedTask) {
@@ -1303,7 +1328,11 @@ async function handleTestNotification(config: any) {
 
         // Send test notification via API
         // @ts-ignore - API method exists
-        await api.tasks.sendTestNotification(localTask.value.id, config);
+        await api.tasks.sendTestNotification(
+            localTask.value.projectId,
+            localTask.value.projectSequence,
+            config
+        );
 
         alert('테스트 알림이 전송되었습니다. 웹훅 URL을 확인해주세요.');
     } catch (error) {
@@ -1354,13 +1383,21 @@ function formatDate(date: Date | string | null | undefined): string {
 }
 
 // Load task history
+// Load task history
 async function loadTaskHistory() {
-    if (!localTask.value?.id) return;
+    // if (!localTask.value?.id) return; // Removed ID check because usage is inconsistent with composite keys
 
     isLoadingHistory.value = true;
     try {
-        const history = await window.electron.taskHistory.getByTaskId(localTask.value.id);
-        taskHistoryEntries.value = history as TaskHistoryEntry[];
+        if (localTask.value?.projectId && localTask.value?.projectSequence) {
+            const history = await window.electron.taskHistory.getByTask(
+                localTask.value.projectId,
+                localTask.value.projectSequence
+            );
+            taskHistoryEntries.value = history as TaskHistoryEntry[];
+        } else {
+            // console.warn('📜 [TaskDetailPanel] Missing projectId or sequence');
+        }
     } catch (error) {
         console.error('Failed to load task history:', error);
         taskHistoryEntries.value = [];
@@ -2995,130 +3032,6 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                 />
                             </div>
 
-                            <!-- 자동 REVIEW 옵션 -->
-                            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        v-model="autoReview"
-                                        type="checkbox"
-                                        class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <div class="flex-1">
-                                        <span
-                                            class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                                        >
-                                            자동 REVIEW 활성화
-                                        </span>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            AI가 프롬프트 결과물이 의도대로 나왔는지 자동으로
-                                            검토합니다
-                                        </p>
-                                    </div>
-                                </label>
-
-                                <!-- 리뷰용 AI 설정 - 자동 REVIEW 활성화 시에만 표시 -->
-                                <div
-                                    v-if="autoReview"
-                                    class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-                                >
-                                    <div class="mb-3">
-                                        <p
-                                            class="text-sm font-semibold text-blue-900 dark:text-blue-100"
-                                        >
-                                            리뷰용 AI 설정
-                                        </p>
-                                        <p class="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                                            자동 리뷰 실행 시 사용할 Provider와 모델을 지정하세요
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <AIProviderSelector
-                                            v-model:provider="reviewAiProvider"
-                                            v-model:model="reviewAiModel"
-                                            label="리뷰 AI (제공자/모델)"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 자동 승인 옵션 -->
-                            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                <label
-                                    v-if="localTask"
-                                    class="flex items-center gap-3 cursor-pointer"
-                                >
-                                    <input
-                                        v-model="localTask.autoApprove"
-                                        type="checkbox"
-                                        class="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                                    />
-                                    <div class="flex-1">
-                                        <span
-                                            class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                                        >
-                                            자동 승인
-                                        </span>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            실행 성공 시 검토 없이 바로 완료(DONE) 처리
-                                        </p>
-                                    </div>
-                                </label>
-
-                                <!-- Warning if project has auto-review enabled -->
-                                <div
-                                    v-if="
-                                        localTask?.autoApprove &&
-                                        projectStore.currentProject?.autoReview
-                                    "
-                                    class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
-                                >
-                                    <div class="flex items-start gap-2">
-                                        <svg
-                                            class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
-                                            fill="currentColor"
-                                            viewBox="0 0 20 20"
-                                        >
-                                            <path
-                                                fill-rule="evenodd"
-                                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                                clip-rule="evenodd"
-                                            />
-                                        </svg>
-                                        <p class="text-xs text-amber-700 dark:text-amber-300">
-                                            이 태스크는 프로젝트 자동 검토 대신 자동 승인을
-                                            사용합니다
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Info if neither is enabled -->
-                                <div
-                                    v-if="
-                                        localTask &&
-                                        !localTask.autoApprove &&
-                                        !projectStore.currentProject?.autoReview
-                                    "
-                                    class="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
-                                >
-                                    <div class="flex items-start gap-2">
-                                        <svg
-                                            class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
-                                            fill="currentColor"
-                                            viewBox="0 0 20 20"
-                                        >
-                                            <path
-                                                fill-rule="evenodd"
-                                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                                clip-rule="evenodd"
-                                            />
-                                        </svg>
-                                        <p class="text-xs text-blue-700 dark:text-blue-300">
-                                            실행 완료 후 수동 검토가 필요합니다
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
                             <!-- 테스크 세분화 옵션 (1뎀스 테스크만) -->
                             <div
                                 v-if="canSubdivide"
@@ -3528,6 +3441,133 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                             </option>
                                             <option value="UTC">UTC</option>
                                         </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 자동 REVIEW 옵션 (AI Only) -->
+                            <div
+                                v-if="!localTask?.taskType || localTask?.taskType === 'ai'"
+                                class="border-t border-gray-200 dark:border-gray-700 pt-6"
+                            >
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        v-model="autoReview"
+                                        type="checkbox"
+                                        class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <div class="flex-1">
+                                        <span
+                                            class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                        >
+                                            자동 REVIEW 활성화
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            AI가 프롬프트 결과물이 의도대로 나왔는지 자동으로
+                                            검토합니다
+                                        </p>
+                                    </div>
+                                </label>
+
+                                <!-- 리뷰용 AI 설정 - 자동 REVIEW 활성화 시에만 표시 -->
+                                <div
+                                    v-if="autoReview"
+                                    class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                                >
+                                    <div class="mb-3">
+                                        <p
+                                            class="text-sm font-semibold text-blue-900 dark:text-blue-100"
+                                        >
+                                            리뷰용 AI 설정
+                                        </p>
+                                        <p class="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                                            자동 리뷰 실행 시 사용할 Provider와 모델을 지정하세요
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <AIProviderSelector
+                                            v-model:provider="reviewAiProvider"
+                                            v-model:model="reviewAiModel"
+                                            label="리뷰 AI (제공자/모델)"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 자동 승인 옵션 -->
+                            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                                <label
+                                    v-if="localTask"
+                                    class="flex items-center gap-3 cursor-pointer"
+                                >
+                                    <input
+                                        v-model="localTask.autoApprove"
+                                        type="checkbox"
+                                        class="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                    />
+                                    <div class="flex-1">
+                                        <span
+                                            class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                        >
+                                            자동 승인
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            실행 성공 시 검토 없이 바로 완료(DONE) 처리
+                                        </p>
+                                    </div>
+                                </label>
+
+                                <!-- Warning if project has auto-review enabled -->
+                                <div
+                                    v-if="
+                                        localTask?.autoApprove &&
+                                        projectStore.currentProject?.autoReview
+                                    "
+                                    class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                        <p class="text-xs text-amber-700 dark:text-amber-300">
+                                            이 태스크는 프로젝트 자동 검토 대신 자동 승인을
+                                            사용합니다
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Info if neither is enabled -->
+                                <div
+                                    v-if="
+                                        localTask &&
+                                        !localTask.autoApprove &&
+                                        !projectStore.currentProject?.autoReview
+                                    "
+                                    class="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                        <p class="text-xs text-blue-700 dark:text-blue-300">
+                                            실행 완료 후 수동 검토가 필요합니다
+                                        </p>
                                     </div>
                                 </div>
                             </div>

@@ -610,6 +610,11 @@ export interface TaskExecutionResult {
     model?: string;
     aiResult?: AiResult | null;
     attachments?: TaskAttachment[];
+    control?: {
+        next?: number[] | null;
+        reason?: string;
+        reasons?: Record<number, string>; // Per-branch execution reason
+    };
     [key: string]: any;
 }
 
@@ -915,7 +920,9 @@ export interface Activity extends BaseEntity {
 
 export interface TaskHistoryEntry {
     id: number;
-    taskId: number;
+    taskId?: number;
+    taskProjectId: number;
+    taskSequence: number;
     eventType: TaskHistoryEventType;
     eventData: TaskHistoryEventData | null;
     metadata: TaskHistoryMetadata | null;

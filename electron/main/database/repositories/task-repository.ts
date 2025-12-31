@@ -71,19 +71,8 @@ export class TaskRepository {
      * Find task by ID (DEPRECATED - use findByKey instead)
      * @deprecated Global IDs will be removed. Use findByKey(projectId, projectSequence) instead.
      */
-    async findById(id: number): Promise<Task | undefined> {
-        const [result] = await db
-            .select()
-            .from(tasks)
-            .where(and(eq(tasks.id, id), isNull(tasks.deletedAt)))
-            .limit(1);
-
-        return result;
-    }
-
     /**
      * Find task by composite key (projectId, projectSequence)
-     * This is the PRIMARY method for task lookup going forward.
      */
     async findByKey(projectId: number, projectSequence: number): Promise<Task | undefined> {
         const [result] = await db
@@ -101,6 +90,14 @@ export class TaskRepository {
         return result;
     }
 
+    // findByKey already exists and matches the implementation above.
+    // I will remove the duplicated findByKey since I replaced findById with it.
+    // Wait, the file ALREADY had findByKey at line 88?
+    // Step 3650 shows findByKey at line 88.
+    // If I replaced findById with findByKey, I now have duplicate findByKey.
+    // I should just REMOVE findById and keep the existing findByKey.
+    // I'll adjust the chunk to just DELETE findById.
+
     /**
      * Find all tasks by status (across all projects)
      */
@@ -115,14 +112,23 @@ export class TaskRepository {
     /**
      * Find task with subtasks
      */
-    async findWithSubtasks(id: number): Promise<(Task & { subtasks: Task[] }) | undefined> {
-        const task = await this.findById(id);
+    async findWithSubtasks(
+        projectId: number,
+        projectSequence: number
+    ): Promise<(Task & { subtasks: Task[] }) | undefined> {
+        const task = await this.findByKey(projectId, projectSequence);
         if (!task) return undefined;
 
         const subtasks = await db
             .select()
             .from(tasks)
-            .where(and(eq(tasks.parentTaskId, id), isNull(tasks.deletedAt)))
+            .where(
+                and(
+                    eq(tasks.parentProjectId, projectId),
+                    eq(tasks.parentSequence, projectSequence),
+                    isNull(tasks.deletedAt)
+                )
+            )
             .orderBy(asc(tasks.order));
 
         return { ...task, subtasks };
@@ -169,37 +175,7 @@ export class TaskRepository {
         return created;
     }
 
-    /**
-     * Update existing task (DEPRECATED - use updateByKey instead)
-     * @deprecated Use updateByKey(projectId, projectSequence, data) instead
-     */
-    async update(id: number, data: Partial<Task>): Promise<Task> {
-        // Ensure date fields are Date objects (fix for value.getTime error)
-        const safeData = { ...data };
-        const dateFields = ['dueDate', 'startedAt', 'completedAt', 'pausedAt', 'deletedAt'];
-
-        for (const field of dateFields) {
-            if (typeof (safeData as any)[field] === 'string') {
-                (safeData as any)[field] = new Date((safeData as any)[field]);
-            }
-        }
-
-        const updatedResult = await db
-            .update(tasks)
-            .set({
-                ...safeData,
-                updatedAt: new Date(),
-            })
-            .where(eq(tasks.id, id))
-            .returning();
-
-        const updated = firstRow(updatedResult);
-        if (!updated) {
-            throw new Error('Task not found');
-        }
-
-        return updated;
-    }
+    // Removed update(id). Use updateByKey.
 
     /**
      * Update existing task by composite key
@@ -219,6 +195,11 @@ export class TaskRepository {
             }
         }
 
+        // Remove ID fields to prevent unique constraint violations
+        delete (safeData as any).id;
+        delete (safeData as any).projectId;
+        delete (safeData as any).projectSequence;
+
         const updatedResult = await db
             .update(tasks)
             .set({
@@ -236,21 +217,7 @@ export class TaskRepository {
         return updated;
     }
 
-    /**
-     * Update task status (DEPRECATED - use updateStatusByKey instead)
-     * @deprecated Use updateStatusByKey(projectId, projectSequence, status) instead
-     */
-    async updateStatus(id: number, status: TaskStatus): Promise<Task> {
-        const updateData: Partial<Task> = { status };
-
-        if (status === 'in_progress') {
-            updateData.startedAt = new Date();
-        } else if (status === 'done') {
-            updateData.completedAt = new Date();
-        }
-
-        return await this.update(id, updateData);
-    }
+    // Removed updateStatus(id). Use updateStatusByKey.
 
     /**
      * Update task status by composite key
@@ -271,19 +238,7 @@ export class TaskRepository {
         return await this.updateByKey(projectId, projectSequence, updateData);
     }
 
-    /**
-     * Soft delete task (DEPRECATED - use deleteByKey instead)
-     * @deprecated Use deleteByKey(projectId, projectSequence) instead
-     */
-    async delete(id: number): Promise<void> {
-        await db
-            .update(tasks)
-            .set({
-                deletedAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .where(eq(tasks.id, id));
-    }
+    // Removed delete(id). Use deleteByKey.
 
     /**
      * Soft delete task by composite key
@@ -301,15 +256,17 @@ export class TaskRepository {
     /**
      * Permanently delete task
      */
-    async hardDelete(id: number): Promise<void> {
-        await db.delete(tasks).where(eq(tasks.id, id));
+    async hardDelete(projectId: number, projectSequence: number): Promise<void> {
+        await db
+            .delete(tasks)
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence)));
     }
 
     /**
      * Restore deleted task
      */
-    async restore(id: number): Promise<Task> {
-        return await this.update(id, {
+    async restore(projectId: number, projectSequence: number): Promise<Task> {
+        return await this.updateByKey(projectId, projectSequence, {
             deletedAt: null,
         });
     }
@@ -317,17 +274,17 @@ export class TaskRepository {
     /**
      * Reorder tasks within a project
      */
-    async reorder(projectId: number, taskIds: number[]): Promise<void> {
+    async reorder(projectId: number, taskSequences: number[]): Promise<void> {
         // Update each task with its new order
         await Promise.all(
-            taskIds.map((taskId, index) =>
+            taskSequences.map((seq, index) =>
                 db
                     .update(tasks)
                     .set({
                         order: index,
                         updatedAt: new Date(),
                     })
-                    .where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)))
+                    .where(and(eq(tasks.projectSequence, seq), eq(tasks.projectId, projectId)))
             )
         );
     }
@@ -335,8 +292,13 @@ export class TaskRepository {
     /**
      * Move task to different status column (for kanban)
      */
-    async moveToColumn(taskId: number, status: TaskStatus, newOrder: number): Promise<Task> {
-        return await this.update(taskId, {
+    async moveToColumn(
+        projectId: number,
+        projectSequence: number,
+        status: TaskStatus,
+        newOrder: number
+    ): Promise<Task> {
+        return await this.updateByKey(projectId, projectSequence, {
             status,
             order: newOrder,
         });
@@ -370,13 +332,16 @@ export class TaskRepository {
     /**
      * Get subtask count for a task
      */
-    async getSubtaskCount(taskId: number): Promise<{ total: number; completed: number }> {
+    async getSubtaskCount(
+        projectId: number,
+        projectSequence: number
+    ): Promise<{ total: number; completed: number }> {
         const result = await db.all<{ total: number; completed: number }>(sql`
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as completed
       FROM tasks
-      WHERE parent_task_id = ${taskId} AND deleted_at IS NULL
+      WHERE parent_project_id = ${projectId} AND parent_sequence = ${projectSequence} AND deleted_at IS NULL
     `);
 
         return {
@@ -388,8 +353,8 @@ export class TaskRepository {
     /**
      * Assign task to user
      */
-    async assign(taskId: number, userId: number | null): Promise<Task> {
-        return await this.update(taskId, {
+    async assign(projectId: number, projectSequence: number, userId: number | null): Promise<Task> {
+        return await this.updateByKey(projectId, projectSequence, {
             assigneeId: userId,
         });
     }
@@ -398,13 +363,16 @@ export class TaskRepository {
      * Set task as blocked
      */
     async setBlocked(
-        taskId: number,
-        blockedByTaskId: number | null,
+        projectId: number,
+        projectSequence: number,
+        blockedByProjectId: number | null,
+        blockedBySequence: number | null,
         reason?: string
     ): Promise<Task> {
-        return await this.update(taskId, {
+        return await this.updateByKey(projectId, projectSequence, {
             status: 'blocked',
-            blockedByTaskId,
+            blockedByProjectId,
+            blockedBySequence,
             blockedReason: reason || null,
         });
     }
@@ -412,10 +380,11 @@ export class TaskRepository {
     /**
      * Unblock task
      */
-    async unblock(taskId: number): Promise<Task> {
-        return await this.update(taskId, {
+    async unblock(projectId: number, projectSequence: number): Promise<Task> {
+        return await this.updateByKey(projectId, projectSequence, {
             status: 'todo',
-            blockedByTaskId: null,
+            blockedByProjectId: null,
+            blockedBySequence: null,
             blockedReason: null,
         });
     }
@@ -462,8 +431,8 @@ export class TaskRepository {
     /**
      * Duplicate task
      */
-    async duplicate(taskId: number, newTitle?: string): Promise<Task> {
-        const original = await this.findById(taskId);
+    async duplicate(projectId: number, projectSequence: number, newTitle?: string): Promise<Task> {
+        const original = await this.findByKey(projectId, projectSequence);
         if (!original) {
             throw new Error('Task not found');
         }
@@ -475,7 +444,8 @@ export class TaskRepository {
             priority: original.priority,
             estimatedMinutes: original.estimatedMinutes,
             tags: original.tags,
-            parentTaskId: original.parentTaskId,
+            parentProjectId: original.parentProjectId,
+            parentSequence: original.parentSequence,
         });
     }
 

@@ -429,7 +429,8 @@ export class AIServiceManager {
                     'debug',
                     '[AIServiceManager] MCP auto-detection skipped (explicit configuration present or feature disabled)',
                     {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                         hasExplicitMCPs: explicitMCPs.length > 0,
                         autoDetectEnabled: this.autoDetectMCPsEnabled,
                     }
@@ -441,7 +442,8 @@ export class AIServiceManager {
                         detectedMCPs.length ? detectedMCPs.join(', ') : 'none'
                     }`,
                     {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                         detectedMCPs,
                     }
                 );
@@ -455,7 +457,8 @@ export class AIServiceManager {
                     allRequiredMCPs.length ? allRequiredMCPs.join(', ') : 'none'
                 }`,
                 {
-                    taskId: task.id,
+                    projectId: task.projectId,
+                    projectSequence: task.projectSequence,
                     requiredMCPs: allRequiredMCPs,
                     detectedMCPs,
                 }
@@ -2055,8 +2058,9 @@ ${
         mcpContext: MCPContextInsight[] = []
     ): AIExecutionContext {
         return {
-            taskId: task.id,
+            taskId: task.id, // Keeping for backward compatibility if needed, though mostly deprecated
             projectId: task.projectId,
+            projectSequence: task.projectSequence,
             userId: context.userId,
             previousExecutions: context.previousResults?.map((r) => ({
                 prompt: String(r.output?.prompt || ''),
@@ -2086,8 +2090,8 @@ ${
         eventBus.emit<AIPromptGeneratedEvent>(
             'ai.prompt_generated',
             {
-                taskId: task.id,
                 projectId: task.projectId,
+                projectSequence: task.projectSequence,
                 provider,
                 model,
                 prompt: truncate(prompt),
@@ -2115,6 +2119,7 @@ ${
             {
                 taskId: task.id,
                 projectId: task.projectId,
+                projectSequence: task.projectSequence,
                 provider,
                 model,
                 prompt,

@@ -24,7 +24,7 @@ const emit = defineEmits<{
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'subdivide', task: Task): void;
     (e: 'delete', task: Task): void;
 }>();
@@ -94,23 +94,69 @@ const taskTypeConfig = computed(() => {
             };
     }
 });
+
+// Status-based Border Logic
+const containerClasses = computed(() => {
+    // 1. Interaction States (Highest Priority)
+    if (isConnectionTarget.value) {
+        return 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-[1.02]';
+    }
+    if (isOperatorDragOver.value) {
+        return 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg scale-[1.02]';
+    }
+
+    // 2. Base Classes
+    const classes = ['bg-white dark:bg-gray-800 hover:shadow-md'];
+
+    // 3. Status-based Borders
+    // Special Case: Script Task Explicit Stop
+    const isExplicitStop =
+        props.task.taskType === 'script' &&
+        props.task.status === 'done' &&
+        (props.task.executionResult as any)?.control?.next?.length === 0;
+
+    if (isExplicitStop) {
+        classes.push('border-red-500 dark:border-red-500 ring-1 ring-red-500');
+    } else if (hasMissingProvider.value) {
+        classes.push('border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600');
+    } else {
+        switch (props.task.status) {
+            case 'failed':
+            case 'blocked':
+                classes.push('border-red-500 dark:border-red-500');
+                break;
+            case 'done':
+                classes.push('border-green-500 dark:border-green-500');
+                break;
+            case 'in_progress':
+                if (!isWaitingForInput.value) {
+                    classes.push('border-blue-500 dark:border-blue-500');
+                }
+                break;
+            case 'in_review':
+            case 'needs_approval':
+                classes.push('border-amber-500 dark:border-amber-500');
+                break;
+            default: // todo
+                classes.push('border-gray-200 dark:border-gray-700');
+        }
+    }
+
+    return classes.join(' ');
+});
+
+const taskCardClasses = computed(() => [
+    'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
+    props.isDragging && 'opacity-50 rotate-2',
+    props.task.status === 'in_progress' && !isWaitingForInput.value && 'task-pulse-border',
+    isWaitingForInput.value && 'task-waiting-input-border mt-1',
+    containerClasses.value,
+]);
 </script>
 
 <template>
     <div
-        :class="[
-            'rounded-lg p-4 shadow-sm border-2 transition-all duration-200 cursor-pointer relative group',
-            isDragging && 'opacity-50 rotate-2',
-            task.status === 'in_progress' && !isWaitingForInput && 'task-pulse-border',
-            isWaitingForInput && 'task-waiting-input-border mt-1',
-            isConnectionTarget
-                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-lg scale-[1.02]'
-                : isOperatorDragOver
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg scale-[1.02]'
-                  : hasMissingProvider
-                    ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600 hover:shadow-md'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md',
-        ]"
+        :class="taskCardClasses"
         @click="
             () => {
                 console.log('[BaseTaskCard] Card clicked:', task.id, task.title, task.taskType);

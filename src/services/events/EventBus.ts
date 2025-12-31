@@ -99,8 +99,8 @@ export interface TaskCreatedEvent extends BaseEvent {
     category: 'task';
     type: 'task.created';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         title: string;
         status: string;
         priority: string;
@@ -112,8 +112,8 @@ export interface TaskUpdatedEvent extends BaseEvent {
     category: 'task';
     type: 'task.updated';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         changes: Record<string, { old: any; new: any }>;
         updatedBy: number;
     };
@@ -123,8 +123,8 @@ export interface TaskStatusChangedEvent extends BaseEvent {
     category: 'task';
     type: 'task.status_changed';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         previousStatus: string;
         newStatus: string;
         changedBy: number;
@@ -135,8 +135,8 @@ export interface TaskAssignedEvent extends BaseEvent {
     category: 'task';
     type: 'task.assigned';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         previousAssignee?: number;
         newAssignee: number;
         assignedBy: number;
@@ -147,8 +147,8 @@ export interface TaskDeletedEvent extends BaseEvent {
     category: 'task';
     type: 'task.deleted';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         deletedBy: number;
     };
 }
@@ -219,7 +219,8 @@ export interface WorkflowTaskCompletedEvent extends BaseEvent {
     type: 'workflow.task_completed';
     payload: {
         workflowId: string;
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         status: 'success' | 'failure';
         duration: number;
         cost?: number;
@@ -232,7 +233,8 @@ export interface AIExecutionStartedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.execution_started';
     payload: {
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         provider: string;
         model: string;
     };
@@ -242,7 +244,8 @@ export interface AIExecutionCompletedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.execution_completed';
     payload: {
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         provider: string;
         model: string;
         tokensUsed: number;
@@ -256,7 +259,8 @@ export interface AITokenStreamEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.token_stream';
     payload: {
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         token: string;
         accumulated: string;
     };
@@ -266,8 +270,8 @@ export interface AIPromptGeneratedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.prompt_generated';
     payload: {
-        taskId?: number;
         projectId?: number;
+        projectSequence?: number;
         provider: string;
         model: string;
         prompt: string;
@@ -282,8 +286,8 @@ export interface MCPRequestEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_request';
     payload: {
-        taskId?: number;
         projectId?: number;
+        projectSequence?: number;
         taskTitle?: string;
         projectName?: string;
         mcpId: number;
@@ -298,8 +302,8 @@ export interface MCPResponseEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_response';
     payload: {
-        taskId?: number;
         projectId?: number;
+        projectSequence?: number;
         taskTitle?: string;
         projectName?: string;
         mcpId: number;
@@ -316,8 +320,8 @@ export interface CuratorStartedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_started';
     payload: {
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         taskTitle: string;
     };
 }
@@ -326,7 +330,8 @@ export interface CuratorStepEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_step';
     payload: {
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         step: 'analyzing' | 'extracting' | 'updating' | 'saving';
         detail: string;
     };
@@ -336,7 +341,8 @@ export interface CuratorCompletedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_completed';
     payload: {
-        taskId: number;
+        projectId: number;
+        projectSequence: number;
         summaryUpdate?: string;
         newDecisionsCount: number;
         glossaryUpdatesCount: number;
@@ -373,8 +379,8 @@ export interface CommentCreatedEvent extends BaseEvent {
     type: 'comment.created';
     payload: {
         commentId: number;
-        taskId: number;
         projectId: number;
+        projectSequence: number;
         userId: number;
         content: string;
         mentions: number[];

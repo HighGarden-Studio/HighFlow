@@ -27,6 +27,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
     (e: 'click', task: Task): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'connectionStart', task: Task, event: DragEvent): void;
     (e: 'connectionEnd', task: Task): void;
     (e: 'connectionCancel'): void;
@@ -96,6 +97,7 @@ function handleExecute(event: Event) {
         :missing-provider="missingProvider"
         :hide-connection-handles="hideConnectionHandles"
         @click="emit('click', task)"
+        @operator-drop="(pid, seq, oid) => emit('operatorDrop', pid, seq, oid)"
         @connection-start="(t, e) => emit('connectionStart', t, e)"
         @connection-end="(t) => emit('connectionEnd', t)"
         @connection-cancel="emit('connectionCancel')"

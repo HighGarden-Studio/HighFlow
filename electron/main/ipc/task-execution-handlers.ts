@@ -4,7 +4,7 @@
  * Handles IPC communication for AI task execution with streaming support
  */
 
-import { ipcMain, IpcMainInvokeEvent, shell, dialog, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { getMainWindow } from '../index';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
@@ -23,7 +23,7 @@ import type {
     CuratorCompletedEvent,
 } from '../../../src/services/events/EventBus';
 import type { TaskResult } from '../../../src/services/workflow/types';
-import { MCPPermissionError } from '../../../src/services/mcp/errors';
+// import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
 import { GlobalExecutionService } from '../services/GlobalExecutionService';
 import { taskNotificationService } from '../services/task-notification-service';
@@ -54,7 +54,8 @@ function sendActivityLog(
 
 // Execution state tracking
 interface ExecutionState {
-    taskId: number;
+    projectId: number;
+    projectSequence: number;
     status: 'running' | 'paused' | 'stopped' | 'completed' | 'failed' | 'needs_approval';
     startedAt: Date;
     pausedAt?: Date;
@@ -66,7 +67,8 @@ interface ExecutionState {
 
 // Review state tracking
 interface ReviewState {
-    taskId: number;
+    projectId: number;
+    projectSequence: number;
     status: 'reviewing' | 'completed' | 'failed';
     startedAt: Date;
     progress: number;
@@ -74,14 +76,21 @@ interface ReviewState {
     error?: string;
 }
 
-// Store active execution states
-const activeExecutions = new Map<number, ExecutionState>();
-// Store active review states
-const activeReviews = new Map<number, ReviewState>();
-// Store pending execution requests for busy tasks (TargetTaskId -> SourceTriggerId)
+// Store active execution states (Key: `${projectId}-${projectSequence}`)
+const activeExecutions = new Map<string, ExecutionState>();
+// Store active review states (Key: `${projectId}-${projectSequence}`)
+const activeReviews = new Map<string, ReviewState>();
+// Store pending execution requests for busy tasks (TargetKey -> SourceKey)
 // This implements a "Latest Request Only" (Debounce) queue for Repeat/Always tasks.
-const executionQueue = new Map<number, number>();
+const executionQueue = new Map<string, string>();
 const executor = new AdvancedTaskExecutor();
+
+/**
+ * Helper to generate task key
+ */
+function getTaskKey(projectId: number, projectSequence: number): string {
+    return `${projectId}-${projectSequence}`;
+}
 
 /**
  * Extract dependency task IDs and their execution results for macro substitution/context passing
@@ -89,10 +98,10 @@ const executor = new AdvancedTaskExecutor();
  */
 async function buildDependencyContext(
     task: Task
-): Promise<{ dependencyTaskIds: number[]; previousResults: TaskResult[] }> {
-    const visitedIds = new Set<number>();
+): Promise<{ dependencySequences: number[]; previousResults: TaskResult[] }> {
+    const visitedSequences = new Set<number>();
     const resultsMap = new Map<number, TaskResult>();
-    const queue: { id: number; depth: number }[] = [];
+    const queue: { sequence: number; depth: number }[] = [];
 
     // 1. Identify direct dependencies
     const triggerConfig = task.triggerConfig as any;
@@ -122,7 +131,7 @@ async function buildDependencyContext(
     // To be efficient, we'll collect potential IDs/Sequences first
     const potentialRefs = new Set<number>();
     while ((match = macroRegex.exec(promptText)) !== null) {
-        const val = parseInt(match[1], 10);
+        const val = parseInt(match[1] || '', 10);
         if (!isNaN(val)) potentialRefs.add(val);
     }
 
@@ -151,13 +160,13 @@ async function buildDependencyContext(
     }
 
     if (directDeps.size === 0) {
-        return { dependencyTaskIds: [], previousResults: [] };
+        return { dependencySequences: [], previousResults: [] };
     }
 
     // 2. Initialize BFS Queue
-    directDeps.forEach((id) => {
-        queue.push({ id, depth: 1 });
-        visitedIds.add(id);
+    directDeps.forEach((seq) => {
+        queue.push({ sequence: seq, depth: 1 });
+        visitedSequences.add(seq);
     });
 
     console.log(
@@ -166,15 +175,15 @@ async function buildDependencyContext(
 
     // 3. Recursive Fetch (BFS)
     while (queue.length > 0) {
-        const { id, depth } = queue.shift()!;
+        const { sequence, depth } = queue.shift()!;
 
         try {
-            const depTask = await taskRepository.findById(id);
+            const depTask = await taskRepository.findByKey(task.projectId, sequence);
             if (!depTask) continue;
 
             // Process Execution Result
             console.log(
-                `[DependencyContext] Checking Task ${id}: status=${depTask.status}, hasResult=${!!depTask.executionResult}`
+                `[DependencyContext] Checking Task ${sequence}: status=${depTask.status}, hasResult=${!!depTask.executionResult}`
             );
 
             // Allow results if task is done OR has a result (e.g., in_progress re-run in loop)
@@ -186,8 +195,8 @@ async function buildDependencyContext(
                             : depTask.executionResult;
 
                     const now = new Date();
-                    resultsMap.set(id, {
-                        taskId: depTask.id,
+                    resultsMap.set(sequence, {
+                        taskId: depTask.projectSequence, // Use sequence as ID abstraction for now in results
                         projectSequence: depTask.projectSequence,
                         taskTitle: depTask.title,
                         status: 'success',
@@ -212,7 +221,7 @@ async function buildDependencyContext(
                     });
                 } catch (parseErr) {
                     console.error(
-                        `[TaskExecution] Failed to parse result for task ${id}`,
+                        `[TaskExecution] Failed to parse result for task ${sequence}`,
                         parseErr
                     );
                 }
@@ -221,16 +230,16 @@ async function buildDependencyContext(
             // Recurse if depth allows
             if (depth < 5) {
                 const depConfig = depTask.triggerConfig as any;
-                const parentIds = depConfig?.dependsOn?.taskIds || [];
-                for (const pid of parentIds) {
-                    if (typeof pid === 'number' && !visitedIds.has(pid)) {
-                        visitedIds.add(pid);
-                        queue.push({ id: pid, depth: depth + 1 });
+                const parentSequences = depConfig?.dependsOn?.taskIds || [];
+                for (const pSeq of parentSequences) {
+                    if (typeof pSeq === 'number' && !visitedSequences.has(pSeq)) {
+                        visitedSequences.add(pSeq);
+                        queue.push({ sequence: pSeq, depth: depth + 1 });
                     }
                 }
             }
         } catch (err) {
-            console.error(`[TaskExecution] Failed to fetch dependency ${id}`, err);
+            console.error(`[TaskExecution] Failed to fetch dependency ${sequence}`, err);
         }
     }
 
@@ -246,7 +255,7 @@ async function buildDependencyContext(
         `[TaskExecution] Built dependency context with ${previousResults.length} tasks (Depth reached)`
     );
 
-    return { dependencyTaskIds: Array.from(visitedIds), previousResults };
+    return { dependencySequences: Array.from(visitedSequences), previousResults };
 }
 
 /**
@@ -257,40 +266,37 @@ async function buildDependencyContext(
  * Helper: Resolve expression containing Project Sequences or Task IDs to strictly Task IDs
  * Returns the resolved expression and the set of Task IDs found.
  */
-function resolveExpressionToIds(
+/**
+ * Helper: Resolve expression containing Project Sequences
+ * Returns the resolved expression and the set of Sequences found.
+ */
+function resolveExpressionToSequences(
     expression: string,
     allTasks: any[]
-): { resolvedExpression: string; referencedIds: Set<number> } {
+): { resolvedExpression: string; referencedSequences: Set<number> } {
     if (!expression || !expression.trim()) {
-        return { resolvedExpression: '', referencedIds: new Set() };
+        return { resolvedExpression: '', referencedSequences: new Set() };
     }
 
-    const referencedIds = new Set<number>();
+    const referencedSequences = new Set<number>();
 
     // Replace all numbers in the expression
-    // We assume numbers are Project Sequences first, then Task IDs
+    // We assume numbers are Project Sequences
     const resolvedExpression = expression.replace(/\b\d+\b/g, (match) => {
         const val = parseInt(match, 10);
 
         // 1. Try to find by Project Sequence
         const taskBySeq = allTasks.find((t) => t.projectSequence === val);
         if (taskBySeq) {
-            referencedIds.add(taskBySeq.id);
-            return taskBySeq.id.toString();
+            referencedSequences.add(taskBySeq.projectSequence);
+            return taskBySeq.projectSequence.toString();
         }
 
-        // 2. Fallback: Check if it matches a Task ID directly
-        const taskById = allTasks.find((t) => t.id === val);
-        if (taskById) {
-            referencedIds.add(taskById.id);
-            return val.toString();
-        }
-
-        // 3. No match found - keep original (will likely fail evaluation but preserves intent)
+        // 2. No match found - keep original
         return match;
     });
 
-    return { resolvedExpression, referencedIds };
+    return { resolvedExpression, referencedSequences };
 }
 
 /**
@@ -319,26 +325,26 @@ function areTaskDependenciesMet(
     const dependsOn = triggerConfig.dependsOn;
     const originalExpression = dependsOn.expression;
     const operator = dependsOn.operator || 'all';
-    let dependencyTaskIds = (dependsOn.taskIds as number[]) || [];
+    let dependencySequences = (dependsOn.taskIds as number[]) || [];
 
     // Resolve Expression if present
     let resolvedExpression = '';
     if (originalExpression && originalExpression.trim().length > 0) {
-        const resolution = resolveExpressionToIds(originalExpression, allTasks);
+        const resolution = resolveExpressionToSequences(originalExpression, allTasks);
         resolvedExpression = resolution.resolvedExpression;
-        // Merge referenced IDs from expression into dependencyTaskIds for info gathering
-        resolution.referencedIds.forEach((id) => {
-            if (!dependencyTaskIds.includes(id)) {
-                dependencyTaskIds.push(id);
+        // Merge referenced Sequences from expression into dependencySequences for info gathering
+        resolution.referencedSequences.forEach((seq) => {
+            if (!dependencySequences.includes(seq)) {
+                dependencySequences.push(seq);
             }
         });
     }
 
     // 1. Prepare Dependency Data for Evaluator
     const dependencyInfo = allTasks
-        .filter((t) => dependencyTaskIds.includes(t.id))
+        .filter((t) => dependencySequences.includes(t.projectSequence))
         .map((t) => ({
-            id: t.id,
+            id: t.projectSequence, // Use sequence as "ID" for evaluator
             status: t.status,
             completedAt: t.completedAt,
         }));
@@ -405,7 +411,8 @@ function areTaskDependenciesMet(
 
         let details = '';
         if (!met) {
-            if (!allDone) details = `Waiting for: ${incomplete.map((t: any) => t.id).join(', ')}`;
+            if (!allDone)
+                details = `Waiting for: ${incomplete.map((t: any) => t.projectSequence).join(', ')}`;
             else details = 'All done but no new events (stale)';
         }
 
@@ -418,22 +425,95 @@ function areTaskDependenciesMet(
  * Finds all tasks that have a triggerConfig.dependsOn containing the completed taskId
  * and auto-executes them if all their dependencies are satisfied
  */
+// Check and execute dependent tasks
 export async function checkAndExecuteDependentTasks(
-    completedTaskId: number,
-    completedTask: Task
+    projectId: number,
+    sequence: number,
+    completedTask: Task,
+    options?: { triggerChain?: string[] }
 ): Promise<void> {
     try {
         console.log(
-            `[TaskExecution] Checking dependent tasks for completed task ${completedTaskId} (Seq: ${completedTask.projectSequence})`
+            `[TaskExecution] Checking dependent tasks for completed task ${projectId}-${sequence}}`
         );
 
         // Project Pause Check
         if (GlobalExecutionService.getInstance().isProjectPaused(completedTask.projectId)) {
             console.log(
-                `[TaskExecution] Project ${completedTask.projectId} execution is PAUSED. Skipping auto-execution for task ${completedTaskId}'s dependents.`
+                `[TaskExecution] Project ${completedTask.projectId} execution is PAUSED. Skipping auto-execution for task ${projectId}-${sequence}'s dependents.`
             );
             return;
         }
+
+        // ===== PRIORITY 1: Check for explicit control flow =====
+        const executionResult = completedTask.executionResult as any;
+        if (executionResult?.control) {
+            const control = executionResult.control;
+            console.log(
+                `[ControlFlow] Task ${projectId}-${sequence} has control flow: next=${JSON.stringify(control.next)}, reason="${control.reason || ''}"`
+            );
+
+            // Terminal node: empty or null next means STOP
+            if (
+                control.next === null ||
+                (Array.isArray(control.next) && control.next.length === 0)
+            ) {
+                console.log(
+                    `[ControlFlow] Terminal node detected. Workflow stopped. Reason: "${control.reason || 'none'}"`
+                );
+                return; // Explicit STOP - no further execution
+            }
+
+            // Explicit next tasks defined
+            if (Array.isArray(control.next) && control.next.length > 0) {
+                console.log(
+                    `[ControlFlow] Explicit branching to tasks: [${control.next.join(', ')}]`
+                );
+
+                // Get all tasks in project
+                const allTasks = await taskRepository.findByProject(completedTask.projectId);
+
+                // Execute only the tasks specified in control.next
+                for (const nextSequence of control.next) {
+                    const nextTask = allTasks.find((t) => t.projectSequence === nextSequence);
+
+                    if (!nextTask) {
+                        console.warn(
+                            `[ControlFlow] Task ${nextSequence} not found in control.next, skipping`
+                        );
+                        continue;
+                    }
+
+                    console.log(
+                        `[ControlFlow] Triggering task ${nextTask.projectId}-${nextTask.projectSequence} (reason: "${control.reason || ''}")`
+                    );
+
+                    // Notify frontend about auto-execution
+                    const win = getMainWindow();
+                    win?.webContents.send('task:autoExecutionStarting', {
+                        projectId: nextTask.projectId,
+                        projectSequence: nextTask.projectSequence,
+                        triggeredBy: { projectId, sequence },
+                    });
+
+                    // Execute via frontend event
+                    win?.webContents.send('task:triggerAutoExecution', {
+                        projectId: nextTask.projectId,
+                        projectSequence: nextTask.projectSequence,
+                        triggeredBy: { projectId, sequence },
+                        triggerChain: options?.triggerChain || [],
+                        controlFlowReason: control.reason,
+                    });
+                }
+
+                return; // Control flow handled, skip static dependencies
+            }
+        }
+
+        // ===== PRIORITY 2: Fall back to static dependencies =====
+        console.log(
+            `[TaskExecution] No control flow defined, checking static dependencies for ${projectId}-${sequence}`
+        );
 
         // Get all tasks in the same project
         const allTasks = await taskRepository.findByProject(completedTask.projectId);
@@ -445,28 +525,26 @@ export async function checkAndExecuteDependentTasks(
             if (!triggerConfig?.dependsOn) return false;
 
             // Check if this task depends on the completed task
-            const taskIds = triggerConfig.dependsOn.taskIds || [];
-            const hasIdInTaskIds = taskIds.includes(completedTaskId);
+            const taskSequences = triggerConfig.dependsOn.taskIds || [];
+            const hasSeqInTaskIds = taskSequences.includes(sequence);
 
             // Check expression for BOTH Task ID and Project Sequence
             // We use word boundaries ensuring we match "6" but not "16"
             let hasMatchInExpr = false;
             if (triggerConfig.dependsOn.expression) {
                 const expr = triggerConfig.dependsOn.expression;
-                const matchesId = new RegExp(`\\b${completedTaskId}\\b`).test(expr);
-                const matchesSeq = completedTask.projectSequence
-                    ? new RegExp(`\\b${completedTask.projectSequence}\\b`).test(expr)
-                    : false;
-                hasMatchInExpr = matchesId || matchesSeq;
+                // Check if expression references this sequence
+                const matchesSeq = new RegExp(`\\b${sequence}\\b`).test(expr);
+                hasMatchInExpr = matchesSeq;
             }
 
             // If the completed task is not a dependency, skip
-            if (!hasIdInTaskIds && !hasMatchInExpr) return false;
+            if (!hasSeqInTaskIds && !hasMatchInExpr) return false;
 
             // Prevent self-dependency (task triggering itself)
-            if (task.id === completedTaskId) {
+            if (task.projectSequence === sequence) {
                 console.warn(
-                    `[TaskExecution] Task ${task.id} depends on itself (via ID or Sequence). Ignoring self-trigger to prevent infinite loop.`
+                    `[TaskExecution] Task ${task.projectSequence} depends on itself (via Sequence). Ignoring self-trigger to prevent infinite loop.`
                 );
                 return false;
             }
@@ -479,7 +557,7 @@ export async function checkAndExecuteDependentTasks(
                 const isInTodoStatus = task.status === 'todo';
                 if (!isInTodoStatus) {
                     console.log(
-                        `[TaskExecution] Task ${task.id} has executionPolicy='once' and is not in TODO status (current: ${task.status}). Skipping auto-execution.`
+                        `[TaskExecution] Task ${task.projectId}-${task.projectSequence} has executionPolicy='once' and is not in TODO status (current: ${task.status}). Skipping auto-execution.`
                     );
                     return false;
                 }
@@ -490,11 +568,25 @@ export async function checkAndExecuteDependentTasks(
                 if (task.status === 'in_progress' || task.status === 'getting_input') {
                     // Task is busy. Queue this request (Debounce: overwrite with latest trigger)
                     console.log(
-                        `[TaskExecution] Task ${task.id} is busy. Queueing re-execution request from ${completedTaskId}`
+                        `[TaskExecution] Task ${task.projectId}-${task.projectSequence} is busy. Queueing re-execution request from ${projectId}-${sequence}`
                     );
-                    executionQueue.set(task.id, completedTaskId);
+                    executionQueue.set(
+                        getTaskKey(task.projectId, task.projectSequence),
+                        getTaskKey(projectId, sequence)
+                    );
                     return false; // Do not execute immediately
                 }
+
+                // SAFETY: Prevent Cycle Loops using triggerChain
+                // If the dependent task is already in the trigger chain, it means we are looping back.
+                const depKey = `${task.projectId}-${task.projectSequence}`;
+                if (options?.triggerChain && options.triggerChain.includes(depKey)) {
+                    console.warn(
+                        `[TaskExecution] Cycle detected for task ${depKey} in chain: ${options.triggerChain.join(' -> ')} -> ${depKey}. Stopping loop.`
+                    );
+                    return false;
+                }
+
                 return true; // Allowed to run
             }
 
@@ -531,41 +623,81 @@ export async function checkAndExecuteDependentTasks(
         });
 
         if (dependentTasks.length === 0) {
-            console.log(`[TaskExecution] No dependent tasks found for task ${completedTaskId}`);
+            console.log(
+                `[TaskExecution] No dependent tasks found for task ${projectId}-${sequence}`
+            );
             return;
         }
 
         console.log(
-            `[TaskExecution] Found ${dependentTasks.length} dependent tasks: ${dependentTasks.map((t) => t.id).join(', ')}`
+            `[TaskExecution] Found ${dependentTasks.length} dependent tasks: ${dependentTasks.map((t) => t.projectSequence).join(', ')}`
         );
 
         // Check each dependent task
         for (const dependentTask of dependentTasks) {
+            // 0. Control Flow Check
+            // Logic Update:
+            // - If control.next is UNDEFINED or NULL -> Execute all (Default)
+            // - If control.next is EMPTY ARRAY [] -> Execute none (Stop)
+            // - If control.next is populated -> Execute specific tasks in list
+
+            const controlNext = options?.control?.next;
+
+            // Only apply filtering if 'next' is explicitly an array
+            if (Array.isArray(controlNext)) {
+                // Case A: Empty array means "Stop execution / No next steps"
+                if (controlNext.length === 0) {
+                    console.log(
+                        `[TaskExecution] Skipping task ${dependentTask.projectId}-${dependentTask.projectSequence} (control.next is empty - explicit stop)`
+                    );
+                    continue;
+                }
+
+                // Case B: Array has values, check if current task is in it
+                if (!controlNext.includes(dependentTask.projectSequence)) {
+                    console.log(
+                        `[TaskExecution] Skipping task ${dependentTask.projectId}-${dependentTask.projectSequence} (not in control.next list: [${controlNext.join(', ')}])`
+                    );
+                    continue;
+                }
+            }
+            // Case C: control.next is undefined/null -> Execute normally (Fall through)
+
             // Use revised helper that handles sequence-to-ID resolution
             const checkResult = areTaskDependenciesMet(dependentTask, allTasks);
             const shouldExecute = checkResult.met;
 
             if (shouldExecute) {
+                // Auto-executing dependent task
+
+                // Build new chain
+                const currentChain = options?.triggerChain || [];
+                // Add current Triggerer (Execution that just finished)
+                const nextChain = [...currentChain, `${projectId}-${sequence}`];
+
                 console.log(
-                    `[TaskExecution] Auto-executing dependent task ${dependentTask.id} (dependencies satisfied)`
+                    `[TaskExecution] Auto-executing dependent task ${dependentTask.projectId}-${dependentTask.projectSequence} (dependencies satisfied). Chain: ${nextChain.join(' -> ')}`
                 );
 
                 // Notify frontend about auto-execution
                 const win = getMainWindow();
                 win?.webContents.send('task:autoExecutionStarting', {
-                    taskId: dependentTask.id,
-                    triggeredBy: completedTaskId,
+                    projectId: dependentTask.projectId,
+                    projectSequence: dependentTask.projectSequence,
+                    triggeredBy: { projectId, sequence },
                 });
 
                 // Execute the task (this will be handled by the frontend's execution flow)
                 // We send an event so the frontend can trigger the execution with proper API keys
                 win?.webContents.send('task:triggerAutoExecution', {
-                    taskId: dependentTask.id,
-                    triggeredBy: completedTaskId,
+                    projectId: dependentTask.projectId,
+                    projectSequence: dependentTask.projectSequence,
+                    triggeredBy: { projectId, sequence },
+                    triggerChain: nextChain,
                 });
             } else {
                 console.log(
-                    `[TaskExecution] Task ${dependentTask.id} dependencies not yet satisfied. Reason: ${checkResult.details}`
+                    `[TaskExecution] Task ${dependentTask.projectId}-${dependentTask.projectSequence} dependencies not yet satisfied. Reason: ${checkResult.details}`
                 );
             }
         }
@@ -594,11 +726,13 @@ export async function resetStuckTasks(): Promise<number> {
         let resetCount = 0;
         for (const task of inProgressTasks) {
             // If no active execution exists for this task, reset it to todo
-            if (!activeExecutions.has(task.id)) {
+            if (!activeExecutions.has(getTaskKey(task.projectId, task.projectSequence))) {
                 console.log(
-                    `[TaskExecution] Resetting stuck task ${task.id} from in_progress to todo`
+                    `[TaskExecution] Resetting stuck task ${task.projectId}-${task.projectSequence} from in_progress to todo`
                 );
-                await taskRepository.update(task.id, { status: 'todo' });
+                await taskRepository.updateByKey(task.projectId, task.projectSequence, {
+                    status: 'todo',
+                });
                 resetCount++;
             }
         }
@@ -617,7 +751,13 @@ export async function resetStuckTasks(): Promise<number> {
 /**
  * Trigger Curator for a completed task
  */
-const triggerCurator = async (taskId: number, task: any, output: string, project: any) => {
+const triggerCurator = async (
+    projectId: number,
+    sequence: number,
+    task: any,
+    output: string,
+    project: any
+) => {
     // Only trigger if task is marked as done (fully completed)
     // If it goes to in_review, we wait until review is approved
     if (task.status === 'done' || task.autoApprove) {
@@ -661,7 +801,17 @@ const triggerCurator = async (taskId: number, task: any, output: string, project
             const curator = CuratorService.getInstance();
             curator.setApiKeys(apiKeys);
 
-            await curator.runCurator(taskId, task.title, output, project, null, projectRepository);
+            curator.setApiKeys(apiKeys);
+
+            await curator.runCurator(
+                projectId,
+                sequence,
+                task.title,
+                output,
+                project,
+                null,
+                projectRepository
+            );
         } catch (err: any) {
             console.error('[CuratorTrigger] Failed:', err);
         }
@@ -671,14 +821,19 @@ const triggerCurator = async (taskId: number, task: any, output: string, project
 /**
  * Process input task submission (shared logic for IPC and auto-execution)
  */
-async function processInputSubmission(taskId: number, payload: any): Promise<any> {
-    const task = await taskRepository.findById(taskId);
+async function processInputSubmission(
+    projectId: number,
+    sequence: number,
+    payload: any,
+    options?: { triggerChain?: string[] }
+): Promise<any> {
+    const task = await taskRepository.findByKey(projectId, sequence);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task ${projectId}-${sequence} not found`);
     }
 
     if (task.taskType !== 'input') {
-        throw new Error(`Task ${taskId} is not an input task`);
+        throw new Error(`Task ${projectId}-${sequence} is not an input task`);
     }
 
     const { InputProviderManager } =
@@ -709,11 +864,12 @@ async function processInputSubmission(taskId: number, payload: any): Promise<any
         inputSubStatus: null, // Clear input waiting status
     };
 
-    await taskRepository.update(taskId, updateData);
+    await taskRepository.updateByKey(projectId, sequence, updateData);
 
     // Log completion to history
-    await taskHistoryRepository.logExecutionCompleted(
-        taskId,
+    const historyEntry = await taskHistoryRepository.logExecutionCompleted(
+        projectId,
+        sequence,
         output.text || JSON.stringify(output.json) || 'Input submitted',
         {
             provider: 'input',
@@ -726,17 +882,23 @@ async function processInputSubmission(taskId: number, payload: any): Promise<any
         output
     );
 
+    getMainWindow()?.webContents.send('task-history:created', historyEntry);
+
     // Log completion
-    console.log(`[Input] ✅ Task ${taskId} input submitted - status: ${finalStatus}`);
+    console.log(
+        `[Input] ✅ Task ${projectId}-${sequence} input submitted - status: ${finalStatus}`
+    );
 
     getMainWindow()?.webContents.send('task:status-changed', {
-        id: taskId,
+        projectId,
+        projectSequence: sequence,
         status: finalStatus,
     });
 
     // We can also send a completed event if needed for UI to refresh
     getMainWindow()?.webContents.send('taskExecution:completed', {
-        taskId,
+        projectId,
+        projectSequence: sequence,
         result: {
             content: output.text || JSON.stringify(output.json) || 'Input submitted',
             provider: 'input',
@@ -746,12 +908,13 @@ async function processInputSubmission(taskId: number, payload: any): Promise<any
     });
 
     // Trigger dependents
-    await checkAndExecuteDependentTasks(taskId, task as Task);
+    // Trigger dependents
+    await checkAndExecuteDependentTasks(projectId, sequence, task as Task, options);
 
     // Explicitly notify Curator for Input Tasks (similar to standard tasks) if needed
     const project = await projectRepository.findById(task.projectId);
     if (project) {
-        triggerCurator(taskId, task, output.text || 'Input submitted', project);
+        triggerCurator(projectId, sequence, task, output.text || 'Input submitted', project);
     }
 
     return output;
@@ -787,6 +950,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 };
                 enabledProviders?: EnabledProviderInfo[];
                 mcpServers?: MCPServerRuntimeConfig[];
+                triggerChain?: string[];
+                force?: boolean;
+                source?: string;
+                recursive?: boolean;
+                control?: { next: number[]; reason?: string };
             }
         ) => {
             // Get task from database using composite key
@@ -795,12 +963,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 throw new Error(`Task ${projectId}-${projectSequence} not found`);
             }
             // For internal usage in this function scope only - will be removed
-            const taskId = task.id;
+            // const taskKey = getTaskKey(projectId, projectSequence);
 
             // Project Pause Check for manual execution
             if (GlobalExecutionService.getInstance().isProjectPaused(task.projectId)) {
                 const errorMsg = 'Project execution is currently PAUSED. Resume to execute tasks.';
-                console.warn(`[TaskExecution] Blocked execution of task ${taskId}: ${errorMsg}`);
+                console.warn(
+                    `[TaskExecution] Blocked execution of task ${projectId}-${projectSequence}: ${errorMsg}`
+                );
 
                 // Notify frontend
                 getMainWindow()?.webContents.send('taskExecution:failed', {
@@ -850,10 +1020,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         console.error(details);
 
                         // Log failure to history
-                        await taskHistoryRepository.logExecutionFailed(taskId, errorMsg, {
-                            reason: 'dependency_validation_failed',
-                            details: dependencyCheck.details,
-                        });
+                        await taskHistoryRepository.logExecutionFailed(
+                            task.projectId,
+                            task.projectSequence,
+                            errorMsg,
+                            {
+                                reason: 'dependency_validation_failed',
+                                details: dependencyCheck.details,
+                            }
+                        );
 
                         throw new Error(`${errorMsg}\n${details}`);
                     }
@@ -861,18 +1036,21 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Check if this is a script or input task - execute locally/handle input
                 if (task.taskType === 'script' || task.taskType === 'input') {
-                    console.log(`[TaskExecution] Executing script task ${taskId}`);
+                    console.log(
+                        `[TaskExecution] Executing script task ${projectId}-${projectSequence}`
+                    );
 
                     // Initialize execution state
                     const executionState: ExecutionState = {
-                        taskId,
+                        projectId,
+                        projectSequence,
                         status: 'running',
                         startedAt: new Date(),
                         progress: 0,
                         currentPhase: 'initializing',
                         streamContent: '',
                     };
-                    activeExecutions.set(taskId, executionState);
+                    activeExecutions.set(getTaskKey(projectId, projectSequence), executionState);
 
                     const initialStatus = 'in_progress';
 
@@ -907,9 +1085,10 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         updateData.inputSubStatus = 'WAITING_USER';
                     }
 
-                    await taskRepository.update(taskId, updateData);
+                    await taskRepository.updateByKey(projectId, projectSequence, updateData);
                     getMainWindow()?.webContents.send('task:status-changed', {
-                        id: taskId,
+                        projectId,
+                        projectSequence,
                         status: initialStatus,
                     });
                     getMainWindow()?.webContents.send('taskExecution:started', {
@@ -969,7 +1148,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             ) {
                                 const filePath = (inputConfig as any).localFile.filePath;
                                 console.log(
-                                    `[TaskExecution] Auto-submitting Local File Input Task ${taskId} with path: ${filePath}`
+                                    `[TaskExecution] Auto-submitting Local File Input Task ${projectId}-${projectSequence} with path: ${filePath}`
                                 );
                                 try {
                                     // Verify file exists
@@ -977,12 +1156,17 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     await fs.access(filePath);
 
                                     // Submit automatically
-                                    await processInputSubmission(taskId, {
-                                        filePath: filePath,
-                                    });
+                                    await processInputSubmission(
+                                        projectId,
+                                        projectSequence,
+                                        {
+                                            filePath: filePath,
+                                        },
+                                        options
+                                    );
 
                                     // Remove execution state and return success (already marked done by processInputSubmission)
-                                    activeExecutions.delete(taskId);
+                                    activeExecutions.delete(getTaskKey(projectId, projectSequence));
                                     return { success: true, autoSubmitted: true };
                                 } catch (fileErr) {
                                     console.error(
@@ -1006,38 +1190,27 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             // Log failure to history
                             await taskHistoryRepository.logExecutionFailed(
-                                taskId,
+                                projectId,
+                                projectSequence,
                                 executionState.error
                             );
-
-                            await taskRepository.update(taskId, { status: 'todo' });
+                            await taskRepository.updateByKey(projectId, projectSequence, {
+                                status: 'todo',
+                            });
 
                             // Create explicit logger for this execution
-                            // Create explicit logger for this execution
-                            const logger = (log: any) => {
-                                getMainWindow()?.webContents.send('task-execution:log', {
-                                    taskId,
-                                    log,
-                                });
-                            };
-
-                            const win = getMainWindow();
-                            if (win) {
-                                win.webContents.send('taskExecution:failed', {
-                                    projectId: task.projectId,
-                                    projectSequence: task.projectSequence,
-                                    error: executionState.error,
-                                });
-
-                                // Send specific notification for critical errors
-                                win.webContents.send('app:notification', {
-                                    type: 'error',
-                                    message: executionState.error,
-                                    duration: 5000,
-                                });
-                            }
-
-                            throw error;
+                            console.log(
+                                '[TaskExecution] Handling Input Task:',
+                                task.projectId,
+                                task.projectSequence
+                            );
+                            getMainWindow()?.webContents.send('task:inputRequired', {
+                                projectId: task.projectId,
+                                projectSequence: task.projectSequence,
+                                config: task.inputConfig,
+                                subStatus: task.inputSubStatus,
+                            });
+                            return { success: true, status: 'needs_approval', inputRequired: true };
                         }
                     }
 
@@ -1057,7 +1230,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             console.log(
                                 `[TaskExecution] Sending ${result.logs.length} logs to Activity Console`
                             );
-                            result.logs.forEach((log) => {
+                            result.logs.forEach((log: string) => {
                                 const level = log.startsWith('ERROR:')
                                     ? 'error'
                                     : log.startsWith('WARN:')
@@ -1066,24 +1239,39 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 const message = log.replace(/^(ERROR:|WARN:)\s*/, '');
 
                                 console.log(`[ActivityConsole] ${level}: ${message}`);
-                                getMainWindow()?.webContents.send('activity:log', {
-                                    level,
-                                    message,
-                                    details: { taskId, source: 'script' },
-                                });
+                                try {
+                                    getMainWindow()?.webContents.send('activity:log', {
+                                        level,
+                                        message,
+                                        details: { projectId, projectSequence, source: 'script' },
+                                    });
+                                } catch (err) {
+                                    console.error(
+                                        '[TaskExecution] Failed to send activity log:',
+                                        err
+                                    );
+                                }
                             });
 
                             if (result.success) {
                                 executionState.status = 'completed';
                                 executionState.streamContent = result.output || '';
 
-                                const executionResult = {
+                                const executionResult: any = {
                                     content: result.output || '',
                                     duration: result.duration || 0,
                                     provider: 'script',
                                     model: task.scriptLanguage || 'javascript',
                                     logs: result.logs || [],
                                 };
+
+                                // Store control flow if present
+                                if (result.control) {
+                                    executionResult.control = result.control;
+                                    console.log(
+                                        `[ScriptTask] Control flow detected: next=${JSON.stringify(result.control.next)}, reason="${result.control.reason || ''}"`
+                                    );
+                                }
 
                                 const finalStatus = task.autoApprove ? 'done' : 'in_review';
                                 const updateData: any = {
@@ -1095,34 +1283,103 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     updateData.completedAt = new Date().toISOString();
                                 }
 
-                                await taskRepository.update(taskId, updateData);
-
-                                getMainWindow()?.webContents.send('task:status-changed', {
-                                    id: taskId,
-                                    status: finalStatus,
-                                });
-                                getMainWindow()?.webContents.send('taskExecution:completed', {
+                                const completionPayload = {
                                     projectId: task.projectId,
                                     projectSequence: task.projectSequence,
                                     result: executionResult,
-                                });
+                                };
 
-                                await taskHistoryRepository.logExecutionCompleted(
-                                    taskId,
-                                    result.output || '',
-                                    {
-                                        provider: 'script',
-                                        model: task.scriptLanguage || 'javascript',
-                                        duration: result.duration || 0,
-                                    }
+                                console.log(
+                                    `[TaskExecution] Updating task ${projectId}-${projectSequence} status to ${finalStatus}`
                                 );
 
-                                if (finalStatus === 'done') {
-                                    await checkAndExecuteDependentTasks(taskId, task as Task);
+                                // Log success to history
+                                const historyEntry =
+                                    await taskHistoryRepository.logExecutionCompleted(
+                                        projectId,
+                                        projectSequence,
+                                        executionResult.content,
+                                        {
+                                            provider: executionResult.provider,
+                                            model: executionResult.model,
+                                            duration: executionResult.duration,
+                                        },
+                                        undefined, // AI Result
+                                        executionResult // Execution Result
+                                    );
+
+                                getMainWindow()?.webContents.send(
+                                    'task-history:created',
+                                    historyEntry
+                                );
+
+                                await taskRepository.updateByKey(
+                                    projectId,
+                                    projectSequence,
+                                    updateData
+                                );
+
+                                try {
+                                    getMainWindow()?.webContents.send('task:status-changed', {
+                                        projectId,
+                                        projectSequence,
+                                        status: finalStatus,
+                                    });
+
+                                    // Safe serialization for IPC
+                                    try {
+                                        // Deep clone via JSON to strip non-serializable properties (proxies, etc)
+                                        const safePayload = JSON.parse(
+                                            JSON.stringify(completionPayload)
+                                        );
+
+                                        getMainWindow()?.webContents.send(
+                                            'taskExecution:completed',
+                                            safePayload
+                                        );
+                                    } catch (err) {
+                                        console.error(
+                                            `[TaskExecution] Serialization prevented IPC send for ${projectId}-${projectSequence}:`,
+                                            err
+                                        );
+                                        // Fallback: send minimal success info
+                                        const minimalPayload = {
+                                            projectId: task.projectId,
+                                            projectSequence: task.projectSequence,
+                                            result: {
+                                                success: true,
+                                                output:
+                                                    typeof executionResult.output === 'string'
+                                                        ? executionResult.output
+                                                        : 'Output not serializable',
+                                            },
+                                        };
+                                        getMainWindow()?.webContents.send(
+                                            'taskExecution:completed',
+                                            minimalPayload
+                                        );
+                                    }
+                                } catch (err) {
+                                    console.error(
+                                        '[TaskExecution] Failed to send completion events:',
+                                        err
+                                    );
                                 }
 
-                                activeExecutions.delete(taskId);
-                                return { success: true, result };
+                                if (finalStatus === 'done') {
+                                    await checkAndExecuteDependentTasks(
+                                        projectId,
+                                        projectSequence,
+                                        task as Task,
+                                        options
+                                    );
+                                }
+
+                                activeExecutions.delete(getTaskKey(projectId, projectSequence));
+
+                                // Safe serialization for IPC return value
+                                const safeResult = JSON.parse(JSON.stringify(result));
+                                return { success: true, result: safeResult };
                             } else {
                                 throw new Error(result.error || 'Script execution failed');
                             }
@@ -1131,13 +1388,37 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             executionState.error =
                                 error instanceof Error ? error.message : String(error);
 
-                            await taskRepository.update(taskId, { status: 'todo' });
+                            // Keep status as failed to show red border
+                            await taskRepository.updateByKey(projectId, projectSequence, {
+                                status: 'failed',
+                            });
+
+                            // Log failure to history
+                            const historyEntry = await taskHistoryRepository.logExecutionFailed(
+                                projectId,
+                                projectSequence,
+                                executionState.error,
+                                {
+                                    provider: 'script',
+                                    model: task.scriptLanguage || 'javascript',
+                                }
+                            );
+
+                            getMainWindow()?.webContents.send('task-history:created', historyEntry);
+
                             getMainWindow()?.webContents.send('taskExecution:failed', {
                                 projectId: task.projectId,
                                 projectSequence: task.projectSequence,
                                 error: executionState.error,
                             });
-                            throw error;
+
+                            // Return failure instead of throwing to prevent outer catch block from resetting status to in_review
+                            activeExecutions.delete(getTaskKey(projectId, projectSequence));
+                            return {
+                                success: false,
+                                statusHandled: true,
+                                error: executionState.error || 'Check logs for details',
+                            };
                         }
                     }
 
@@ -1148,53 +1429,70 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // 3. Handle Output Tasks
                 if (task.taskType === 'output') {
-                    console.log(`[TaskExecution] Executing output task ${taskId}`);
+                    console.log(
+                        `[TaskExecution] Executing output task ${projectId}-${projectSequence}`
+                    );
 
                     // Initialize execution state for Output Tasks to track status/errors locally
                     const executionState: ExecutionState = {
-                        taskId,
+                        projectId,
+                        projectSequence,
                         status: 'running',
                         startedAt: new Date(),
                         progress: 0,
                         currentPhase: 'executing',
                         streamContent: '',
                     };
-                    activeExecutions.set(taskId, executionState);
+                    activeExecutions.set(getTaskKey(projectId, projectSequence), executionState);
 
                     try {
                         const { OutputTaskRunner } = await import('../services/output'); // Ensure this imports correctly or use full path
                         const runner = new OutputTaskRunner();
 
                         // Execute output logic
-                        const result = await runner.execute(taskId);
+                        // Assuming runner.execute is updated to accept projectId, sequence
+                        const result = await runner.execute(projectId, projectSequence);
 
                         if (result.success) {
                             executionState.status = 'completed';
 
                             // Get the updated task to access result data
-                            const updatedTask = await taskRepository.findById(taskId);
+                            const updatedTask = await taskRepository.findByKey(
+                                projectId,
+                                projectSequence
+                            );
 
                             // Log execution completion to history for Output tasks
                             if (updatedTask) {
-                                await taskHistoryRepository.logExecutionCompleted(
-                                    taskId,
-                                    'Output task completed',
-                                    {
-                                        provider: 'output',
-                                        model: 'connector',
-                                        cost: 0,
-                                        tokens: 0,
-                                        duration: Date.now() - executionState.startedAt.getTime(),
-                                    },
-                                    undefined,
-                                    updatedTask.executionResult as any
+                                const historyEntry =
+                                    await taskHistoryRepository.logExecutionCompleted(
+                                        projectId,
+                                        projectSequence,
+                                        'Output task completed',
+                                        {
+                                            provider: 'output',
+                                            model: 'connector',
+                                            cost: 0,
+                                            tokens: 0,
+                                            duration:
+                                                Date.now() - executionState.startedAt.getTime(),
+                                        },
+                                        undefined,
+                                        updatedTask.executionResult as any
+                                    );
+                                getMainWindow()?.webContents.send(
+                                    'task-history:created',
+                                    historyEntry
                                 );
-                                console.log(`[TaskExecution] Output task ${taskId} history logged`);
+                                console.log(
+                                    `[TaskExecution] Output task ${projectId}-${projectSequence} history logged`
+                                );
                             }
 
                             // Task status update is handled inside runner, but we ensure notification
                             getMainWindow()?.webContents.send('taskExecution:completed', {
-                                taskId,
+                                projectId: task.projectId,
+                                projectSequence: task.projectSequence,
                                 result: {
                                     content: 'Output execution completed',
                                     provider: 'output',
@@ -1205,10 +1503,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             // Trigger dependent tasks
                             if (updatedTask && updatedTask.status === 'done') {
-                                await checkAndExecuteDependentTasks(taskId, updatedTask);
+                                await checkAndExecuteDependentTasks(
+                                    projectId,
+                                    projectSequence,
+                                    updatedTask,
+                                    options
+                                );
                             }
 
-                            activeExecutions.delete(taskId);
+                            activeExecutions.delete(getTaskKey(projectId, projectSequence));
                             return { success: true }; // Exit here
                         } else {
                             throw new Error(result.error || 'Output execution failed');
@@ -1218,10 +1521,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         executionState.error =
                             error instanceof Error ? error.message : String(error);
 
-                        await taskRepository.update(taskId, { status: 'todo' });
+                        await taskRepository.updateByKey(projectId, projectSequence, {
+                            status: 'todo',
+                        });
 
                         getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
+                            projectId,
+                            projectSequence,
                             status: 'todo',
                         });
 
@@ -1232,9 +1538,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         });
 
                         // Send failure notification
-                        await taskNotificationService.notifyFailure(taskId, executionState.error);
+                        await taskNotificationService.notifyFailure(
+                            projectId,
+                            projectSequence,
+                            executionState.error
+                        );
 
-                        activeExecutions.delete(taskId); // Clean up
+                        activeExecutions.delete(getTaskKey(projectId, projectSequence)); // Clean up
                         throw error;
                     }
                 } // End Output Task block
@@ -1242,22 +1552,24 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 // 4. AI Task Execution (Default)
                 // Initialize execution state for AI tasks
                 let executionState: ExecutionState = {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     status: 'running',
                     startedAt: new Date(),
                     progress: 0,
                     currentPhase: 'initializing',
                     streamContent: '',
                 };
-                activeExecutions.set(taskId, executionState);
+                activeExecutions.set(getTaskKey(projectId, projectSequence), executionState);
 
                 // Update task status to in_progress
-                await taskRepository.update(taskId, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'in_progress',
                     startedAt: new Date(),
                 });
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'in_progress',
                 });
                 getMainWindow()?.webContents.send('taskExecution:started', {
@@ -1275,7 +1587,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             );
                             if (operator) {
                                 console.log(
-                                    `[TaskExecution] Using operator ${operator.name} for task ${taskId}`
+                                    `[TaskExecution] Using operator ${operator.name} for task ${projectId}-${projectSequence}`
                                 );
                                 task.aiProvider = operator.aiProvider;
                                 task.aiModel = operator.aiModel;
@@ -1326,7 +1638,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         pkg += `Glossary:\n${glossary}\n\n`;
                         pkg += `---\n\n`;
                         pkg += `## Task Contract\n`;
-                        pkg += `Task ID: ${task.id}\n`;
+                        pkg += `Task Sequence: ${task.projectSequence}\n`;
                         pkg += `Task Name: ${task.title}\n`;
                         // Task Objective removed from Context Package to prevent duplication
                         // The description/prompt is already provided as the main user prompt.
@@ -1352,13 +1664,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         }
 
                         console.log(
-                            `[TaskExecution] Routing task ${taskId} to Local Agent: ${agentType}`
+                            `[TaskExecution] Routing task ${projectId}-${projectSequence} to Local Agent: ${agentType}`
                         );
 
                         const workingDir = project?.baseDevFolder;
                         if (!workingDir) {
                             throw new Error(
-                                `Task ${taskId} requires a working directory (baseDevFolder) for local agent execution`
+                                `Task ${projectId}-${projectSequence} requires a working directory (baseDevFolder) for local agent execution`
                             );
                         }
 
@@ -1385,7 +1697,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 variables: {},
                                 projectName: project?.title,
                                 projectDescription: project?.description || undefined,
-                                currentTaskId: task.id,
+                                currentTaskId: task.projectSequence,
                             };
 
                             const resolvedDescription = PromptMacroService.replaceMacros(
@@ -1417,7 +1729,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     ) {
                                         const imagePath = saveBase64ImageToTempFile(
                                             outputContent,
-                                            res.taskId
+                                            // Ensure this uses a valid ID if res.taskId is deprecated
+                                            res.taskId || `prev-task-${res.taskTitle}`
                                         );
                                         outputContent = `[Image saved to: ${imagePath}]\n\nNote: The image file is available at the path above. You can reference it in your work.`;
                                     }
@@ -1465,9 +1778,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 }
                             }
 
-                            // Output Contract Injection Removed (Curator handles memory updates)
-                            // prompt += getOutputContract();
-
                             return prompt;
                         };
 
@@ -1475,14 +1785,17 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             agentType,
                             workingDir,
                             undefined,
-                            taskId // Pass taskId for session tracking
+                            projectId,
+                            projectSequence
                         );
 
                         // Re-fetch execution state safely
-                        const tempState = activeExecutions.get(taskId);
+                        const tempState = activeExecutions.get(
+                            getTaskKey(projectId, projectSequence)
+                        );
                         if (!tempState) {
                             console.error(
-                                `[TaskExecution] Execution state was deleted for task ${taskId}`
+                                `[TaskExecution] Execution state was deleted for task ${projectId}-${projectSequence}`
                             );
                             throw new Error('Execution state was cleared before completion');
                         }
@@ -1492,7 +1805,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         const response = await sessionManager.sendMessage(sessionInfo.id, prompt, {
                             timeout: options?.timeout || 300000,
                             onChunk: (chunk) => {
-                                const state = activeExecutions.get(taskId);
+                                const state = activeExecutions.get(
+                                    getTaskKey(projectId, projectSequence)
+                                );
                                 if (state) state.streamContent += chunk;
 
                                 getMainWindow()?.webContents.send('taskExecution:progress', {
@@ -1514,17 +1829,20 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                         if (response.success) {
                             await taskHistoryRepository.logExecutionStarted(
-                                taskId,
+                                projectId,
+                                projectSequence,
                                 prompt, // Log the Resolved Prompt
                                 task.aiProvider || 'local',
                                 'local-model'
                             );
 
                             // Re-check execution state before updating
-                            const tempState = activeExecutions.get(taskId);
+                            const tempState = activeExecutions.get(
+                                getTaskKey(projectId, projectSequence)
+                            );
                             if (!tempState) {
                                 console.error(
-                                    `[TaskExecution] Execution state was deleted for task ${taskId} during execution`
+                                    `[TaskExecution] Execution state was deleted for task ${projectId}-${projectSequence} during execution`
                                 );
                                 throw new Error('Execution state was cleared during execution');
                             }
@@ -1554,14 +1872,19 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             const updateData: any = { status: finalStatus, executionResult };
                             if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
-                            await taskRepository.update(taskId, updateData);
+                            await taskRepository.updateByKey(
+                                projectId,
+                                projectSequence,
+                                updateData
+                            );
 
                             console.log(
-                                `[LocalAgent] ✅ Task ${taskId} completed - status: ${finalStatus}`
+                                `[LocalAgent] ✅ Task ${projectId}-${projectSequence} completed - status: ${finalStatus}`
                             );
 
                             getMainWindow()?.webContents.send('task:status-changed', {
-                                id: taskId,
+                                projectId,
+                                projectSequence,
                                 status: finalStatus,
                             });
                             getMainWindow()?.webContents.send('taskExecution:completed', {
@@ -1570,8 +1893,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 result: executionResult,
                             });
 
-                            await taskHistoryRepository.logExecutionCompleted(
-                                taskId,
+                            const historyEntry = await taskHistoryRepository.logExecutionCompleted(
+                                projectId,
+                                projectSequence,
                                 response.content,
                                 {
                                     provider: task.aiProvider || 'local',
@@ -1586,10 +1910,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 executionResult
                             );
 
+                            getMainWindow()?.webContents.send('task-history:created', historyEntry);
+
                             // Send notifications
                             if (finalStatus === 'done') {
                                 await taskNotificationService.notifyCompletion(
-                                    taskId,
+                                    projectId,
+                                    projectSequence,
                                     response.content,
                                     {
                                         duration: response.duration,
@@ -1605,16 +1932,27 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                             : undefined,
                                     }
                                 );
-                                triggerCurator(taskId, task, response.content, project); // Trigger Curator
-                                await checkAndExecuteDependentTasks(taskId, task as Task);
+                                triggerCurator(
+                                    projectId,
+                                    projectSequence,
+                                    task,
+                                    response.content,
+                                    project
+                                ); // Trigger Curator
+                                await checkAndExecuteDependentTasks(
+                                    projectId,
+                                    projectSequence,
+                                    task as Task
+                                );
                             } else if (finalStatus === 'in_review') {
                                 await taskNotificationService.notifyReviewReady(
-                                    taskId,
+                                    projectId,
+                                    projectSequence,
                                     response.content
                                 );
                             }
 
-                            activeExecutions.delete(taskId);
+                            activeExecutions.delete(getTaskKey(projectId, projectSequence));
                             return { success: true, result: response };
                         } else {
                             throw new Error(response.error || 'Local agent execution failed');
@@ -1646,7 +1984,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         variables: context.variables || {},
                         projectName: project?.title,
                         projectDescription: project?.description || undefined,
-                        currentTaskId: taskId,
+                        currentTaskId: task.projectSequence,
                     };
 
                     const resolvedDescription = PromptMacroService.replaceMacros(
@@ -1660,24 +1998,25 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // Log Execution Started with RESOLVED Prompt
                     await taskHistoryRepository.logExecutionStarted(
-                        taskId,
+                        projectId,
+                        projectSequence,
                         resolvedDescription,
                         task.aiProvider || undefined,
                         undefined
                     );
 
                     // Safe Execution State
-                    const tempState = activeExecutions.get(taskId);
+                    const tempState = activeExecutions.get(getTaskKey(projectId, projectSequence));
                     if (!tempState) {
                         console.error(
-                            `[TaskExecution] Execution state was deleted for task ${taskId}`
+                            `[TaskExecution] Execution state was deleted for task ${projectId}-${projectSequence}`
                         );
                         throw new Error('Execution state was cleared before AI execution');
                     }
                     executionState = tempState;
 
                     const onToken = (token: string) => {
-                        const state = activeExecutions.get(taskId);
+                        const state = activeExecutions.get(getTaskKey(projectId, projectSequence));
                         if (state) state.streamContent += token;
                         getMainWindow()?.webContents.send('taskExecution:progress', {
                             projectId: task.projectId,
@@ -1694,7 +2033,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         elapsedTime: number;
                         content?: string;
                     }) => {
-                        const state = activeExecutions.get(taskId);
+                        const state = activeExecutions.get(getTaskKey(projectId, projectSequence));
                         if (state) state.currentPhase = progress.phase;
                         getMainWindow()?.webContents.send('taskExecution:progress', {
                             projectId: task.projectId,
@@ -1721,18 +2060,23 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     });
 
                     // Check stopped state
-                    const currentState = activeExecutions.get(taskId);
+                    const currentState = activeExecutions.get(
+                        getTaskKey(projectId, projectSequence)
+                    );
                     if (!currentState || currentState.status === 'stopped') {
-                        await taskRepository.update(taskId, { status: 'todo' });
+                        await taskRepository.updateByKey(projectId, projectSequence, {
+                            status: 'todo',
+                        });
                         getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
+                            projectId,
+                            projectSequence,
                             status: 'todo',
                         });
                         getMainWindow()?.webContents.send('taskExecution:stopped', {
                             projectId: task.projectId,
                             projectSequence: task.projectSequence,
                         });
-                        activeExecutions.delete(taskId);
+                        activeExecutions.delete(getTaskKey(projectId, projectSequence));
                         return { success: false, stopped: true };
                     }
 
@@ -1745,10 +2089,12 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 : JSON.stringify(result.output));
 
                         // Re-check execution state before updating
-                        const tempState = activeExecutions.get(taskId);
+                        const tempState = activeExecutions.get(
+                            getTaskKey(projectId, projectSequence)
+                        );
                         if (!tempState) {
                             console.error(
-                                `[TaskExecution] Execution state was deleted for task ${taskId} after execution`
+                                `[TaskExecution] Execution state was deleted for task ${projectId}-${projectSequence} after execution`
                             );
                             throw new Error('Execution state was cleared after execution');
                         }
@@ -1776,16 +2122,17 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
                         console.log(
-                            `[TaskExecution] 📝 Updating task ${taskId} status to ${finalStatus} (autoApprove: ${task.autoApprove})`
+                            `[TaskExecution] 📝 Updating task ${projectId}-${projectSequence} status to ${finalStatus} (autoApprove: ${task.autoApprove})`
                         );
-                        await taskRepository.update(taskId, updateData);
+                        await taskRepository.updateByKey(projectId, projectSequence, updateData);
 
                         console.log(
-                            `[Main IPC] ✅ Task ${taskId} completed - status: ${finalStatus}`
+                            `[Main IPC] ✅ Task ${projectId}-${projectSequence} completed - status: ${finalStatus}`
                         );
 
                         getMainWindow()?.webContents.send('task:status-changed', {
-                            id: taskId,
+                            projectId,
+                            projectSequence,
                             status: finalStatus,
                         });
                         getMainWindow()?.webContents.send('taskExecution:completed', {
@@ -1794,8 +2141,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             result: executionResult,
                         });
 
-                        await taskHistoryRepository.logExecutionCompleted(
-                            taskId,
+                        const historyEntry = await taskHistoryRepository.logExecutionCompleted(
+                            projectId,
+                            projectSequence,
                             displayContent || '',
                             {
                                 provider: aiResult?.meta?.provider || result.metadata?.provider,
@@ -1807,9 +2155,12 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             aiResult
                         );
 
+                        getMainWindow()?.webContents.send('task-history:created', historyEntry);
+
                         if (finalStatus === 'done') {
                             await taskNotificationService.notifyCompletion(
-                                taskId,
+                                projectId,
+                                projectSequence,
                                 displayContent || '',
                                 {
                                     duration: result.duration,
@@ -1821,46 +2172,71 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     },
                                 }
                             );
-                            triggerCurator(taskId, task, displayContent || '', project); // Trigger Curator
-                            await checkAndExecuteDependentTasks(taskId, task as Task);
+                            triggerCurator(
+                                projectId,
+                                projectSequence,
+                                task,
+                                displayContent || '',
+                                project
+                            ); // Trigger Curator
+                            await checkAndExecuteDependentTasks(
+                                projectId,
+                                projectSequence,
+                                task as Task,
+                                options
+                            );
                         } else if (finalStatus === 'in_review') {
                             await taskNotificationService.notifyReviewReady(
-                                taskId,
+                                projectId,
+                                projectSequence,
                                 displayContent || ''
                             );
                         }
 
-                        activeExecutions.delete(taskId);
+                        activeExecutions.delete(getTaskKey(projectId, projectSequence));
+                        const taskKey = getTaskKey(projectId, projectSequence);
 
                         // CHECK QUEUE: If there's a pending request for this task, execute it now.
-                        if (executionQueue.has(taskId)) {
-                            const triggerId = executionQueue.get(taskId)!;
-                            executionQueue.delete(taskId);
-                            console.log(
-                                `[TaskExecution] 🔄 Processing queued execution for task ${taskId} (Triggered by ${triggerId})`
-                            );
+                        // CHECK QUEUE: If there's a pending request for this task, execute it now.
+                        if (executionQueue.has(taskKey)) {
+                            const triggerId = executionQueue.get(taskKey)!;
+                            executionQueue.delete(taskKey);
 
-                            // Small delay to ensure DB writes settle?
-                            setTimeout(() => {
-                                // We strictly re-trigger the dependency check or just execute?
-                                // Since we queued it, we know it WAS requested.
-                                // But we still need to check validty?
-                                // Easier to just "simulate" a trigger from the source.
+                            // SAFETY: Prevent Rapid Loops (Recursion)
+                            // Even for queued tasks, we should check for tight loops
+                            let isLoop = false;
+                            if (task.startedAt) {
+                                const now = new Date().getTime();
+                                const lastRunTime = new Date(task.startedAt).getTime();
+                                const timeSinceUnknown = now - lastRunTime;
+                                if (timeSinceUnknown < 3000) {
+                                    console.warn(
+                                        `[TaskExecution] QUEUE: Task ${projectId}-${projectSequence} executed too recently (${timeSinceUnknown}ms ago). Ignoring queued request to prevent infinite loop.`
+                                    );
+                                    isLoop = true;
+                                }
+                            }
 
-                                // Actually better: Calling checkAndExecuteDependentTasks is for DOWNSTREAM.
-                                // We need to execute THIS task.
-                                // We can emit the auto-execution event to frontend just like checkResult would.
+                            if (!isLoop) {
+                                console.log(
+                                    `[TaskExecution] 🔄 Processing queued execution for task ${taskKey} (Triggered by ${triggerId})`
+                                );
 
-                                const win = getMainWindow();
-                                win?.webContents.send('task:autoExecutionStarting', {
-                                    taskId: taskId,
-                                    triggeredBy: triggerId,
-                                });
-                                win?.webContents.send('task:triggerAutoExecution', {
-                                    taskId: taskId,
-                                    triggeredBy: triggerId,
-                                });
-                            }, 500);
+                                // Small delay to ensure DB writes settle?
+                                setTimeout(() => {
+                                    const win = getMainWindow();
+                                    win?.webContents.send('task:autoExecutionStarting', {
+                                        projectId,
+                                        projectSequence,
+                                        triggeredBy: triggerId,
+                                    });
+                                    win?.webContents.send('task:triggerAutoExecution', {
+                                        projectId,
+                                        projectSequence,
+                                        triggeredBy: triggerId,
+                                    });
+                                }, 500);
+                            }
                         }
 
                         return { success: true, result };
@@ -1891,18 +2267,27 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             shortError = shortError.substring(0, 300) + '...';
                         }
 
-                        console.error(`[TaskExecution] Task ${taskId} failed: ${shortError}`);
+                        console.error(
+                            `[TaskExecution] Task ${projectId}-${projectSequence} failed: ${shortError}`
+                        );
 
                         // Log failure to history
-                        await taskHistoryRepository.logExecutionFailed(taskId, shortError);
+                        await taskHistoryRepository.logExecutionFailed(
+                            projectId,
+                            projectSequence,
+                            shortError
+                        );
 
                         // Set to in_review on failure so user can see error state
-                        await taskRepository.update(taskId, { status: 'in_review' });
+                        await taskRepository.updateByKey(projectId, projectSequence, {
+                            status: 'in_review',
+                        });
 
                         const win = getMainWindow();
                         if (win) {
                             win.webContents.send('task:status-changed', {
-                                id: taskId,
+                                projectId,
+                                projectSequence,
                                 status: 'in_review',
                             });
                             win.webContents.send('taskExecution:failed', {
@@ -1920,17 +2305,20 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             });
                         }
 
-                        activeExecutions.delete(taskId);
+                        activeExecutions.delete(getTaskKey(projectId, projectSequence));
                         return { success: false, error: shortError };
                     }
                 } catch (error) {
                     console.error('Error executing AI task:', error);
-                    activeExecutions.delete(taskId);
+                    activeExecutions.delete(getTaskKey(projectId, projectSequence));
 
                     // Set to in_review on error
-                    await taskRepository.update(taskId, { status: 'in_review' }).catch(() => {});
+                    await taskRepository
+                        .updateByKey(projectId, projectSequence, { status: 'in_review' })
+                        .catch(() => {});
                     getMainWindow()?.webContents.send('task:status-changed', {
-                        id: taskId,
+                        projectId,
+                        projectSequence,
                         status: 'in_review',
                     });
                     getMainWindow()?.webContents.send('taskExecution:failed', {
@@ -1955,12 +2343,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 console.error('Error executing task:', error);
 
                 // Clean up on error
-                activeExecutions.delete(taskId);
+                activeExecutions.delete(getTaskKey(projectId, projectSequence));
 
                 // Set to in_review on error
-                await taskRepository.update(taskId, { status: 'in_review' }).catch(() => {});
+                await taskRepository
+                    .updateByKey(projectId, projectSequence, { status: 'in_review' })
+                    .catch(() => {});
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'in_review',
                 });
                 getMainWindow()?.webContents.send('taskExecution:failed', {
@@ -1994,16 +2385,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             if (!task) {
                 throw new Error(`Task ${projectId}-${projectSequence} not found`);
             }
-            const taskId = task.id; // Temporary for internal use
+            const taskKey = getTaskKey(projectId, projectSequence); // Use composite key
             try {
-                const state = activeExecutions.get(taskId);
+                const state = activeExecutions.get(taskKey);
                 if (!state) {
-                    throw new Error(`No active execution for task ${taskId}`);
+                    throw new Error(`No active execution for task ${taskKey}`);
                 }
 
                 if (state.status !== 'running') {
                     throw new Error(
-                        `Task ${taskId} is not running (current status: ${state.status})`
+                        `Task ${taskKey} is not running (current status: ${state.status})`
                     );
                 }
 
@@ -2011,13 +2402,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 state.pausedAt = new Date();
 
                 getMainWindow()?.webContents.send('taskExecution:paused', {
-                    projectId: task.projectId,
-                    projectSequence: task.projectSequence,
+                    projectId,
+                    projectSequence,
                     pausedAt: state.pausedAt,
                 });
 
                 // Log paused to history
-                await taskHistoryRepository.logPaused(taskId);
+                await taskHistoryRepository.logPaused(projectId, projectSequence);
 
                 return { success: true };
             } catch (error) {
@@ -2037,16 +2428,16 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             if (!task) {
                 throw new Error(`Task ${projectId}-${projectSequence} not found`);
             }
-            const taskId = task.id; // Temporary for internal use
+            const taskKey = getTaskKey(projectId, projectSequence); // Use composite key
             try {
-                const state = activeExecutions.get(taskId);
+                const state = activeExecutions.get(taskKey);
                 if (!state) {
-                    throw new Error(`No active execution for task ${taskId}`);
+                    throw new Error(`No active execution for task ${taskKey}`);
                 }
 
                 if (state.status !== 'paused') {
                     throw new Error(
-                        `Task ${taskId} is not paused (current status: ${state.status})`
+                        `Task ${taskKey} is not paused (current status: ${state.status})`
                     );
                 }
 
@@ -2059,7 +2450,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 });
 
                 // Log resumed to history
-                await taskHistoryRepository.logResumed(taskId);
+                await taskHistoryRepository.logResumed(projectId, projectSequence);
 
                 return { success: true };
             } catch (error) {
@@ -2079,56 +2470,63 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             if (!task) {
                 throw new Error(`Task ${projectId}-${projectSequence} not found`);
             }
-            const taskId = task.id; // Temporary for internal use
+            const taskKey = getTaskKey(projectId, projectSequence);
             try {
-                const aiCancelled = await executor.cancelTask(taskId);
+                const aiCancelled = await executor.cancelTask(projectId, projectSequence);
                 if (aiCancelled) {
                     console.log(
-                        `[TaskExecution] Sent cancel signal to AI provider for task ${taskId}`
+                        `[TaskExecution] Sent cancel signal to AI provider for task ${taskKey}`
                     );
                 } else {
                     console.warn(
-                        `[TaskExecution] No active AI execution found to cancel for task ${taskId}`
+                        `[TaskExecution] No active AI execution found to cancel for task ${taskKey}`
                     );
                 }
 
                 // Terminate Local Agent session if exists
                 try {
                     const { sessionManager } = await import('../services/local-agent-session');
-                    const sessionTerminated = await sessionManager.terminateTaskSession(taskId);
+                    const sessionTerminated = await sessionManager.terminateTaskSession(
+                        projectId,
+                        projectSequence
+                    );
                     if (sessionTerminated) {
                         console.log(
-                            `[TaskExecution] Terminated Local Agent session for task ${taskId}`
+                            `[TaskExecution] Terminated Local Agent session for task ${taskKey}`
                         );
                     }
                 } catch (error) {
                     // Session manager might not be available or session doesn't exist
                     console.debug(
-                        `[TaskExecution] No Local Agent session to terminate for task ${taskId}`
+                        `[TaskExecution] No Local Agent session to terminate for task ${taskKey}`
                     );
                 }
 
-                const state = activeExecutions.get(taskId);
+                const state = activeExecutions.get(taskKey);
                 if (state) {
                     state.status = 'stopped';
                     state.currentPhase = 'stopped';
                 }
 
                 // Update task status to todo and clear inputSubStatus
-                await taskRepository.update(taskId, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'todo',
                     inputSubStatus: null,
                 });
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'todo',
                 });
-                getMainWindow()?.webContents.send('taskExecution:stopped', { taskId });
+                getMainWindow()?.webContents.send('taskExecution:stopped', {
+                    projectId,
+                    projectSequence,
+                });
 
                 // Log stopped to history
-                await taskHistoryRepository.logStopped(taskId);
+                await taskHistoryRepository.logStopped(projectId, projectSequence);
 
-                activeExecutions.delete(taskId);
+                activeExecutions.delete(taskKey);
 
                 return { success: true };
             } catch (error) {
@@ -2141,39 +2539,48 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Get execution status for a task
      */
-    ipcMain.handle('taskExecution:getStatus', async (_event, taskId: number) => {
-        const state = activeExecutions.get(taskId);
-        if (!state) {
-            return null;
-        }
+    /**
+     * Get execution status for a task
+     */
+    ipcMain.handle(
+        'taskExecution:getStatus',
+        async (_event, projectId: number, projectSequence: number) => {
+            const state = activeExecutions.get(getTaskKey(projectId, projectSequence));
+            if (!state) {
+                return null;
+            }
 
-        return {
-            taskId: state.taskId,
-            status: state.status,
-            startedAt: state.startedAt,
-            pausedAt: state.pausedAt,
-            progress: state.progress,
-            currentPhase: state.currentPhase,
-            streamContent: state.streamContent,
-            error: state.error,
-        };
-    });
+            return {
+                projectId: state.projectId,
+                projectSequence: state.projectSequence,
+                status: state.status,
+                startedAt: state.startedAt,
+                pausedAt: state.pausedAt,
+                progress: state.progress,
+                currentPhase: state.currentPhase,
+                streamContent: state.streamContent,
+                error: state.error,
+            };
+        }
+    );
 
     /**
      * Get all active executions
      */
     ipcMain.handle('taskExecution:getAllActive', async () => {
         const executions: Array<{
-            taskId: number;
+            projectId: number;
+            projectSequence: number;
             status: string;
             startedAt: Date;
             progress: number;
             currentPhase: string;
         }> = [];
 
-        activeExecutions.forEach((state, taskId) => {
+        activeExecutions.forEach((state) => {
             executions.push({
-                taskId,
+                projectId: state.projectId,
+                projectSequence: state.projectSequence,
                 status: state.status,
                 startedAt: state.startedAt,
                 progress: state.progress,
@@ -2188,9 +2595,12 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      * Pause All Executions (Global)
      * Cancel task execution
      */
-    ipcMain.handle('taskExecution:cancel', async (_event, taskId: number) => {
-        await executor.cancelTask(taskId);
-    });
+    ipcMain.handle(
+        'taskExecution:cancel',
+        async (_event, projectId: number, projectSequence: number) => {
+            await executor.cancelTask(projectId, projectSequence);
+        }
+    );
 
     /**
      * Pause execution for a project
@@ -2236,7 +2646,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
         'taskExecution:requestApproval',
         async (
             _event,
-            taskId: number,
+            projectId: number,
+            projectSequence: number,
             data: {
                 question: string;
                 options?: string[];
@@ -2244,24 +2655,26 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             }
         ) => {
             try {
-                const state = activeExecutions.get(taskId);
+                const state = activeExecutions.get(getTaskKey(projectId, projectSequence));
                 if (state) {
                     state.status = 'needs_approval';
                     state.currentPhase = 'waiting_for_approval';
                 }
 
                 // Update task status to needs_approval
-                await taskRepository.update(taskId, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'needs_approval',
                     aiApprovalRequest: JSON.stringify(data),
                 });
 
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'needs_approval',
                 });
                 getMainWindow()?.webContents.send('taskExecution:approvalRequired', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     question: data.question,
                     options: data.options,
                     context: data.context,
@@ -2269,7 +2682,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Log approval requested to history
                 await taskHistoryRepository.logApprovalRequested(
-                    taskId,
+                    projectId,
+                    projectSequence,
                     data.question,
                     data.options
                 );
@@ -2285,95 +2699,110 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Approve and continue execution with user response
      */
-    ipcMain.handle('taskExecution:approve', async (_event, taskId: number, response?: string) => {
-        console.log(`[TaskExecution] Approve task`, taskId);
+    ipcMain.handle(
+        'taskExecution:approve',
+        async (_event, projectId: number, projectSequence: number, response?: string) => {
+            console.log(`[TaskExecution] Approve task ${projectId}-${projectSequence}`);
 
-        try {
-            const task = await taskRepository.findById(taskId);
-            if (!task) {
-                return { success: false, error: 'Task not found' };
-            }
+            try {
+                const task = await taskRepository.findByKey(projectId, projectSequence);
+                if (!task) {
+                    return { success: false, error: 'Task not found' };
+                }
 
-            // Support both needs_approval (AI tasks) and in_review (Script tasks)
-            if (task.status !== 'needs_approval' && task.status !== 'in_review') {
+                // Support both needs_approval (AI tasks) and in_review (Script tasks)
+                if (task.status !== 'needs_approval' && task.status !== 'in_review') {
+                    return {
+                        success: false,
+                        error: 'Task must be in NEEDS_APPROVAL or IN_REVIEW status to approve',
+                    };
+                }
+
+                // Determine new status based on current status
+                // Script tasks (in_review) go to done, AI tasks (needs_approval) go back to in_progress
+                let newStatus: 'done' | 'in_progress' = 'in_progress';
+                if (task.status === 'in_review') {
+                    newStatus = 'done';
+                    console.log('[TaskExecution] Script task approved, moving to DONE');
+                } else {
+                    newStatus = 'in_progress';
+                    console.log('[TaskExecution] AI task approved, moving back to IN_PROGRESS');
+                }
+
+                // Update task status
+                await taskRepository.updateByKey(projectId, projectSequence, {
+                    status: newStatus,
+                    approvalResponse: response || null,
+                    updatedAt: new Date(),
+                });
+
+                // Broadcast update
+                const updatedTask = await taskRepository.findByKey(projectId, projectSequence);
+                if (updatedTask) {
+                    getMainWindow()?.webContents.send('task:status-changed', {
+                        projectId,
+                        projectSequence,
+                        status: updatedTask.status,
+                    });
+                    // broadcastTaskUpdate(updatedTask as Task);
+                }
+
+                // Trigger dependent tasks if moving to DONE (Script tasks)
+                if (newStatus === 'done' && updatedTask) {
+                    await checkAndExecuteDependentTasks(
+                        projectId,
+                        projectSequence,
+                        updatedTask as Task
+                    );
+                }
+
+                return { success: true };
+            } catch (error) {
+                console.error('[TaskExecution] Approve failed:', error);
                 return {
                     success: false,
-                    error: 'Task must be in NEEDS_APPROVAL or IN_REVIEW status to approve',
+                    error: error instanceof Error ? error.message : String(error),
                 };
             }
-
-            // Determine new status based on current status
-            // Script tasks (in_review) go to done, AI tasks (needs_approval) go back to in_progress
-            let newStatus: 'done' | 'in_progress' = 'in_progress';
-            if (task.status === 'in_review') {
-                newStatus = 'done';
-                console.log('[TaskExecution] Script task approved, moving to DONE');
-            } else {
-                newStatus = 'in_progress';
-                console.log('[TaskExecution] AI task approved, moving back to IN_PROGRESS');
-            }
-
-            // Update task status
-            await taskRepository.update(taskId, {
-                status: newStatus,
-                approvalResponse: response || null,
-                updatedAt: new Date(),
-            });
-
-            // Broadcast update
-            const updatedTask = await taskRepository.findById(taskId);
-            if (updatedTask) {
-                getMainWindow()?.webContents.send('task:status-changed', {
-                    id: updatedTask.id,
-                    status: updatedTask.status,
-                });
-                // broadcastTaskUpdate(updatedTask as Task);
-            }
-
-            // Trigger dependent tasks if moving to DONE (Script tasks)
-            if (newStatus === 'done' && updatedTask) {
-                await checkAndExecuteDependentTasks(taskId, updatedTask as Task);
-            }
-
-            return { success: true };
-        } catch (error) {
-            console.error('[TaskExecution] Approve failed:', error);
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : String(error),
-            };
         }
-    });
+    );
 
     /**
      * Reject and revert to TODO
      */
-    ipcMain.handle('taskExecution:reject', async (_event, taskId: number) => {
-        try {
-            // Update task status to todo
-            await taskRepository.update(taskId, {
-                status: 'todo',
-                aiApprovalRequest: null,
-                aiApprovalResponse: null,
-            });
+    ipcMain.handle(
+        'taskExecution:reject',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                // Update task status to todo
+                await taskRepository.updateByKey(projectId, projectSequence, {
+                    status: 'todo',
+                    aiApprovalRequest: null,
+                    aiApprovalResponse: null,
+                });
 
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'todo',
-            });
-            getMainWindow()?.webContents.send('taskExecution:rejected', { taskId });
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    projectId,
+                    projectSequence,
+                    status: 'todo',
+                });
+                getMainWindow()?.webContents.send('taskExecution:rejected', {
+                    projectId,
+                    projectSequence,
+                });
 
-            // Log rejected to history
-            await taskHistoryRepository.logRejected(taskId);
+                // Log rejected to history
+                await taskHistoryRepository.logRejected(projectId, projectSequence);
 
-            activeExecutions.delete(taskId);
+                activeExecutions.delete(getTaskKey(projectId, projectSequence));
 
-            return { success: true };
-        } catch (error) {
-            console.error('Error rejecting task:', error);
-            throw error;
+                return { success: true };
+            } catch (error) {
+                console.error('Error rejecting task:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     // ========================================
     // IN_REVIEW State Handlers
@@ -2382,59 +2811,78 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Complete review and move to DONE
      */
-    ipcMain.handle('taskExecution:completeReview', async (_event, taskId: number) => {
-        try {
-            // Get task before updating for dependent task check
-            const task = await taskRepository.findById(taskId);
-            if (!task) {
-                throw new Error(`Task ${taskId} not found`);
+    ipcMain.handle(
+        'taskExecution:completeReview',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                // Get task before updating for dependent task check
+                const task = await taskRepository.findByKey(projectId, projectSequence);
+                if (!task) {
+                    throw new Error(`Task ${projectId}-${projectSequence} not found`);
+                }
+
+                await taskRepository.updateByKey(projectId, projectSequence, {
+                    status: 'done',
+                    completedAt: new Date(),
+                });
+
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    projectId,
+                    projectSequence,
+                    status: 'done',
+                });
+                getMainWindow()?.webContents.send('taskExecution:reviewCompleted', {
+                    projectId,
+                    projectSequence,
+                });
+
+                // Log review completed to history
+                await taskHistoryRepository.logReviewCompleted(projectId, projectSequence);
+
+                // Check and execute dependent tasks
+                await checkAndExecuteDependentTasks(projectId, projectSequence, {
+                    ...task,
+                    status: 'done',
+                });
+
+                return { success: true };
+            } catch (error) {
+                console.error('Error completing review:', error);
+                throw error;
             }
-
-            await taskRepository.update(taskId, { status: 'done', completedAt: new Date() });
-
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'done',
-            });
-            getMainWindow()?.webContents.send('taskExecution:reviewCompleted', { taskId });
-
-            // Log review completed to history
-            await taskHistoryRepository.logReviewCompleted(taskId);
-
-            // Check and execute dependent tasks
-            await checkAndExecuteDependentTasks(taskId, { ...task, status: 'done' });
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error completing review:', error);
-            throw error;
         }
-    });
+    );
 
     /**
      * Request changes and restart execution
      */
     ipcMain.handle(
         'taskExecution:requestChanges',
-        async (_event, taskId: number, refinementPrompt: string) => {
+        async (_event, projectId: number, projectSequence: number, refinementPrompt: string) => {
             try {
                 // Store the refinement prompt
-                await taskRepository.update(taskId, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'in_progress',
                     refinementPrompt,
                 });
 
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'in_progress',
                 });
                 getMainWindow()?.webContents.send('taskExecution:changesRequested', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     refinementPrompt,
                 });
 
                 // Log changes requested to history
-                await taskHistoryRepository.logChangesRequested(taskId, refinementPrompt);
+                await taskHistoryRepository.logChangesRequested(
+                    projectId,
+                    projectSequence,
+                    refinementPrompt
+                );
 
                 return { success: true };
             } catch (error) {
@@ -2453,19 +2901,26 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle(
         'taskExecution:requestAdditionalWork',
-        async (_event, taskId: number, additionalWorkPrompt: string) => {
+        async (
+            _event,
+            projectId: number,
+            projectSequence: number,
+            additionalWorkPrompt: string
+        ) => {
             try {
-                await taskRepository.update(taskId, {
+                await taskRepository.updateByKey(projectId, projectSequence, {
                     status: 'in_progress',
                     additionalWorkPrompt,
                 });
 
                 getMainWindow()?.webContents.send('task:status-changed', {
-                    id: taskId,
+                    projectId,
+                    projectSequence,
                     status: 'in_progress',
                 });
                 getMainWindow()?.webContents.send('taskExecution:additionalWorkRequested', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     additionalWorkPrompt,
                 });
 
@@ -2484,55 +2939,71 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Block a task (cancels any active execution)
      */
-    ipcMain.handle('taskExecution:block', async (_event, taskId: number, reason?: string) => {
-        try {
-            // Stop any active execution
-            const state = activeExecutions.get(taskId);
-            if (state) {
-                state.status = 'stopped';
-                activeExecutions.delete(taskId);
+    ipcMain.handle(
+        'taskExecution:block',
+        async (_event, projectId: number, projectSequence: number, reason?: string) => {
+            try {
+                // Stop any active execution
+                const taskKey = getTaskKey(projectId, projectSequence);
+                const state = activeExecutions.get(taskKey);
+                if (state) {
+                    state.status = 'stopped';
+                    activeExecutions.delete(taskKey);
+                }
+
+                await taskRepository.updateByKey(projectId, projectSequence, {
+                    status: 'blocked',
+                    blockReason: reason,
+                });
+
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    projectId,
+                    projectSequence,
+                    status: 'blocked',
+                });
+                getMainWindow()?.webContents.send('taskExecution:blocked', {
+                    projectId,
+                    projectSequence,
+                    reason,
+                });
+
+                return { success: true };
+            } catch (error) {
+                console.error('Error blocking task:', error);
+                throw error;
             }
-
-            await taskRepository.update(taskId, {
-                status: 'blocked',
-                blockReason: reason,
-            });
-
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'blocked',
-            });
-            getMainWindow()?.webContents.send('taskExecution:blocked', { taskId, reason });
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error blocking task:', error);
-            throw error;
         }
-    });
+    );
 
     /**
      * Unblock a task (moves to TODO)
      */
-    ipcMain.handle('taskExecution:unblock', async (_event, taskId: number) => {
-        try {
-            await taskRepository.update(taskId, {
-                status: 'todo',
-                blockReason: null,
-            });
+    ipcMain.handle(
+        'taskExecution:unblock',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                await taskRepository.updateByKey(projectId, projectSequence, {
+                    status: 'todo',
+                    blockReason: null,
+                });
 
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'todo',
-            });
-            getMainWindow()?.webContents.send('taskExecution:unblocked', { taskId });
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    projectId,
+                    projectSequence,
+                    status: 'todo',
+                });
+                getMainWindow()?.webContents.send('taskExecution:unblocked', {
+                    projectId,
+                    projectSequence,
+                });
 
-            return { success: true };
-        } catch (error) {
-            console.error('Error unblocking task:', error);
-            throw error;
+                return { success: true };
+            } catch (error) {
+                console.error('Error unblocking task:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     // ========================================
     // Streaming Progress Handler
@@ -2541,11 +3012,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Update streaming progress (called internally during execution)
      */
+    /**
+     * Update streaming progress (called internally during execution)
+     */
     ipcMain.handle(
         'taskExecution:updateProgress',
         async (
             _event,
-            taskId: number,
+            projectId: number,
+            projectSequence: number,
             progress: {
                 percentage: number;
                 phase: string;
@@ -2556,7 +3031,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             }
         ) => {
             try {
-                const state = activeExecutions.get(taskId);
+                const state = activeExecutions.get(getTaskKey(projectId, projectSequence));
                 if (state) {
                     state.progress = progress.percentage;
                     state.currentPhase = progress.phase;
@@ -2568,7 +3043,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 }
 
                 getMainWindow()?.webContents.send('taskExecution:progress', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     progress: progress.percentage,
                     phase: progress.phase,
                     delta: progress.delta,
@@ -2620,41 +3096,46 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Force clear a specific task execution
      */
-    ipcMain.handle('taskExecution:forceClear', async (_event, taskId: number) => {
-        try {
-            const hadExecution = activeExecutions.has(taskId);
-            activeExecutions.delete(taskId);
+    /**
+     * Force clear a specific task execution
+     */
+    ipcMain.handle(
+        'taskExecution:forceClear',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                const taskKey = getTaskKey(projectId, projectSequence);
+                const hadExecution = activeExecutions.has(taskKey);
+                activeExecutions.delete(taskKey);
 
-            // Reset task status to todo
-            await taskRepository.update(taskId, { status: 'todo' });
-            getMainWindow()?.webContents.send('task:status-changed', {
-                id: taskId,
-                status: 'todo',
-            });
+                // Reset task status to todo
+                await taskRepository.updateByKey(projectId, projectSequence, { status: 'todo' });
+                getMainWindow()?.webContents.send('task:status-changed', {
+                    projectId,
+                    projectSequence,
+                    status: 'todo',
+                });
 
-            console.log(
-                `[TaskExecution] Force cleared task ${taskId} (had execution: ${hadExecution})`
-            );
-            return { success: true, hadExecution };
-        } catch (error) {
-            console.error('Error force clearing task:', error);
-            throw error;
+                console.log(
+                    `[TaskExecution] Force cleared task ${taskKey} (had execution: ${hadExecution})`
+                );
+                return { success: true, hadExecution };
+            } catch (error) {
+                console.error('Error force clearing task:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     // ========================================
     // Auto AI Review Handlers
     // ========================================
 
-    /**
-     * Start AI review for a task in IN_REVIEW status
-     * Called automatically when autoReview is enabled and task moves to IN_REVIEW
-     */
     ipcMain.handle(
         'taskExecution:startAutoReview',
         async (
             _event,
-            taskId: number,
+            projectId: number,
+            projectSequence: number,
             options?: {
                 streaming?: boolean;
                 apiKeys?: {
@@ -2683,21 +3164,28 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 }
 
                 // Get task from database
-                const task = await taskRepository.findById(taskId);
+                const task = await taskRepository.findByKey(projectId, projectSequence);
                 if (!task) {
-                    throw new Error(`Task ${taskId} not found`);
+                    throw new Error(`Task ${projectId}-${projectSequence} not found`);
                 }
 
+                console.log(
+                    `[TaskExecution] Starting execution for task ${projectId}-${projectSequence} (Type: ${task.taskType}, Status: ${task.status})`
+                );
+
+                const taskKey = getTaskKey(projectId, projectSequence); // Defined taskKey
+
+                // Check dependencies (unless forced)
                 // Verify task is in IN_REVIEW status
                 if (task.status !== 'in_review') {
                     throw new Error(
-                        `Task ${taskId} is not in IN_REVIEW status (current: ${task.status})`
+                        `Task ${taskKey} is not in IN_REVIEW status (current: ${task.status})`
                     );
                 }
 
                 // Check if already reviewing
-                if (activeReviews.has(taskId)) {
-                    throw new Error(`Task ${taskId} is already being reviewed`);
+                if (activeReviews.has(taskKey)) {
+                    throw new Error(`Task ${taskKey} is already being reviewed`);
                 }
 
                 // Get execution result
@@ -2708,10 +3196,10 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     : null;
 
                 if (!executionResult?.content) {
-                    throw new Error(`Task ${taskId} has no execution result to review`);
+                    throw new Error(`Task ${taskKey} has no execution result to review`);
                 }
 
-                const { dependencyTaskIds, previousResults } = await buildDependencyContext(
+                const { dependencySequences, previousResults } = await buildDependencyContext(
                     task as Task
                 );
                 const promptSource = (task.generatedPrompt || task.description || '').trim();
@@ -2719,7 +3207,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     promptSource.length > 0 &&
                     PromptMacroService.findMacros(promptSource).length > 0;
                 const shouldResolveMacros =
-                    task.autoReview && dependencyTaskIds.length > 0 && hasMacros;
+                    task.autoReview && dependencySequences.length > 0 && hasMacros;
                 let resolvedPromptForReview = promptSource;
 
                 if (shouldResolveMacros) {
@@ -2732,8 +3220,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             currentTaskId: task.id,
                         });
                         console.log('[TaskExecution] Resolved macros for auto-review prompt', {
-                            taskId,
-                            dependencyCount: dependencyTaskIds.length,
+                            taskKey,
+                            dependencyCount: dependencySequences.length,
                         });
                     } catch (macroError) {
                         console.error(
@@ -2745,24 +3233,27 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Initialize review state
                 const reviewState: ReviewState = {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     status: 'reviewing',
                     startedAt: new Date(),
                     progress: 0,
                     streamContent: '',
                 };
-                activeReviews.set(taskId, reviewState);
+                activeReviews.set(taskKey, reviewState);
 
                 // Notify frontend that review is starting
                 const win = getMainWindow();
                 win?.webContents.send('taskReview:started', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     startedAt: reviewState.startedAt,
                 });
 
                 // Log AI review requested to history
                 await taskHistoryRepository.logAIReviewRequested(
-                    taskId,
+                    projectId,
+                    projectSequence,
                     resolvedPromptForReview || task.description || task.generatedPrompt || '',
                     executionResult.content
                 );
@@ -2806,7 +3297,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 }
 
                 console.log('[TaskExecution] Starting auto-review with settings:', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     provider: effectiveConfig.provider,
                     model: effectiveConfig.model,
                     source: effectiveConfig.source,
@@ -2815,21 +3307,23 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Streaming callback for review
                 const onReviewToken = (token: string) => {
-                    const state = activeReviews.get(taskId);
+                    const state = activeReviews.get(getTaskKey(projectId, projectSequence));
                     if (state) {
                         state.streamContent += token;
                     }
                     // Send streaming content to frontend
                     const reviewWin = getMainWindow();
                     if (reviewWin) {
-                        console.log(
+                        /* console.log(
                             '[Main IPC] Sending review progress:',
-                            taskId,
+                            projectId,
+                            projectSequence,
                             'streaming',
                             token.slice(0, 20)
-                        );
+                        ); */
                         reviewWin.webContents.send('taskReview:progress', {
-                            taskId,
+                            projectId,
+                            projectSequence,
                             progress: state?.progress ?? 50,
                             phase: 'reviewing',
                             content: token,
@@ -2858,7 +3352,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     }
                 );
 
-                const currentState = activeReviews.get(taskId);
+                const currentState = activeReviews.get(getTaskKey(projectId, projectSequence));
                 if (!currentState) {
                     // Review was cancelled
                     return { success: false, cancelled: true };
@@ -2872,7 +3366,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // Parse review score from content
                     const reviewScore = parseReviewScore(reviewResult.content || '');
                     console.log(
-                        `[TaskExecution] Review completed for task ${taskId}. Score: ${reviewScore} (Passed: ${reviewScore >= 8})`
+                        `[TaskExecution] Review completed for task ${projectId}-${projectSequence}. Score: ${reviewScore} (Passed: ${reviewScore >= 8})`
                     );
                     const reviewPassed = reviewScore >= 8;
 
@@ -2891,22 +3385,26 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // Update task based on review result
                     if (reviewPassed) {
                         // Score 8+ : Move to DONE
-                        await taskRepository.update(taskId, {
+                        await taskRepository.updateByKey(projectId, projectSequence, {
                             status: 'done',
                             aiReviewResult: JSON.stringify(reviewData),
                             reviewFailed: false,
                             completedAt: new Date(),
                         });
                         win?.webContents.send('task:status-changed', {
-                            id: taskId,
+                            projectId,
+                            projectSequence,
                             status: 'done',
                         });
 
                         // Check and execute dependent tasks when review passed
-                        await checkAndExecuteDependentTasks(taskId, { ...task, status: 'done' });
+                        await checkAndExecuteDependentTasks(projectId, projectSequence, {
+                            ...task,
+                            status: 'done',
+                        });
                     } else {
                         // Score 7- : Stay in IN_REVIEW with failed flag
-                        await taskRepository.update(taskId, {
+                        await taskRepository.updateByKey(projectId, projectSequence, {
                             aiReviewResult: JSON.stringify(reviewData),
                             reviewFailed: true,
                         });
@@ -2915,7 +3413,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // Log AI review completed to history
                     await taskHistoryRepository.logAIReviewCompleted(
-                        taskId,
+                        projectId,
+                        projectSequence,
                         reviewResult.content || '',
                         reviewPassed ? '리뷰 통과' : '리뷰 실패 - 재작업 필요',
                         reviewPassed,
@@ -2930,13 +3429,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // Notify frontend
                     win?.webContents.send('taskReview:completed', {
-                        taskId,
+                        projectId,
+                        projectSequence,
                         result: reviewData,
                         passed: reviewPassed,
                         score: reviewScore,
                     });
 
-                    activeReviews.delete(taskId);
+                    activeReviews.delete(getTaskKey(projectId, projectSequence));
                     return {
                         success: true,
                         result: reviewData,
@@ -2954,14 +3454,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         error: currentState.error,
                     });
 
-                    activeReviews.delete(taskId);
+                    activeReviews.delete(getTaskKey(projectId, projectSequence));
                     return { success: false, error: currentState.error };
                 }
             } catch (error) {
                 console.error('Error starting AI review:', error);
-                activeReviews.delete(taskId);
+                activeReviews.delete(getTaskKey(projectId, projectSequence));
                 getMainWindow()?.webContents.send('taskReview:failed', {
-                    taskId,
+                    projectId,
+                    projectSequence,
                     error: error instanceof Error ? error.message : String(error),
                 });
                 throw error;
@@ -2972,65 +3473,80 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
     /**
      * Get review status for a task
      */
-    ipcMain.handle('taskExecution:getReviewStatus', async (_event, taskId: number) => {
-        const state = activeReviews.get(taskId);
-        if (!state) {
-            return null;
-        }
+    ipcMain.handle(
+        'taskExecution:getReviewStatus',
+        async (_event, projectId: number, projectSequence: number) => {
+            const state = activeReviews.get(getTaskKey(projectId, projectSequence));
+            if (!state) {
+                return null;
+            }
 
-        return {
-            taskId: state.taskId,
-            status: state.status,
-            startedAt: state.startedAt,
-            progress: state.progress,
-            streamContent: state.streamContent,
-            error: state.error,
-        };
-    });
+            return {
+                projectId: state.projectId,
+                projectSequence: state.projectSequence,
+                status: state.status,
+                startedAt: state.startedAt,
+                progress: state.progress,
+                streamContent: state.streamContent,
+                error: state.error,
+            };
+        }
+    );
 
     /**
      * Cancel ongoing AI review
      */
-    ipcMain.handle('taskExecution:cancelReview', async (_event, taskId: number) => {
-        try {
-            const hadReview = activeReviews.has(taskId);
-            activeReviews.delete(taskId);
+    ipcMain.handle(
+        'taskExecution:cancelReview',
+        async (_event, projectId: number, projectSequence: number) => {
+            try {
+                const taskKey = getTaskKey(projectId, projectSequence);
+                const hadReview = activeReviews.has(taskKey);
+                activeReviews.delete(taskKey);
 
-            getMainWindow()?.webContents.send('taskReview:cancelled', { taskId });
+                getMainWindow()?.webContents.send('taskReview:cancelled', {
+                    projectId,
+                    projectSequence,
+                });
 
-            console.log(
-                `[TaskExecution] Cancelled review for task ${taskId} (had review: ${hadReview})`
-            );
-            return { success: true, hadReview };
-        } catch (error) {
-            console.error('Error cancelling review:', error);
-            throw error;
+                console.log(
+                    `[TaskExecution] Cancelled review for task ${taskKey} (had review: ${hadReview})`
+                );
+                return { success: true, hadReview };
+            } catch (error) {
+                console.error('Error cancelling review:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     /**
      * Submit input for an Input Task
      */
-    ipcMain.handle('task:submitInput', async (_event, taskId: number, payload: any) => {
-        try {
-            const result = await processInputSubmission(taskId, payload);
-            return { success: true, result };
-        } catch (error) {
-            console.error('[TaskExecution] Failed to submit input:', error);
-            // Log failure to history
-            await taskHistoryRepository.logExecutionFailed(
-                taskId,
-                error instanceof Error ? error.message : String(error),
-                {
-                    reason: 'input_submission_failed',
-                }
-            );
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : String(error),
-            };
+    ipcMain.handle(
+        'taskExecution:submitInput',
+        async (_event, projectId: number, sequence: number, payload: any) => {
+            try {
+                const result = await processInputSubmission(projectId, sequence, payload);
+                return { success: true, result };
+            } catch (error) {
+                console.error('[TaskExecution] Failed to submit input:', error);
+                // Log failure to history
+                await taskHistoryRepository.logExecutionFailed(
+                    projectId,
+                    sequence,
+                    error instanceof Error ? error.message : String(error),
+                    {
+                        reason: 'input_submission_failed',
+                    }
+                );
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : String(error),
+                };
+            }
         }
-    });
+    );
 
     console.log('Task execution IPC handlers registered');
 
@@ -3072,7 +3588,7 @@ function isBase64Image(str: string): boolean {
 /**
  * Save base64 image to temp file and return file path
  */
-function saveBase64ImageToTempFile(base64Data: string, taskId?: number): string {
+function saveBase64ImageToTempFile(base64Data: string, taskIdOrKey?: number | string): string {
     const fs = require('fs');
     const path = require('path');
     const os = require('os');
@@ -3096,8 +3612,8 @@ function saveBase64ImageToTempFile(base64Data: string, taskId?: number): string 
 
         // 파일명 생성
         const timestamp = Date.now();
-        const filename = taskId
-            ? `task-${taskId}-review-${timestamp}.${extension}`
+        const filename = taskIdOrKey
+            ? `task-${taskIdOrKey}-review-${timestamp}.${extension}`
             : `review-${timestamp}.${extension}`;
         const filePath = path.join(tempDir, filename);
 
@@ -3130,7 +3646,10 @@ function buildReviewPrompt(
     // 이미지 결과일 경우 base64를 파일로 저장하고 경로로 대체
     let processedContent = executionContent;
     if (isBase64Image(executionContent)) {
-        const imagePath = saveBase64ImageToTempFile(executionContent, task.id);
+        const imagePath = saveBase64ImageToTempFile(
+            executionContent,
+            getTaskKey(task.projectId, task.projectSequence)
+        );
         // 프롬프트에는 로컬 경로 대신 이미지가 첨부되었다는 사실만 명시 (AI가 로컬 경로를 읽으려 시도하는 것 방지)
         processedContent = `[이미지가 결과물로 생성되었습니다. 첨부된 이미지를 확인하세요.]\n(참고: 내부 저장 경로 ${imagePath})`;
         console.log(`[buildReviewPrompt] Converted base64 image to file: ${imagePath}`);
