@@ -51,12 +51,13 @@ const projectId = computed(() => Number(route.params.id));
 const isMounted = ref(true);
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
-const draggedTask = ref<number | null>(null);
-const selectedTaskId = ref<number | null>(null);
+const draggedTask = ref<string | null>(null);
+const selectedTaskKey = ref<string | null>(null);
 const selectedTask = computed(() => {
-    if (!selectedTaskId.value) return null;
+    if (!selectedTaskKey.value) return null;
+    const [pId, seq] = selectedTaskKey.value.split('_').map(Number);
     // Directly access tasks array to get stable object reference
-    return taskStore.tasks.find((t) => t.id === selectedTaskId.value) || null;
+    return taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq) || null;
 });
 const showDetailPanel = ref(false);
 
@@ -80,15 +81,44 @@ const editingTask = ref<Task | null>(null);
 // Result preview state
 // Result preview state
 const showResultPreview = ref(false);
-const previewTaskId = ref<number | null>(null);
+const previewTaskId = ref<{ projectId: number; projectSequence: number } | null>(null);
 const resultPreviewTask = computed(() => {
-    if (!previewTaskId.value) return null;
-    const task = taskStore.tasks.find((t) => t.id === previewTaskId.value);
-    if (!task) return null;
+    console.log('[KanbanBoardView] resultPreviewTask computed:', {
+        previewTaskId: previewTaskId.value,
+        totalTasks: taskStore.tasks.length,
+        taskSample: taskStore.tasks[0]
+            ? {
+                  projectId: taskStore.tasks[0].projectId,
+                  projectSequence: taskStore.tasks[0].projectSequence,
+              }
+            : null,
+    });
+
+    if (!previewTaskId.value) {
+        console.log('[KanbanBoardView] No previewTaskId, returning null');
+        return null;
+    }
+
+    const task = taskStore.tasks.find(
+        (t) =>
+            t.projectId === previewTaskId.value!.projectId &&
+            t.projectSequence === previewTaskId.value!.projectSequence
+    );
+    if (!task) {
+        console.error('[KanbanBoardView] Task not found in store!', {
+            searchingFor: previewTaskId.value,
+            availableTasks: taskStore.tasks.map((t) => ({
+                projectId: t.projectId,
+                projectSequence: t.projectSequence,
+            })),
+        });
+        return null;
+    }
 
     // Augment with execution progress if available
-    const progress = taskStore.executionProgress.get(task.id);
-    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
+    const taskKey = `${task.projectId}-${task.projectSequence}`;
+    const progress = taskStore.executionProgress.get(taskKey);
+    const reviewProgressEntry = taskStore.reviewProgress.get(taskKey);
 
     return {
         ...task,
@@ -183,20 +213,42 @@ function handleTaskSaved() {
     taskStore.fetchTasks(projectId.value);
 }
 
-function handleDragStart(taskId: number) {
-    draggedTask.value = taskId;
+function handleDragStart(task: Task) {
+    if (!task) return;
+    const key = `${task.projectId}_${task.projectSequence}`;
+    console.log('📦 Drag Start:', key);
+    draggedTask.value = key;
 }
 
 function handleDragEnd() {
+    console.log('📦 Drag End');
     draggedTask.value = null;
 }
 
-async function handleDrop(status: TaskStatus) {
-    if (draggedTask.value === null) return;
+function isTaskDragging(task: Task): boolean {
+    if (!draggedTask.value) return false;
+    return draggedTask.value === `${task.projectId}_${task.projectSequence}`;
+}
 
-    const task = taskStore.taskById(draggedTask.value);
+async function handleDrop(status: TaskStatus) {
+    console.log('📦 Handle Drop:', status, 'DraggedTask:', draggedTask.value);
+    if (!draggedTask.value) return;
+
+    const [pIdStr, seqStr] = draggedTask.value.split('_');
+    const pId = Number(pIdStr);
+    const seq = Number(seqStr);
+
+    const task = taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq);
+
+    if (task) {
+        console.log('📦 Drop Target Task:', task.projectId, task.projectSequence, task.status);
+    } else {
+        console.warn('📦 Drop Task Not Found:', draggedTask.value);
+    }
+
     if (task && task.status !== status) {
-        await taskStore.updateTask(draggedTask.value, { status });
+        console.log('📦 Updating Task Status to:', status);
+        await taskStore.updateTask(task.projectId, task.projectSequence, { status });
     }
 
     draggedTask.value = null;
@@ -214,18 +266,23 @@ async function handleDrop(status: TaskStatus) {
 // };
 
 function openTaskDetail(task: Task) {
-    console.log('[KanbanBoardView] openTaskDetail called with task:', task.id, task.title);
     console.log(
-        '[KanbanBoardView] Before - selectedTaskId:',
-        selectedTaskId.value,
+        '[KanbanBoardView] openTaskDetail called with task:',
+        task.projectId,
+        task.projectSequence,
+        task.title
+    );
+    console.log(
+        '[KanbanBoardView] Before - selectedTaskKey:',
+        selectedTaskKey.value,
         'showDetailPanel:',
         showDetailPanel.value
     );
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
     console.log(
-        '[KanbanBoardView] After - selectedTaskId:',
-        selectedTaskId.value,
+        '[KanbanBoardView] After - selectedTaskKey:',
+        selectedTaskKey.value,
         'showDetailPanel:',
         showDetailPanel.value
     );
@@ -233,7 +290,7 @@ function openTaskDetail(task: Task) {
 
 function closeDetailPanel() {
     showDetailPanel.value = false;
-    selectedTaskId.value = null;
+    selectedTaskKey.value = null;
 }
 
 async function handleTaskSave(task: Task) {
@@ -355,7 +412,7 @@ async function handleEnhancePrompt(task: Task) {
 
 function handlePreviewPrompt(task: Task) {
     // Open task detail panel with prompt preview
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
@@ -374,19 +431,19 @@ async function handleRetry(task: Task) {
 
 function handleViewHistory(task: Task) {
     // Open task detail panel with history view
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
 function handleViewProgress(task: Task) {
     // Open task detail panel with progress view
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
 function handleViewStepHistory(task: Task) {
     // Open task detail panel with step history view
-    selectedTaskId.value = task.id;
+    selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
     showDetailPanel.value = true;
 }
 
@@ -435,7 +492,10 @@ async function handleEditModalDelete(taskId: number) {
 
 // Result Preview handlers
 async function openResultPreview(task: Task) {
-    previewTaskId.value = task.id;
+    previewTaskId.value = {
+        projectId: task.projectId,
+        projectSequence: task.projectSequence,
+    };
     showResultPreview.value = true;
 
     // Attempt to fetch latest details to ensure we have the result
@@ -1137,11 +1197,11 @@ onMounted(async () => {
                             v-for="task in groupedTasks[column.id]"
                             :key="task.id"
                             draggable="true"
-                            @dragstart="handleDragStart(task.id)"
+                            @dragstart="handleDragStart(task)"
                             @dragend="handleDragEnd"
                             :class="[
                                 'transition-all',
-                                draggedTask === task.id ? 'opacity-50 scale-95' : '',
+                                isTaskDragging(task) ? 'opacity-50 scale-95' : '',
                             ]"
                         >
                             <TaskCard
@@ -1151,7 +1211,7 @@ onMounted(async () => {
                                 :show-due-date="true"
                                 :show-priority="true"
                                 :show-tags="true"
-                                :is-dragging="draggedTask === task.id"
+                                :is-dragging="isTaskDragging(task)"
                                 :missing-provider="getCachedMissingProvider(task.id)"
                                 :hide-prompt-actions="true"
                                 @click="(t) => openTaskDetail(t)"

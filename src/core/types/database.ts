@@ -620,6 +620,7 @@ export interface TaskAttachment {
     mime: string;
     encoding: 'base64' | 'url' | 'text';
     value: string;
+    data?: string; // Optional, for compatibility with code that accesses att.data instead of att.value
     size?: number;
     description?: string;
     sourceTaskId?: number;

@@ -21,7 +21,7 @@ export class AdvancedTaskExecutor {
     private aiServiceManager: AIServiceManager;
     private executionStates: Map<string, ExecutionState> = new Map();
     private checkpoints: Map<string, Checkpoint[]> = new Map();
-    private activeTaskExecutions: Map<number, AbortController> = new Map();
+    private activeTaskExecutions: Map<string, AbortController> = new Map();
 
     constructor() {
         this.aiServiceManager = new AIServiceManager();
@@ -63,7 +63,8 @@ export class AdvancedTaskExecutor {
 
         // Create AbortController for this task
         const abortController = new AbortController();
-        this.activeTaskExecutions.set(task.id, abortController);
+        const taskKey = `${task.projectId}-${task.projectSequence}`;
+        this.activeTaskExecutions.set(taskKey, abortController);
 
         try {
             // If external signal is provided, link it
@@ -237,7 +238,8 @@ export class AdvancedTaskExecutor {
                 metadata: {},
             };
         } finally {
-            this.activeTaskExecutions.delete(task.id);
+            const taskKey = `${task.projectId}-${task.projectSequence}`;
+            this.activeTaskExecutions.delete(taskKey);
         }
     }
 
@@ -700,12 +702,13 @@ export class AdvancedTaskExecutor {
     /**
      * 특정 태스크 실행 취소
      */
-    async cancelTask(taskId: number): Promise<boolean> {
-        const controller = this.activeTaskExecutions.get(taskId);
+    async cancelTask(projectId: number, projectSequence: number): Promise<boolean> {
+        const taskKey = `${projectId}-${projectSequence}`;
+        const controller = this.activeTaskExecutions.get(taskKey);
         if (controller) {
             controller.abort();
-            this.activeTaskExecutions.delete(taskId);
-            console.log(`[AdvancedTaskExecutor] Cancelled task ${taskId}`);
+            this.activeTaskExecutions.delete(taskKey);
+            console.log(`[AdvancedTaskExecutor] Cancelled task ${taskKey}`);
             return true;
         }
         return false;
@@ -1039,14 +1042,16 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
         const baseName = `task-${taskId}-output`;
 
         if (aiResult.format === 'base64' || aiResult.format === 'binary') {
+            const base64Value = aiResult.value;
             attachments.push({
                 id: `${taskId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
                 name: `${baseName}.${extension}`,
                 type: this.mapAiKindToAttachmentType(aiResult.kind),
                 mime: mime || 'application/octet-stream',
                 encoding: 'base64',
-                value: aiResult.value,
-                size: Math.round((aiResult.value.length * 3) / 4),
+                value: base64Value,
+                data: base64Value, // Add 'data' field for compatibility with downstream code
+                size: Math.round((base64Value.length * 3) / 4),
                 sourceTaskId: taskId,
             });
         } else if (aiResult.format === 'url') {

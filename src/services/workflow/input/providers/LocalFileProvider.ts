@@ -102,6 +102,45 @@ export class LocalFileProvider implements InputProvider {
             }
         }
 
+        // === CRITICAL FIX: Detect images BEFORE text mode ===
+        // If the file is an image (by extension), read as base64 regardless of readMode
+        const mimeType = this.getMimeType(ext);
+        if (mimeType.startsWith('image/')) {
+            try {
+                const buffer = await fs.readFile(filePath);
+                const base64 = buffer.toString('base64');
+
+                return {
+                    kind: 'file',
+                    file: {
+                        name: fileName,
+                        path: filePath,
+                        size: stats.size,
+                    },
+                    mimeType: mimeType,
+                    metadata: {
+                        source: 'local_file',
+                        readMode: readMode || 'auto',
+                        attachments: [
+                            {
+                                type: 'image',
+                                mime: mimeType,
+                                value: base64, // Set both for compatibility
+                                data: base64,
+                                name: fileName,
+                            },
+                        ],
+                    },
+                };
+            } catch (e: any) {
+                return {
+                    kind: 'error',
+                    text: `Failed to read image file: ${e.message}`,
+                    metadata: { error: e.message },
+                };
+            }
+        }
+
         // 1. Text Mode (Simple read for txt, md, json, csv, etc.) - or parserType='text'/'markdown'
         if (
             parserType === 'text' ||
@@ -188,7 +227,8 @@ export class LocalFileProvider implements InputProvider {
                                 {
                                     type: 'image',
                                     mime: mimeType,
-                                    data: base64, // Raw base64, no prefix
+                                    value: base64, // Set both for compatibility
+                                    data: base64, // Set both for compatibility
                                     name: fileName,
                                 },
                             ],
