@@ -186,10 +186,59 @@ export class AdvancedTaskExecutor {
                         attachments,
                     };
                 } catch (error) {
-                    lastError = error instanceof Error ? error : new Error(String(error));
+                    let finalError = error instanceof Error ? error : new Error(String(error));
+
+                    // Clean up Gemini/Vertex AI JSON error messages for better UI display
+                    const errorMsg = finalError.message;
+                    if (
+                        (errorMsg.includes('{') && errorMsg.includes('429')) ||
+                        errorMsg.includes('quota')
+                    ) {
+                        try {
+                            const jsonMatch = errorMsg.match(/({[\s\S]*})/);
+                            if (jsonMatch) {
+                                const parsed = JSON.parse(jsonMatch[0]);
+                                // Extract inner message from Gemini/Google error format
+                                // Format: { error: { message: "...", code: 429, ... } }
+                                // The message itself might be stringified JSON or just text.
+                                const innerError = parsed.error || parsed;
+                                let cleanMessage = innerError.message || 'Rate limit exceeded';
+
+                                // Sometimes the inner message is ALSO a JSON string (as seen in logs)
+                                // "message": "{\n  \"error\": {\n    \"code\": 429...
+                                if (cleanMessage.includes('{') && cleanMessage.includes('error')) {
+                                    try {
+                                        const innerParsed = JSON.parse(cleanMessage);
+                                        const deepError = innerParsed.error || innerParsed;
+                                        cleanMessage = deepError.message || cleanMessage;
+                                    } catch (e) {
+                                        /* ignore inner parse fail */
+                                    }
+                                }
+
+                                // Truncate generic help links to keep it short
+                                if (cleanMessage.includes('http')) {
+                                    cleanMessage = cleanMessage.split('http')[0].trim();
+                                }
+                                // Remove "You exceeded..." repetition if verbose
+                                if (cleanMessage.length > 200) {
+                                    cleanMessage =
+                                        'Rate limit exceeded. Please check your plan or try again later.';
+                                }
+
+                                finalError = new Error(cleanMessage);
+                                // Ensure it preserves the 429 code for fatal check
+                                (finalError as any).code = 429;
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse error JSON:', e);
+                        }
+                    }
+
+                    lastError = finalError;
                     console.error(
                         `Task #${task.projectSequence} failed (attempt ${retries + 1}/${retryStrategy.maxRetries + 1}):`,
-                        lastError
+                        lastError.message
                     );
 
                     // 재시도 불가능한 에러인 경우 즉시 실패
@@ -865,7 +914,7 @@ export class AdvancedTaskExecutor {
             'ENOTFOUND',
             'network',
             'timeout',
-            '429',
+            // '429', // Removed: Rate Limit should fail fast as requested
             '500',
             '502',
             '503',

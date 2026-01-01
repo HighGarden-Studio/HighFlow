@@ -93,22 +93,40 @@ export class OutputTaskRunner {
 
             // 5. Save Result Metadata
             if (result.success) {
-                // For local files, store the path not the content
-                // This allows streaming and prevents DB bloat
+                // For local files, store the path...
                 const isLocalFile = config.destination === 'local_file';
+                let uiContent = contentToOutput;
+
+                // If local file and append mode, we want to show the FULL content in UI, not just the delta
+                if (isLocalFile && result?.metadata?.path) {
+                    try {
+                        const { promises: fs } = await import('fs');
+                        // Read the full file content to show in UI
+                        const fullContent = await fs.readFile(result.metadata.path, 'utf-8');
+                        uiContent = fullContent;
+                    } catch (readErr) {
+                        console.warn(
+                            `[OutputTaskRunner] Failed to read back file content for UI: ${readErr}`
+                        );
+                    }
+                }
 
                 await taskRepository.updateByKey(projectId, projectSequence, {
                     executionResult: {
-                        // For local files, store metadata with file path
-                        // For other outputs (Slack, etc.), store the content
-                        content: isLocalFile ? undefined : contentToOutput,
+                        // For local files, we NOW store the content as well to ensure UI display
+                        // We rely on the fact that these are text logs and usually manageable size.
+                        content: uiContent,
                         filePath: isLocalFile ? result.metadata?.path : undefined,
                         metadata: result.metadata,
                         provider: connector.id,
                         status: 'success',
                     },
                     // For local files, store path in result for preview to read file
-                    // For other outputs, store the actual content
+                    // OR should we store content? Let's treat 'result' as the main output value.
+                    // If we want the accumulated text to be usable by subsequent tasks easily,
+                    // content is better. But 'path' tells where it is.
+                    // Let's keep existing logic for 'result' field (Path for file),
+                    // but ensure executionResult has content for UI.
                     result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
@@ -224,9 +242,23 @@ export class OutputTaskRunner {
         for (const depSequence of dependencies) {
             const depTask = await taskRepository.findByKey(task.projectId, depSequence);
             if (depTask) {
+                // Check for Freshness (Exclude stale inputs/tasks from previous runs)
+                // Threshold: 60 seconds. If task completed > 60s ago, it's old history.
+                const completedAt = depTask.completedAt
+                    ? new Date(depTask.completedAt).getTime()
+                    : 0;
+                const now = Date.now();
+                const isFresh = now - completedAt < 60 * 1000; // 60s
+
                 console.log(
-                    `[OutputTaskRunner] Dependency task ${depSequence}: status=${depTask.status}`
+                    `[OutputTaskRunner] Dependency task ${depSequence}: status=${depTask.status}, fresh=${isFresh} (${Math.round((now - completedAt) / 1000)}s ago)`
                 );
+
+                if (!isFresh) {
+                    console.log(`[OutputTaskRunner] Skipping stale dependency ${depSequence}`);
+                    continue;
+                }
+
                 // Determine what content to use
                 // 1. Result field
                 // 2. ExecutionResult.content
@@ -234,6 +266,7 @@ export class OutputTaskRunner {
                 const content =
                     (depTask as any).result ||
                     (depTask.executionResult as any)?.content ||
+                    (depTask.executionResult as any)?.text || // Input Task support
                     depTask.generatedPrompt || // Fallback?
                     '';
 

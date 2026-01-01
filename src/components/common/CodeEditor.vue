@@ -14,6 +14,8 @@ interface Props {
     height?: string;
     readonly?: boolean;
     showLineNumbers?: boolean; // 라인 넘버 표시 옵션
+    autoScroll?: boolean; // 항상 자동 스크롤
+    autoScrollWhenAtBottom?: boolean; // 바닥에 있을 때만 자동 스크롤
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -21,6 +23,8 @@ const props = withDefaults(defineProps<Props>(), {
     height: '400px',
     readonly: false,
     showLineNumbers: true, // 기본값: 표시
+    autoScroll: false,
+    autoScrollWhenAtBottom: false,
 });
 
 const emit = defineEmits<{
@@ -198,10 +202,27 @@ watch(
     () => props.modelValue,
     (newValue) => {
         if (editor && editor.getValue() !== newValue) {
+            const wasAtBottom = isAtBottom();
             editor.setValue(newValue);
+
+            // Auto-scroll logic
+            if (props.autoScroll || (props.autoScrollWhenAtBottom && wasAtBottom)) {
+                // Use setTimeout to ensure layout is updated
+                setTimeout(() => scrollToBottom(), 0);
+            }
         }
     }
 );
+
+function isAtBottom(): boolean {
+    if (!editor) return false;
+    const model = editor.getModel();
+    if (!model) return false;
+    const maxLine = model.getLineCount();
+    const visibleRange = editor.getVisibleRanges()[0];
+    if (!visibleRange) return false;
+    return visibleRange.endLineNumber >= maxLine - 1;
+}
 
 // readonly 변경 감지
 watch(
@@ -239,9 +260,25 @@ function insertMacro(macro: string) {
     editor.focus();
 }
 
+// 스크롤 제어 메서드
+function scrollToBottom() {
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const lineCount = model.getLineCount();
+    editor.revealLine(lineCount);
+}
+
+function scrollToTop() {
+    if (!editor) return;
+    editor.revealLine(1);
+}
+
 // 부모에서 접근할 수 있도록 expose
 defineExpose({
     insertMacro,
+    scrollToBottom,
+    scrollToTop,
 });
 </script>
 

@@ -430,7 +430,7 @@ export async function checkAndExecuteDependentTasks(
     projectId: number,
     sequence: number,
     completedTask: Task,
-    options?: { triggerChain?: string[] }
+    options?: { triggerChain?: string[]; control?: { next: number[]; reason?: string } }
 ): Promise<void> {
     try {
         console.log(
@@ -577,14 +577,19 @@ export async function checkAndExecuteDependentTasks(
                     return false; // Do not execute immediately
                 }
 
-                // SAFETY: Prevent Cycle Loops using triggerChain
-                // If the dependent task is already in the trigger chain, it means we are looping back.
+                // SAFETY: Prevent Infinite Loops using triggerChain
+                // We allow cyclic workflows (e.g. Turn-Based Games: A -> B -> A -> B...)
+                // But we must prevent infinite INSTANT recursion stack overflows.
+                // We allow a specific task to appear in the chain up to 10 times.
                 const depKey = `${task.projectId}-${task.projectSequence}`;
-                if (options?.triggerChain && options.triggerChain.includes(depKey)) {
-                    console.warn(
-                        `[TaskExecution] Cycle detected for task ${depKey} in chain: ${options.triggerChain.join(' -> ')} -> ${depKey}. Stopping loop.`
-                    );
-                    return false;
+                if (options?.triggerChain) {
+                    const loopCount = options.triggerChain.filter((id) => id === depKey).length;
+                    if (loopCount >= 10) {
+                        console.warn(
+                            `[TaskExecution] Cycle detected for task ${depKey} in chain: ${options.triggerChain.join(' -> ')} -> ${depKey}. Loop count ${loopCount} exceeds limit (10). Stopping loop.`
+                        );
+                        return false;
+                    }
                 }
 
                 return true; // Allowed to run
@@ -859,7 +864,7 @@ async function processInputSubmission(
 
     const updateData: any = {
         status: finalStatus,
-        executionResult: JSON.stringify(output), // Store as executionResult for consistency
+        executionResult: output, // Drizzle handles JSON stringification
         completedAt: new Date(),
         inputSubStatus: null, // Clear input waiting status
     };
@@ -914,7 +919,7 @@ async function processInputSubmission(
     // Explicitly notify Curator for Input Tasks (similar to standard tasks) if needed
     const project = await projectRepository.findById(task.projectId);
     if (project) {
-        triggerCurator(projectId, sequence, task, output.text || 'Input submitted', project);
+        await triggerCurator(projectId, sequence, task, output.text || 'Input submitted', project);
     }
 
     return output;
@@ -1932,7 +1937,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                             : undefined,
                                     }
                                 );
-                                triggerCurator(
+                                await triggerCurator(
                                     projectId,
                                     projectSequence,
                                     task,
@@ -2050,6 +2055,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         onToken,
                         onProgress,
                         projectMcpConfig: project?.mcpConfig || null,
+                        project: project || null,
                     };
 
                     const result = await executor.executeTask(task as Task, context, {
@@ -2172,7 +2178,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                     },
                                 }
                             );
-                            triggerCurator(
+                            await triggerCurator(
                                 projectId,
                                 projectSequence,
                                 task,
@@ -2278,9 +2284,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             shortError
                         );
 
-                        // Set to in_review on failure so user can see error state
+                        // Set to failed/blocked on failure so user can clearly see error state
+                        // If this task has dependents, mark as blocked to indicate upstream failure
+                        const hasDependents = await taskRepository.hasDependents(
+                            projectId,
+                            projectSequence
+                        );
                         await taskRepository.updateByKey(projectId, projectSequence, {
-                            status: 'in_review',
+                            status: hasDependents ? 'blocked' : 'failed',
                         });
 
                         const win = getMainWindow();
@@ -2312,14 +2323,20 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     console.error('Error executing AI task:', error);
                     activeExecutions.delete(getTaskKey(projectId, projectSequence));
 
-                    // Set to in_review on error
+                    // Set to failed/blocked on error
+                    const hasDependents = await taskRepository.hasDependents(
+                        projectId,
+                        projectSequence
+                    );
                     await taskRepository
-                        .updateByKey(projectId, projectSequence, { status: 'in_review' })
+                        .updateByKey(projectId, projectSequence, {
+                            status: hasDependents ? 'blocked' : 'failed',
+                        })
                         .catch(() => {});
                     getMainWindow()?.webContents.send('task:status-changed', {
                         projectId,
                         projectSequence,
-                        status: 'in_review',
+                        status: 'failed',
                     });
                     getMainWindow()?.webContents.send('taskExecution:failed', {
                         projectId: task.projectId,
@@ -2345,14 +2362,20 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 // Clean up on error
                 activeExecutions.delete(getTaskKey(projectId, projectSequence));
 
-                // Set to in_review on error
+                // Set to failed/blocked on error
+                const hasDependents = await taskRepository.hasDependents(
+                    projectId,
+                    projectSequence
+                );
                 await taskRepository
-                    .updateByKey(projectId, projectSequence, { status: 'in_review' })
+                    .updateByKey(projectId, projectSequence, {
+                        status: hasDependents ? 'blocked' : 'failed',
+                    })
                     .catch(() => {});
                 getMainWindow()?.webContents.send('task:status-changed', {
                     projectId,
                     projectSequence,
-                    status: 'in_review',
+                    status: 'failed',
                 });
                 getMainWindow()?.webContents.send('taskExecution:failed', {
                     projectId: task.projectId,
@@ -2749,6 +2772,19 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Trigger dependent tasks if moving to DONE (Script tasks)
                 if (newStatus === 'done' && updatedTask) {
+                    // Trigger Curator
+                    const project = await projectRepository.findById(projectId);
+                    const content = (updatedTask.executionResult as any)?.content || '';
+                    if (project && content) {
+                        await triggerCurator(
+                            projectId,
+                            projectSequence,
+                            updatedTask as Task,
+                            content,
+                            project
+                        );
+                    }
+
                     await checkAndExecuteDependentTasks(
                         projectId,
                         projectSequence,
@@ -2838,6 +2874,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                 // Log review completed to history
                 await taskHistoryRepository.logReviewCompleted(projectId, projectSequence);
+
+                // Trigger Curator
+                const project = await projectRepository.findById(projectId);
+                const content = (task.executionResult as any)?.content || '';
+                if (project && content) {
+                    await triggerCurator(projectId, projectSequence, task, content, project);
+                }
 
                 // Check and execute dependent tasks
                 await checkAndExecuteDependentTasks(projectId, projectSequence, {

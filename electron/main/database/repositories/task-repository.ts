@@ -471,6 +471,20 @@ export class TaskRepository {
             })
             .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)));
     }
+    /**
+     * Check if a task has dependents (is a dependency for other tasks)
+     * Performs an in-memory check for safety and simplicity given reasonable project sizes.
+     */
+    async hasDependents(projectId: number, projectSequence: number): Promise<boolean> {
+        // Optimization: We only need the dependencies column, but findByProject returns full objects.
+        // For now, this is acceptable. If performance becomes an issue, we can create a specific query.
+        const projectTasks = await this.findByProject(projectId);
+
+        return projectTasks.some(
+            (task) =>
+                Array.isArray(task.dependencies) && task.dependencies.includes(projectSequence)
+        );
+    }
 }
 
 // Export singleton instance

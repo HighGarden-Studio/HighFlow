@@ -371,14 +371,19 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
      * Select a cost-effective AI provider for text summarization
      * Priority: gemini-flash (cheap, multimodal) > gpt-4o-mini > claude-haiku > default-highflow > any available
      */
+    /**
+     * Select a cost-effective AI provider for text summarization
+     * Priority: Explicit preferred models > Any Flash/Mini/Haiku model > First available model
+     */
     private async selectCostEffectiveProvider(
         providerFactory: any
     ): Promise<{ provider: any; model: string } | null> {
-        // Cost-effective models in priority order (prioritize multimodal support)
+        // 1. Explicit Preferred Models
         const preferredModels = [
+            { provider: 'google', model: 'gemini-2.0-flash-exp' },
             { provider: 'google', model: 'gemini-2.0-flash' },
+            { provider: 'google', model: 'gemini-2.5-flash' }, // Corrected provider ID
             { provider: 'google', model: 'gemini-1.5-flash' },
-            { provider: 'default-highflow', model: 'gemini-2.5-flash' },
             { provider: 'openai', model: 'gpt-4o-mini' },
             { provider: 'anthropic', model: 'claude-3-haiku-20240307' },
             { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
@@ -387,7 +392,6 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
         // Try preferred models first
         for (const { provider: providerId, model } of preferredModels) {
             try {
-                // Only use enabled providers
                 if (!providerFactory.isProviderEnabled(providerId)) continue;
 
                 const provider = await providerFactory.getProvider(providerId);
@@ -399,19 +403,67 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                 if (provider) {
                     // Check if the model is available
                     const modelInfo = provider.models.find(
-                        (m: any) => m.name === model || m.name.includes(model.replace(/-/g, ''))
+                        (m: any) => m.name === model || m.name.includes(model)
                     );
                     if (modelInfo) {
                         console.log(
-                            `[Curator] Selected cost-effective provider: ${providerId} with model: ${model}`
+                            `[Curator] Selected cost-effective provider: ${providerId} with model: ${modelInfo.name}`
                         );
-                        return { provider, model };
+                        return { provider, model: modelInfo.name };
                     }
                 }
             } catch (error) {
-                // Provider not configured or error, try next PREFERRED model
-                // But do NOT fall back to generic provider list
-                console.debug(`[Curator] Preferred provider ${providerId} not available:`, error);
+                // Continue to next
+            }
+        }
+
+        // 2. Wildcard Fallback: Any "flash", "mini", or "haiku" model
+        console.log(
+            '[Curator] Exact preferred models not found, searching for any efficient model...'
+        );
+        const efficientKeywords = ['flash', 'mini', 'haiku', 'sammll'];
+        const providers = ['google', 'openai', 'anthropic', 'ollama'];
+
+        for (const providerId of providers) {
+            try {
+                if (!providerFactory.isProviderEnabled(providerId)) continue;
+                const provider = await providerFactory.getProvider(providerId);
+                if (this.apiKeys) providerFactory.setApiKeys(this.apiKeys);
+
+                if (provider && provider.models) {
+                    const efficientModel = provider.models.find((m: any) =>
+                        efficientKeywords.some((kw) => m.name.toLowerCase().includes(kw))
+                    );
+
+                    if (efficientModel) {
+                        console.log(
+                            `[Curator] Selected efficient fallback: ${providerId} - ${efficientModel.name}`
+                        );
+                        return { provider, model: efficientModel.name };
+                    }
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        // 3. Last Resort: Any available model
+        console.warn('[Curator] No efficient model found. Fallback to first available model.');
+        for (const providerId of providers) {
+            try {
+                if (!providerFactory.isProviderEnabled(providerId)) continue;
+                const provider = await providerFactory.getProvider(providerId);
+                if (this.apiKeys) providerFactory.setApiKeys(this.apiKeys);
+
+                if (provider && provider.models && provider.models.length > 0) {
+                    const fallbackModel = provider.models[0];
+                    console.log(
+                        `[Curator] Selected fallback: ${providerId} - ${fallbackModel.name}`
+                    );
+                    return { provider, model: fallbackModel.name };
+                }
+            } catch (e) {
+                continue;
             }
         }
 

@@ -57,7 +57,7 @@ export async function buildDependencyContext(
     // To be efficient, we'll collect potential IDs/Sequences first
     const potentialRefs = new Set<number>();
     while ((match = macroRegex.exec(promptText)) !== null) {
-        const val = parseInt(match[1], 10);
+        const val = parseInt(match[1]!, 10);
         if (!isNaN(val)) potentialRefs.add(val);
     }
 
@@ -68,10 +68,17 @@ export async function buildDependencyContext(
             // Try Sequence
             const seqMatch = allTasks.find((t) => t.projectSequence === ref);
             if (seqMatch) {
-                directDeps.add(seqMatch.id);
-                console.log(
-                    `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${seqMatch.id}`
-                );
+                if (seqMatch.id) {
+                    directDeps.add(seqMatch.id);
+                    console.log(
+                        `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${seqMatch.id}`
+                    );
+                } else {
+                    console.error(
+                        `[DependencyContext] Found macro {{task.${ref}}} (Sequence) but ID is missing on task object`,
+                        seqMatch
+                    );
+                }
             } else {
                 // Try ID
                 const idMatch = allTasks.find((t) => t.id === ref);
@@ -129,7 +136,7 @@ export async function buildDependencyContext(
                         projectSequence: depTask.projectSequence,
                         taskTitle: depTask.title,
                         status: 'success',
-                        output: execResult.content || execResult,
+                        output: execResult.content || execResult.text || execResult,
                         startTime: depTask.startedAt || now,
                         endTime: depTask.completedAt || now, // Crucial for sorting
                         duration: execResult.duration || 0,

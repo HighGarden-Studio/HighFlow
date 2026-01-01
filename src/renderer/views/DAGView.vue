@@ -152,14 +152,30 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
     dagreGraph.setDefaultEdgeLabel(() => ({}));
     dagreGraph.setGraph({
         rankdir: direction,
-        nodesep: 100,
-        ranksep: 150,
+        nodesep: 15, // Very tight vertical gap (15px)
+        ranksep: 100, // Horizontal gap
         marginx: 50,
         marginy: 50,
     });
 
     nodes.forEach((node) => {
-        dagreGraph.setNode(node.id, { width: 320, height: 250 });
+        // Heuristic Height Calculation
+        // Check if task has result or is executed to estimate height
+        const task = node.data?.task;
+        const hasResult =
+            task &&
+            (task.status === 'done' ||
+                task.executionResult?.content ||
+                task.executionResult?.text ||
+                (task as any).result);
+
+        // Refined estimates to avoid excessive gaps
+        // Base: 300px (Compact)
+        // Result: 500px (Moderate expansion, 650 was too big)
+        const width = 320;
+        const height = hasResult ? 500 : 300;
+
+        dagreGraph.setNode(node.id, { width, height });
     });
 
     edges.forEach((edge) => {
@@ -170,11 +186,20 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
 
     const layoutedNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
+        const task = node.data?.task;
+        const hasResult =
+            task &&
+            (task.status === 'done' ||
+                task.executionResult?.content ||
+                task.executionResult?.text ||
+                (task as any).result);
+        const height = hasResult ? 500 : 300;
+
         return {
             ...node,
             position: {
-                x: nodeWithPosition.x - 160, // center the node
-                y: nodeWithPosition.y - 125,
+                x: nodeWithPosition.x - 160, // center (width/2)
+                y: nodeWithPosition.y - height / 2, // center (height/2)
             },
         };
     });
@@ -215,21 +240,36 @@ function buildGraph(shouldFit = false) {
     // Create edges from dependencies
     // Create edges from dependencies
     tasks.value.forEach((task) => {
-        const dependencies = new Set<number>();
+        const dependencySequences = new Set<number>();
+
+        // Helper to add dependency safely (checking ID first, then Sequence)
+        const addDependency = (val: number) => {
+            // 1. Try treating it as a Task ID
+            const taskById = tasks.value.find((t) => t.id == val);
+            if (taskById) {
+                dependencySequences.add(taskById.projectSequence);
+                return;
+            }
+            // 2. Try treating it as a Project Sequence
+            const taskBySeq = tasks.value.find((t) => t.projectSequence == val);
+            if (taskBySeq) {
+                dependencySequences.add(val);
+            }
+        };
 
         // 1. Trigger Config IDs
         if (task.triggerConfig?.dependsOn?.taskIds) {
-            task.triggerConfig.dependsOn.taskIds.forEach((id) => dependencies.add(id));
+            task.triggerConfig.dependsOn.taskIds.forEach(addDependency);
         }
 
         // 2. Explicit Dependencies (Task model field)
         if (task.dependencies && Array.isArray(task.dependencies)) {
-            task.dependencies.forEach((id) => dependencies.add(id));
+            task.dependencies.forEach(addDependency);
         }
 
         // 3. Data Dependencies (passResultsFrom)
         if (task.triggerConfig?.dependsOn?.passResultsFrom) {
-            task.triggerConfig.dependsOn.passResultsFrom.forEach((id) => dependencies.add(id));
+            task.triggerConfig.dependsOn.passResultsFrom.forEach(addDependency);
         }
 
         // 4. Parse IDs (or Sequences) from expression
@@ -247,31 +287,27 @@ function buildGraph(shouldFit = false) {
                 // Try to find by projectSequence first (User mostly types sequences)
                 const taskBySeq = tasks.value.find((t) => t.projectSequence === val);
                 if (taskBySeq) {
-                    dependencies.add(taskBySeq.id);
+                    dependencySequences.add(taskBySeq.projectSequence);
                 } else {
                     // Fallback: Check if it's a raw Task ID
                     const taskById = tasks.value.find((t) => t.id === val);
                     if (taskById) {
-                        dependencies.add(taskById.id);
+                        dependencySequences.add(taskById.projectSequence);
                     }
                 }
             });
         }
 
-        dependencies.forEach((depSequence: number) => {
+        dependencySequences.forEach((depSequence: number) => {
             // Only create edge if dependency task exists (by sequence)
             const sourceTask = tasks.value.find((t) => t.projectSequence === depSequence);
             if (sourceTask) {
                 // Get output type label from SOURCE task (dependency)
+                // Get output type label from SOURCE task (dependency)
                 // Use expectedOutputFormat (AI-generated) if available, fallback to outputType
-                const outputFormat = sourceTask.expectedOutputFormat || sourceTask.outputType;
+                const outputFormat =
+                    sourceTask.expectedOutputFormat || (sourceTask as any).outputType;
                 const formatInfo = getOutputFormatInfo(outputFormat);
-
-                // Verbose logging disabled to reduce console noise
-                // console.log(
-                //     `📊 Edge ${depId}->${task.id}: expectedOutputFormat="${sourceTask.expectedOutputFormat}", outputType="${sourceTask.outputType}", formatInfo:`,
-                //     formatInfo
-                // );
 
                 // Determine if this specific dependency is part of an "Active Path"
                 // For direct dependencies (no expression), it's always active if it exists.
@@ -303,7 +339,8 @@ function buildGraph(shouldFit = false) {
                         branchReason = control.reason;
                     }
                 } else if (isComplexDependency && expression) {
-                    isActivePath = isDependencyActive(expression, depId, tasks.value);
+                    // Fix: Use depSequence instead of undefined depId
+                    isActivePath = isDependencyActive(expression, depSequence, tasks.value);
                 }
 
                 // Determine edge color based on SOURCE task status and active state
@@ -343,8 +380,8 @@ function buildGraph(shouldFit = false) {
                     animated: task.status === 'in_progress' && isActivePath, // Only animate active paths
                     style: {
                         stroke: edgeColor,
-                        strokeWidth: isComplexDependency ? 3 : 2,
-                        strokeDasharray: isComplexDependency ? '5,5' : undefined,
+                        strokeWidth: isActivePath ? 3 : 2, // Thicker if active
+                        // strokeDasharray: isComplexDependency ? '5,5' : undefined, // Removed dotted style as requested
                         opacity: isActivePath ? 1 : 0.4, // Dim inactive paths slightly
                     },
                     markerEnd: {
@@ -363,12 +400,12 @@ function buildGraph(shouldFit = false) {
                     data: {
                         formatInfo, // Pass full formatInfo to CustomEdge for icon rendering
                         onEdgeRemove: (edgeId: string) => {
-                            console.log('🗑️ Removing edge:', edgeId);
+                            // console.log('🗑️ Removing edge:', edgeId);
                             handleEdgeRemove([
                                 {
                                     id: edgeId,
-                                    source: String(depId),
-                                    target: String(task.id),
+                                    source: `${sourceTask.projectId}_${sourceTask.projectSequence}`,
+                                    target: `${task.projectId}_${task.projectSequence}`,
                                 } as Edge,
                             ]);
                         },
@@ -448,16 +485,47 @@ function rebuildGraphImmediate(shouldFit = false) {
  * Update only node data without full graph rebuild
  * Uses VueFlow's updateNodeData for smooth updates
  */
+/**
+ * Update a specific node by its composite key (projectId_sequence)
+ * This is O(1) compared to O(N) of updateNodesDataSmooth
+ */
+function updateNodeByKey(compositeKey: string) {
+    // compositeKey from store is "projectId-sequence" (e.g. "6-3")
+    // BUT Node ID is "projectId_sequence" (e.g. "6_3")
+    // We need to convert if they differ.
+    // Store uses taskKeyToString: `${projectId}-${projectSequence}`
+    // Node ID uses `${projectId}_${projectSequence}`
+    // So "6-3" -> "6_3".
+
+    // Safe conversion: split and rejoin
+    const parts = compositeKey.split('-');
+    if (parts.length === 2) {
+        const nodeId = `${parts[0]}_${parts[1]}`;
+        // Find the task object to pass fresh data
+        const [pId, seq] = parts.map(Number);
+        const task = taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq);
+
+        if (task) {
+            updateNodeData(nodeId, { task: { ...task } });
+        }
+    }
+}
+
+/**
+ * Update only node data without full graph rebuild
+ * Uses VueFlow's updateNodeData for smooth updates
+ */
 function updateNodesDataSmooth() {
-    console.log('[DAGView] Updating nodes data smoothly...');
+    // console.log('[DAGView] Updating nodes data smoothly...');
 
     // Update each node's data using VueFlow's API
     taskStore.tasks.forEach((task) => {
-        const nodeId = String(task.id);
+        // Fix: Use composite key to match node creation ID
+        const nodeId = `${task.projectId}_${task.projectSequence}`;
         updateNodeData(nodeId, { task: { ...task } });
     });
 
-    console.log('[DAGView] Nodes data updated');
+    // console.log('[DAGView] Nodes data updated');
 }
 
 /**
@@ -513,6 +581,7 @@ function getOutputFormatInfo(
         'haskell',
         'dart',
         'r',
+        'diff',
     ];
 
     const map: Record<string, { label: string; icon: string; bgColor: string; textColor: string }> =
@@ -681,8 +750,10 @@ function getSegmentStats(
     let maxTime = 0;
 
     for (const idStr of matches) {
-        const id = parseInt(idStr, 10);
-        const task = allTasks.find((t) => t.id === id);
+        const val = parseInt(idStr, 10);
+        // Fix: Use projectSequence lookup first, fallback to id
+        const task =
+            allTasks.find((t) => t.projectSequence === val) || allTasks.find((t) => t.id === val);
 
         // If any task in an AND group is NOT done, the group is False.
         // (Ignoring !NOT logic for visualization simplicity for now)
@@ -911,12 +982,9 @@ async function handleEditModalSave(updates: Partial<Task>) {
     closeEditModal();
 }
 
-async function handleEditModalDelete(task: Task) {
-    if (!task) return; // Expecting task object or at least we should pass it
-    // Wait, the original signature was taskId: number.
-    // We should change it to use editingTask.value if available, or update call site.
-    // The call site likely passes nothing if it uses editingTask.value in closure?
-    // Let's assume editingTask.value is used.
+async function handleEditModalDelete(payload: any) {
+    // payload might be Task object OR taskId number depending on Modal implementation
+    // But we use editingTask.value which is reliable
     if (editingTask.value) {
         await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
     }
@@ -1333,11 +1401,63 @@ onMounted(async () => {
         // This ensures INPUT task status updates (including inputSubStatus) are reflected immediately
         const unsubscribe = taskStore.$subscribe(
             async (mutation, state) => {
-                // console.log('[DAGView] TaskStore mutation detected:', mutation.type);
+                // Check if mutation is related to streaming progress or task updates
+                // If it's just a ref update for progress, we use smooth update
+                if (
+                    mutation.events &&
+                    typeof mutation.events === 'object' &&
+                    'key' in mutation.events &&
+                    (mutation.events.key === 'executionProgress' ||
+                        mutation.events.key === 'reviewProgress' ||
+                        mutation.events.key === 'executingTaskIds')
+                ) {
+                    // Optimized: Only update the specific node that changed
+                    const changedKey = mutation.events.key;
+                    // For Maps (executionProgress, reviewProgress), the 'key' property of the event is the map Key (composite string)
+                    // But wait, Pinia Map mutations might be tricky.
+                    // If it's a Map.set(key, value), mutation.events.key is just 'executionProgress' (the field name)?
+                    // No, for Maps/Sets, Pinia deep subscription often gives events for the collection itself.
+                    // Let's check mutation.events structure.
+                    // For Map.set: type = 'set', key = map key, target = map object.
+                    // BUT in Pinia $subscribe, deeply reactive objects work differently.
+                    // Actually, let's look at how we keyed it.
+                    // executionProgress is a Ref<Map>. updating it usually means .value.set().
+                    // This triggers a 'set' operation on the Map.
+                    // Pinia's subscription state is the whole state tree.
+                    // mutation.events will vary.
+                    // Robust approach: If we can get the key, update specific. If not, fallback to smooth update.
 
-                // Trigger rebuild on any store mutation
+                    // Try to extract key from event loop if possible, or just optimize updateNodesDataSmooth to be smarter?
+                    // "Targeted Node Updates" requires knowing WHICH task changed.
+                    // For streaming, we are doing executionProgress.value.get(key).content += ...
+                    // Wait, we are NOT Mutating the map value in place if it's a primitive string. We are probably doing map.set(key, newObj).
+                    // In `AIServiceManager.ts` / `taskStore.ts`:
+                    // executionProgress.value.set(key, { ...old, content: ... })
+                    // This triggers a Map SET operation.
+                    // mutation.events.key should be the Map KEY (composite string) if we subscribe deeply?
+                    // Pinia $subscribe(callback, { detached: true }) is state subscription.
+                    // It returns { type, storeId, events }. "events" is the Vue reactivity event.
+                    // If we modify a Map, events.key is the Map Key.
+
+                    const mapKey = (mutation.events as any).key;
+                    // Store keys formatted as "projectId-sequence" (e.g., "6-3")
+                    if (
+                        typeof mapKey === 'string' &&
+                        (mapKey.includes('-') || mapKey.includes('_'))
+                    ) {
+                        updateNodeByKey(mapKey);
+                    } else {
+                        // Fallback for bulk updates or if key detection fails
+                        updateNodesDataSmooth();
+                    }
+                    return;
+                }
+
+                // For structure changes (add/remove task) or status changes that might affect edges
+                // We typically rebuild, but maybe we can optimize further.
+                // For now, let's debounce normal rebuilds and avoid immediate rebuild on everything.
                 await nextTick();
-                rebuildGraphImmediate();
+                rebuildGraphDebounced();
             },
             { detached: true }
         );

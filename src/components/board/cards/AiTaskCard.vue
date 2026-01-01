@@ -95,12 +95,22 @@ watch(
 
 // Store-bound computed properties
 const streamedContent = computed(() => {
-    const progress = taskStore.executionProgress.get(props.task.id);
+    // Legacy support for global ID lookup is preserved in store, but we prefer composite key
+    // to avoid collision if ID is undefined.
+    // We construct the key manually here to match store logic or pass the object if store supports it.
+    // The store's getExecutionProgress now supports object.
+    const progress = taskStore.getExecutionProgress({
+        projectId: props.task.projectId,
+        projectSequence: props.task.projectSequence,
+    });
     return progress?.content || '';
 });
 
 const reviewStreamedContent = computed(() => {
-    const progress = taskStore.reviewProgress.get(props.task.id);
+    const progress = taskStore.getReviewProgress({
+        projectId: props.task.projectId,
+        projectSequence: props.task.projectSequence,
+    });
     return progress?.content || '';
 });
 
@@ -131,6 +141,17 @@ const dependencySequences = computed(() => {
 const hasPreviousResult = computed(() => {
     const t = props.task as any;
     return !!(t.executionResult?.content || t.result);
+});
+
+const isLocalProvider = computed(() => {
+    const provider = assignedOperator.value?.aiProvider || props.task.aiProvider;
+    return ['claude-code', 'antigravity', 'codex'].includes(provider || '');
+});
+
+const displayModel = computed(() => {
+    if (isLocalProvider.value) return '';
+    const model = assignedOperator.value?.aiModel || props.task.aiModel;
+    return model || 'Default Model';
 });
 
 // Image content detection
@@ -375,11 +396,7 @@ function hexToRgba(hex: string, alpha: number) {
                             }}
                         </span>
                         <span class="text-xs font-medium text-gray-700 dark:text-gray-200">
-                            {{
-                                assignedOperator
-                                    ? assignedOperator.aiModel || task.aiModel || 'Default Model'
-                                    : task.aiModel || 'Default Model'
-                            }}
+                            {{ displayModel }}
                         </span>
                     </div>
                 </div>

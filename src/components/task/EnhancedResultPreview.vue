@@ -16,6 +16,7 @@ import FileTreeItem from './FileTreeItem.vue';
 import { useProjectStore } from '../../renderer/stores/projectStore';
 import { Diff } from 'vue-diff';
 import 'vue-diff/dist/index.css';
+import CodeEditor from '../common/CodeEditor.vue';
 
 // Output format type
 type OutputFormat =
@@ -1081,8 +1082,11 @@ const formatDisplayName = computed(() => {
 
 // Dynamic Label for "AI Response" button
 const resultLabel = computed(() => {
-    if ((props.task as any)?.type === 'output') {
-        const config = props.task.outputConfig;
+    // Check both taskType (DB) and type (legacy/runtime)
+    const type = (props.task as any)?.taskType || (props.task as any)?.type;
+
+    if (type === 'output') {
+        const config = props.task?.outputConfig;
         if (config?.destination === 'local_file') {
             // Try to extract filename from pathTemplate
             const path = config.localFile?.pathTemplate;
@@ -1098,8 +1102,9 @@ const resultLabel = computed(() => {
 });
 
 const resultSubLabel = computed(() => {
-    if (props.task?.type === 'output') {
-        return props.task.outputConfig?.destination || '';
+    const type = (props.task as any)?.taskType || (props.task as any)?.type;
+    if (type === 'output') {
+        return props.task?.outputConfig?.destination || '';
     }
     if (taskResult.value.provider) {
         return `${taskResult.value.provider}${
@@ -2390,6 +2395,54 @@ onMounted(() => {
                                                     <p class="text-sm mt-1">
                                                         태스크가 실행되면 결과가 여기에 표시됩니다.
                                                     </p>
+                                                </div>
+                                            </div>
+
+                                            <!-- Code View / Output Task View (using CodeEditor) -->
+                                            <div
+                                                v-else-if="
+                                                    outputFormat === 'code' ||
+                                                    (task?.taskType === 'output' &&
+                                                        ['markdown', 'text', 'log'].includes(
+                                                            outputFormat
+                                                        ))
+                                                "
+                                                class="h-full flex flex-col"
+                                            >
+                                                <div
+                                                    class="flex-1 relative border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                                                >
+                                                    <CodeEditor
+                                                        :model-value="content || ''"
+                                                        :language="
+                                                            outputFormat === 'markdown'
+                                                                ? 'markdown'
+                                                                : codeLanguage === 'plaintext'
+                                                                  ? 'markdown'
+                                                                  : codeLanguage
+                                                        "
+                                                        :readonly="true"
+                                                        :show-line-numbers="true"
+                                                        height="100%"
+                                                        :auto-scroll-when-at-bottom="
+                                                            !!task?.outputConfig?.localFile
+                                                                ?.accumulateResults
+                                                        "
+                                                    />
+                                                    <!-- Auto-scroll controls overlay -->
+                                                    <div
+                                                        v-if="
+                                                            task?.outputConfig?.localFile
+                                                                ?.accumulateResults
+                                                        "
+                                                        class="absolute bottom-4 right-6 z-10 flex gap-2"
+                                                    >
+                                                        <div
+                                                            class="px-2 py-1 bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 text-xs rounded-full shadow-lg border border-blue-200 dark:border-blue-700 font-medium"
+                                                        >
+                                                            Auto-scroll Active
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
 

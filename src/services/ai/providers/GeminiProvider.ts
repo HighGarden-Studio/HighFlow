@@ -407,6 +407,7 @@ export class GeminiProvider extends BaseAIProvider {
                 lastError = error as Error;
 
                 // Check for 429
+                // Check for 429
                 if (
                     error.status === 429 ||
                     error.statusCode === 429 ||
@@ -414,12 +415,10 @@ export class GeminiProvider extends BaseAIProvider {
                     error.message?.includes('429') ||
                     error.message?.includes('quota')
                 ) {
-                    const delay = this.extractRetryDelay(error);
-                    console.warn(
-                        `[GeminiProvider] Rate limit hit during stream. Waiting ${delay}ms before retry (Attempt ${attempt}/${maxRetries})`
+                    console.error(
+                        `[GeminiProvider] Rate limit hit during stream. Failing immediately as requested.`
                     );
-                    await this.delay(delay);
-                    continue;
+                    throw error; // Fail immediately
                 }
 
                 // Don't retry on other fatal errors
@@ -618,7 +617,7 @@ export class GeminiProvider extends BaseAIProvider {
             } catch (error: any) {
                 lastError = error as Error;
 
-                // Check for 429
+                // Check for 429 - FAIL IMMEDIATELY per user request
                 if (
                     error.status === 429 ||
                     error.statusCode === 429 ||
@@ -626,12 +625,12 @@ export class GeminiProvider extends BaseAIProvider {
                     error.message?.includes('429') ||
                     error.message?.includes('quota')
                 ) {
-                    const delay = this.extractRetryDelay(error);
-                    console.warn(
-                        `[GeminiProvider] Rate limit hit. Waiting ${delay}ms before retry (Attempt ${attempt}/${maxRetries})`
+                    console.error(
+                        `[GeminiProvider] Rate limit hit. Failing immediately as requested. Error: ${error.message}`
                     );
-                    await this.delay(delay);
-                    continue;
+                    throw new Error(
+                        `Rate Limit Hit (429): ${error.message}. Please check your quota.`
+                    );
                 }
 
                 // Don't retry on other fatal errors
@@ -646,19 +645,6 @@ export class GeminiProvider extends BaseAIProvider {
         }
 
         throw lastError || new Error('Max retries exceeded');
-    }
-
-    private extractRetryDelay(error: any): number {
-        // Regex to find "retry in X.Xs" or similar
-        // The user log shows: "Please retry in 42.889386014s." inside the error message string.
-        const text = typeof error === 'string' ? error : error.message || JSON.stringify(error);
-        const match = text.match(/retry in\s+(\d+(?:\.\d+)?)s/i);
-        if (match && match[1]) {
-            // Parse seconds, convert to ms, add 1s buffer
-            return Math.ceil(parseFloat(match[1]) * 1000) + 1000;
-        }
-
-        return 5000; // Default fallback for 429 if no time found
     }
 
     async generateVideo(

@@ -152,6 +152,15 @@ const aiProviderDisplay = computed(() => {
 });
 
 const aiModelDisplay = computed(() => {
+    // Check if the relevant provider is local
+    const providerId = isEditingAI.value
+        ? editedAIProvider.value
+        : effectiveAI.value.provider || props.project.aiProvider;
+
+    if (providerId && isLocalAgentProvider(providerId).isLocal) {
+        return '';
+    }
+
     // configured model | effective model | default
     const modelId = isEditingAI.value
         ? editedAIModel.value
@@ -481,10 +490,26 @@ async function saveAISettings(): Promise<void> {
     const metadata = (props.project as any).metadata || {};
     const wasClaudeCodeSynced = metadata.claudeCodeIntegration && !metadata.settingsOverridden;
 
+    // Determine provider and model based on mode
+    let providerToSave = editedAIProvider.value;
+    let modelToSave = editedAIModel.value;
+
+    if (editedAIMode.value === 'local' && editedLocalAgent.value) {
+        // Map local agent type back to provider ID
+        const agentMap: Record<string, string> = {
+            claude: 'claude-code',
+            codex: 'codex',
+            antigravity: 'antigravity',
+        };
+        providerToSave = agentMap[editedLocalAgent.value] || editedLocalAgent.value;
+        // For local agents, the model might be redundant or same as provider ID, but let's keep it clean
+        modelToSave = null;
+    }
+
     // Emit settings update
     emit('update-ai-settings', {
-        aiProvider: editedAIProvider.value,
-        aiModel: editedAIModel.value,
+        aiProvider: providerToSave,
+        aiModel: modelToSave,
     });
 
     // If project was synced with Claude, mark as manually overridden

@@ -15,6 +15,7 @@ type TaskLike = {
         provider?: string;
         model?: string;
         language?: string;
+        text?: string;
     } | null;
     aiReviewResult?: {
         content?: string;
@@ -79,7 +80,12 @@ export function extractTaskResult(task?: TaskLike | null): TaskResultPayload {
         normalizeAiResult(task.aiResult);
 
     const content =
-        aiResult?.value ?? executionResult?.content ?? aiReviewResult?.content ?? task.result ?? '';
+        aiResult?.value ??
+        executionResult?.content ??
+        executionResult?.text ??
+        aiReviewResult?.content ??
+        task.result ??
+        '';
 
     const provider = executionResult?.provider || aiResult?.meta?.provider;
     const model = executionResult?.model || aiResult?.meta?.model;

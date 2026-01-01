@@ -10,8 +10,13 @@ import type { Task, TaskStatus } from '@core/types/database';
 import type { TaskPriority, TaskType } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
 import type { ExecutionProgress } from '@core/types/electron.d';
-import { TASK_STATUS_TRANSITIONS, isValidStatusTransition } from '@core/types/database';
+import {
+    TASK_STATUS_TRANSITIONS,
+    isValidStatusTransition,
+    taskKeyToString,
+} from '@core/types/database';
 import { useSettingsStore } from './settingsStore';
+import { useProjectStore } from './projectStore';
 import { buildEnabledProvidersPayload, buildRuntimeMCPServers } from '../utils/runtimeConfig';
 import { aiInterviewService } from '../../services/ai/AIInterviewService';
 // Removed unused commands
@@ -58,6 +63,14 @@ export const useTaskStore = defineStore('tasks', () => {
     const filters = ref<TaskFilters>({});
     const settingsStore = useSettingsStore();
     const historyStore = useHistoryStore();
+
+    // Helper for composite keys
+    function getTaskKey(
+        pd: { projectId: number; projectSequence: number } | null | undefined
+    ): string {
+        if (!pd) return '';
+        return taskKeyToString({ projectId: pd.projectId, projectSequence: pd.projectSequence });
+    }
 
     function upsertTask(task: Task): void {
         if (!task) return;
@@ -706,6 +719,17 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // Check if AI provider is set
         if (!task.aiProvider) {
+            // 1. Check if assigned to an Operator (Assume valid, let backend validate)
+            if (task.assignedOperatorId) {
+                return null;
+            }
+
+            // 2. Check Project Default
+            const projectStore = useProjectStore();
+            if (projectStore.currentProject?.aiProvider) {
+                return null;
+            }
+
             return 'AI Provider가 설정되지 않았습니다. AI Provider를 선택해주세요.';
         }
 
@@ -1440,7 +1464,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     const executionProgress = ref<
         Map<
-            number,
+            string,
             {
                 progress: number;
                 phase: string;
@@ -1451,7 +1475,7 @@ export const useTaskStore = defineStore('tasks', () => {
         >
     >(new Map());
 
-    const executingTaskIds = ref<Set<number>>(new Set());
+    const executingTaskIds = ref<Set<string>>(new Set());
 
     // ========================================
     // Review state tracking
@@ -1459,7 +1483,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
     const reviewProgress = ref<
         Map<
-            number,
+            string,
             {
                 progress: number;
                 phase: string;
@@ -1468,34 +1492,65 @@ export const useTaskStore = defineStore('tasks', () => {
         >
     >(new Map());
 
-    const reviewingTaskIds = ref<Set<number>>(new Set());
+    const reviewingTaskIds = ref<Set<string>>(new Set());
 
     /**
      * Get execution progress for a task
      */
-    function getExecutionProgress(taskId: number) {
-        return executionProgress.value.get(taskId);
+    /**
+     * Get execution progress for a task
+     */
+    function getExecutionProgress(
+        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+    ) {
+        if (!taskId) return undefined;
+        if (typeof taskId === 'number') {
+            const t = tasks.value.find((x) => x.id === taskId);
+            return t ? executionProgress.value.get(getTaskKey(t)) : undefined;
+        }
+        return executionProgress.value.get(getTaskKey(taskId));
     }
 
     /**
      * Check if a task is currently executing
      */
-    function isTaskExecuting(taskId: number) {
-        return executingTaskIds.value.has(taskId);
+    function isTaskExecuting(
+        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+    ) {
+        if (!taskId) return false;
+        if (typeof taskId === 'number') {
+            const t = tasks.value.find((x) => x.id === taskId);
+            return t ? executingTaskIds.value.has(getTaskKey(t)) : false;
+        }
+        return executingTaskIds.value.has(getTaskKey(taskId));
     }
 
     /**
      * Get review progress for a task
      */
-    function getReviewProgress(taskId: number) {
-        return reviewProgress.value.get(taskId);
+    function getReviewProgress(
+        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+    ) {
+        if (!taskId) return undefined;
+        if (typeof taskId === 'number') {
+            const t = tasks.value.find((x) => x.id === taskId);
+            return t ? reviewProgress.value.get(getTaskKey(t)) : undefined;
+        }
+        return reviewProgress.value.get(getTaskKey(taskId));
     }
 
     /**
      * Check if a task is currently being reviewed
      */
-    function isTaskReviewing(taskId: number) {
-        return reviewingTaskIds.value.has(taskId);
+    function isTaskReviewing(
+        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+    ) {
+        if (!taskId) return false;
+        if (typeof taskId === 'number') {
+            const t = tasks.value.find((x) => x.id === taskId);
+            return t ? reviewingTaskIds.value.has(getTaskKey(t)) : false;
+        }
+        return reviewingTaskIds.value.has(getTaskKey(taskId));
     }
 
     /**
@@ -1721,15 +1776,17 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
 
-                    executingTaskIds.value.add(task.id);
+                    executingTaskIds.value.add(getTaskKey(task));
                     // Create new Map for Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    newMap.set(task.id, {
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    executionProgress.value.set(taskKey, {
                         progress: 0,
                         phase: 'starting',
                         content: '',
                     });
-                    executionProgress.value = newMap;
+
+                    // Note: Pinia store $subscribe might not trigger on Map mutation if detached logic isn't smart, but Vue 3 ref(Map) triggers.
 
                     // Also update task status in local state
                     const index = tasks.value.findIndex((t) => t.id === task.id);
@@ -1764,32 +1821,44 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
 
-                    executingTaskIds.value.delete(task.id);
+                    executingTaskIds.value.delete(getTaskKey(task));
 
                     // Update progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly instead of cloning
+                    const taskKey = getTaskKey(task);
+                    const existing = executionProgress.value.get(taskKey);
 
                     if (existing) {
-                        newMap.set(task.id, {
+                        // If content is provided (full text), replace it. If delta only, append.
+                        // Ideally backend sends one or other.
+                        let newContent = existing.content;
+                        if (data.content) {
+                            newContent = data.content;
+                        } else if (data.delta) {
+                            newContent += data.delta;
+                        }
+
+                        executionProgress.value.set(taskKey, {
                             ...existing,
                             progress:
                                 (data as any).percentage || data.progress || existing.progress,
                             phase: data.phase || existing.phase,
-                            content: existing.content + (data.content || ''),
+                            content: newContent,
                             tokensUsed: (data as any).tokensUsed,
                             cost: (data as any).cost,
                         });
                     } else {
-                        newMap.set(task.id, {
+                        executionProgress.value.set(taskKey, {
                             progress: (data as any).percentage || data.progress || 0,
                             phase: data.phase || 'running',
-                            content: data.content || '',
+                            content: data.content || data.delta || '',
                             tokensUsed: (data as any).tokensUsed,
                             cost: (data as any).cost,
                         });
                     }
-                    executionProgress.value = newMap;
+                    // Trigger shallow update if needed, but Map.set should be reactive for watchers of the item or deep watchers.
+                    // For our optimize subscribers, they listen to mutation events.
+                    // Pinia $subscribe should catch this.
                 }
             );
             cleanupFns.push(unsubscribeProgress);
@@ -1805,19 +1874,20 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
 
-                    executingTaskIds.value.delete(task.id);
+                    executingTaskIds.value.delete(getTaskKey(task));
 
                     // Update progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const existing = executionProgress.value.get(taskKey);
                     if (existing) {
-                        newMap.set(task.id, {
+                        executionProgress.value.set(taskKey, {
                             ...existing,
-                            progress: 100,
                             phase: 'completed',
+                            progress: 100,
                         });
                     }
-                    executionProgress.value = newMap;
+                    // executionProgress.value = newMap; // Removed
 
                     // Update task with AI result and status
                     const result = data.result as
@@ -1910,13 +1980,14 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
 
-                    executingTaskIds.value.delete(task.id);
+                    executingTaskIds.value.delete(getTaskKey(task));
 
                     // Update progress with Vue reactivity
                     const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    const taskKey = getTaskKey(task);
+                    const existing = newMap.get(taskKey);
                     if (existing) {
-                        newMap.set(task.id, {
+                        newMap.set(taskKey, {
                             ...existing,
                             phase: 'failed',
                             content: existing.content + `\n\nError: ${data.error}`,
@@ -1956,15 +2027,15 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
 
                     // Update progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const existing = executionProgress.value.get(taskKey);
                     if (existing) {
-                        newMap.set(task.id, {
+                        executionProgress.value.set(taskKey, {
                             ...existing,
                             phase: 'paused',
                         });
                     }
-                    executionProgress.value = newMap;
 
                     // Update task isPaused flag
                     if (index >= 0) {
@@ -1991,15 +2062,15 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
 
                     // Update progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const existing = executionProgress.value.get(taskKey);
                     if (existing) {
-                        newMap.set(task.id, {
+                        executionProgress.value.set(taskKey, {
                             ...existing,
                             phase: 'executing',
                         });
                     }
-                    executionProgress.value = newMap;
 
                     // Update task isPaused flag
                     if (index >= 0) {
@@ -2025,12 +2096,12 @@ export const useTaskStore = defineStore('tasks', () => {
                             t.projectId === task.projectId &&
                             t.projectSequence === task.projectSequence
                     );
-                    executingTaskIds.value.delete(task.id);
+                    executingTaskIds.value.delete(getTaskKey(task));
 
                     // Clear progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    newMap.delete(task.id);
-                    executionProgress.value = newMap;
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    executionProgress.value.delete(taskKey);
 
                     // Update task status back to todo
                     // Fix: Use task.id from the found task, not data.taskId which doesn't exist
@@ -2064,15 +2135,15 @@ export const useTaskStore = defineStore('tasks', () => {
                     const index = tasks.value.findIndex((t) => t.id === task.id);
 
                     // Update progress with Vue reactivity
-                    const newMap = new Map(executionProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const existing = executionProgress.value.get(taskKey);
                     if (existing) {
-                        newMap.set(task.id, {
+                        executionProgress.value.set(taskKey, {
                             ...existing,
                             phase: 'awaiting_approval',
                         });
                     }
-                    executionProgress.value = newMap;
 
                     if (index >= 0) {
                         tasks.value[index] = {
@@ -2098,15 +2169,15 @@ export const useTaskStore = defineStore('tasks', () => {
                             t.projectSequence === data.projectSequence
                     );
                     if (!task) return;
-                    reviewingTaskIds.value.add(task.id);
+                    const taskKey = getTaskKey(task);
+                    reviewingTaskIds.value.add(taskKey);
                     // Create new Map for Vue reactivity
-                    const newMap = new Map(reviewProgress.value);
-                    newMap.set(task.id, {
+                    // Optimized: Mutate map directly
+                    reviewProgress.value.set(taskKey, {
                         progress: 0,
                         phase: 'reviewing',
                         content: '',
                     });
-                    reviewProgress.value = newMap;
                 }
             );
             cleanupFns.push(unsubscribeReviewStarted);
@@ -2128,18 +2199,18 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
 
-                    const currentMap = new Map(reviewProgress.value);
-                    const currentProgress = currentMap.get(task.id) || {
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const currentProgress = reviewProgress.value.get(taskKey) || {
                         progress: 0,
                         phase: '',
                         content: '',
                     };
 
-                    currentMap.set(task.id, {
+                    reviewProgress.value.set(taskKey, {
                         ...currentProgress,
                         ...data,
                     });
-                    reviewProgress.value = currentMap;
                 }
             );
             cleanupFns.push(unsubscribeReviewProgress);
@@ -2162,9 +2233,8 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (!task) return;
 
                     // Clear review progress
-                    const newMap = new Map(reviewProgress.value);
-                    newMap.delete(task.id);
-                    reviewProgress.value = newMap;
+                    // Optimized: Mutate map directly
+                    reviewProgress.value.delete(getTaskKey(task));
 
                     const index = tasks.value.findIndex((t) => t.id === task.id);
                     if (index >= 0) {
@@ -2198,18 +2268,19 @@ export const useTaskStore = defineStore('tasks', () => {
                             t.projectSequence === data.projectSequence
                     );
                     if (!task) return;
-                    reviewingTaskIds.value.delete(task.id);
+                    reviewingTaskIds.value.delete(getTaskKey(task));
 
                     // Update review progress
-                    const newMap = new Map(reviewProgress.value);
-                    const existing = newMap.get(task.id);
+                    // Optimized: Mutate map directly
+                    const taskKey = getTaskKey(task);
+                    const existing = reviewProgress.value.get(taskKey); // Corrected from executionProgress.value
                     if (existing) {
-                        newMap.set(task.id, {
+                        reviewProgress.value.set(taskKey, {
+                            // Corrected from executionProgress.value
                             ...existing,
                             phase: 'failed',
                         });
                     }
-                    reviewProgress.value = newMap;
 
                     error.value = data.error;
                 }
@@ -2227,12 +2298,12 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (!task) return;
                     // Status update handled by backend event (task:status-changed)
-                    reviewingTaskIds.value.delete(task.id); // If it was in review
+                    reviewingTaskIds.value.delete(getTaskKey(task)); // If it was in review
 
                     // Clear review progress
                     // Clear review progress
                     const newMap = new Map(reviewProgress.value);
-                    newMap.delete(task.id);
+                    newMap.delete(getTaskKey(task));
                     reviewProgress.value = newMap;
                 }
             );

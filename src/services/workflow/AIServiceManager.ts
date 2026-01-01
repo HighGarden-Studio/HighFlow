@@ -477,7 +477,13 @@ export class AIServiceManager {
             };
 
             // Build AI config with MCP tools
-            const aiConfig = await this.buildAIConfig(task, model, mcpContext, allRequiredMCPs);
+            const aiConfig = await this.buildAIConfig(
+                task,
+                model,
+                mcpContext,
+                allRequiredMCPs,
+                context
+            );
 
             // Build AI execution context
             // Build AI execution context
@@ -637,7 +643,7 @@ export class AIServiceManager {
             // Update system prompt with collected MCP context
             if (mcpContext && mcpContext.length > 0) {
                 // Rebuild system prompt to include the collected environment variables
-                const updatedSystemPrompt = this.buildSystemPrompt(task, mcpContext);
+                const updatedSystemPrompt = this.buildSystemPrompt(task, mcpContext, context);
 
                 // Only update if it actually changed (it should, as we're adding context)
                 if (updatedSystemPrompt !== aiConfig.systemPrompt) {
@@ -924,7 +930,7 @@ export class AIServiceManager {
                     elapsedTime: Date.now() - startTime,
                     provider: providerName,
                     model: config.model,
-                    currentContent: token, // Send the latest token for streaming display
+                    currentContent: accumulated, // Send the full accumulated content for correct streaming display
                 });
             },
             context,
@@ -1740,7 +1746,8 @@ export class AIServiceManager {
         task: Task,
         model: AIModel,
         mcpContext: MCPContextInsight[] = [],
-        requiredMCPs: string[] = []
+        requiredMCPs: string[] = [],
+        context?: ExecutionContext
     ): Promise<AIConfig> {
         // Collect MCP tool definitions
         const tools = await this.collectMCPTools(task, requiredMCPs);
@@ -1749,7 +1756,7 @@ export class AIServiceManager {
             model,
             temperature: (task as any).aiTemperature ?? 0.7,
             maxTokens: (task as any).aiMaxTokens ?? 4096,
-            systemPrompt: this.buildSystemPrompt(task, mcpContext),
+            systemPrompt: this.buildSystemPrompt(task, mcpContext, context),
             responseFormat: (task as any).outputFormat === 'json' ? 'json' : undefined,
         };
 
@@ -1837,7 +1844,11 @@ export class AIServiceManager {
         return allTools;
     }
 
-    private buildSystemPrompt(task: Task, mcpContext: MCPContextInsight[] = []): string {
+    private buildSystemPrompt(
+        task: Task,
+        mcpContext: MCPContextInsight[] = [],
+        context?: ExecutionContext
+    ): string {
         let systemPrompt = `You are an AI assistant helping to complete the following task.
 
 ## Task Information
@@ -1845,6 +1856,40 @@ export class AIServiceManager {
 - Priority: ${task.priority}
 - Status: ${task.status}
 `;
+
+        // Inject Project Context from Metadata (injected by task-execution-handlers)
+        if (context?.metadata?.project) {
+            const project = context.metadata.project;
+            systemPrompt += `\n## Project Context\n`;
+            systemPrompt += `Project: ${project.title}\n`;
+            if (project.goal) systemPrompt += `Goal: ${project.goal}\n`;
+            if (project.constraints) systemPrompt += `Constraints: ${project.constraints}\n`;
+            if (project.phase) systemPrompt += `Current Phase: ${project.phase}\n`;
+
+            if (project.memory) {
+                const mem = project.memory;
+                if (mem.summary) systemPrompt += `\n### Project Memory (Summary)\n${mem.summary}\n`;
+
+                if (mem.glossary && Object.keys(mem.glossary).length > 0) {
+                    systemPrompt += `\n### Glossary\n`;
+                    for (const [term, def] of Object.entries(mem.glossary)) {
+                        systemPrompt += `- **${term}**: ${def}\n`;
+                    }
+                }
+
+                if (
+                    mem.recentDecisions &&
+                    Array.isArray(mem.recentDecisions) &&
+                    mem.recentDecisions.length > 0
+                ) {
+                    systemPrompt += `\n### Recent Decisions\n`;
+                    mem.recentDecisions.forEach((d: any) => {
+                        systemPrompt += `- ${d.date}: ${d.summary}\n`;
+                    });
+                }
+            }
+            systemPrompt += `\n`;
+        }
 
         if ((task as any).contextFromParent) {
             systemPrompt += `\n## Context from Parent Task\n${(task as any).contextFromParent}\n`;

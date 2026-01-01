@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useTaskStore, type TaskStatus, type TaskPriority } from '@/stores/taskStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { tagService } from '../../services/task/TagService';
 
 const props = defineProps<{
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
+const projectStore = useProjectStore();
 
 // Local state
 const newTaskTitle = ref('');
@@ -46,6 +48,9 @@ async function handleCreateTask() {
         const basePrompt = `${newTaskTitle.value}\n\n${newTaskDescription.value}`;
         const autoTags = tagService.generatePromptTags(basePrompt);
 
+        // Get current project settings for inheritance
+        const currentProject = projectStore.projectById(props.projectId);
+
         const taskData: any = {
             projectId: props.projectId,
             title: newTaskTitle.value.trim(),
@@ -54,6 +59,16 @@ async function handleCreateTask() {
             tags: autoTags,
             taskType: newTaskType.value,
         };
+
+        // Inherit AI Settings for AI tasks
+        if (newTaskType.value === 'ai' && currentProject) {
+            if (currentProject.aiProvider) {
+                taskData.aiProvider = currentProject.aiProvider;
+            }
+            if (currentProject.aiModel) {
+                taskData.aiModel = currentProject.aiModel;
+            }
+        }
 
         // Add script-specific fields
         if (newTaskType.value === 'script') {

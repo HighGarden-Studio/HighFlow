@@ -171,22 +171,58 @@ const columns: { id: TaskStatus; title: string; color: string; icon?: string }[]
 ];
 
 // Cache for missing provider info with operator check
-const missingProviderCache = ref<Map<number, MissingProviderInfo | null>>(new Map());
+const missingProviderCache = ref<Map<string, MissingProviderInfo | null>>(new Map());
 
 // Update cache when tasks change
-watch(
-    () => taskStore.tasks,
-    async () => {
-        if (!isMounted.value) return;
-        const newCache = new Map<string, MissingProviderInfo | null>();
-        for (const task of taskStore.tasks) {
-            const key = `${task.projectId}_${task.projectSequence}`;
-            newCache.set(key, await getMissingProviderForTask(task));
-        }
-        missingProviderCache.value = newCache;
-    },
-    { deep: true, immediate: true }
-);
+// Optimize: Use subscription instead of deep watcher to avoid rebuilding on streaming updates
+onMounted(() => {
+    isMounted.value = true;
+
+    // Initial load
+    updateMissingProviderCache();
+
+    const unsubscribe = taskStore.$subscribe(
+        (mutation) => {
+            // Skip updates for streaming progress to prevent lag
+            if (
+                mutation.events &&
+                typeof mutation.events === 'object' &&
+                'key' in mutation.events &&
+                (mutation.events.key === 'executionProgress' ||
+                    mutation.events.key === 'reviewProgress' ||
+                    mutation.events.key === 'executingTaskIds')
+            ) {
+                return;
+            }
+
+            // Debounce cache updates for other changes
+            updateMissingProviderCacheDebounced();
+        },
+        { detached: true }
+    );
+
+    onUnmounted(() => {
+        unsubscribe();
+    });
+});
+
+let cacheUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+function updateMissingProviderCacheDebounced() {
+    if (cacheUpdateTimer) clearTimeout(cacheUpdateTimer);
+    cacheUpdateTimer = setTimeout(() => {
+        updateMissingProviderCache();
+    }, 200);
+}
+
+async function updateMissingProviderCache() {
+    if (!isMounted.value) return;
+    const newCache = new Map<string, MissingProviderInfo | null>();
+    for (const task of taskStore.tasks) {
+        const key = `${task.projectId}_${task.projectSequence}`;
+        newCache.set(key, await getMissingProviderForTask(task));
+    }
+    missingProviderCache.value = newCache;
+}
 
 // Watch for project ID changes (routing)
 watch(projectId, async (newId) => {
@@ -586,13 +622,21 @@ function getSubtasks(projectId: number, parentSequence: number): Task[] {
 
 const liveStreamingContent = computed(() => {
     if (!livePreviewTask.value) return '';
-    const progress = taskStore.executionProgress.get(livePreviewTask.value.id);
+    // Use helper to support composite key lookup
+    const progress = taskStore.getExecutionProgress({
+        projectId: livePreviewTask.value.projectId,
+        projectSequence: livePreviewTask.value.projectSequence,
+    });
     return progress?.content || '';
 });
 
 const liveReviewContent = computed(() => {
     if (!livePreviewTask.value) return '';
-    const progress = taskStore.reviewProgress.get(livePreviewTask.value.id);
+    // Use helper to support composite key lookup
+    const progress = taskStore.getReviewProgress({
+        projectId: livePreviewTask.value.projectId,
+        projectSequence: livePreviewTask.value.projectSequence,
+    });
     return progress?.content || '';
 });
 

@@ -521,6 +521,8 @@ watch(executionMode, (newMode) => {
                 console.log('[TaskDetailPanel] Mode -> Local: Syncing aiProvider:', newProvider);
                 aiProvider.value = newProvider;
             }
+            // Clear API model for local agent
+            aiModel.value = null;
         }
     } else if (newMode === 'api') {
         // Safe check for local provider
@@ -826,7 +828,10 @@ const isSelectedProviderConnected = computed(() => {
  */
 const isGloballyExecuting = computed(() => {
     if (!localTask.value) return false;
-    return taskStore.isTaskExecuting(localTask.value.id);
+    return taskStore.isTaskExecuting({
+        projectId: localTask.value.projectId,
+        projectSequence: localTask.value.projectSequence,
+    });
 });
 
 /**
@@ -899,7 +904,7 @@ function persistExecutionSettings() {
     emit('save', {
         ...localTask.value,
         aiProvider: aiProvider.value,
-        aiModel: aiModel.value,
+        aiModel: executionMode.value === 'local' ? null : aiModel.value,
         reviewAiProvider: reviewAiProvider.value,
         reviewAiModel: reviewAiModel.value,
         executionType: executionMode.value === 'local' ? 'serial' : localTask.value.executionType,
@@ -1562,6 +1567,30 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
     if (meta.duration != null) parts.push(`Duration: ${(meta.duration / 1000).toFixed(1)}s`);
 
     return parts.join(' | ');
+}
+
+// Open file using Electron shell
+async function handleOpenFile(filePath: string) {
+    if (!filePath) return;
+
+    try {
+        const api = getAPI();
+        // If path is relative, try to resolve it against project path if available
+        // For now, we assume the path is either absolute or relative to CWD
+        // functionality depends on how the path is stored in outputConfig
+        await api.shell.openPath(filePath);
+    } catch (error) {
+        console.error('Failed to open file:', error);
+    }
+}
+
+// Format file size
+function formatFileSize(bytes: number): string {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 </script>
 
@@ -3809,7 +3838,102 @@ function formatHistoryMetadata(entry: TaskHistoryEntry): string {
                                                         </div>
                                                     </template>
 
-                                                    <!-- Markdown Content Display -->
+                                                    <!-- Output Result Display (Code view with Auto-scroll) -->
+                                                    <template
+                                                        v-else-if="
+                                                            localTask?.taskType === 'output' &&
+                                                            entry.eventData
+                                                        "
+                                                    >
+                                                        <div class="space-y-1 relative group">
+                                                            <div
+                                                                class="flex items-center justify-between"
+                                                            >
+                                                                <span
+                                                                    class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                                                                >
+                                                                    Output Content
+                                                                </span>
+                                                                <div class="flex gap-2">
+                                                                    <!-- Auto-scroll control (only for accumulated results) -->
+                                                                    <button
+                                                                        v-if="
+                                                                            localTask?.outputConfig
+                                                                                ?.localFile
+                                                                                ?.accumulateResults
+                                                                        "
+                                                                        class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                                                                        @click="
+                                                                            (
+                                                                                $refs[
+                                                                                    `outputCodeEditor_${entry.id}`
+                                                                                ] as any
+                                                                            )?.[0]?.scrollToBottom()
+                                                                        "
+                                                                        title="Scroll to bottom"
+                                                                    >
+                                                                        ⬇ Bottom
+                                                                    </button>
+                                                                    <button
+                                                                        class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                                                                        @click="
+                                                                            handleOpenFile(
+                                                                                localTask
+                                                                                    ?.outputConfig
+                                                                                    ?.localFile
+                                                                                    ?.pathTemplate ||
+                                                                                    'output.txt'
+                                                                            )
+                                                                        "
+                                                                    >
+                                                                        <svg
+                                                                            class="w-3 h-3"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <path
+                                                                                stroke-linecap="round"
+                                                                                stroke-linejoin="round"
+                                                                                stroke-width="2"
+                                                                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                                                            />
+                                                                        </svg>
+                                                                        Open File
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="relative">
+                                                                <CodeEditor
+                                                                    :ref="`outputCodeEditor_${entry.id}`"
+                                                                    :model-value="
+                                                                        typeof entry.eventData
+                                                                            .content === 'string'
+                                                                            ? entry.eventData
+                                                                                  .content
+                                                                            : JSON.stringify(
+                                                                                  entry.eventData
+                                                                                      .content,
+                                                                                  null,
+                                                                                  2
+                                                                              )
+                                                                    "
+                                                                    :language="'markdown'"
+                                                                    :readonly="true"
+                                                                    height="300px"
+                                                                    :show-line-numbers="true"
+                                                                    :auto-scroll-when-at-bottom="
+                                                                        !!localTask?.outputConfig
+                                                                            ?.localFile
+                                                                            ?.accumulateResults
+                                                                    "
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- Markdown Content Display (Default for others) -->
                                                     <template
                                                         v-else-if="
                                                             entry.eventData?.content &&
