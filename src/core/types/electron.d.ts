@@ -616,6 +616,7 @@ export interface TaskHistoryAPI {
         eventData?: unknown,
         metadata?: unknown
     ) => Promise<unknown>;
+    getFirstStartedAt: (projectId: number) => Promise<Record<string, string>>;
 }
 
 export interface OperatorsAPI {

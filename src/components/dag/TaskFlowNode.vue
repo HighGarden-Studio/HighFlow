@@ -24,7 +24,7 @@ const emit = defineEmits<{
     (e: 'approve', task: Task): void;
     (e: 'stop', task: Task): void;
     (e: 'delete', task: Task): void;
-    (e: 'operatorDrop', taskId: number, operatorId: number): void;
+    (e: 'operatorDrop', projectId: number, sequence: number, operatorId: number): void;
     (e: 'provideInput', task: Task): void;
     // New events synced with Kanban Board
     (e: 'edit', task: Task): void;
@@ -114,8 +114,8 @@ function handleConnectProvider(providerId: string) {
     emit('connectProvider', providerId);
 }
 
-function handleOperatorDrop(taskId: number, operatorId: number) {
-    emit('operatorDrop', taskId, operatorId);
+function handleOperatorDrop(projectId: number, sequence: number, operatorId: number) {
+    emit('operatorDrop', projectId, sequence, operatorId);
 }
 
 function handleProvideInput() {
@@ -157,7 +157,12 @@ function handleWrapperDrop(event: DragEvent) {
 
         try {
             const operator = JSON.parse(operatorData);
-            emit('operatorDrop', props.data.task.id, operator.id);
+            emit(
+                'operatorDrop',
+                props.data.task.projectId,
+                props.data.task.projectSequence,
+                operator.id
+            );
         } catch (error) {
             console.error('Failed to parse operator data:', error);
         }
@@ -199,9 +204,8 @@ onMounted(() => {
             handleWrapperDragOver(event);
         });
 
-        nodeRef.value.addEventListener('dragleave', (e: Event) => {
-            const event = e as DragEvent;
-            handleWrapperDragLeave(event);
+        nodeRef.value.addEventListener('dragleave', () => {
+            handleWrapperDragLeave();
         });
     }
 });

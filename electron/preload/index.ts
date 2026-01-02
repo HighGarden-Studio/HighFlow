@@ -44,8 +44,20 @@ const projectsAPI = {
     create: (data: { title: string; description?: string; ownerId: number }) =>
         ipcRenderer.invoke('projects:create', data),
 
-    update: (id: number, data: Partial<{ title: string; description: string; status: string }>) =>
-        ipcRenderer.invoke('projects:update', id, data),
+    update: (
+        id: number,
+        data: Partial<{
+            title: string;
+            description: string;
+            status: string;
+            goal: string;
+            projectGuidelines: string;
+            baseDevFolder: string;
+            aiProvider: string;
+            aiModel: string;
+            emoji: string;
+        }>
+    ) => ipcRenderer.invoke('projects:update', id, data),
 
     delete: (id: number) => ipcRenderer.invoke('projects:delete', id),
 
@@ -1139,6 +1151,9 @@ const taskHistoryAPI = {
         eventData?: Record<string, unknown>,
         metadata?: Record<string, unknown>
     ) => ipcRenderer.invoke('taskHistory:add', projectId, sequence, eventType, eventData, metadata),
+
+    getFirstStartedAt: (projectId: number): Promise<Record<string, string>> =>
+        ipcRenderer.invoke('taskHistory:getFirstStartedAt', projectId),
 };
 
 // ========================================

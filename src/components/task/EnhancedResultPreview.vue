@@ -14,6 +14,7 @@ import { marked } from 'marked';
 import type { MarkedOptions, Tokens } from 'marked';
 import FileTreeItem from './FileTreeItem.vue';
 import { useProjectStore } from '../../renderer/stores/projectStore';
+import { useActivityLogStore } from '../../renderer/stores/activityLogStore';
 import { Diff } from 'vue-diff';
 import 'vue-diff/dist/index.css';
 import CodeEditor from '../common/CodeEditor.vue';
@@ -114,9 +115,16 @@ const markedOptions: MarkedOptions = {
 interface Props {
     task: Task | null;
     open: boolean;
+    taskId?: number; // Explicit ID prop
 }
 
 const props = defineProps<Props>();
+
+// Resolve Task ID reliably
+const resolvedTaskId = computed(() => {
+    if (props.taskId) return props.taskId;
+    return props.task?.id;
+});
 
 const emit = defineEmits<{
     (e: 'close'): void;
@@ -125,6 +133,17 @@ const emit = defineEmits<{
     (e: 'download'): void;
     (e: 'rollback', versionId: string): void;
 }>();
+
+const projectStore = useProjectStore();
+const activityLogStore = useActivityLogStore();
+
+const bottomOffset = computed(() => {
+    const headerHeight = 40;
+    if (activityLogStore.isConsoleOpen) {
+        return `${headerHeight + activityLogStore.consoleHeight}px`;
+    }
+    return `${headerHeight}px`;
+});
 
 // State
 const zoomLevel = ref(100);
@@ -174,7 +193,6 @@ const toggleMaximize = () => {
     isPreviewMaximized.value = !isPreviewMaximized.value;
 };
 
-const projectStore = useProjectStore();
 const currentProject = computed(() => projectStore.currentProject);
 
 // Tree View State
@@ -218,7 +236,8 @@ const fileTree = computed(() => {
     const sortNodes = (nodes: FileTreeNode[]) => {
         nodes.sort((a, b) => {
             if (a.type === b.type) {
-                return a.name.localeCompare(b.name);
+                // Reverse sort by name (descending) to show newest files first if named by date/seq
+                return b.name.localeCompare(a.name);
             }
             return a.type === 'folder' ? -1 : 1;
         });
@@ -229,13 +248,12 @@ const fileTree = computed(() => {
         });
     };
 
-    // Determine Root Path
-    let rootPath = currentProject.value?.baseDevFolder || '';
-    if (rootPath) {
-        rootPath = rootPath.replace(/[/\\]$/, '');
-    }
+    // Determine Root Path for Project Files
+    let rootPath = (currentProject.value?.baseDevFolder || '').replace(/[/\\]$/, '');
 
+    // Separate files
     const projectRootChildren: FileTreeNode[] = [];
+    const externalFiles: { path: string; file: any }[] = [];
 
     files.forEach((file) => {
         // Check if file is inside project root
@@ -265,29 +283,15 @@ const fileTree = computed(() => {
                 }
             });
         } else {
-            // Outside project root - add to top level with full path
-            rootNodes.push({
-                name: file.path,
-                path: file.path,
-                type: 'file',
-                status: file.type,
-                children: [],
-            });
+            // Outside project root
+            externalFiles.push({ path: file.path, file });
         }
     });
 
     sortNodes(projectRootChildren);
-    sortNodes(rootNodes);
 
-    // If we have files in the project root, create a root node for them
-    if (
-        projectRootChildren.length > 0 ||
-        (rootPath && files.length > 0 && rootNodes.length === 0)
-    ) {
-        // Even if projectRootChildren is empty but we have a rootPath, we might want to show the root folder if we want to enforce it?
-        // But logic above only puts items in projectRootChildren if they match.
-        // If projectRootChildren has items, wrap them.
-
+    // Build Project Root Node
+    if (projectRootChildren.length > 0) {
         const pathParts = rootPath.split(/[/\\]/).filter((p) => p);
         const rootName =
             pathParts.length > 0
@@ -301,17 +305,97 @@ const fileTree = computed(() => {
             children: projectRootChildren,
             status: undefined,
         };
-
-        // Add project node to the beginning
-        rootNodes.unshift(projectNode);
+        rootNodes.push(projectNode);
     }
 
-    // Fallback: If no root path configured (and thus everything considered 'outside'),
-    // maybe we should just return rootNodes which contains all files as flat list.
-    // Or if we want to support the old 'common prefix' logic when NO project root is defined?
-    // User requirement: "If not in project folder, show full path". This implies strict project root usage.
-    // If no project root definition, `rootPath` is empty, so everything goes to `else` block (rootNodes push).
-    // This results in valid flat list of full paths.
+    // Process External Files (Group by common prefix)
+    if (externalFiles.length > 0) {
+        // Simple common prefix detection
+        const paths = externalFiles.map((f) => f.path);
+        const splitPaths = paths.map((p) => p.split(/[/\\]/));
+        let commonPrefixParts: string[] = splitPaths[0] || [];
+
+        for (let i = 1; i < splitPaths.length; i++) {
+            const current = splitPaths[i];
+            let j = 0;
+            while (
+                j < commonPrefixParts.length &&
+                j < current.length &&
+                commonPrefixParts[j] === current[j]
+            ) {
+                j++;
+            }
+            commonPrefixParts = commonPrefixParts.slice(0, j);
+        }
+
+        const commonPrefix = commonPrefixParts.join('/');
+        const externalRootChildren: FileTreeNode[] = [];
+
+        externalFiles.forEach(({ path: filePath, file }) => {
+            let relativePath = filePath;
+            let effectiveRoot = '';
+
+            if (commonPrefix && filePath.startsWith(commonPrefix)) {
+                relativePath = filePath.substring(commonPrefix.length).replace(/^[/\\]/, '');
+                effectiveRoot = commonPrefix;
+            }
+
+            if (!commonPrefix || !effectiveRoot) {
+                // Flat add
+                rootNodes.push({
+                    name: filePath,
+                    path: filePath,
+                    type: 'file',
+                    status: file.type,
+                    children: [],
+                });
+            } else {
+                const parts = relativePath.split(/[/\\]/);
+                let currentLevel = externalRootChildren;
+                let currentPath = effectiveRoot;
+
+                parts.forEach((part, index) => {
+                    if (!part) return;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    const isLast = index === parts.length - 1;
+
+                    if (isLast) {
+                        currentLevel.push({
+                            name: part,
+                            path: filePath,
+                            type: 'file',
+                            status: file.type,
+                            children: [],
+                        });
+                    } else {
+                        const folder = findOrCreateFolder(currentLevel, part, currentPath);
+                        currentLevel = folder.children!;
+                    }
+                });
+            }
+        });
+
+        sortNodes(externalRootChildren);
+
+        if (externalRootChildren.length > 0) {
+            // Check if common prefix is meaningful (not root)
+            const prefixParts = commonPrefixParts.filter((p) => p);
+            const folderName =
+                prefixParts.length > 0 ? prefixParts[prefixParts.length - 1] : 'External Output';
+
+            // If the folder name is the project name or similar, it's nice; otherwise 'External Output'
+
+            rootNodes.push({
+                name: folderName,
+                path: commonPrefix,
+                type: 'folder',
+                children: externalRootChildren,
+                status: undefined,
+            });
+        }
+    }
+
+    sortNodes(rootNodes);
 
     return rootNodes;
 });
@@ -324,9 +408,13 @@ const onTreeSelect = (path: string) => {
 };
 
 const fetchHistory = async () => {
-    if (!props.task?.id) return;
+    // Use composite key check
+    if (!props.task?.projectId || !props.task?.projectSequence) return;
     try {
-        console.log('[EnhancedResultPreview] Fetching history entries for task:', props.task.id);
+        console.log('[EnhancedResultPreview] Fetching history entries for task (composite):', {
+            pid: props.task.projectId,
+            seq: props.task.projectSequence,
+        });
         const entries = await (window as any).electron.taskHistory.getByTask(
             props.task.projectId,
             props.task.projectSequence
@@ -611,6 +699,30 @@ const updateResultFiles = async () => {
             }
         }
 
+        // --- NEW: Add generated files from Task Metadata (Persistent History) ---
+        const generatedFiles = (props.task as any)?.metadata?.generatedFiles || [];
+        for (const f of generatedFiles) {
+            if (f.path && !filesMap.has(f.path)) {
+                let size = f.size || 0;
+                try {
+                    const stats = await window.electron.fs.stat(f.path);
+                    size = stats.size;
+
+                    filesMap.set(f.path, {
+                        path: f.path,
+                        absolutePath: f.path,
+                        type: 'created',
+                        size: size,
+                        extension: f.path.split('.').pop() || '',
+                    });
+                } catch (e) {
+                    // File might be missing/deleted, skipping implies user only sees existing files
+                    // which matches "File Tree" expectation.
+                }
+            }
+        }
+        // -----------------------------------------------------------------------
+
         // Extract files from transcript tool results
         transcriptData.forEach((item: any) => {
             if (item.role === 'user' && item.type === 'tool_result' && item.metadata?.result) {
@@ -682,6 +794,125 @@ const updateResultFiles = async () => {
             }
         }
 
+        // --- NEW: Directory Scanning for Output Tasks (Local File) ---
+        // Scans for all files matching the output template to show history/versions
+        if (
+            props.task?.taskType === 'output' &&
+            (props.task.outputConfig as any)?.destination === 'local_file'
+        ) {
+            try {
+                const config = (props.task.outputConfig as any).localFile;
+                if (config?.pathTemplate) {
+                    const template = config.pathTemplate; // e.g., "TRPG-{{date}}.md"
+
+                    // Construct regex from template: replace {{...}} with .*
+                    const escapedTemplate = template.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const patternStr = escapedTemplate.replace(/\\\{\\\{[^}]+\\\}\\\}/g, '.*');
+                    const fileRegex = new RegExp(`^${patternStr}$`);
+
+                    // Determine directory to scan
+                    // Logic must match LocalFileConnector as closely as possible
+                    let scanDir = '';
+
+                    // Validate taskResultPath is actually a path and not content
+                    const isValidPath = (p: string) => {
+                        if (!p || typeof p !== 'string') return false;
+                        if (p.length > 500) return false; // Sanity check for length
+                        // Check for absolute path indicators
+                        return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
+                    };
+
+                    if (isValidPath(taskResultPath)) {
+                        // If we have a hint from result, use its directory
+                        // Handle windows/unix separators
+                        const parts = taskResultPath.split(/[/\\]/);
+                        parts.pop(); // remove filename
+                        scanDir = parts.join('/');
+                    } else if (currentProject.value?.baseDevFolder) {
+                        scanDir = currentProject.value.baseDevFolder;
+                    } else {
+                        // Fallback to downloads: Downloads/AI_Workflow_Output/ProjectName
+                        // This matches LocalFileConnector's default behavior
+                        try {
+                            const paths = await window.electron.app.getPaths();
+                            const downloadsPath = paths.downloads;
+                            const projectName =
+                                currentProject.value?.title ||
+                                (props.task as any)?.projectName ||
+                                'default';
+                            // Sanitize project name (simple version)
+                            const sanitizedProjectName = projectName
+                                .replace(/[^a-z0-9]/gi, '_')
+                                .toLowerCase();
+
+                            // Try multiple variants if exact match unknown, but default connector uses simple sanitization
+                            // Connector: this.sanitizeFilename(context?.projectName || 'default')
+                            // We need to match that logic or scan parent.
+                            // Let's assume standard folder structure.
+
+                            scanDir = `${downloadsPath}/AI_Workflow_Output/${sanitizedProjectName}`;
+                            console.log(
+                                '[EnhancedResultPreview] Using fallback Downloads path:',
+                                scanDir
+                            );
+                        } catch (err) {
+                            console.warn(
+                                '[EnhancedResultPreview] Failed to get downloads path:',
+                                err
+                            );
+                        }
+                    }
+
+                    if (scanDir) {
+                        console.log(
+                            `[EnhancedResultPreview] Scanning directory for output files: ${scanDir} with pattern ${patternStr}`
+                        );
+                        try {
+                            const dirFiles = await window.electron.fs.readDir(scanDir);
+                            console.log(
+                                `[EnhancedResultPreview] Found ${dirFiles.length} files in ${scanDir}. Checking against regex:`,
+                                fileRegex
+                            );
+
+                            let matchedCount = 0;
+                            for (const fileItem of dirFiles) {
+                                if (fileItem.isDirectory) continue;
+                                if (fileRegex.test(fileItem.name)) {
+                                    matchedCount++;
+                                    const fullPath = `${scanDir}/${fileItem.name}`;
+
+                                    // Add to map if not exists
+                                    if (!filesMap.has(fullPath)) {
+                                        filesMap.set(fullPath, {
+                                            path: fullPath,
+                                            absolutePath: fullPath,
+                                            type: 'created',
+                                            size: fileItem.size,
+                                            mtime: fileItem.mtimeMs || 0, // Assuming list_dir returns mtimeMs or similar? Need to verify or just use filename logic if unavailable
+                                            extension: fileItem.name.split('.').pop() || '',
+                                        });
+                                    }
+                                }
+                            }
+                            console.log(`[EnhancedResultPreview] Matched ${matchedCount} files.`);
+                        } catch (scanErr) {
+                            console.warn('[EnhancedResultPreview] Directory scan failed:', scanErr);
+                        }
+                    } else {
+                        console.warn(
+                            '[EnhancedResultPreview] No scanDir determined. taskResultPath:',
+                            taskResultPath,
+                            'baseDevFolder:',
+                            currentProject.value?.baseDevFolder
+                        );
+                    }
+                }
+            } catch (e) {
+                console.error('[EnhancedResultPreview] Error in directory scanning:', e);
+            }
+        }
+        // -------------------------------------------------------------
+
         if (
             typeof taskResultPath === 'string' &&
             taskResultPath.startsWith('/') &&
@@ -697,6 +928,7 @@ const updateResultFiles = async () => {
                         absolutePath: taskResultPath,
                         type: 'created',
                         size: stats.size,
+                        mtime: stats.mtimeMs || 0,
                         extension: taskResultPath.split('.').pop() || 'txt',
                     });
                     console.log(
@@ -727,11 +959,18 @@ const updateResultFiles = async () => {
         }
 
         const files = Array.from(filesMap.values());
-        console.log('[EnhancedResultPreview] resultFiles computed:', {
-            existingFilesCount: existingFiles.length,
-            metadataFilesCount: metadataFiles.length,
-            totalFiles: files.length,
-            taskType: props.task?.taskType,
+
+        // Sort files by mtime descending (newest first), then by path descending
+        files.sort((a: any, b: any) => {
+            const timeA = a.mtime || 0;
+            const timeB = b.mtime || 0;
+            if (timeA !== timeB) return timeB - timeA;
+            return b.path.localeCompare(a.path);
+        });
+
+        console.log('[EnhancedResultPreview] resultFiles computed & sorted:', {
+            count: files.length,
+            top: files[0]?.path,
         });
 
         resultFiles.value = files;
@@ -815,15 +1054,38 @@ watch(
 );
 
 // Load history on mount as well (in case panel is already open)
-onMounted(() => {
-    if (props.open && props.task?.id) {
+onMounted(async () => {
+    // Ensure project is loaded for baseDevFolder
+    if (props.task?.projectId && !currentProject.value) {
         console.log(
-            '[EnhancedResultPreview] Component mounted, loading history for task:',
-            props.task.id
+            '[EnhancedResultPreview] Fetching project for baseDevFolder context:',
+            props.task.projectId
+        );
+        await projectStore.fetchProjects();
+    }
+
+    if (props.open && props.task?.projectId && props.task?.projectSequence) {
+        console.log(
+            '[EnhancedResultPreview] Component mounted, loading history for task (Composite):',
+            { pid: props.task.projectId, seq: props.task.projectSequence }
         );
         fetchHistory();
     }
 });
+
+// Watch for task identity changes to load history
+watch(
+    () => [props.task?.projectId, props.task?.projectSequence],
+    async ([newPid, newSeq]) => {
+        if (newPid && newSeq) {
+            console.log('[EnhancedResultPreview] Task Identity changed, fetching history:', {
+                newPid,
+                newSeq,
+            });
+            fetchHistory();
+        }
+    }
+);
 
 // Watch history changes to trigger file selection for Output tasks
 watch(
@@ -844,6 +1106,20 @@ watch(
                     );
                 }
             });
+        }
+    }
+);
+
+// Watch resultFiles to ensure auto-selection happens when files are actually loaded (async)
+watch(
+    () => resultFiles.value.length,
+    (count) => {
+        if (count > 0 && !selectedFile.value) {
+            selectedFile.value = resultFiles.value[0];
+            console.log(
+                '[EnhancedResultPreview] Auto-selected first file from resultFiles:',
+                resultFiles.value[0].path
+            );
         }
     }
 );
@@ -878,10 +1154,12 @@ const loadContent = async () => {
     if (absolutePath) {
         // Do not set loading true for polling updates to prevent flickering?
         if (!content.value) isContentLoading.value = true;
+        console.log('[EnhancedResultPreview] Loading content from:', absolutePath);
 
         try {
             const exists = await window.electron.fs.exists(absolutePath);
             if (!exists) {
+                console.warn('[EnhancedResultPreview] File does not exist:', absolutePath);
                 if (staticContent) {
                     content.value = staticContent;
                 } else {
@@ -891,14 +1169,21 @@ const loadContent = async () => {
             }
 
             const ext = extension?.toLowerCase() || '';
+            let loadedContent = '';
             // Check if image
             if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
                 const base64 = await window.electron.fs.readFileBase64(absolutePath);
                 const mime = `image/${ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext}`;
-                content.value = `data:${mime};base64,${base64}`;
+                loadedContent = `data:${mime};base64,${base64}`;
             } else {
-                content.value = await window.electron.fs.readFile(absolutePath);
+                loadedContent = await window.electron.fs.readFile(absolutePath);
             }
+
+            console.log('[EnhancedResultPreview] Content loaded, length:', loadedContent?.length);
+            content.value = loadedContent;
+
+            // Force verify format
+            console.log('[EnhancedResultPreview] Current outputFormat:', outputFormat.value);
         } catch (e: any) {
             console.error('[EnhancedResultPreview] Failed to load content:', e);
             content.value = `Error loading file: ${e.message}`;
@@ -1375,7 +1660,16 @@ function renderMarkdown() {
         return;
     }
 
-    markdownHtml.value = renderMarkdownContent(content.value);
+    try {
+        markdownHtml.value = renderMarkdownContent(content.value);
+        console.log(
+            '[EnhancedResultPreview] renderMarkdown success. HTML length:',
+            markdownHtml.value.length
+        );
+    } catch (e) {
+        console.error('[EnhancedResultPreview] renderMarkdown failed:', e);
+        markdownHtml.value = '<p class="text-red-500">Error rendering markdown</p>';
+    }
 }
 
 function escapeHtml(text: string): string {
@@ -1711,9 +2005,12 @@ onMounted(() => {
 
             <!-- Panel -->
             <div
-                class="absolute inset-y-0 right-0 flex shadow-2xl"
+                class="absolute top-0 right-0 flex shadow-2xl transition-all duration-300 ease-in-out"
                 :class="isFullscreen ? 'inset-x-0 w-full' : ''"
-                :style="!isFullscreen ? { width: `${panelWidth}%` } : {}"
+                :style="{
+                    width: !isFullscreen ? `${panelWidth}%` : undefined,
+                    bottom: bottomOffset,
+                }"
             >
                 <!-- Resize Handle -->
                 <div
@@ -2403,9 +2700,7 @@ onMounted(() => {
                                                 v-else-if="
                                                     outputFormat === 'code' ||
                                                     (task?.taskType === 'output' &&
-                                                        ['markdown', 'text', 'log'].includes(
-                                                            outputFormat
-                                                        ))
+                                                        ['text', 'log'].includes(outputFormat))
                                                 "
                                                 class="h-full flex flex-col"
                                             >
@@ -2461,8 +2756,22 @@ onMounted(() => {
                                             <!-- Markdown View -->
                                             <div
                                                 v-else-if="outputFormat === 'markdown'"
-                                                class="h-full flex flex-col"
+                                                class="h-full flex flex-col relative"
                                             >
+                                                <!-- Auto-scroll controls overlay -->
+                                                <div
+                                                    v-if="
+                                                        task?.outputConfig?.localFile
+                                                            ?.accumulateResults
+                                                    "
+                                                    class="absolute bottom-4 right-6 z-10 flex gap-2"
+                                                >
+                                                    <div
+                                                        class="px-2 py-1 bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 text-xs rounded-full shadow-lg border border-blue-200 dark:border-blue-700 font-medium"
+                                                    >
+                                                        Auto-scroll Active
+                                                    </div>
+                                                </div>
                                                 <!-- AI Response: Structured Display (when no file selected) -->
                                                 <div
                                                     v-if="!selectedFile"
@@ -3488,52 +3797,53 @@ onMounted(() => {
                                 </div>
                             </div>
                             <!-- Close Upper Area -->
+                        </div>
+                    </div>
 
-                            <!-- Footer Area -->
-                            <div
-                                class="flex-shrink-0 flex flex-col border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 z-10"
+                    <!-- Global Footer Area (For Feedback) -->
+                    <div
+                        v-if="task?.taskType !== 'output'"
+                        class="flex-shrink-0 flex flex-col border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 z-10"
+                    >
+                        <!-- Feedback Section -->
+                        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                             >
-                                <!-- Feedback Section -->
-                                <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                                    <label
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                    >
-                                        수정 요청
-                                    </label>
-                                    <textarea
-                                        v-model="feedback"
-                                        rows="2"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                                        placeholder="수정이 필요한 내용을 입력하세요..."
-                                    />
-                                </div>
+                                수정 요청
+                            </label>
+                            <textarea
+                                v-model="feedback"
+                                rows="2"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
+                                placeholder="수정이 필요한 내용을 입력하세요..."
+                            />
+                        </div>
 
-                                <!-- Actions -->
-                                <div class="px-4 py-3">
-                                    <div class="flex items-center justify-between">
-                                        <button
-                                            class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                                            @click="handleClose"
-                                        >
-                                            닫기
-                                        </button>
-                                        <div class="flex gap-2">
-                                            <button
-                                                class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                :disabled="!feedback.trim()"
-                                                @click="handleRetry"
-                                            >
-                                                피드백과 함께 재시도
-                                            </button>
-                                            <button
-                                                v-if="task?.status === 'in_review'"
-                                                class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-                                                @click="handleApprove"
-                                            >
-                                                승인
-                                            </button>
-                                        </div>
-                                    </div>
+                        <!-- Actions -->
+                        <div class="px-4 py-3">
+                            <div class="flex items-center justify-between">
+                                <button
+                                    class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                                    @click="handleClose"
+                                >
+                                    닫기
+                                </button>
+                                <div class="flex gap-2">
+                                    <button
+                                        class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        :disabled="!feedback.trim()"
+                                        @click="handleRetry"
+                                    >
+                                        피드백과 함께 재시도
+                                    </button>
+                                    <button
+                                        v-if="task?.status === 'in_review'"
+                                        class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                        @click="handleApprove"
+                                    >
+                                        승인
+                                    </button>
                                 </div>
                             </div>
                         </div>

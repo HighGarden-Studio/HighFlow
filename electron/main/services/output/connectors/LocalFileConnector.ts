@@ -23,6 +23,7 @@ export class LocalFileConnector implements OutputConnector {
             let filePath = config.localFile.pathTemplate;
 
             // Basic template replacement
+            // Basic template replacement
             const replacements: Record<string, string> = {
                 '{{date}}': new Date().toISOString().split('T')[0],
                 '{{time}}': new Date().toISOString().split('T')[1].replace(/:/g, '-').split('.')[0],
@@ -34,9 +35,16 @@ export class LocalFileConnector implements OutputConnector {
                 '{{task.title}}': context?.taskTitle ? String(context.taskTitle) : 'unknown-task',
             };
 
+            console.log(`[LocalFileConnector] Resolving path template: "${filePath}"`);
             for (const [key, value] of Object.entries(replacements)) {
-                filePath = filePath.replace(new RegExp(key, 'g'), this.sanitizeFilename(value));
+                // Use split/join or replaceAll to avoid Regex special char issues
+                if (filePath.includes(key)) {
+                    const cleanValue = this.sanitizeFilename(value);
+                    console.log(`[LocalFileConnector] Replacing "${key}" with "${cleanValue}"`);
+                    filePath = filePath.split(key).join(cleanValue);
+                }
             }
+            console.log(`[LocalFileConnector] Resolved path: "${filePath}"`);
 
             // Handle relative paths
             if (!path.isAbsolute(filePath)) {

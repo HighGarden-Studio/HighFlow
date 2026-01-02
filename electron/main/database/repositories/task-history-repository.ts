@@ -349,6 +349,42 @@ export class TaskHistoryRepository {
     async deleteByProjectId(projectId: number): Promise<void> {
         await db.delete(taskHistory).where(eq(taskHistory.taskProjectId, projectId));
     }
+
+    /**
+     * Get the first 'execution_started' timestamp for all tasks in a project
+     * Returns a Map where key is projectSequence and value is the Date
+     */
+    async getFirstStartedAtMap(projectId: number): Promise<Map<number, Date>> {
+        // Find the earliest 'execution_started' event for each task in the project
+        // Since Drizzle's groupBy support might be tricky with simple query builder,
+        // we can fetch all start events and reduce them in JS, or use a raw query if needed.
+        // For distinct tasks, fetching all start events shouldn't be too huge unless millions of retries.
+        // Let's try JS reduction for safety and simplicity first.
+
+        const startEvents = await db
+            .select({
+                taskSequence: taskHistory.taskSequence,
+                createdAt: taskHistory.createdAt,
+            })
+            .from(taskHistory)
+            .where(
+                and(
+                    eq(taskHistory.taskProjectId, projectId),
+                    eq(taskHistory.eventType, 'execution_started')
+                )
+            )
+            .orderBy(taskHistory.createdAt); // ASC order ensures first one is earliest
+
+        const map = new Map<number, Date>();
+
+        for (const event of startEvents) {
+            if (!map.has(event.taskSequence)) {
+                map.set(event.taskSequence, event.createdAt);
+            }
+        }
+
+        return map;
+    }
 }
 
 // Singleton instance

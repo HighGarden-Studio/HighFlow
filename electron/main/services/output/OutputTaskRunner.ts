@@ -111,22 +111,41 @@ export class OutputTaskRunner {
                     }
                 }
 
+                // Manage generated files history
+                const existingMetadata = (task.metadata as any) || {};
+                const previousFiles = Array.isArray(existingMetadata.generatedFiles)
+                    ? existingMetadata.generatedFiles
+                    : [];
+
+                let newFiles = [...previousFiles];
+                if (isLocalFile && result?.metadata?.path) {
+                    // Remove duplicate entry for same path to update timestamp
+                    newFiles = newFiles.filter((f: any) => f.path !== result.metadata.path);
+                    newFiles.push({
+                        path: result.metadata.path,
+                        timestamp: new Date().toISOString(),
+                        size: result.metadata.size || 0,
+                    });
+                }
+
+                // Update task with new metadata containing the file history
+                const updatedMetadata = {
+                    ...existingMetadata,
+                    generatedFiles: newFiles,
+                };
+
                 await taskRepository.updateByKey(projectId, projectSequence, {
+                    metadata: updatedMetadata,
                     executionResult: {
                         // For local files, we NOW store the content as well to ensure UI display
-                        // We rely on the fact that these are text logs and usually manageable size.
                         content: uiContent,
                         filePath: isLocalFile ? result.metadata?.path : undefined,
-                        metadata: result.metadata,
+                        // Include generatedFiles in executionResult metadata too for easy access
+                        metadata: { ...result.metadata, generatedFiles: newFiles },
                         provider: connector.id,
                         status: 'success',
                     },
                     // For local files, store path in result for preview to read file
-                    // OR should we store content? Let's treat 'result' as the main output value.
-                    // If we want the accumulated text to be usable by subsequent tasks easily,
-                    // content is better. But 'path' tells where it is.
-                    // Let's keep existing logic for 'result' field (Path for file),
-                    // but ensure executionResult has content for UI.
                     result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
@@ -137,6 +156,7 @@ export class OutputTaskRunner {
                     projectSequence: task.projectSequence,
                     resultPath: isLocalFile ? result.metadata?.path : '[content]',
                     filePathInExecutionResult: isLocalFile ? result.metadata?.path : undefined,
+                    totalGeneratedFiles: newFiles.length,
                 });
             } else {
                 await taskRepository.updateByKey(projectId, projectSequence, {

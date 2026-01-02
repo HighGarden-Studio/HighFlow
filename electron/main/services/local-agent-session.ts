@@ -190,25 +190,24 @@ export class LocalAgentSession extends EventEmitter {
             throw new Error('Another message is being processed');
         }
 
-        const timeout = options.timeout || 300000; // 5 minutes default
+        const timeout = options.timeout ?? 0; // 0 = unlimited
 
         return new Promise((resolve, reject) => {
             this.currentResolve = resolve;
             this.currentReject = reject;
             this.currentOnChunk = options.onChunk || null;
             this.responseBuffer = '';
-            this.transcript = []; // Reset transcript for new turn (or keep history? Usually per-response object implies turn transcript)
-            // But if we want full history, we might want to keep it.
-            // However, the `AgentResponse` is for THIS turn. The UI accumulates.
-            // So reset is correct for the returned object.
+            this.transcript = [];
 
             this.status = 'running';
             this.lastActivityAt = new Date();
 
-            // Set timeout
-            this.responseTimeout = setTimeout(() => {
-                this.handleTimeout();
-            }, timeout);
+            // Set timeout only if positive
+            if (timeout > 0) {
+                this.responseTimeout = setTimeout(() => {
+                    this.handleTimeout();
+                }, timeout);
+            }
 
             // Send message based on agent type
             const input = this.formatInput(message, options);

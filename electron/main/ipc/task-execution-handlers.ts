@@ -1808,7 +1808,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                         const prompt = buildTaskPrompt(task, previousResults, project);
                         const response = await sessionManager.sendMessage(sessionInfo.id, prompt, {
-                            timeout: options?.timeout || 300000,
+                            timeout: options?.timeout ?? 0,
                             onChunk: (chunk) => {
                                 const state = activeExecutions.get(
                                     getTaskKey(projectId, projectSequence)

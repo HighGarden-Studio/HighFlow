@@ -351,6 +351,15 @@ const autoReviewProviderDisplay = computed(() => {
 });
 
 const autoReviewModelDisplay = computed(() => {
+    // Check if the relevant provider is local
+    const providerId = isEditingAutoReview.value
+        ? editedAutoReviewProvider.value
+        : effectiveAutoReview.value.provider || props.project.metadata?.autoReviewProvider;
+
+    if (providerId && isLocalAgentProvider(providerId).isLocal) {
+        return '';
+    }
+
     // If editing, show edited value
     if (isEditingAutoReview.value) {
         return editedAutoReviewModel.value || '미설정';

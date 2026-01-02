@@ -228,6 +228,8 @@ async function registerIpcHandlers(): Promise<void> {
                 title: string;
                 description: string;
                 status: string;
+                goal?: string | null;
+                emoji?: string | null;
                 baseDevFolder?: string | null;
                 projectGuidelines?: string | null;
             }>

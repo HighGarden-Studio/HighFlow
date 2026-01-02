@@ -193,6 +193,10 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             const data = await api.tasks.list(projectId, taskFilters);
+            console.log('[TaskStore] fetchTasks response:', {
+                count: data?.length,
+                sample: data?.[0],
+            });
             tasks.value = data;
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to fetch tasks';

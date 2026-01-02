@@ -151,6 +151,7 @@ const isLocalProvider = computed(() => {
 const displayModel = computed(() => {
     if (isLocalProvider.value) return '';
     const model = assignedOperator.value?.aiModel || props.task.aiModel;
+    if (model === 'cli-default') return '';
     return model || 'Default Model';
 });
 
@@ -823,12 +824,7 @@ function hexToRgba(hex: string, alpha: number) {
                         </svg>
                         {{ task.isPaused ? '재개' : '진행중' }}
                     </button>
-                    <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-1 shadow-sm"
-                        @click="handlePreviewResult"
-                    >
-                        결과보기
-                    </button>
+
                     <button
                         class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                         @click="handleStop"

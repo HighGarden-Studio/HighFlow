@@ -100,12 +100,22 @@ const resultPreviewTask = computed(() => {
     const task = taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq);
     if (!task) return null;
 
+    console.log('[DAGView] resultPreviewTask source task:', {
+        id: task.id,
+        pId,
+        seq,
+        projectSequence: task.projectSequence,
+        fullTask: task,
+    });
+
     // Augment with execution progress if available
     const progress = taskStore.executionProgress.get(task.id);
     const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
 
     return {
         ...task,
+        id: task.id, // Explicitly preserve ID
+        projectId: task.projectId, // Explicitly preserve Project ID
         result:
             (task as any).result ||
             (task as any).executionResult?.content ||
@@ -1540,14 +1550,7 @@ onMounted(async () => {
                         @retry="handleTaskRetry(data.task)"
                         @stop="handleStop(data.task)"
                         @delete="handleTaskDelete(data.task)"
-                        @operator-drop="
-                            (opId) =>
-                                handleOperatorDrop(
-                                    data.task.projectId,
-                                    data.task.projectSequence,
-                                    opId
-                                )
-                        "
+                        @operator-drop="handleOperatorDrop"
                         @provide-input="handleProvideInput"
                     />
                 </template>
@@ -1600,6 +1603,7 @@ onMounted(async () => {
             v-if="showResultPreview && resultPreviewTask"
             :open="showResultPreview"
             :task="resultPreviewTask"
+            :taskId="resultPreviewTask.id"
             @close="showResultPreview = false"
         />
 

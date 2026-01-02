@@ -12,6 +12,7 @@ const props = defineProps<{
     tasks: Task[];
     viewMode: 'standard' | 'swimlane';
     zoomLevel: 'hour' | 'day' | 'week' | 'month';
+    firstStartedAtMap?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -67,8 +68,41 @@ const TICK_WIDTH = computed(() => {
 
 const isDetailedView = computed(() => props.zoomLevel === 'hour');
 
+// Helper to get actual start date if available
+function getActualStartDate(task: Task): Date | null {
+    if (props.firstStartedAtMap && props.firstStartedAtMap[task.projectSequence]) {
+        return new Date(props.firstStartedAtMap[task.projectSequence]);
+    }
+    if (task.startedAt) return new Date(task.startedAt);
+    return null;
+}
+
 // Helper to get task duration in ms
 function getTaskDurationMs(task: Task): number {
+    const actualStart = getActualStartDate(task);
+
+    if (actualStart) {
+        if (task.completedAt) {
+            const end = new Date(task.completedAt);
+            const duration = end.getTime() - actualStart.getTime();
+            return duration > 0 ? duration : 60 * 1000; // Min 1 min
+        }
+
+        // If currently running (in_progress), show elapsed time
+        if (task.status === 'in_progress') {
+            const duration = new Date().getTime() - actualStart.getTime();
+            return duration > 0 ? duration : 60 * 1000;
+        }
+
+        // If started but paused/failed/todo (restarted?), show lifespan so far?
+        // Or revert to estimated if not 'done'?
+        // The user asked for "First Started At" to "Last Completed At".
+        // If not completed, maybe just from First Start to Now?
+        // Let's assume lifespan until now if started.
+        const duration = new Date().getTime() - actualStart.getTime();
+        return duration > 0 ? duration : 60 * 1000;
+    }
+
     if (task.estimatedMinutes) {
         return task.estimatedMinutes * 60 * 1000;
     }
@@ -77,7 +111,9 @@ function getTaskDurationMs(task: Task): number {
 
 // Helper to get task start date
 function getTaskStartDate(task: Task): Date {
-    if (task.startedAt) return new Date(task.startedAt);
+    const actualStart = getActualStartDate(task);
+    if (actualStart) return actualStart;
+
     if (task.dueDate) {
         const end = new Date(task.dueDate);
         const duration = getTaskDurationMs(task);

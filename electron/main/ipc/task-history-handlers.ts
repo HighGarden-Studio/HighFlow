@@ -159,5 +159,19 @@ export function registerTaskHistoryHandlers(): void {
         }
     );
 
+    /**
+     * Get first started timestamps for all tasks in a project
+     */
+    ipcMain.handle('taskHistory:getFirstStartedAt', async (_event, projectId: number) => {
+        try {
+            const map = await taskHistoryRepository.getFirstStartedAtMap(projectId);
+            // Convert Map to plain object for IPC serialization
+            return Object.fromEntries(map);
+        } catch (error) {
+            console.error('Error getting first started at map:', error);
+            throw error;
+        }
+    });
+
     console.log('Task history IPC handlers registered');
 }

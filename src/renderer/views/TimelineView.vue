@@ -13,6 +13,7 @@ import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import GanttChart from '../../components/timeline/GanttChart.vue';
 import type { Task } from '@core/types/database';
+import { getAPI } from '../../utils/electron';
 
 const route = useRoute();
 const router = useRouter();
@@ -29,6 +30,7 @@ const zoomLevel = ref<'hour' | 'day' | 'week' | 'month'>('hour');
 const selectedTask = ref<Task | null>(null);
 const showTaskDetail = ref(false);
 const showResultPreview = ref(false);
+const firstStartedAtMap = ref<Record<string, string>>({});
 
 // Computed
 const project = computed(() => projectStore.currentProject);
@@ -71,7 +73,6 @@ async function handleApproveTask(task: Task) {
 }
 
 function handleViewResults(task: Task) {
-    // Open result preview panel (like Kanban view)
     selectedTask.value = task;
     showResultPreview.value = true;
 }
@@ -84,6 +85,16 @@ function closeResultPreview() {
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
     await taskStore.fetchTasks(projectId.value);
+
+    // Fetch first started dates
+    const api = getAPI();
+    if (api.taskHistory?.getFirstStartedAt) {
+        try {
+            firstStartedAtMap.value = await api.taskHistory.getFirstStartedAt(projectId.value);
+        } catch (e) {
+            console.error('Failed to fetch first started dates:', e);
+        }
+    }
 });
 </script>
 
@@ -191,18 +202,19 @@ onMounted(async () => {
             <div v-if="loading" class="absolute inset-0 flex items-center justify-center">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
-
             <GanttChart
                 v-else
                 :tasks="tasks"
                 :view-mode="viewMode"
                 :zoom-level="zoomLevel"
+                :first-started-at-map="firstStartedAtMap"
                 class="w-full h-full"
                 @task-click="handleTaskClick"
                 @execute-task="handleExecuteTask"
                 @approve-task="handleApproveTask"
                 @view-results="handleViewResults"
             />
+            <!-- ... -->
         </main>
 
         <!-- Project Info Modal -->

@@ -335,9 +335,9 @@ async function handleTaskSave(task: Task) {
 }
 
 async function handleTaskExecute(task: Task) {
-    console.log('Execute task:', task.id);
+    console.log('Execute task:', task.projectId, task.projectSequence);
 
-    const result = await taskStore.executeTask(task.id);
+    const result = await taskStore.executeTask(task.projectId, task.projectSequence);
     if (!result.success) {
         console.error('Failed to execute task:', result.error);
         // Show warning notification for validation errors
@@ -1024,9 +1024,9 @@ async function handleRejectTask() {
 }
 
 // Operator assignment handler
-async function handleOperatorDrop(taskId: number, operatorId: number) {
+async function handleOperatorDrop(projectId: number, sequence: number, operatorId: number) {
     try {
-        await taskStore.updateTask(taskId, { assignedOperatorId: operatorId });
+        await taskStore.updateTask(projectId, sequence, { assignedOperatorId: operatorId });
         uiStore.showToast({
             type: 'success',
             message: 'Operator assigned successfully',

@@ -445,6 +445,21 @@ watch(
                 tags: operator.tags || [],
             };
 
+            // Detect Local Agent
+            const provider = operator.aiProvider;
+            if (['claude-code', 'codex', 'antigravity'].includes(provider as string)) {
+                aiMode.value = 'local';
+                const reverseMap: Record<string, string> = {
+                    'claude-code': 'claude',
+                    codex: 'codex',
+                    antigravity: 'antigravity',
+                };
+                localAgent.value = reverseMap[provider as string] || null;
+            } else {
+                aiMode.value = 'api';
+                localAgent.value = null;
+            }
+
             // Try to match with preset
             const matchedPreset = rolePresetOptions.find((p) => p.label === operator.role);
             selectedPreset.value = matchedPreset?.value || 'custom';
@@ -461,7 +476,7 @@ function save() {
         avatar: form.value.avatar,
         color: form.value.color,
         aiProvider: form.value.aiProvider,
-        aiModel: form.value.aiModel,
+        aiModel: aiMode.value === 'local' ? 'cli-default' : form.value.aiModel,
         systemPrompt: form.value.systemPrompt,
         isReviewer: form.value.isReviewer ? 1 : 0,
         specialty: JSON.stringify(form.value.specialty || []),

@@ -568,6 +568,14 @@ watch(aiModel, () => {
 watch(
     () => reviewAiProvider.value,
     (provider) => {
+        // If provider is local, clear model and return
+        if (provider && isLocalAgentProvider(provider).isLocal) {
+            reviewAiModel.value = null;
+            if (isInitializing.value) return;
+            persistExecutionSettings();
+            return;
+        }
+
         const defaultModel = getDefaultModelForProvider(provider);
         if (
             !reviewProviderModelOptions.value.some((opt) => opt.id === reviewAiModel.value) ||
@@ -906,7 +914,10 @@ function persistExecutionSettings() {
         aiProvider: aiProvider.value,
         aiModel: executionMode.value === 'local' ? null : aiModel.value,
         reviewAiProvider: reviewAiProvider.value,
-        reviewAiModel: reviewAiModel.value,
+        reviewAiModel:
+            reviewAiProvider.value && isLocalAgentProvider(reviewAiProvider.value).isLocal
+                ? null
+                : reviewAiModel.value,
         executionType: executionMode.value === 'local' ? 'serial' : localTask.value.executionType,
         localAgent: selectedLocalAgent.value as any,
         localAgentWorkingDir: localAgentWorkingDir.value,
