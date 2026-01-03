@@ -452,7 +452,7 @@ function hexToRgba(hex: string, alpha: number) {
 
                 <!-- Execute Button (TODO) -->
                 <button
-                    v-if="task.status === 'todo' && !task.triggerConfig?.dependsOn?.taskIds?.length"
+                    v-if="task.status === 'todo' && !task.triggerConfig?.dependsOn"
                     class="flex-1 px-3 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                     @click="handleExecute"
                 >

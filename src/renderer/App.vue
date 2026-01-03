@@ -561,7 +561,7 @@ onUnmounted(() => {
 
                 <!-- Center: App Title -->
                 <div class="flex items-center justify-center">
-                    <span class="font-bold text-sm text-gray-400">HighAIFlow</span>
+                    <span class="font-bold text-sm text-gray-400">HighFlow</span>
                 </div>
 
                 <!-- Right: Search Bar & Window Controls -->

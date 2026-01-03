@@ -1097,7 +1097,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                             >Application</span
                                         >
                                         <span class="text-gray-900 dark:text-white font-medium"
-                                            >HighAIFlow</span
+                                            >HighFlow</span
                                         >
                                     </div>
                                     <div class="flex justify-between">
@@ -1137,7 +1137,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                     class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
                                 >
                                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                                        HighAIFlow is an AI Workflow management tool that helps you
+                                        HighFlow is an AI Workflow management tool that helps you
                                         automate and streamline your AI-powered workflows.
                                     </p>
                                 </div>

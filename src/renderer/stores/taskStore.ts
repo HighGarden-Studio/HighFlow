@@ -966,11 +966,23 @@ export const useTaskStore = defineStore('tasks', () => {
             // Updated to use composite ID if available, but backend expects ID for input?
             // Actually, submitInput handler likely needs ID or composite.
             // Let's assume we need to update preload to accept (projectId, sequence, input).
-            // But since we are only fixing frontend logic for now:
+            // Get API keys from settings store (for Curator trigger upon completion)
+            const settingsStore = useSettingsStore();
+            const apiKeys: Record<string, string> = {};
+
+            // Extract API keys from enabled providers
+            for (const provider of settingsStore.aiProviders) {
+                if (provider.apiKey) {
+                    apiKeys[provider.id] = provider.apiKey;
+                }
+            }
+
+            // Call API with options
             const result = await api.taskExecution.submitInput(
                 task.projectId,
                 task.projectSequence,
-                input
+                input,
+                { apiKeys }
             );
             if (!result.success) {
                 return { success: false, error: result.error || 'Failed to submit input' };
@@ -1212,7 +1224,16 @@ export const useTaskStore = defineStore('tasks', () => {
             // If I updated backend, I should update preload.
             // For now, I'll pass ID.
             // api.taskExecution.approve(projectId, sequence, response)
-            const result = await api.taskExecution.approve(projectId, sequence, response);
+            // Get API keys for Curator
+            const settingsStore = useSettingsStore();
+            const apiKeys: Record<string, string> = {};
+            for (const provider of settingsStore.aiProviders) {
+                if (provider.apiKey) apiKeys[provider.id] = provider.apiKey;
+            }
+
+            const result = await api.taskExecution.approve(projectId, sequence, response, {
+                apiKeys,
+            });
             if (!result.success) {
                 return { success: false, error: 'Failed to approve task' };
             }
@@ -1300,9 +1321,17 @@ export const useTaskStore = defineStore('tasks', () => {
                 return changeStatus(projectId, sequence, 'done');
             }
 
+            // Get API keys for Curator
+            const settingsStore = useSettingsStore();
+            const apiKeys: Record<string, string> = {};
+            for (const provider of settingsStore.aiProviders) {
+                if (provider.apiKey) apiKeys[provider.id] = provider.apiKey;
+            }
+
             const result = await api.taskExecution.completeReview(
                 task.projectId,
-                task.projectSequence
+                task.projectSequence,
+                { apiKeys }
             );
             if (!result.success) {
                 return { success: false, error: 'Failed to complete review' };
@@ -1692,26 +1721,9 @@ export const useTaskStore = defineStore('tasks', () => {
                             sequence: seq,
                         });
                         try {
-                            const api = getAPI();
-                            const updatedTask = await api.tasks.update(
-                                projectId,
-                                seq,
-                                data as Partial<Task>
-                            );
-
-                            // Update local state
-                            const index = tasks.value.findIndex(
-                                (t) => t.projectId === projectId && t.projectSequence === seq
-                            );
-                            if (index >= 0) {
-                                tasks.value[index] = { ...tasks.value[index], ...updatedTask };
-                            }
-                            if (
-                                currentTask.value?.projectId === projectId &&
-                                currentTask.value?.projectSequence === seq
-                            ) {
-                                currentTask.value = { ...currentTask.value, ...updatedTask };
-                            }
+                            // Use fetchTasks to get latest state without triggering another write/event loop
+                            await fetchTasks(projectId);
+                            return;
                         } catch (error) {
                             console.error('[TaskStore] Failed to refetch INPUT task:', error);
                             // Fallback to simple status update

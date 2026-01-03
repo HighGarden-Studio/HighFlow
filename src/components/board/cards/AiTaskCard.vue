@@ -752,7 +752,7 @@ function hexToRgba(hex: string, alpha: number) {
                             이전 결과보기
                         </button>
                         <button
-                            v-if="!task.triggerConfig?.dependsOn?.taskIds?.length"
+                            v-if="!task.triggerConfig?.dependsOn"
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                             @click="handleExecute"
                         >

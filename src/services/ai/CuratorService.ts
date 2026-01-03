@@ -85,21 +85,33 @@ export class CuratorService {
                 'curator-service'
             );
 
-            // Dynamically load prompt
-            let systemPrompt: string = '';
-            try {
-                const { PromptLoader } =
-                    await import('../../../electron/main/services/PromptLoader');
-                systemPrompt = PromptLoader.getInstance().getPrompt('system/curator') || '';
-            } catch (error) {
-                console.error('[Curator] Failed to load system prompt:', error);
-            }
+            // Use a dynamic system prompt optimized for JSON output and context preservation
+            // We ignore the file-loaded generic prompt because it conflicts (asks for Markdown)
+            // while we strictly require JSON.
+            const today = new Date().toISOString().split('T')[0];
+            const currentYear = new Date().getFullYear().toString();
 
-            // Fallback content if loader fails (should effectively never happen in prod if bootstrapped correctly)
-            if (!systemPrompt) {
-                console.warn('[Curator] Using minimal fallback prompt');
-                systemPrompt = 'You are Curator. Maintain project context in Markdown format.';
-            }
+            const systemPrompt = `You are the Project Context Curator.
+Role: Analyze the 'Task Output' and update the 'Current Project Memory' to reflect new insights.
+Current Date: ${today}
+
+Principles:
+1. **Preserve Context**: Do not discard existing Summary info unless it is outdated. Merge new info into it.
+2. **Extract Decisions**: detailed decisions made in this task. Use '${today}' for the date if not explicit.
+3. **Update Glossary**: Add new technical terms or project-specific jargon.
+4. **JSON Output**: You MUST output valid JSON.
+5. **No Hallucinated Dates**: DO NOT generate dates in 2024 or 2025 unless explicitly stated in the text. Default to ${today}.
+
+Input Data:
+- Current Summary: The high-level state of the project.
+- Recent Decisions: The last few decisions made.
+- Glossary: Known terms.
+`;
+
+            console.log('[Curator] Context memory checks:', {
+                memoryExists: !!project.memory,
+                summaryLen: project.memory?.summary?.length || 0,
+            });
 
             const currentMemory = project.memory || {
                 summary: '',
@@ -109,7 +121,7 @@ export class CuratorService {
 
             const memoryContext = `
 Current Project Memory:
-Summary: ${currentMemory.summary || 'None'}
+Summary: "${currentMemory.summary || 'None'}"
 Recent Decisions: ${JSON.stringify(currentMemory.recentDecisions?.slice(-10) || [], null, 2)}
 Glossary: ${JSON.stringify(currentMemory.glossary || {}, null, 2)}
 `;
@@ -118,7 +130,7 @@ Glossary: ${JSON.stringify(currentMemory.glossary || {}, null, 2)}
 Task: ${projectId}-${projectSequence}
 Task Title: ${taskTitle}
 Task Output:
-${taskOutput.substring(0, 3000)}${taskOutput.length > 3000 ? '\n[... truncated ...]' : ''}
+${taskOutput.substring(0, 5000)}${taskOutput.length > 5000 ? '\n[... truncated ...]' : ''}
 `;
 
             const prompt = `${systemPrompt}
@@ -129,12 +141,14 @@ ${taskContext}
 
 IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
 {
-  "summaryUpdate": "string or null if no update needed",
+  "summaryUpdate": "string (the NEW updated summary. If no change, return null. If changing, provide the FULL new summary text merging old + new)",
   "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text"}],
   "glossaryUpdates": {"term": "definition"},
-  "conflicts": ["list of conflicts if any"]
+  "conflicts": ["string"]
 }
 `;
+
+            console.log('[Curator] Prompt constructed. Length:', prompt.length);
 
             // 2. Execute AI using cost-effective model from configured providers
             eventBus.emit<CuratorStepEvent>(
@@ -147,6 +161,13 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                 },
                 'curator-service'
             );
+
+            // Check API Keys provided
+            console.log(
+                '[Curator] Checking API keys:',
+                Object.keys(this.apiKeys).length > 0 ? Object.keys(this.apiKeys) : 'NONE'
+            );
+
             let aiResponse: string | null = null;
 
             try {
@@ -275,12 +296,24 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // Let's assume parsed.newDecisions items don't have taskId, or we ignore it.
             // Wait, DecisionsLog interface has `taskId`. We should probably store projectSequence instead?
             // Or just store 0 for now if taskId is deprecated. But the DecisionLog interface in database types might need check.
-            const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => ({
-                date: d.date || new Date().toISOString().split('T')[0],
-                summary: d.summary,
-                taskId: 0, // Deprecated taskId
-                // Ideally we should add projectId/sequence to DecisionLog, but for now just 0.
-            }));
+            const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => {
+                let decisionDate = d.date || today;
+
+                // Sanitize Date: If year is 2024 (or significantly in past/future), force it to today
+                // Logic: If date doesn't start with currentYear (e.g. "2026"), fix it.
+                if (!decisionDate.startsWith(currentYear)) {
+                    console.warn(
+                        `[Curator] Detected invalid date year in decision: ${decisionDate}. Forcing to ${today}.`
+                    );
+                    decisionDate = today;
+                }
+
+                return {
+                    date: decisionDate,
+                    summary: d.summary,
+                    taskId: 0, // Deprecated taskId
+                };
+            });
 
             const updatedMemory: ProjectMemory = {
                 summary: parsed.summaryUpdate || currentMemory.summary || '',

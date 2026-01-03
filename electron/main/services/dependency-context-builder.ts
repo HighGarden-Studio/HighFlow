@@ -68,24 +68,23 @@ export async function buildDependencyContext(
             // Try Sequence
             const seqMatch = allTasks.find((t) => t.projectSequence === ref);
             if (seqMatch) {
-                if (seqMatch.id) {
-                    directDeps.add(seqMatch.id);
-                    console.log(
-                        `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${seqMatch.id}`
-                    );
-                } else {
-                    console.error(
-                        `[DependencyContext] Found macro {{task.${ref}}} (Sequence) but ID is missing on task object`,
-                        seqMatch
-                    );
-                }
+                // Use projectSequence as the identifier for dependencies
+                directDeps.add(seqMatch.projectSequence);
+                console.log(
+                    `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task Sequence ${seqMatch.projectSequence}`
+                );
             } else {
-                // Try ID
+                // Legacy: Try ID if sequence not found (rare fallback)
                 const idMatch = allTasks.find((t) => t.id === ref);
                 if (idMatch) {
-                    directDeps.add(idMatch.id);
+                    // ID match found, but we should use sequence if possible to accept consistent keys
+                    directDeps.add(idMatch.projectSequence);
                     console.log(
-                        `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${idMatch.id}`
+                        `[DependencyContext] Found macro {{task.${ref}}} (ID matched) -> Resolved to Task Sequence ${idMatch.projectSequence}`
+                    );
+                } else {
+                    console.warn(
+                        `[DependencyContext] Found macro {{task.${ref}}} but could not resolve to any task in project`
                     );
                 }
             }
@@ -132,7 +131,7 @@ export async function buildDependencyContext(
 
                     const now = new Date();
                     resultsMap.set(id, {
-                        taskId: depTask.id,
+                        taskId: depTask.id || depTask.projectSequence, // Use sequence as fallback ID
                         projectSequence: depTask.projectSequence,
                         taskTitle: depTask.title,
                         status: 'success',
@@ -209,22 +208,23 @@ export function resolveExpressionToIds(
     const referencedIds = new Set<number>();
 
     // Replace all numbers in the expression
-    // We assume numbers are Project Sequences first, then Task IDs
+    // We assume numbers are Project Sequences first
     const resolvedExpression = expression.replace(/\b\d+\b/g, (match) => {
         const val = parseInt(match, 10);
 
-        // 1. Try to find by Project Sequence
+        // 1. Try to find by Project Sequence (Primary)
         const taskBySeq = allTasks.find((t) => t.projectSequence === val);
         if (taskBySeq) {
-            referencedIds.add(taskBySeq.id);
-            return taskBySeq.id.toString();
+            referencedIds.add(taskBySeq.projectSequence);
+            return taskBySeq.projectSequence.toString();
         }
 
-        // 2. Fallback: Check if it matches a Task ID directly
+        // 2. Legacy: Fallback to ID check if strict match on sequence failed
+        // But since we want to normalize on Sequence, if we find by ID, we return its Sequence.
         const taskById = allTasks.find((t) => t.id === val);
         if (taskById) {
-            referencedIds.add(taskById.id);
-            return val.toString();
+            referencedIds.add(taskById.projectSequence);
+            return taskById.projectSequence.toString();
         }
 
         // 3. No match found - keep original (will likely fail evaluation but preserves intent)
@@ -276,10 +276,11 @@ export function areTaskDependenciesMet(
     }
 
     // 1. Prepare Dependency Data for Evaluator
+    // Use projectSequence for mapping, as dependencyTaskIds contains sequences
     const dependencyInfo = allTasks
-        .filter((t) => dependencyTaskIds.includes(t.id))
+        .filter((t) => dependencyTaskIds.includes(t.projectSequence))
         .map((t) => ({
-            id: t.id,
+            id: t.projectSequence, // Map ID to sequence for evaluator
             status: t.status,
             completedAt: t.completedAt,
         }));

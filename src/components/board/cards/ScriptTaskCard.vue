@@ -406,7 +406,7 @@ function handleViewScript(event: Event) {
                         {{ isMissingExecutionSettings ? '스크립트 없음' : '스크립트' }}
                     </button>
                     <button
-                        v-if="!task.triggerConfig?.dependsOn?.taskIds?.length"
+                        v-if="!task.triggerConfig?.dependsOn"
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="handleExecute"
                     >

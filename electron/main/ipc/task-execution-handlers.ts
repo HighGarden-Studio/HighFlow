@@ -601,7 +601,8 @@ const triggerCurator = async (
     sequence: number,
     task: any,
     output: string,
-    project: any
+    project: any,
+    apiKeysOverrides?: Record<string, string>
 ) => {
     // Only trigger if task is marked as done (fully completed)
     // If it goes to in_review, we wait until review is approved
@@ -622,7 +623,7 @@ const triggerCurator = async (
 
                     if (storedProviders) {
                         const providers = JSON.parse(storedProviders);
-                        apiKeys = {
+                        const fetchedKeys = {
                             anthropic: providers.find((p: any) => p.id === 'anthropic' && p.apiKey)
                                 ?.apiKey,
                             openai: providers.find((p: any) => p.id === 'openai' && p.apiKey)
@@ -633,8 +634,11 @@ const triggerCurator = async (
                             lmstudio: providers.find((p: any) => p.id === 'lmstudio' && p.apiKey)
                                 ?.apiKey,
                         };
+                        // Merge keys: Overrides take precedence
+                        apiKeys = { ...fetchedKeys, ...(apiKeysOverrides || {}) };
+
                         console.log(
-                            '[CuratorTrigger] Injected API keys for providers:',
+                            '[CuratorTrigger] Injected API keys (merged):',
                             Object.keys(apiKeys).filter((k) => !!apiKeys[k])
                         );
                     }
@@ -670,7 +674,7 @@ async function processInputSubmission(
     projectId: number,
     sequence: number,
     payload: any,
-    options?: { triggerChain?: string[] }
+    options?: { triggerChain?: string[]; apiKeys?: Record<string, string> }
 ): Promise<any> {
     const task = await taskRepository.findByKey(projectId, sequence);
     if (!task) {
@@ -756,7 +760,14 @@ async function processInputSubmission(
     // MUST be done BEFORE checking dependents so they have fresh context
     const project = await projectRepository.findById(task.projectId);
     if (project) {
-        await triggerCurator(projectId, sequence, task, output.text || 'Input submitted', project);
+        await triggerCurator(
+            projectId,
+            sequence,
+            task,
+            output.text || 'Input submitted',
+            project,
+            options?.apiKeys
+        );
     }
 
     // Trigger dependents
@@ -2584,7 +2595,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle(
         'taskExecution:approve',
-        async (_event, projectId: number, projectSequence: number, response?: string) => {
+        async (
+            _event,
+            projectId: number,
+            projectSequence: number,
+            response?: string,
+            options?: { apiKeys?: Record<string, string> }
+        ) => {
             console.log(`[TaskExecution] Approve task ${projectId}-${projectSequence}`);
 
             try {
@@ -2641,7 +2658,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             projectSequence,
                             updatedTask as Task,
                             content,
-                            project
+                            project,
+                            options?.apiKeys
                         );
                     }
 
@@ -2709,7 +2727,12 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle(
         'taskExecution:completeReview',
-        async (_event, projectId: number, projectSequence: number) => {
+        async (
+            _event,
+            projectId: number,
+            projectSequence: number,
+            options?: { apiKeys?: Record<string, string> }
+        ) => {
             try {
                 // Get task before updating for dependent task check
                 const task = await taskRepository.findByKey(projectId, projectSequence);
@@ -2739,7 +2762,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 const project = await projectRepository.findById(projectId);
                 const content = (task.executionResult as any)?.content || '';
                 if (project && content) {
-                    await triggerCurator(projectId, projectSequence, task, content, project);
+                    await triggerCurator(
+                        projectId,
+                        projectSequence,
+                        task,
+                        content,
+                        project,
+                        options?.apiKeys
+                    );
                 }
 
                 // Check and execute dependent tasks
@@ -3428,9 +3458,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
      */
     ipcMain.handle(
         'taskExecution:submitInput',
-        async (_event, projectId: number, sequence: number, payload: any) => {
+        async (
+            _event,
+            projectId: number,
+            sequence: number,
+            payload: any,
+            options?: { apiKeys?: Record<string, string> }
+        ) => {
             try {
-                const result = await processInputSubmission(projectId, sequence, payload);
+                const result = await processInputSubmission(projectId, sequence, payload, options);
                 return { success: true, result };
             } catch (error) {
                 console.error('[TaskExecution] Failed to submit input:', error);

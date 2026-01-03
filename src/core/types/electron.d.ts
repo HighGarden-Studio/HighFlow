@@ -407,7 +407,8 @@ export interface TaskExecutionAPI {
     submitInput: (
         projectId: number,
         projectSequence: number,
-        input: unknown
+        input: unknown,
+        options?: { apiKeys?: Record<string, string> }
     ) => Promise<{ success: boolean; error?: string }>;
 
     // Status queries
@@ -445,7 +446,8 @@ export interface TaskExecutionAPI {
     approve: (
         projectId: number,
         projectSequence: number,
-        response?: string
+        response?: string,
+        options?: { apiKeys?: Record<string, string> }
     ) => Promise<{ success: boolean; error?: string }>;
     reject: (
         projectId: number,
@@ -455,7 +457,8 @@ export interface TaskExecutionAPI {
     // Review flow
     completeReview: (
         projectId: number,
-        projectSequence: number
+        projectSequence: number,
+        options?: { apiKeys?: Record<string, string> }
     ) => Promise<{ success: boolean; error?: string }>;
     requestChanges: (
         projectId: number,

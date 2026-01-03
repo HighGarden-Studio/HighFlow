@@ -11,7 +11,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore, type TaskStatus, type Task } from '../stores/taskStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
-import { getAPI } from '../../utils/electron';
+
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import TaskCard from '../../components/board/TaskCard.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
@@ -1091,32 +1091,13 @@ onMounted(async () => {
     await taskStore.fetchTasks(projectId.value);
     const cleanup = taskStore.initEventListeners();
 
-    // Set up IPC listeners for real-time updates
-    const api = (window as any).electron;
-
-    // Store listener references for cleanup
-    const statusChangedHandler = async (data: { id: number; status: string }) => {
-        if (!isMounted.value) return;
-        console.log('[KanbanBoard] Task status changed:', data);
-        await taskStore.fetchTasks(projectId.value);
-    };
-
-    const taskUpdatedHandler = async (taskId: number) => {
-        if (!isMounted.value) return;
-        console.log('[KanbanBoard] Task updated:', taskId);
-        await taskStore.fetchTasks(projectId.value);
-    };
-
     // Register listeners
-    const cleanupStatusChanged = api.events.on('task:status-changed', statusChangedHandler);
-    const cleanupTaskUpdated = api.events.on('task:updated', taskUpdatedHandler);
+    // Note: taskStore.initEventListeners() already handles task:status-changed and task:updated
+    // We don't need to duplicate them here to avoid race conditions and excessive fetches.
 
     onUnmounted(() => {
         isMounted.value = false;
         cleanup();
-        // Clean up IPC listeners using returned cleanup functions
-        cleanupStatusChanged();
-        cleanupTaskUpdated();
     });
 });
 </script>

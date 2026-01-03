@@ -258,24 +258,57 @@ export class OutputTaskRunner {
         }
 
         // 2. Fetch dependency tasks and add new results
-        console.log(`[OutputTaskRunner] Fetching ${dependencies.length} dependency task(s)...`);
+        // Use the Output Task's own last completion time as the baseline.
+        // If a dependency finished BEFORE the last time we ran, we've likely already logged it.
+        const lastOutputRun = task.completedAt ? new Date(task.completedAt).getTime() : 0;
+        console.log(
+            `[OutputTaskRunner] Aggregating content. Last Output Run: ${lastOutputRun ? new Date(lastOutputRun).toISOString() : 'NEVER'}`
+        );
+
+        console.log(`[OutputTaskRunner] Checking ${dependencies.length} dependency task(s)...`);
         for (const depSequence of dependencies) {
             const depTask = await taskRepository.findByKey(task.projectId, depSequence);
             if (depTask) {
-                // Check for Freshness (Exclude stale inputs/tasks from previous runs)
-                // Threshold: 60 seconds. If task completed > 60s ago, it's old history.
-                const completedAt = depTask.completedAt
+                const depCompletedAt = depTask.completedAt
                     ? new Date(depTask.completedAt).getTime()
                     : 0;
-                const now = Date.now();
-                const isFresh = now - completedAt < 60 * 1000; // 60s
 
+                // Freshness Logic:
+                // Include if:
+                // 1. This is the first run of the output task (lastOutputRun === 0)
+                // 2. The dependency completed AFTER our last run
+                // 3. The dependency is 'fresh' (< 60s) AND we haven't run recently?
+                //    Actually, simple "dep > lastRun" is the most robust for "Event Log".
+
+                // However, for "Report Generation" (Template), we likely want everything.
+                // We are in 'concat/single' mode here (implied by previous check logic or default).
+                // But let's be safe: If config.localFile.accumulateResults is FALSE, we might want "Snapshot" (latest state of all).
+                // But if accumulateResults is TRUE, we definitely only want DELTA.
+
+                let shouldInclude = false;
+
+                if (config.localFile?.accumulateResults) {
+                    // Delta mode: Only new stuff
+                    if (lastOutputRun === 0) {
+                        shouldInclude = true; // First run, include all current state
+                    } else {
+                        shouldInclude = depCompletedAt > lastOutputRun;
+                    }
+                } else {
+                    // Snapshot mode: Always include latest state of dependencies
+                    shouldInclude = true;
+                }
+
+                // Debug log
+                const timeDiff = depCompletedAt - lastOutputRun;
                 console.log(
-                    `[OutputTaskRunner] Dependency task ${depSequence}: status=${depTask.status}, fresh=${isFresh} (${Math.round((now - completedAt) / 1000)}s ago)`
+                    `[OutputTaskRunner] Dep ${depSequence} (completed: ${depCompletedAt ? new Date(depCompletedAt).toISOString() : 'N/A'}): ` +
+                        `Accumulate=${config.localFile?.accumulateResults}, ` +
+                        `Diff=${timeDiff}ms. ` +
+                        `Include=${shouldInclude}`
                 );
 
-                if (!isFresh) {
-                    console.log(`[OutputTaskRunner] Skipping stale dependency ${depSequence}`);
+                if (!shouldInclude) {
                     continue;
                 }
 

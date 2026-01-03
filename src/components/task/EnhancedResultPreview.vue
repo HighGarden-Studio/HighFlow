@@ -280,6 +280,31 @@ const showVersionHistory = ref(false);
 const renderedMermaid = ref('');
 const copySuccess = ref(false);
 const markdownHtml = ref('');
+const isAutoScrollActive = ref(false);
+const contentContainer = ref<HTMLElement | null>(null);
+
+const scrollToBottom = () => {
+    if (!isAutoScrollActive.value || !contentContainer.value) return;
+    const el = contentContainer.value;
+    nextTick(() => {
+        el.scrollTop = el.scrollHeight;
+    });
+};
+
+const toggleAutoScroll = () => {
+    isAutoScrollActive.value = !isAutoScrollActive.value;
+    if (isAutoScrollActive.value) {
+        scrollToBottom();
+    }
+};
+
+watch(
+    () => props.task?.outputConfig?.localFile?.accumulateResults,
+    (val) => {
+        if (val) isAutoScrollActive.value = true;
+    },
+    { immediate: true }
+);
 
 // History state
 const history = ref<TaskHistoryEntry[]>([]);
@@ -724,6 +749,15 @@ const fallbackResultContent = computed(() => {
 
     return '';
 });
+
+watch(
+    () => [fallbackResultContent.value, markdownHtml.value],
+    () => {
+        if (isAutoScrollActive.value) {
+            scrollToBottom();
+        }
+    }
+);
 
 // State for Code Preview Drawer
 const selectedCodeBlock = ref<{
@@ -3061,7 +3095,8 @@ onMounted(() => {
                                                     <!-- Markdown Preview -->
                                                     <div
                                                         v-else-if="outputFormat === 'markdown'"
-                                                        class="flex-1 w-full h-full overflow-y-auto p-6"
+                                                        ref="contentContainer"
+                                                        class="flex-1 w-full h-full overflow-y-auto p-6 scroll-smooth"
                                                     >
                                                         <div
                                                             class="prose dark:prose-invert max-w-none"
@@ -3073,7 +3108,8 @@ onMounted(() => {
                                                     <!-- JSON Preview (Tree) -->
                                                     <div
                                                         v-else-if="outputFormat === 'json'"
-                                                        class="flex-1 w-full h-full overflow-y-auto p-4"
+                                                        ref="contentContainer"
+                                                        class="flex-1 w-full h-full overflow-y-auto p-4 scroll-smooth"
                                                     >
                                                         <div
                                                             v-if="jsonMarkdownHtml"
@@ -3118,6 +3154,7 @@ Invalid JSON</pre
                                                     </div>
 
                                                     <!-- Auto-scroll Info -->
+                                                    <!-- Auto-scroll Info -->
                                                     <div
                                                         v-if="
                                                             task?.outputConfig?.localFile
@@ -3125,11 +3162,26 @@ Invalid JSON</pre
                                                         "
                                                         class="absolute bottom-4 right-6 z-10 flex gap-2"
                                                     >
-                                                        <div
-                                                            class="px-2 py-1 bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 text-xs rounded-full shadow-lg border border-blue-200 dark:border-blue-700 font-medium"
+                                                        <button
+                                                            @click="toggleAutoScroll"
+                                                            class="px-2 py-1 text-xs rounded-full shadow-lg border font-medium transition-colors flex items-center gap-1 cursor-pointer hover:opacity-90 active:scale-95"
+                                                            :class="
+                                                                isAutoScrollActive
+                                                                    ? 'bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
+                                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                                                            "
                                                         >
-                                                            Auto-scroll Active
-                                                        </div>
+                                                            <span
+                                                                class="w-1.5 h-1.5 rounded-full"
+                                                                :class="
+                                                                    isAutoScrollActive
+                                                                        ? 'bg-blue-500 animate-pulse'
+                                                                        : 'bg-gray-400'
+                                                                "
+                                                            ></span>
+                                                            Auto-scroll:
+                                                            {{ isAutoScrollActive ? 'On' : 'Off' }}
+                                                        </button>
                                                     </div>
 
                                                     <!-- Code Preview Drawer -->
@@ -3335,7 +3387,11 @@ Invalid JSON</pre
                                             </div>
 
                                             <!-- SQL View -->
-                                            <div v-else-if="outputFormat === 'sql'" class="h-full">
+                                            <div
+                                                v-else-if="outputFormat === 'sql'"
+                                                ref="contentContainer"
+                                                class="h-full overflow-y-auto scroll-smooth"
+                                            >
                                                 <div class="bg-gray-900 rounded-lg overflow-hidden">
                                                     <div class="flex">
                                                         <div
@@ -3365,7 +3421,8 @@ Invalid JSON</pre
                                             <!-- Shell Script View -->
                                             <div
                                                 v-else-if="outputFormat === 'shell'"
-                                                class="h-full"
+                                                ref="contentContainer"
+                                                class="h-full overflow-y-auto scroll-smooth"
                                             >
                                                 <div class="bg-gray-900 rounded-lg overflow-hidden">
                                                     <div
@@ -3630,7 +3687,11 @@ Invalid JSON</pre
                                             </div>
 
                                             <!-- Log View -->
-                                            <div v-else-if="outputFormat === 'log'" class="h-full">
+                                            <div
+                                                v-else-if="outputFormat === 'log'"
+                                                ref="contentContainer"
+                                                class="h-full overflow-y-auto scroll-smooth"
+                                            >
                                                 <div class="bg-gray-900 rounded-lg overflow-hidden">
                                                     <div
                                                         class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
@@ -3707,7 +3768,11 @@ Invalid JSON</pre
                                             </div>
 
                                             <!-- Code View -->
-                                            <div v-else-if="outputFormat === 'code'" class="h-full">
+                                            <div
+                                                v-else-if="outputFormat === 'code'"
+                                                ref="contentContainer"
+                                                class="h-full overflow-y-auto scroll-smooth"
+                                            >
                                                 <div class="bg-gray-900 rounded-lg overflow-hidden">
                                                     <div
                                                         class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
@@ -3778,7 +3843,11 @@ Invalid JSON</pre
                                             </div>
 
                                             <!-- Default/Unknown View -->
-                                            <div v-else class="h-full">
+                                            <div
+                                                v-else
+                                                ref="contentContainer"
+                                                class="h-full overflow-y-auto scroll-smooth"
+                                            >
                                                 <div
                                                     class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6"
                                                 >

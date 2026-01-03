@@ -444,6 +444,28 @@ onUnmounted(() => {
                                 <p class="text-gray-400 text-sm mt-0.5 truncate">
                                     {{ project.description || 'No description' }}
                                 </p>
+                                <!-- Base Dev Folder -->
+                                <div
+                                    v-if="project.baseDevFolder"
+                                    class="flex items-center gap-1.5 mt-1.5 text-xs text-gray-500 font-mono group-hover:text-gray-400 transition-colors"
+                                >
+                                    <svg
+                                        class="w-3.5 h-3.5 flex-shrink-0"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                                        />
+                                    </svg>
+                                    <span class="truncate" :title="project.baseDevFolder">
+                                        {{ project.baseDevFolder }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
