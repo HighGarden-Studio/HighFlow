@@ -37,6 +37,10 @@ export function detectTextSubType(value: string): DetectionResult {
         return { kind: 'image', subType: 'svg', mime: 'image/svg+xml' };
     }
 
+    if (MERMAID_HINT.test(trimmed)) {
+        return { kind: 'document', subType: 'mermaid', mime: 'text/plain' };
+    }
+
     if (JSON_PATTERN.test(trimmed)) {
         try {
             JSON.parse(trimmed);

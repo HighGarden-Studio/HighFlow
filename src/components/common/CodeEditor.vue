@@ -29,6 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;
+    (e: 'add-comment', payload: { range: any; text: string }): void;
 }>();
 
 const editorContainer = ref<HTMLElement | null>(null);
@@ -91,6 +92,32 @@ onMounted(() => {
     editor.onDidChangeModelContent(() => {
         const value = editor?.getValue() || '';
         emit('update:modelValue', value);
+    });
+
+    // Register "Add Comment" action
+    editor.addAction({
+        id: 'add-comment-action',
+        label: 'Add Feedback Comment',
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.5,
+        run: (ed) => {
+            const selection = ed.getSelection();
+            if (selection && !selection.isEmpty()) {
+                const model = ed.getModel();
+                if (model) {
+                    const text = model.getValueInRange(selection);
+                    emit('add-comment', {
+                        range: {
+                            startLineNumber: selection.startLineNumber,
+                            endLineNumber: selection.endLineNumber,
+                            startColumn: selection.startColumn,
+                            endColumn: selection.endColumn,
+                        },
+                        text,
+                    });
+                }
+            }
+        },
     });
 
     // 매크로 자동완성 제안 등록 (모든 언어에 등록)

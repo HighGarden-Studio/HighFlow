@@ -23,6 +23,7 @@ import type {
     CuratorCompletedEvent,
 } from '../../../src/services/events/EventBus';
 import type { TaskResult } from '../../../src/services/workflow/types';
+import { buildDependencyContext } from '../services/dependency-context-builder';
 // import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';
 import { GlobalExecutionService } from '../services/GlobalExecutionService';
@@ -96,167 +97,6 @@ function getTaskKey(projectId: number, projectSequence: number): string {
  * Extract dependency task IDs and their execution results for macro substitution/context passing
  * recursively (up to depth 5) to support deep history macros like {{prev-1}}
  */
-async function buildDependencyContext(
-    task: Task
-): Promise<{ dependencySequences: number[]; previousResults: TaskResult[] }> {
-    const visitedSequences = new Set<number>();
-    const resultsMap = new Map<number, TaskResult>();
-    const queue: { sequence: number; depth: number }[] = [];
-
-    // 1. Identify direct dependencies
-    const triggerConfig = task.triggerConfig as any;
-    const directDeps = new Set<number>();
-
-    if (triggerConfig?.dependsOn) {
-        if (
-            Array.isArray(triggerConfig.dependsOn.passResultsFrom) &&
-            triggerConfig.dependsOn.passResultsFrom.length > 0
-        ) {
-            triggerConfig.dependsOn.passResultsFrom.forEach((id: number) => directDeps.add(id));
-        }
-        if (
-            Array.isArray(triggerConfig.dependsOn.taskIds) &&
-            triggerConfig.dependsOn.taskIds.length > 0
-        ) {
-            triggerConfig.dependsOn.taskIds.forEach((id: number) => directDeps.add(id));
-        }
-    }
-
-    // 1.5 Scan Prompt for Macros ({{task.N}}) and add them to dependencies
-    // This allows ad-hoc references even if not in explicit dependsOn
-    const promptText = (task.description || '') + (task.generatedPrompt || '');
-    const macroRegex = /\{\{task\.(\d+)\}\}/g;
-    let match;
-    // We need to resolve Sequence -> ID if needed, so we might need all tasks
-    // To be efficient, we'll collect potential IDs/Sequences first
-    const potentialRefs = new Set<number>();
-    while ((match = macroRegex.exec(promptText)) !== null) {
-        const val = parseInt(match[1] || '', 10);
-        if (!isNaN(val)) potentialRefs.add(val);
-    }
-
-    if (potentialRefs.size > 0) {
-        // Fetch all project tasks to resolve sequences
-        const allTasks = await taskRepository.findByProject(task.projectId);
-        potentialRefs.forEach((ref) => {
-            // Try Sequence
-            const seqMatch = allTasks.find((t) => t.projectSequence === ref);
-            if (seqMatch) {
-                directDeps.add(seqMatch.id);
-                console.log(
-                    `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${seqMatch.id}`
-                );
-            } else {
-                // Try ID
-                const idMatch = allTasks.find((t) => t.id === ref);
-                if (idMatch) {
-                    directDeps.add(idMatch.id);
-                    console.log(
-                        `[DependencyContext] Found macro {{task.${ref}}} -> Resolved to Task ID ${idMatch.id}`
-                    );
-                }
-            }
-        });
-    }
-
-    if (directDeps.size === 0) {
-        return { dependencySequences: [], previousResults: [] };
-    }
-
-    // 2. Initialize BFS Queue
-    directDeps.forEach((seq) => {
-        queue.push({ sequence: seq, depth: 1 });
-        visitedSequences.add(seq);
-    });
-
-    console.log(
-        `[TaskExecution] Building specific dependency context starting from ${directDeps.size} direct deps`
-    );
-
-    // 3. Recursive Fetch (BFS)
-    while (queue.length > 0) {
-        const { sequence, depth } = queue.shift()!;
-
-        try {
-            const depTask = await taskRepository.findByKey(task.projectId, sequence);
-            if (!depTask) continue;
-
-            // Process Execution Result
-            console.log(
-                `[DependencyContext] Checking Task ${sequence}: status=${depTask.status}, hasResult=${!!depTask.executionResult}`
-            );
-
-            // Allow results if task is done OR has a result (e.g., in_progress re-run in loop)
-            if (depTask.executionResult) {
-                try {
-                    const execResult =
-                        typeof depTask.executionResult === 'string'
-                            ? JSON.parse(depTask.executionResult)
-                            : depTask.executionResult;
-
-                    const now = new Date();
-                    resultsMap.set(sequence, {
-                        taskId: depTask.projectSequence, // Use sequence as ID abstraction for now in results
-                        projectSequence: depTask.projectSequence,
-                        taskTitle: depTask.title,
-                        status: 'success',
-                        output: execResult.content || execResult,
-                        startTime: depTask.startedAt || now,
-                        endTime: depTask.completedAt || now, // Crucial for sorting
-                        duration: execResult.duration || 0,
-                        retries: 0,
-                        // Fix for Image Input Injection: Explicitly extract attachments
-                        // Input Tasks store attachments in metadata.attachments
-                        // AI Tasks store attachments in top-level attachments (sometimes) or we need to normalize
-                        attachments:
-                            execResult.attachments || execResult.metadata?.attachments || [],
-                        metadata: {
-                            provider: execResult.provider,
-                            model: execResult.model,
-                            files: execResult.files,
-                            // Preserve original attachments in metadata too just in case
-                            attachments:
-                                execResult.attachments || execResult.metadata?.attachments || [],
-                        },
-                    });
-                } catch (parseErr) {
-                    console.error(
-                        `[TaskExecution] Failed to parse result for task ${sequence}`,
-                        parseErr
-                    );
-                }
-            }
-
-            // Recurse if depth allows
-            if (depth < 5) {
-                const depConfig = depTask.triggerConfig as any;
-                const parentSequences = depConfig?.dependsOn?.taskIds || [];
-                for (const pSeq of parentSequences) {
-                    if (typeof pSeq === 'number' && !visitedSequences.has(pSeq)) {
-                        visitedSequences.add(pSeq);
-                        queue.push({ sequence: pSeq, depth: depth + 1 });
-                    }
-                }
-            }
-        } catch (err) {
-            console.error(`[TaskExecution] Failed to fetch dependency ${sequence}`, err);
-        }
-    }
-
-    // 4. Sort results chronologically (Oldest -> Newest)
-    // This ensures {{prev}} is the last item, {{prev-1}} is second last, etc.
-    const previousResults = Array.from(resultsMap.values()).sort((a, b) => {
-        const timeA = new Date(a.endTime).getTime();
-        const timeB = new Date(b.endTime).getTime();
-        return timeA - timeB; // Ascending
-    });
-
-    console.log(
-        `[TaskExecution] Built dependency context with ${previousResults.length} tasks (Depth reached)`
-    );
-
-    return { dependencySequences: Array.from(visitedSequences), previousResults };
-}
 
 /**
  * Helper: Check if task dependencies are met (Robust Logic with Novelty Check)
@@ -912,15 +752,15 @@ async function processInputSubmission(
         },
     });
 
-    // Trigger dependents
-    // Trigger dependents
-    await checkAndExecuteDependentTasks(projectId, sequence, task as Task, options);
-
     // Explicitly notify Curator for Input Tasks (similar to standard tasks) if needed
+    // MUST be done BEFORE checking dependents so they have fresh context
     const project = await projectRepository.findById(task.projectId);
     if (project) {
         await triggerCurator(projectId, sequence, task, output.text || 'Input submitted', project);
     }
+
+    // Trigger dependents
+    await checkAndExecuteDependentTasks(projectId, sequence, task as Task, options);
 
     return output;
 }
@@ -1372,6 +1212,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 }
 
                                 if (finalStatus === 'done') {
+                                    // 1. Trigger Curator to update memory (AWAIT THIS)
+                                    // Re-fetch project to ensure we pass correct object
+                                    const freshProject = await projectRepository.findById(
+                                        task.projectId
+                                    );
+                                    if (freshProject) {
+                                        await triggerCurator(
+                                            projectId,
+                                            projectSequence,
+                                            task,
+                                            executionResult.content, // Pass content
+                                            freshProject
+                                        );
+                                    }
+
+                                    // 2. Trigger Dependents
                                     await checkAndExecuteDependentTasks(
                                         projectId,
                                         projectSequence,
@@ -1969,10 +1825,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // ==================================================================================
 
                     // Fetch dependent task results
+                    // Fetch dependent task results using Centralized Builder
                     const { previousResults } = await buildDependencyContext(task as Task);
 
+                    // Re-fetch Project to get LATEST memory (updated by Curator from previous tasks)
+                    const freshProject = await projectRepository.findById(task.projectId);
+
                     // Context Injection & Prompt Construction (Consolidated)
-                    const contextPackage = buildContextPackage(project, task);
+                    const contextPackage = buildContextPackage(freshProject || project, task);
                     let basePrompt = task.generatedPrompt || task.description || '';
                     task.description = `${contextPackage}\n${basePrompt}`;
 

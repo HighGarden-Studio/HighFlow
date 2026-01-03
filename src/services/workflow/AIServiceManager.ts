@@ -1361,12 +1361,12 @@ export class AIServiceManager {
     }
 
     private cleanAIResponse(content: string): string {
-        // Remove markdown code blocks
+        // Remove markdown code blocks if present
         const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (jsonMatch?.[1]) {
-            return jsonMatch[1].trim();
+            return jsonMatch[1]; // Do not trim to preserve whitespace
         }
-        return content.trim();
+        return content; // Do not trim to preserve whitespace
     }
 
     private truncateString(
@@ -1972,11 +1972,19 @@ You have access to external tools (MCPs) to retrieve information (e.g., Jira iss
 - Consider the task priority and requirements
 - Be concise but thorough
 
+
+## CRITICAL OUTPUT RULES
+- **NO CONVERSATIONAL TEXT**: Do not include "Here is the code", "Sure", "I have updated...", or any other natural language commentary. Return ONLY the requested content.
+- **NO MARKDOWN FENCES (unless Markdown)**: If the requested format is HTML, CSS, JavaScript, Python, JSON, XML, YAML, or CSV, return the RAW code/data only. DO NOT wrap it in \`\`\` code blocks. enclosing the content in markdown blocks will break the system.
+- **STRICT STRUCTURE**: Ensure the output is valid and parseable in the requested format.
+
 ## Output Format
 ${
     (task as any).outputFormat === 'json'
         ? 'You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or explanatory text outside the JSON object.'
-        : 'Follow the output format instructions provided in the task description.'
+        : (task as any).outputFormat === 'markdown'
+          ? 'Return valid Markdown. You may use code blocks for code snippets, but do not include conversational filler.'
+          : 'Return ONLY the raw content (e.g., pure HTML, pure Python). Do NOT use markdown code blocks.'
 }
 `;
 

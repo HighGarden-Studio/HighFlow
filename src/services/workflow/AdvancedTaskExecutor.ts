@@ -709,7 +709,31 @@ export class AdvancedTaskExecutor {
             },
         };
 
-        return this.executeTask(task, enhancedContext, { retryStrategy });
+        // 대화 히스토리 재구성 (Session Persistence Simulation)
+        let processedDescription = task.description || '';
+
+        // 이전 실행 결과가 있다면 프롬프트에 포함 (Context Window 유지)
+        const previousContent =
+            task.executionResult?.aiResult?.value || task.executionResult?.content;
+
+        if (previousContent) {
+            // 이미 이전에 피드백이 포함된 경우 중복 방지를 위해 확인 (선택적)
+            // 여기서는 단순하게 이전 결과 + 피드백을 append 합니다.
+            processedDescription += `\n\n--- PREVIOUS AI OUTPUT (Context) ---\n${previousContent}`;
+        }
+
+        // 피드백 추가
+        // EnhancedResultPreview에서 이미 포맷팅된 피드백이 올 수 있음 (Attached Comments 등)
+        processedDescription += `\n\n--- USER FEEDBACK / MODIFICATION REQUEST ---\n${userFeedback}`;
+
+        const enhancedTask = {
+            ...task,
+            description: processedDescription,
+            // Clean execution result for new run but keep it in history implicitly via prompt
+            // executeTask will treat it as a new run
+        };
+
+        return this.executeTask(enhancedTask, enhancedContext, { retryStrategy });
     }
 
     /**
@@ -1212,7 +1236,10 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
             return previousResults;
         }
 
-        return previousResults.filter((result) => dependencyIds.has(result.taskId));
+        return previousResults.filter(
+            (result) =>
+                dependencyIds.has(result.taskId) || dependencyIds.has(result.projectSequence)
+        );
     }
 
     private buildDependencyResultsSection(results: TaskResult[]): string {

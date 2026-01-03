@@ -99,11 +99,138 @@ const SUBTYPE_EXTENSION_MAP: Partial<Record<AiSubType, string>> = {
     code: 'txt',
 };
 
+// Custom Markdown Renderer
+// Custom Markdown Renderer
+// We must use marked.use() to ensure the parser is available in the renderer context when using the function syntax.
+// However, since we are using marked.parse() directly in the component, we can pass the renderer in options.
+// BUT, 'this.parser' on the renderer instance is NOT automatically populated by standard instantiation.
+// The default Renderer class does not have a parser property.
+// It is the Parser that calls the renderer.
+// When using `marked.parse()`, it creates a Parser, which has a Renderer.
+// If we override the renderer methods on an instance we pass in, `this` inside those methods refers to the renderer instance.
+// But that renderer instance does NOT have `this.parser`.
+// The only way to access the parser recursively is to use `marked.parse(content)` again? NO, that would be inefficient and lose context.
+// In marked v12+, the suggested way to extend is via `marked.use({ renderer: ... })` or extensions.
+// When we pass `renderer` in options to `marked.parse`, it uses THAT instance.
+// But that instance doesn't have the parser attached.
+//
+// SOLUTION: We should NOT rely on `this.parser`.
+// Instead, we should check if `token.tokens` exists. If so, we can simply run `marked.parseInline(token.tokens)` or similar?
+// No, `marked.parseInline` takes text.
+// We need to use `marked.parse(token.tokens)`? No, tokens.
+//
+// Actually, `marked` functions (parse, parseInline) can take tokens in recent versions?
+// Let's check imports. We import `marked` from 'marked'.
+// The `marked` object itself has `parser` method?
+//
+// If we look at marked documentation for v12+:
+// renderer methods receive (token).
+// To parse children: `this.parser.parse(token.items)`.
+// BUT `this` must be the Parser instance or have access to it.
+//
+// If we use:
+// `const renderer = new marked.Renderer();`
+// `marked.use({ renderer });`
+// Then when `marked.parse()` is called, it uses the key-value pairs from `renderer`.
+//
+// Let's try to remove `new marked.Renderer()` and instead create a plain object or extend via `use`.
+//
+// Wait, the ERROR "Error rendering markdown" comes from the try-catch block in `renderMarkdown`.
+// It means an exception is THROWN.
+// Most likely `this.parser` is undefined.
+//
+// FIX: We will implement a helper `parseTokens(tokens)` that uses `marked.parser(tokens)` if available,
+// or fallback to a new `marked.parse`?
+// `marked.parser(tokens)` is the static method to parse tokens!
+//
+// So we should replace `this.parser.parse(token.items)` with `marked.parser(token.items)`.
+// And `this.parser.parseInline(token.tokens)` with `marked.parser(token.tokens)` (Parser handles both? No).
+// `marked.parser` processes block tokens.
+// For inline tokens, we might need `marked.parser(tokens)` too?
+//
+// Let's try replacing `this.parser.parse(...)` with `marked.parser(...)`.
+
 const markdownRenderer = new marked.Renderer();
-markdownRenderer.code = ({ text, lang }: Tokens.Code) => {
-    const language = (lang || '').trim();
-    const langClass = language ? `language-${language}` : '';
-    return `<pre class="bg-gray-900 p-4 rounded-lg overflow-x-auto"><code class="${langClass} text-sm font-mono text-gray-100">${escapeHtml(text)}</code></pre>`;
+// @ts-ignore
+const parseTokens = (tokens: any) => marked.parser(tokens);
+// @ts-ignore
+const parseInline = (tokens: any) => marked.parser(tokens); // In newer marked, parser handles inline too if structured correctly?
+// Actually, `marked.parser` takes `src` (tokens).
+
+// Headings
+markdownRenderer.heading = function (this: any, token: Tokens.Heading | string, level?: number) {
+    const text = typeof token === 'string' ? token : this.parser.parseInline(token.tokens);
+    const depth = typeof token === 'string' ? level || 1 : token.depth;
+
+    const sizes = {
+        1: 'text-2xl font-bold mb-4 mt-6 pb-2 border-b border-gray-200 dark:border-gray-700',
+        2: 'text-xl font-bold mb-3 mt-5 pb-1 border-b border-gray-100 dark:border-gray-800',
+        3: 'text-lg font-bold mb-2 mt-4',
+        4: 'text-base font-bold mb-2 mt-3',
+        5: 'text-sm font-bold mb-1 mt-2',
+        6: 'text-xs font-bold mb-1 mt-1',
+    };
+    const className = sizes[depth as keyof typeof sizes] || sizes[6];
+    return `<h${depth} class="${className} text-gray-900 dark:text-gray-100">${text}</h${depth}>`;
+};
+
+// Paragraphs
+markdownRenderer.paragraph = function (this: any, token: Tokens.Paragraph | string) {
+    const text = typeof token === 'string' ? token : this.parser.parseInline(token.tokens);
+    return `<p class="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">${text}</p>`;
+};
+
+markdownRenderer.code = function (this: any, token: Tokens.Code | string, language?: string) {
+    const rawCode = typeof token === 'string' ? token : token.text;
+    const rawLang = typeof token === 'string' ? language : token.lang;
+
+    const lang = (rawLang || '').trim();
+    const langClass = lang ? `language-${lang}` : '';
+
+    return `<div class="relative group my-4 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 shadow-sm code-block-trigger" data-language="${lang}">
+        <div class="flex items-center justify-between px-4 py-2 bg-gray-700 border-b border-gray-600">
+            <span class="text-xs font-medium text-gray-300 uppercase">${lang || 'text'}</span>
+            <span class="text-xs text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity">Click to preview</span>
+        </div>
+        <pre class="p-4 overflow-x-auto m-0"><code class="${langClass} text-sm font-mono text-gray-100 block">${escapeHtml(
+            rawCode
+        )}</code></pre>
+    </div>`;
+};
+
+// Inline Code
+markdownRenderer.codespan = function (this: any, token: Tokens.Codespan | string) {
+    const text = typeof token === 'string' ? token : token.text;
+    return `<code class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-pink-500 font-mono text-sm border border-gray-200 dark:border-gray-700">${text}</code>`;
+};
+
+// Links
+markdownRenderer.link = function (
+    this: any,
+    token: Tokens.Link | string,
+    title?: string | null,
+    text?: string
+) {
+    let href = '';
+    let linkTitle = '';
+    let linkText = '';
+
+    if (typeof token === 'string') {
+        href = token;
+        linkTitle = title || '';
+        linkText = text || '';
+    } else {
+        href = token.href;
+        linkTitle = token.title || '';
+        linkText = this.parser.parseInline(token.tokens);
+    }
+
+    return `<a href="${href}" title="${linkTitle}" class="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+};
+
+// HR
+markdownRenderer.hr = () => {
+    return `<hr class="my-6 border-gray-200 dark:border-gray-700" />`;
 };
 
 const markedOptions: MarkedOptions = {
@@ -197,6 +324,75 @@ const currentProject = computed(() => projectStore.currentProject);
 
 // Tree View State
 const isTreeView = ref(true);
+
+// Feedback Comment State
+interface FeedbackComment {
+    id: string;
+    type: 'code' | 'text';
+    file?: string;
+    range?: any;
+    selection: string;
+    comment: string;
+}
+const feedbackItems = ref<FeedbackComment[]>([]);
+const isCommentModalOpen = ref(false);
+const pendingComment = ref<Partial<FeedbackComment> | null>(null);
+const newCommentText = ref('');
+
+function handleAddCodeComment(payload: { range: any; text: string }) {
+    pendingComment.value = {
+        type: 'code',
+        file: selectedFile.value?.path,
+        range: payload.range,
+        selection: payload.text,
+    };
+    newCommentText.value = '';
+    isCommentModalOpen.value = true;
+}
+
+function handleMarkdownMouseUp() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    // Check if selection is within markdown content (simple check using active element or just assume scoped if triggered inside component)
+    // Ideally check if anchorNode is inside .markdown-content, but here we can just capture text
+    const text = selection.toString().trim();
+    if (!text) return;
+
+    pendingComment.value = {
+        type: 'text',
+        file: selectedFile.value?.path,
+        selection: text,
+    };
+    newCommentText.value = '';
+    isCommentModalOpen.value = true;
+}
+
+function saveComment() {
+    if (!pendingComment.value || !newCommentText.value.trim()) return;
+
+    feedbackItems.value.push({
+        id: Date.now().toString(),
+        type: pendingComment.value.type as 'code' | 'text',
+        file: pendingComment.value.file,
+        range: pendingComment.value.range,
+        selection: pendingComment.value.selection || '',
+        comment: newCommentText.value,
+    });
+
+    closeCommentModal();
+}
+
+function closeCommentModal() {
+    isCommentModalOpen.value = false;
+    pendingComment.value = null;
+    document.getSelection()?.removeAllRanges(); // Clear selection
+}
+
+function removeComment(id: string) {
+    const index = feedbackItems.value.findIndex((c) => c.id === id);
+    if (index !== -1) feedbackItems.value.splice(index, 1);
+}
 
 interface FileTreeNode {
     name: string;
@@ -529,6 +725,35 @@ const fallbackResultContent = computed(() => {
     return '';
 });
 
+// State for Code Preview Drawer
+const selectedCodeBlock = ref<{
+    code: string;
+    language: string;
+} | null>(null);
+
+// Tab state for drawer
+const drawerTab = ref<'code' | 'preview'>('code');
+const drawerMermaidSvg = ref<string>('');
+
+// Watch selectedCodeBlock to reset tab or default to preview for HTML/Mermaid
+watch(
+    () => selectedCodeBlock.value,
+    (newValue) => {
+        if (newValue && (newValue.language === 'html' || newValue.language === 'mermaid')) {
+            drawerTab.value = 'preview';
+        } else {
+            drawerTab.value = 'code';
+        }
+    }
+);
+
+// Watch for Drawer Mermaid Rendering
+watch([() => selectedCodeBlock.value, drawerTab], async ([block, tab]) => {
+    if (block?.language === 'mermaid' && tab === 'preview') {
+        await renderDrawerMermaid();
+    }
+});
+
 // Get output format from selected file or task
 const outputFormat = computed<OutputFormat>(() => {
     if (selectedFile.value) {
@@ -537,26 +762,29 @@ const outputFormat = computed<OutputFormat>(() => {
 
     // Always use markdown for AI Result view (when no file selected)
     // BUT check for image content first
-    const content = fallbackResultContent.value;
-    if (
-        content &&
-        (content.startsWith('iVBORw0KGgo') ||
-            content.startsWith('/9j/') ||
-            content.startsWith('data:image'))
-    ) {
-        return 'png';
-    }
-
+    // Use AI Metadata if available
     // Use AI Metadata if available
     if (
         aiResult.value?.subType &&
         (OUTPUT_FORMAT_VALUES as ReadonlyArray<string>).includes(aiResult.value.subType)
     ) {
-        return aiResult.value.subType as OutputFormat;
+        let format = aiResult.value.subType as OutputFormat;
+        const contentVal = fallbackResultContent.value;
+        // Check for mixed content (code blocks) in text/html to force markdown
+        if ((format === 'text' || format === 'html') && contentVal) {
+            if (/```[\s\S]+```/.test(contentVal)) {
+                format = 'markdown';
+            }
+        }
+        return format;
     }
 
-    // Auto-detect format from content
+    // Default heuristics based on content
+    const content = fallbackResultContent.value;
     if (content) {
+        if (/```[\s\S]+```/.test(content)) return 'markdown';
+
+        // Auto-detect format from content
         const detection = detectTextSubType(content);
         if (
             detection.subType === 'mermaid' ||
@@ -1614,6 +1842,30 @@ async function renderMermaid() {
     }
 }
 
+async function renderDrawerMermaid() {
+    if (!selectedCodeBlock.value || selectedCodeBlock.value.language !== 'mermaid') return;
+
+    try {
+        const mermaid = await import('mermaid');
+        mermaid.default.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+        });
+
+        const code = selectedCodeBlock.value.code.trim();
+        // Generate unique ID for drawer render
+        const id = `drawer-mermaid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const { svg } = await mermaid.default.render(id, code);
+        drawerMermaidSvg.value = svg;
+    } catch (err) {
+        console.error('Drawer Mermaid render error:', err);
+        drawerMermaidSvg.value = `<div class="p-4 text-red-500 bg-red-50 dark:bg-red-900/20 rounded">
+            <p class="font-bold">Mermaid Error:</p>
+        </div>`;
+    }
+}
+
 // Reset selection on open
 watch(
     () => props.open,
@@ -1648,9 +1900,9 @@ function extractJsonPayload(rawText: string): string | null {
     if (!rawText) return null;
     const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenceMatch && fenceMatch[1]) {
-        return fenceMatch[1].trim();
+        return fenceMatch[1];
     }
-    return rawText.trim() || null;
+    return rawText || null;
 }
 
 // Render Markdown
@@ -1666,9 +1918,12 @@ function renderMarkdown() {
             '[EnhancedResultPreview] renderMarkdown success. HTML length:',
             markdownHtml.value.length
         );
-    } catch (e) {
+    } catch (e: any) {
         console.error('[EnhancedResultPreview] renderMarkdown failed:', e);
-        markdownHtml.value = '<p class="text-red-500">Error rendering markdown</p>';
+        markdownHtml.value = `<div class="p-4 text-red-500 border border-red-200 rounded bg-red-50">
+            <h3 class="font-bold mb-2">Error rendering markdown</h3>
+            <pre class="whitespace-pre-wrap text-xs font-mono">${e.message}\n${e.stack || ''}</pre>
+        </div>`;
     }
 }
 
@@ -1785,31 +2040,59 @@ function handleDownload() {
 
 function handleMarkdownClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
+
+    // Handle File Links
     if (target.tagName === 'A' && target.dataset.filePath) {
         event.preventDefault();
         const path = target.dataset.filePath;
-
-        // Try to find the file in resultFiles
         const file = resultFiles.value.find(
             (f) => f.absolutePath === path || path.endsWith(f.path)
         );
 
         if (file) {
             selectedFile.value = file;
-        } else {
-            // If file is not in the captured results, we could emit an event to open it externally
-            // or just notify the user. For now, let's try to open it externally if possible via simple link behavior?
-            // But we prevented default.
-            // Let's rely on standard copy/paste if not in preview, or maybe open URI?
-            // window.open(`file://${path}`, '_blank'); // Security might block this
         }
+        return;
+    }
+
+    // Handle Code Block Preview Clicks (Delegation)
+    const trigger = target.closest('.code-block-trigger') as HTMLElement;
+    if (trigger) {
+        const language = trigger.getAttribute('data-language') || 'plaintext';
+        const codeElement = trigger.querySelector('code');
+        const code = codeElement?.innerText || '';
+
+        selectedCodeBlock.value = {
+            code,
+            language,
+        };
+        event.stopPropagation();
     }
 }
 
 function handleRetry() {
-    if (!props.task || !feedback.value.trim()) return;
-    emit('retry', props.task, feedback.value);
+    if (!props.task || (!feedback.value.trim() && feedbackItems.value.length === 0)) return;
+
+    let finalFeedback = feedback.value;
+
+    if (feedbackItems.value.length > 0) {
+        finalFeedback += '\n\n# Attached Comments:\n';
+        feedbackItems.value.forEach((item, index) => {
+            finalFeedback += `\n--- Comment ${index + 1} ---\n`;
+            if (item.file) finalFeedback += `File: ${item.file}\n`;
+            if (item.range) {
+                if (item.type === 'code') {
+                    finalFeedback += `Lines: ${item.range.startLineNumber}-${item.range.endLineNumber}\n`;
+                }
+            }
+            finalFeedback += `Selection: "${item.selection}"\n`;
+            finalFeedback += `Instruction: ${item.comment}\n`;
+        });
+    }
+
+    emit('retry', props.task, finalFeedback);
     feedback.value = '';
+    feedbackItems.value = [];
 }
 
 function handleApprove() {
@@ -2695,36 +2978,146 @@ onMounted(() => {
                                                 </div>
                                             </div>
 
-                                            <!-- Code View / Output Task View (using CodeEditor) -->
+                                            <!-- Unified Split View -->
                                             <div
                                                 v-else-if="
-                                                    outputFormat === 'code' ||
-                                                    (task?.taskType === 'output' &&
-                                                        ['text', 'log'].includes(outputFormat))
+                                                    [
+                                                        'code',
+                                                        'text',
+                                                        'markdown',
+                                                        'html',
+                                                        'json',
+                                                    ].includes(outputFormat) ||
+                                                    task?.taskType === 'output'
                                                 "
-                                                class="h-full flex flex-col"
+                                                class="h-full flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden relative group"
                                             >
+                                                <!-- Left Panel: Source / Raw View -->
                                                 <div
-                                                    class="flex-1 relative border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                                                    class="flex-1 flex flex-col min-w-0 border-r border-gray-200 dark:border-gray-700"
                                                 >
-                                                    <CodeEditor
-                                                        :model-value="content || ''"
-                                                        :language="
-                                                            outputFormat === 'markdown'
-                                                                ? 'markdown'
-                                                                : codeLanguage === 'plaintext'
-                                                                  ? 'markdown'
-                                                                  : codeLanguage
-                                                        "
-                                                        :readonly="true"
-                                                        :show-line-numbers="true"
-                                                        height="100%"
-                                                        :auto-scroll-when-at-bottom="
-                                                            !!task?.outputConfig?.localFile
-                                                                ?.accumulateResults
-                                                        "
-                                                    />
-                                                    <!-- Auto-scroll controls overlay -->
+                                                    <div
+                                                        class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+                                                    >
+                                                        <span
+                                                            class="text-xs font-medium text-gray-500 uppercase"
+                                                            >Input / Source</span
+                                                        >
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-xs text-gray-400"
+                                                                >Right-click to add feedback</span
+                                                            >
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex-1 relative">
+                                                        <CodeEditor
+                                                            :model-value="content || ''"
+                                                            :language="
+                                                                outputFormat === 'markdown'
+                                                                    ? 'markdown'
+                                                                    : outputFormat === 'json'
+                                                                      ? 'json'
+                                                                      : outputFormat === 'html'
+                                                                        ? 'html'
+                                                                        : codeLanguage ===
+                                                                            'plaintext'
+                                                                          ? 'markdown'
+                                                                          : codeLanguage
+                                                            "
+                                                            :readonly="true"
+                                                            :show-line-numbers="true"
+                                                            height="100%"
+                                                            class="h-full"
+                                                            @add-comment="handleAddCodeComment"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <!-- Right Panel: Preview / Rendered View -->
+                                                <div
+                                                    class="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900 relative"
+                                                >
+                                                    <div
+                                                        class="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+                                                    >
+                                                        <span
+                                                            class="text-xs font-medium text-gray-500 uppercase"
+                                                            >Preview</span
+                                                        >
+                                                    </div>
+
+                                                    <!-- HTML Preview (Iframe) -->
+                                                    <div
+                                                        v-if="outputFormat === 'html'"
+                                                        class="flex-1 w-full h-full relative"
+                                                    >
+                                                        <iframe
+                                                            :srcdoc="content"
+                                                            class="w-full h-full border-0 bg-white"
+                                                            sandbox="allow-scripts"
+                                                        />
+                                                    </div>
+
+                                                    <!-- Markdown Preview -->
+                                                    <div
+                                                        v-else-if="outputFormat === 'markdown'"
+                                                        class="flex-1 w-full h-full overflow-y-auto p-6"
+                                                    >
+                                                        <div
+                                                            class="prose dark:prose-invert max-w-none"
+                                                            v-html="markdownHtml"
+                                                            @click="handleMarkdownClick"
+                                                        ></div>
+                                                    </div>
+
+                                                    <!-- JSON Preview (Tree) -->
+                                                    <div
+                                                        v-else-if="outputFormat === 'json'"
+                                                        class="flex-1 w-full h-full overflow-y-auto p-4"
+                                                    >
+                                                        <div
+                                                            v-if="jsonMarkdownHtml"
+                                                            class="prose dark:prose-invert max-w-none"
+                                                        >
+                                                            <div v-html="jsonMarkdownHtml"></div>
+                                                        </div>
+                                                        <pre
+                                                            v-else-if="parsedJsonData"
+                                                            class="text-sm font-mono"
+                                                            v-html="renderJsonTree(parsedJsonData)"
+                                                        />
+                                                        <pre v-else class="text-sm text-gray-500">
+Invalid JSON</pre
+                                                        >
+                                                    </div>
+
+                                                    <!-- Default/Code Preview -->
+                                                    <div
+                                                        v-else
+                                                        class="flex-1 flex items-center justify-center text-gray-400"
+                                                    >
+                                                        <div class="text-center">
+                                                            <svg
+                                                                class="w-12 h-12 mx-auto mb-2 opacity-50"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    stroke-linecap="round"
+                                                                    stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                                                                />
+                                                            </svg>
+                                                            <p class="text-sm">
+                                                                Preview not available for this
+                                                                format
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Auto-scroll Info -->
                                                     <div
                                                         v-if="
                                                             task?.outputConfig?.localFile
@@ -2738,320 +3131,137 @@ onMounted(() => {
                                                             Auto-scroll Active
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
 
-                                            <!-- Text View -->
-                                            <div v-else-if="outputFormat === 'text'" class="h-full">
-                                                <div
-                                                    class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6"
-                                                >
-                                                    <pre
-                                                        class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono"
-                                                        >{{ content }}</pre
+                                                    <!-- Code Preview Drawer -->
+                                                    <div
+                                                        v-if="selectedCodeBlock"
+                                                        class="absolute top-0 right-0 bottom-0 w-full bg-white dark:bg-gray-900 z-20 flex flex-col transition-transform duration-300"
                                                     >
-                                                </div>
-                                            </div>
+                                                        <div
+                                                            class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                                                        >
+                                                            <div class="flex items-center gap-4">
+                                                                <span
+                                                                    class="font-medium text-sm text-gray-700 dark:text-gray-300"
+                                                                >
+                                                                    {{
+                                                                        selectedCodeBlock.language ===
+                                                                        'html'
+                                                                            ? 'HTML Preview'
+                                                                            : selectedCodeBlock.language ===
+                                                                                'mermaid'
+                                                                              ? 'Mermaid Preview'
+                                                                              : `Preview: ${selectedCodeBlock.language}`
+                                                                    }}
+                                                                </span>
 
-                                            <!-- Markdown View -->
-                                            <div
-                                                v-else-if="outputFormat === 'markdown'"
-                                                class="h-full flex flex-col relative"
-                                            >
-                                                <!-- Auto-scroll controls overlay -->
-                                                <div
-                                                    v-if="
-                                                        task?.outputConfig?.localFile
-                                                            ?.accumulateResults
-                                                    "
-                                                    class="absolute bottom-4 right-6 z-10 flex gap-2"
-                                                >
-                                                    <div
-                                                        class="px-2 py-1 bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 text-xs rounded-full shadow-lg border border-blue-200 dark:border-blue-700 font-medium"
-                                                    >
-                                                        Auto-scroll Active
-                                                    </div>
-                                                </div>
-                                                <!-- AI Response: Structured Display (when no file selected) -->
-                                                <div
-                                                    v-if="!selectedFile"
-                                                    class="h-full flex flex-col bg-white dark:bg-gray-900"
-                                                >
-                                                    <!-- Header Section -->
-                                                    <div
-                                                        class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-850"
-                                                    >
-                                                        <div class="flex items-start gap-3">
-                                                            <!-- AI Icon -->
-                                                            <div
-                                                                class="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg"
+                                                                <!-- View Toggle for HTML/Mermaid -->
+                                                                <div
+                                                                    v-if="
+                                                                        selectedCodeBlock.language ===
+                                                                            'html' ||
+                                                                        selectedCodeBlock.language ===
+                                                                            'mermaid'
+                                                                    "
+                                                                    class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-0.5"
+                                                                >
+                                                                    <button
+                                                                        @click="
+                                                                            drawerTab = 'preview'
+                                                                        "
+                                                                        class="px-3 py-1 text-xs font-medium rounded-md transition-all"
+                                                                        :class="
+                                                                            drawerTab === 'preview'
+                                                                                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                                                        "
+                                                                    >
+                                                                        Preview
+                                                                    </button>
+                                                                    <button
+                                                                        @click="drawerTab = 'code'"
+                                                                        class="px-3 py-1 text-xs font-medium rounded-md transition-all"
+                                                                        :class="
+                                                                            drawerTab === 'code'
+                                                                                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                                                        "
+                                                                    >
+                                                                        Code
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <button
+                                                                @click="selectedCodeBlock = null"
+                                                                class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
                                                             >
                                                                 <svg
-                                                                    class="w-6 h-6 text-white"
+                                                                    class="w-4 h-4"
                                                                     fill="none"
-                                                                    stroke="currentColor"
                                                                     viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
                                                                 >
                                                                     <path
                                                                         stroke-linecap="round"
                                                                         stroke-linejoin="round"
                                                                         stroke-width="2"
-                                                                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                                                                        d="M6 18L18 6M6 6l12 12"
                                                                     />
                                                                 </svg>
-                                                            </div>
-                                                            <div class="flex-1 min-w-0">
-                                                                <h3
-                                                                    class="text-lg font-semibold text-gray-900 dark:text-gray-100"
-                                                                >
-                                                                    {{ resultLabel }}
-                                                                </h3>
-                                                                <div
-                                                                    class="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400"
-                                                                >
-                                                                    <span
-                                                                        v-if="taskResult.provider"
-                                                                        class="inline-flex items-center gap-1.5"
-                                                                    >
-                                                                        <svg
-                                                                            class="w-4 h-4"
-                                                                            fill="none"
-                                                                            stroke="currentColor"
-                                                                            viewBox="0 0 24 24"
-                                                                        >
-                                                                            <path
-                                                                                stroke-linecap="round"
-                                                                                stroke-linejoin="round"
-                                                                                stroke-width="2"
-                                                                                d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
-                                                                            />
-                                                                        </svg>
-                                                                        {{ taskResult.provider }}
-                                                                    </span>
-                                                                    <span
-                                                                        v-if="taskResult.model"
-                                                                        class="inline-flex items-center gap-1.5"
-                                                                    >
-                                                                        <svg
-                                                                            class="w-4 h-4"
-                                                                            fill="none"
-                                                                            stroke="currentColor"
-                                                                            viewBox="0 0 24 24"
-                                                                        >
-                                                                            <path
-                                                                                stroke-linecap="round"
-                                                                                stroke-linejoin="round"
-                                                                                stroke-width="2"
-                                                                                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
-                                                                            />
-                                                                        </svg>
-                                                                        {{ taskResult.model }}
-                                                                    </span>
-                                                                    <span
-                                                                        v-if="
-                                                                            safeExecutionResult?.duration
-                                                                        "
-                                                                        class="inline-flex items-center gap-1.5"
-                                                                    >
-                                                                        <svg
-                                                                            class="w-4 h-4"
-                                                                            fill="none"
-                                                                            stroke="currentColor"
-                                                                            viewBox="0 0 24 24"
-                                                                        >
-                                                                            <path
-                                                                                stroke-linecap="round"
-                                                                                stroke-linejoin="round"
-                                                                                stroke-width="2"
-                                                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                                            />
-                                                                        </svg>
-                                                                        {{
-                                                                            Math.round(
-                                                                                safeExecutionResult.duration /
-                                                                                    1000
-                                                                            )
-                                                                        }}s
-                                                                    </span>
-                                                                </div>
-                                                            </div>
+                                                            </button>
                                                         </div>
-                                                    </div>
 
-                                                    <!-- Content Section with Enhanced Styling -->
-                                                    <div class="flex-1 overflow-y-auto">
                                                         <div
-                                                            class="prose prose-lg dark:prose-invert max-w-none p-6 prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-gray-100 prose-h1:text-3xl prose-h1:mb-4 prose-h1:pb-3 prose-h1:border-b prose-h1:border-gray-200 dark:prose-h1:border-gray-700 prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-7 prose-p:mb-4 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 prose-pre:shadow-lg prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r prose-ul:my-4 prose-li:my-1 prose-strong:text-gray-900 dark:prose-strong:text-gray-100 prose-strong:font-semibold"
+                                                            class="flex-1 overflow-hidden relative"
                                                         >
+                                                            <!-- Iframe Preview -->
                                                             <div
-                                                                v-html="markdownHtml"
-                                                                class="markdown-content"
-                                                                @click="handleMarkdownClick"
+                                                                v-if="
+                                                                    selectedCodeBlock.language ===
+                                                                        'html' &&
+                                                                    drawerTab === 'preview'
+                                                                "
+                                                                class="w-full h-full bg-white"
+                                                            >
+                                                                <iframe
+                                                                    :srcdoc="selectedCodeBlock.code"
+                                                                    class="w-full h-full border-0"
+                                                                    sandbox="allow-scripts"
+                                                                />
+                                                            </div>
+
+                                                            <!-- Mermaid Preview -->
+                                                            <div
+                                                                v-else-if="
+                                                                    selectedCodeBlock.language ===
+                                                                        'mermaid' &&
+                                                                    drawerTab === 'preview'
+                                                                "
+                                                                class="w-full h-full bg-white dark:bg-gray-800 p-4 overflow-auto flex items-center justify-center"
+                                                            >
+                                                                <div
+                                                                    v-html="drawerMermaidSvg"
+                                                                    class="w-full h-full flex items-center justify-center p-4 bg-white dark:bg-gray-800"
+                                                                ></div>
+                                                            </div>
+
+                                                            <!-- Code Editor -->
+                                                            <CodeEditor
+                                                                v-else
+                                                                :model-value="
+                                                                    selectedCodeBlock.code
+                                                                "
+                                                                :language="
+                                                                    selectedCodeBlock.language
+                                                                "
+                                                                :readonly="true"
+                                                                :show-line-numbers="true"
+                                                                height="100%"
+                                                                class="h-full"
                                                             />
                                                         </div>
                                                     </div>
-
-                                                    <!-- Metadata Footer (Collapsible) -->
-                                                    <div
-                                                        v-if="
-                                                            safeExecutionResult?.tokens ||
-                                                            safeExecutionResult?.cost
-                                                        "
-                                                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
-                                                    >
-                                                        <div
-                                                            class="px-6 py-3 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400"
-                                                        >
-                                                            <span
-                                                                v-if="safeExecutionResult?.tokens"
-                                                                class="inline-flex items-center gap-1.5"
-                                                            >
-                                                                <svg
-                                                                    class="w-4 h-4"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    viewBox="0 0 24 24"
-                                                                >
-                                                                    <path
-                                                                        stroke-linecap="round"
-                                                                        stroke-linejoin="round"
-                                                                        stroke-width="2"
-                                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                                    />
-                                                                </svg>
-                                                                <span class="font-medium"
-                                                                    >{{
-                                                                        safeExecutionResult.tokens.toLocaleString()
-                                                                    }}
-                                                                    tokens</span
-                                                                >
-                                                            </span>
-                                                            <span
-                                                                v-if="safeExecutionResult?.cost"
-                                                                class="inline-flex items-center gap-1.5"
-                                                            >
-                                                                <svg
-                                                                    class="w-4 h-4"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    viewBox="0 0 24 24"
-                                                                >
-                                                                    <path
-                                                                        stroke-linecap="round"
-                                                                        stroke-linejoin="round"
-                                                                        stroke-width="2"
-                                                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                                    />
-                                                                </svg>
-                                                                <span class="font-medium"
-                                                                    >${{
-                                                                        safeExecutionResult.cost.toFixed(
-                                                                            4
-                                                                        )
-                                                                    }}</span
-                                                                >
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- File Content: Simple Markdown Display (when file selected) -->
-                                                <div v-else class="h-full overflow-y-auto">
-                                                    <div
-                                                        class="prose dark:prose-invert max-w-none bg-gray-800 rounded-lg p-6"
-                                                    >
-                                                        <div
-                                                            v-html="markdownHtml"
-                                                            class="markdown-content"
-                                                            @click="handleMarkdownClick"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- HTML View -->
-                                            <div
-                                                v-else-if="outputFormat === 'html'"
-                                                class="h-full flex flex-col"
-                                            >
-                                                <div
-                                                    v-if="viewMode === 'split'"
-                                                    class="flex-1 flex overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg"
-                                                >
-                                                    <!-- Code Side -->
-                                                    <div
-                                                        class="flex-1 border-r border-gray-200 dark:border-gray-700 overflow-auto bg-gray-50 dark:bg-gray-900"
-                                                    >
-                                                        <div
-                                                            class="p-2 text-xs font-mono text-gray-500 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800"
-                                                        >
-                                                            HTML Source
-                                                        </div>
-                                                        <div class="p-4">
-                                                            <pre
-                                                                class="text-xs font-mono whitespace-pre-wrap dark:text-gray-300"
-                                                                >{{ content }}</pre
-                                                            >
-                                                        </div>
-                                                    </div>
-                                                    <!-- Preview Side -->
-                                                    <div class="flex-1 bg-white flex flex-col">
-                                                        <div
-                                                            class="p-2 text-xs font-mono text-gray-500 border-b border-gray-200 bg-gray-50"
-                                                        >
-                                                            Preview
-                                                        </div>
-                                                        <iframe
-                                                            :srcdoc="content"
-                                                            class="flex-1 w-full h-full border-0 bg-white"
-                                                            sandbox="allow-scripts"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <!-- Standard Preview (non-split) -->
-                                                <div
-                                                    v-else
-                                                    class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 h-full flex flex-col"
-                                                >
-                                                    <div
-                                                        class="mb-4 text-xs text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700"
-                                                    >
-                                                        HTML 미리보기
-                                                    </div>
-                                                    <iframe
-                                                        :srcdoc="content"
-                                                        class="flex-1 w-full border-0 bg-white rounded"
-                                                        sandbox="allow-scripts"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <!-- JSON View -->
-                                            <div v-else-if="outputFormat === 'json'" class="h-full">
-                                                <div
-                                                    class="bg-gray-900 rounded-lg p-4 overflow-auto space-y-4"
-                                                >
-                                                    <div
-                                                        v-if="jsonMarkdownHtml"
-                                                        class="prose dark:prose-invert max-w-none"
-                                                    >
-                                                        <div
-                                                            v-html="jsonMarkdownHtml"
-                                                            class="markdown-content"
-                                                        />
-                                                    </div>
-                                                    <div v-else-if="parsedJsonData">
-                                                        <pre
-                                                            class="text-sm font-mono"
-                                                            v-html="renderJsonTree(parsedJsonData)"
-                                                        />
-                                                    </div>
-                                                    <pre
-                                                        v-else
-                                                        class="text-sm font-mono text-gray-100 whitespace-pre-wrap"
-                                                        >{{ content }}</pre
-                                                    >
                                                 </div>
                                             </div>
 
@@ -3802,9 +4012,32 @@ onMounted(() => {
 
                     <!-- Global Footer Area (For Feedback) -->
                     <div
-                        v-if="task?.taskType !== 'output'"
                         class="flex-shrink-0 flex flex-col border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 z-10"
                     >
+                        <!-- Feedback Items List -->
+                        <div v-if="feedbackItems.length > 0" class="px-4 pt-2 flex flex-wrap gap-2">
+                            <div
+                                v-for="item in feedbackItems"
+                                :key="item.id"
+                                class="flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs max-w-full overflow-hidden"
+                            >
+                                <span class="font-bold shrink-0"
+                                    >[{{
+                                        item.type === 'code'
+                                            ? 'Line ' + item.range?.startLineNumber
+                                            : 'Text'
+                                    }}]</span
+                                >
+                                <span class="truncate max-w-[150px]">{{ item.comment }}</span>
+                                <button
+                                    @click="removeComment(item.id)"
+                                    class="ml-1 text-blue-500 hover:text-blue-700 dark:hover:text-blue-200"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Feedback Section -->
                         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
                             <label
@@ -3848,6 +4081,50 @@ onMounted(() => {
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </Teleport>
+
+    <!-- Comment Input Modal -->
+    <Teleport to="body">
+        <div
+            v-if="isCommentModalOpen"
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        >
+            <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+            >
+                <h3 class="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Add Comment</h3>
+
+                <div
+                    class="mb-4 max-h-32 overflow-y-auto bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs font-mono text-gray-600 dark:text-gray-400"
+                >
+                    {{ pendingComment?.selection }}
+                </div>
+
+                <textarea
+                    v-model="newCommentText"
+                    class="w-full h-24 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                    placeholder="Enter your comment or instruction here..."
+                    autofocus
+                    @keydown.enter.ctrl="saveComment"
+                ></textarea>
+
+                <div class="flex justify-end gap-2 mt-4">
+                    <button
+                        @click="closeCommentModal"
+                        class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        @click="saveComment"
+                        class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium disabled:opacity-50"
+                        :disabled="!newCommentText.trim()"
+                    >
+                        Add Comment
+                    </button>
                 </div>
             </div>
         </div>
