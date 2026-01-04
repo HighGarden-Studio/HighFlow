@@ -121,6 +121,7 @@
         "vue": "^3.4.21",
         "vue-diff": "^1.2.4",
         "vue-echarts": "^6.7.0",
+        "vue-i18n": "9",
         "vue-router": "^4.3.0",
         "web-streams-polyfill": "^3.2.1",
         "webidl-conversions": "^8.0.0",

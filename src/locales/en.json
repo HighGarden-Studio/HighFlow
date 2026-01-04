@@ -1,0 +1,579 @@
+{
+    "common": {
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "search": "Search...",
+        "update": "Update",
+        "save": "Save",
+        "delete": "Delete",
+        "edit": "Edit",
+        "close": "Close",
+        "back": "Back",
+        "next": "Next",
+        "prev": "Previous",
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+
+        "yes": "Yes",
+        "no": "No",
+        "retry": "Retry",
+        "stop": "Stop",
+        "settings": "Settings",
+        "prev_task": "Previous Task",
+        "ai_assistant": "AI Assistant (⌘J)",
+        "default": "(Default)",
+        "current_user": "Current User"
+    },
+    "nav": {
+        "projects": "Projects",
+        "marketplace": "Marketplace",
+        "settings": "Settings"
+    },
+    "auth": {
+        "login": "Login with Google",
+        "login_loading": "Logging in...",
+        "logout": "Logout",
+        "logout_confirm": "Are you sure you want to logout?",
+        "credits": "Credits"
+    },
+    "project": {
+        "create": {
+            "button": "AI Project",
+            "empty": "Empty Project",
+            "import": "Import",
+            "wizard": {
+                "title": "Create AI Project",
+                "description": "Start a new project with AI assistance",
+                "steps": {
+                    "idea": "Idea",
+                    "provider": "Select AI",
+                    "interview": "AI Interview",
+                    "concretize": "Concretize",
+                    "preview": "Plan Preview",
+                    "optimize": "Optimize Prompts",
+                    "confirm": "Confirm"
+                },
+                "step_desc": {
+                    "idea": "Describe your project idea",
+                    "provider": "Choose an AI assistant for the interview",
+                    "interview": "Discuss details with AI",
+                    "concretize": "Flesh out the idea based on discussion",
+                    "preview": "Review generated tasks and models",
+                    "optimize": "Optimize prompts for each task",
+                    "confirm": "Finalize and create project"
+                },
+                "quick_start": {
+                    "title": "Quick Start",
+                    "sub_title": "Create with Wizard",
+                    "desc": "Concretize ideas and generate tasks via AI chat."
+                },
+                "import_git": {
+                    "title": "Import from Git",
+                    "desc": "Select existing Git repo or AI agent folder."
+                },
+                "idea": {
+                    "label": "Freely describe your project idea",
+                    "placeholder": "Describe the app or service you want to build.\ne.g., 'I want to build a travel itinerary app. It needs user authentication and maps.'",
+                    "min_length": "Please enter at least 20 characters",
+                    "tip": {
+                        "title": "Tip: What makes a good idea description?",
+                        "item1": "Clearly describe the problem or goal",
+                        "item2": "Mention any specific tech stack or platform",
+                        "item3": "Describe target users or business context",
+                        "item4": "Mention any reference products if applicable"
+                    },
+                    "mode_wizard": "AI Wizard",
+                    "mode_local": "Local Repo (Code Agent)",
+                    "scan_btn": "Scan Repos",
+                    "scan_btn_scanning": "Scanning...",
+                    "select_folder": "Select Folder",
+                    "repo_template": "Create project based on existing local repo.\n\nPath: {path}\nType: {type}\nDescription: {desc}",
+                    "scanning_title": "Scanning local repositories...",
+                    "scanning_desc": "Checking Development, Projects, GitHub folders",
+                    "no_repos_title": "No repositories found",
+                    "no_repos_desc": "Use 'Select Folder' to add a repository manually",
+                    "selected_repo_title": "Selected Repository"
+                },
+                "provider": {
+                    "guide": "Select an AI model for the interview process.",
+                    "no_providers": {
+                        "title": "No Active AI Providers",
+                        "desc": "To proceed with AI interview, you must configure and enable at least one AI provider in Settings > AI Providers.",
+                        "button": "Go to Settings"
+                    }
+                },
+                "interview": {
+                    "progress": "Interview Progress",
+                    "progress_guide": {
+                        "ongoing": "Answer AI's questions to flesh out your idea.",
+                        "complete": "Sufficient information collected. You can proceed to the next step."
+                    },
+                    "presets": {
+                        "ai_decide": {
+                            "label": "Let AI Decide",
+                            "desc": "Delegate the best choice to AI"
+                        },
+                        "simple": { "label": "Keep it Simple", "desc": "Minimize complexity" },
+                        "best_practice": {
+                            "label": "Best Practice",
+                            "desc": "Follow industry standards"
+                        },
+                        "skip": { "label": "Decide Later", "desc": "Skip for now and decide later" }
+                    },
+                    "typing": "AI is preparing a response...",
+                    "options_title": "If unsure, choose an option below:",
+                    "input_placeholder": "Type your answer or select an option...",
+                    "file_attach": "Attach File",
+                    "send": "Send",
+                    "force_complete": "End Interview Early"
+                }
+            }
+        },
+        "list": {
+            "search_placeholder": "Search projects...",
+            "empty_title": "No projects yet",
+            "empty_desc": "Create your first project to get started",
+            "ai_start": "Start with AI"
+        },
+        "card": {
+            "updated": "Updated",
+            "hours": "h spent",
+            "ai_model_title": "Default AI Model"
+        },
+        "status": {
+            "progress": "Progress",
+            "confirm": "Waiting Approval",
+            "in_progress": "In Progress",
+            "in_review": "In Review",
+            "done": "Done",
+            "blocked": "Blocked",
+            "total": "Total Tasks"
+        },
+        "actions": {
+            "info": "Project Info",
+            "delete": "Delete Project",
+            "deleting": "Deleting...",
+            "reset": "Reset Results",
+            "export": "Export",
+            "view_detail": "View Detail",
+            "connect": "Connect",
+            "enhance": "Enhance",
+            "view_prev_result": "View Prev Result",
+            "approve": "Approve",
+            "input": "Input"
+        },
+        "msg": {
+            "reset_confirm": "Are you sure you want to reset project results?\n\nThis will delete:\n- Project AI Memory\n- All Task Results & History\n- Task Statuses (Reset to Todo)\n\nTask definitions and settings will be preserved.",
+            "reset_success": "Project results reset successfully.",
+            "reset_fail": "Failed to reset project results.",
+            "export_fail": "Failed to export project."
+        },
+        "modal": {
+            "create_title": "Create New Project",
+            "name_label": "Project Name",
+            "name_placeholder": "My Awesome Project",
+            "desc_label": "Description (Optional)",
+            "desc_placeholder": "Project description...",
+            "create_btn": "Create",
+            "creating_btn": "Creating..."
+        },
+        "info": {
+            "title": "Project Info",
+            "description": "Description",
+            "created_at": "Created At",
+            "path": "Path",
+            "ai_provider": "AI Provider",
+            "context": "AI Context",
+            "memory": "Project Memory"
+        }
+    },
+    "task": {
+        "status": {
+            "todo": "To Do",
+            "in_progress": "In Progress",
+            "done": "Done",
+            "failed": "Failed",
+            "pending": "Pending",
+            "live": "LIVE",
+            "ai_response": "AI Response",
+            "no_result": "No Previous Result",
+            "waiting": "Waiting for Response...",
+            "not_started": "Not Started",
+            "ai_reviewing": "AI Reviewing",
+            "review_starting": "Start Review...",
+            "executing": "Executing...",
+            "no_script": "No Script",
+            "waiting_input": "Waiting for User Input"
+        },
+        "type": {
+            "ai": "AI Task",
+            "script": "Script",
+            "input": "Input Request",
+            "output": "Output"
+        },
+        "card": {
+            "execute": "Execute",
+            "view_result": "View Result",
+            "auto_execute": "Auto Execute",
+            "output": "Output",
+            "input": "Input",
+            "dependencies": "Dependencies"
+        },
+        "detail": {
+            "title": "Task Detail",
+            "description": "Description",
+            "prompt": "Prompt",
+            "result": "Result",
+            "history": "History",
+            "edit_title": {
+                "save": "Save",
+                "cancel": "Cancel",
+                "edit": "Edit Title"
+            },
+            "title_default": "Task Detail",
+            "order": "Order",
+            "prompt_label": "Prompt (Description)",
+            "template": "Template",
+            "ai_enhance": "AI Enhance",
+            "macro_tip": "💡 <strong>Tip:</strong> {{ prev }}, {{ task.N }}, {{ project.name }} etc. Supports macro autocomplete (Ctrl+Space or {{)"
+        },
+        "tabs": {
+            "prompt": "Execution",
+            "settings": "AI Settings",
+            "detail": "Information",
+            "notification": "Notification",
+            "comment": "Comments",
+            "history": "History"
+        },
+        "warning": {
+            "readonly_title": "Settings cannot be changed during execution",
+            "readonly_desc": "Please STOP the task to change settings"
+        },
+
+        "history_event": {
+            "execution_started": "Started",
+            "execution_completed": "Completed",
+            "execution_failed": "Failed",
+            "ai_review_requested": "AI Review Requested",
+            "ai_review_completed": "AI Review Completed",
+            "prompt_refined": "Prompt Refined",
+            "status_changed": "Status Changed",
+
+            "paused": "Paused",
+            "resumed": "Resumed",
+            "stopped": "Stopped",
+            "approval_requested": "Approval Requested",
+            "approved": "Approved",
+            "rejected": "Rejected",
+            "review_completed": "Review Completed",
+            "changes_requested": "Changes Requested"
+        },
+        "history_msg": {
+            "result": "Result",
+            "result_image": "Result: [Image Generated]",
+            "error": "Error",
+            "prompt": "Prompt",
+            "review_req": "Review Request",
+            "review_res": "Review Result",
+            "feedback": "Feedback",
+            "refine_req": "Refinement Request",
+            "question": "Question",
+            "response": "Response"
+        },
+        "trigger": {
+            "auto": "Auto Execute",
+            "scheduled": "Scheduled",
+            "all": "All",
+            "any": "Any",
+            "on_complete": "On Complete",
+            "once": "Once",
+            "repeat": "Repeat"
+        },
+        "input": {
+            "settings_title": "Input Task Settings",
+            "source_type": "Data Source Type",
+            "mode": "Input Mode",
+            "message_label": "Request Message",
+            "message_placeholder": "Message to show to user",
+            "placeholder_label": "Placeholder (Optional)",
+            "placeholder_placeholder": "Example input",
+            "options_label": "Options List (Comma separated)",
+            "options_placeholder": "e.g. Option A, Option B",
+            "allow_custom": "Allow Custom Input",
+            "required": "Required",
+            "type": {
+                "user": "User Input",
+                "local": "Local File",
+                "remote": "Remote URL"
+            },
+            "local": {
+                "extensions": "Allowed Extensions",
+                "read_mode": "Read Mode",
+                "mode": {
+                    "auto": "Auto (Detect)",
+                    "text": "Text (Default)",
+                    "table": "Table (CSV/Excel)",
+                    "binary": "Binary"
+                },
+                "target_file": "Target File",
+                "select_file": "Select File",
+                "file_placeholder": "Select a file..."
+            },
+            "remote": {
+                "resource_type": "Resource Type",
+                "type": {
+                    "general": "General Web URL",
+                    "drive": "Google Drive (Coming Soon)"
+                },
+                "url_label": "URL (Optional)",
+                "url_placeholder": "https://example.com"
+            }
+        },
+        "macro": {
+            "guide_title": "📖 Macro Usage Guide",
+            "dep_result_title": "📋 Dependency Task Result",
+            "prev_task_title": "⬆️ Previous Task Reference",
+            "system_title": "⚙️ System Macro",
+            "context_title": "🔤 Context Variables",
+            "example_title": "💡 Usage Examples",
+            "desc": {
+                "content": "Result content of specific task (ID)",
+                "json": "Full output object (JSON)",
+                "status": "Task Status",
+                "summary": "Result Summary (500 chars)",
+                "prev": "Immediate previous task (Last dependency)",
+                "prev_0": "Last dependency (Same as prev)",
+                "prev_1": "Second last dependency",
+                "prev_summary": "Previous result summary",
+                "all_results": "All previous results (JSON Array)",
+                "all_summary": "Summary of all results",
+                "date": "Today's date (YYYY-MM-DD)",
+                "datetime": "Current datetime (ISO format)",
+                "project_name": "Current project name",
+                "project_desc": "Project description",
+                "var_ref": "User defined variable reference"
+            }
+        },
+        "control": {
+            "flow": "Control Flow",
+            "end": "Workflow End"
+        },
+        "message": {
+            "provider_required": "Provider Required"
+        },
+        "tooltip": {
+            "click_expand": "Click to expand live response"
+        },
+        "script": {
+            "code_label": "Script Code",
+            "no_code": "No script code available.",
+            "error_exec": "Execution Error"
+        },
+        "notification": {
+            "save_error": "Failed to save notification settings",
+            "test_sent": "Test notification sent. Please check your webhook URL."
+        },
+        "output": {
+            "text": "Text",
+            "markdown": "Markdown",
+            "json": "JSON",
+            "code": "Code",
+            "html": "HTML",
+            "pdf": "PDF",
+            "csv": "CSV",
+            "yaml": "YAML",
+            "sql": "SQL",
+            "shell": "Shell Script",
+            "mermaid": "Mermaid Diagram",
+            "svg": "SVG Image",
+            "png": "PNG Image",
+            "mp4": "MP4 Video",
+            "mp3": "MP3 Audio",
+            "diff": "Diff",
+            "log": "Log File",
+            "open_file": "Open File"
+        },
+        "subdivide": {
+            "desc": "If this task is too large, you can subdivide it into subtasks. After subdivision, the parent task is used for grouping only and execution is disabled.",
+            "button": "Subdivide Task",
+            "title": "Task Subdivision"
+        },
+        "macro": {
+            "variable_name": "variable_name",
+            "guide_title": "Macro Usage Guide"
+        },
+        "group": {
+            "title": "Group Task",
+            "desc": "This task is subdivided into {count} subtasks. It is used for grouping only and cannot be executed directly."
+        },
+        "priority_label": "Priority",
+        "priority": {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "urgent": "Urgent",
+            "critical": "Critical"
+        },
+        "tags_label": "Tags",
+        "tags_placeholder": "Add tags...",
+        "duration_label": "Estimated Duration (minutes)",
+        "duration_placeholder": "Enter estimated minutes",
+        "duration_format": "Approximately {h}h {m}m",
+        "due_date_label": "Due Date",
+        "trigger_title": "Auto Execute Trigger",
+        "trigger_type": "Trigger Type",
+        "trigger_types": {
+            "none": "None (Manual)",
+            "dependency": "Task Dependency",
+            "time": "Time Based"
+        },
+        "dependency": {
+            "ids_label": "Dependent Task IDs (Comma separated)",
+            "ids_placeholder": "e.g. 1, 2, 3",
+            "desc": "Executed automatically when specified tasks are completed",
+            "advanced_label": "Advanced Condition (Optional)",
+            "advanced_desc": "Set complex logic conditions. You can use ! (Not) operator for 'not completed' condition.",
+            "advanced_placeholder": "e.g. (!2 && !3) || 6",
+            "condition_label": "Here execution condition",
+            "all": "All tasks must be completed",
+            "any": "Execute if any task completes",
+            "policy_label": "Auto Execution Policy",
+            "once": "Execute Once",
+            "once_desc": "Auto execute only when status is TODO",
+            "repeat": "Always Execute (Recommended)",
+            "repeat_desc": "Execute regardless of current status if condition met"
+        },
+        "schedule": {
+            "type_label": "Schedule Type",
+            "once": "Execute Once",
+            "recurring": "Recurring",
+            "datetime_label": "Execution Date/Time",
+            "cron_label": "Cron Expression",
+            "cron_desc": "e.g. \"0 9 * * 1-5\" = Weekdays 9 AM",
+            "cron_placeholder": "0 9 * * 1-5",
+            "timezone_label": "Timezone"
+        },
+        "auto_review": {
+            "label": "Enable Auto REVIEW",
+            "desc": "AI automatically reviews if the prompt result matches the intention",
+            "settings_title": "Review AI Settings",
+            "settings_desc": "Specify Provider and Model for auto review",
+            "ai_label": "Review AI (Provider/Model)"
+        },
+        "auto_approve": {
+            "label": "Auto Approve",
+            "desc": "Automatically mark as DONE upon successful execution without review",
+            "project_warning": "This task uses Auto Approve instead of Project Auto Review",
+            "manual_info": "Manual review required after execution completes"
+        },
+        "update_details": "Update Details",
+        "notification_settings": {
+            "title": "Notification Settings",
+            "desc": "Receive notifications via Slack or Webhook for task execution and review events. Task settings override project settings."
+        },
+        "comments": {
+            "empty": "No comments yet",
+            "placeholder": "Enter a comment...",
+            "add": "Add Comment"
+        },
+        "history": {
+            "loading": "Loading history...",
+            "empty": "No history recorded yet.",
+            "expand_image": "Expand Image",
+            "collapse_image": "Collapse Image",
+            "output_content_label": "Output Content",
+            "scroll_bottom": "Bottom"
+        },
+        "suggestion": {
+            "title": "AI Assistant can improve your prompt",
+            "button": "Get Improvement Suggestion"
+        },
+        "script_notice": {
+            "title": "Script Task",
+            "desc": "Executes your written code directly. No AI execution settings needed."
+        },
+        "ai_info": {
+            "title": "AI Execution Info",
+            "order": "Execution Order",
+            "estimated_time": "Estimated Time",
+            "output_format": "Output Format (Expected)",
+            "auto_detect": "Auto Detect",
+            "dependencies": "Dependencies",
+            "required_mcp": "Required MCP Tools"
+        },
+        "operator_warning": "⚠️ Operator assigned. AI settings below are disabled.",
+        "execution_mode": {
+            "label": "Execution Mode",
+            "api": "AI API",
+            "api_desc": "Cloud AI Service",
+            "local": "Local Agent",
+            "local_desc": "Local CLI Agent"
+        },
+        "local_agent": {
+            "settings_title": "Local Agent Settings",
+            "select_label": "Select Agent",
+            "installed": "Installed",
+            "not_installed": "Not Installed",
+            "workdir_label": "Working Directory",
+            "browse": "Browse"
+        },
+        "ai_provider": {
+            "label": "AI Provider"
+        },
+        "cost": {
+            "temperature": "Temperature",
+            "accurate": "Accurate",
+            "creative": "Creative",
+            "max_tokens": "Max Tokens",
+            "estimated_cost": "Estimated Cost"
+        },
+        "footer": {
+            "provider_required": "Provider Connection Required",
+            "executing": "Executing...",
+            "execute": "Execute",
+            "save": "Save",
+            "close": "Close"
+        },
+        "info": {
+            "basic_info": "Basic Info",
+            "created_at": "Created:",
+            "updated_at": "Updated:",
+            "started_at": "Started:",
+            "completed_at": "Completed:"
+        },
+        "history_action": {
+            "expand": "Show More",
+            "collapse": "Collapse"
+        },
+        "alert": {
+            "execution_error": "Execution Error",
+            "no_script": "No script code found.",
+            "save_error": "Failed to save notification settings",
+            "electron_unavailable": "Electron API unavailable.",
+            "config_required": "Please configure notification settings first. (Slack Webhook URL or Custom Webhook URL)",
+            "test_sent": "Test notification sent. Please check your webhook URL.",
+            "test_fail": "Failed to send test notification"
+        },
+        "macro_example": {
+            "analyze": "Analyze the following data:",
+            "result_prefix": "Result:",
+            "report_suffix": "Create a report based on this date."
+        }
+    },
+    "result": {
+        "preview": {
+            "title": "Result Preview",
+            "no_content": "No content to display.",
+            "output": "Output Result"
+        }
+    },
+    "date": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "days_ago": "{n} days ago",
+        "weeks_ago": "{n} weeks ago",
+        "months_ago": "{n} months ago",
+        "years_ago": "{n} years ago"
+    }
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
@@ -45,6 +46,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
+const { t } = useI18n();
 const { isMissingExecutionSettings, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
@@ -250,7 +252,7 @@ function handleViewScript(event: Event) {
                     {{ task.description }}
                 </p>
                 <p v-else class="text-xs text-gray-400 dark:text-gray-500 italic">
-                    스크립트 태스크
+                    {{ t('task.type.script_desc') }}
                 </p>
             </div>
 
@@ -280,14 +282,16 @@ function handleViewScript(event: Event) {
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
                             {{
-                                dependencySequences ? `Task ${dependencySequences}` : '이전 태스크'
+                                dependencySequences
+                                    ? `Task ${dependencySequences}`
+                                    : t('common.prev_task')
                             }}
                             {{
                                 task.triggerConfig.dependsOn.operator === 'all'
-                                    ? '모두'
-                                    : '하나라도'
+                                    ? t('task.trigger.all')
+                                    : t('task.trigger.any')
                             }}
-                            완료 시
+                            {{ t('task.trigger.on_complete') }}
                         </p>
                     </div>
                 </div>
@@ -309,10 +313,14 @@ function handleViewScript(event: Event) {
                     </svg>
                     <div class="flex-1">
                         <p class="font-medium text-indigo-700 dark:text-indigo-300 mb-0.5">
-                            예약 실행
+                            {{ t('task.trigger.scheduled') }}
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
-                            {{ task.triggerConfig.scheduledAt.type === 'once' ? '1회' : '반복' }}:
+                            {{
+                                task.triggerConfig.scheduledAt.type === 'once'
+                                    ? t('task.trigger.once')
+                                    : t('task.trigger.repeat')
+                            }}:
                             {{
                                 task.triggerConfig.scheduledAt.datetime
                                     ? new Date(
@@ -351,7 +359,7 @@ function handleViewScript(event: Event) {
                     </svg>
                     <div class="flex-1">
                         <p class="font-medium text-emerald-700 dark:text-emerald-300 mb-0.5">
-                            제어 흐름
+                            {{ t('task.control.flow') }}
                         </p>
                         <p
                             v-if="
@@ -372,7 +380,7 @@ function handleViewScript(event: Event) {
                             v-else
                             class="text-[10px] text-emerald-600 dark:text-emerald-400 leading-tight"
                         >
-                            🛑 워크플로우 종료
+                            🛑 {{ t('task.control.end') }}
                             <span
                                 v-if="(task as any).executionResult.control.reason"
                                 class="block mt-0.5 text-emerald-500 dark:text-emerald-300"
@@ -403,14 +411,18 @@ function handleViewScript(event: Event) {
                         "
                         @click="handleViewScript"
                     >
-                        {{ isMissingExecutionSettings ? '스크립트 없음' : '스크립트' }}
+                        {{
+                            isMissingExecutionSettings
+                                ? t('task.status.no_script')
+                                : t('task.type.script')
+                        }}
                     </button>
                     <button
                         v-if="!task.triggerConfig?.dependsOn"
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="handleExecute"
                     >
-                        실행
+                        {{ t('task.card.execute') }}
                     </button>
                 </template>
 
@@ -419,13 +431,13 @@ function handleViewScript(event: Event) {
                     <button
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 animate-pulse shadow-sm"
                     >
-                        실행중...
+                        {{ t('task.status.executing') }}
                     </button>
                     <button
                         class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                         @click="handleStop"
                     >
-                        중지
+                        {{ t('common.stop') }}
                     </button>
                 </template>
 
@@ -441,7 +453,7 @@ function handleViewScript(event: Event) {
                                 }
                             "
                         >
-                            결과 확인
+                            {{ t('task.actions.view_result') }}
                         </button>
                         <button
                             class="px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
@@ -453,7 +465,7 @@ function handleViewScript(event: Event) {
                             "
                             title="다시 실행"
                         >
-                            재시도
+                            {{ t('common.retry') }}
                         </button>
                         <button
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
@@ -467,7 +479,7 @@ function handleViewScript(event: Event) {
                                 }
                             "
                         >
-                            승인
+                            {{ t('task.actions.approve') }}
                         </button>
                     </div>
                 </template>
@@ -484,7 +496,7 @@ function handleViewScript(event: Event) {
                             }
                         "
                     >
-                        결과보기
+                        {{ t('task.actions.view_result') }}
                     </button>
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
@@ -505,7 +517,7 @@ function handleViewScript(event: Event) {
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                             />
                         </svg>
-                        재실행
+                        {{ t('common.retry') }}
                     </button>
                     <button
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
@@ -516,7 +528,7 @@ function handleViewScript(event: Event) {
                             }
                         "
                     >
-                        히스토리
+                        {{ t('task.detail.history') }}
                     </button>
                 </template>
             </div>

@@ -17,6 +17,15 @@ import LocalAgentsTab from '../../components/settings/LocalAgentsTab.vue';
 import CreditsTab from '../../components/settings/CreditsTab.vue';
 import IconRenderer from '../../components/common/IconRenderer.vue';
 import InitialSetupWizard from '../../components/setup/InitialSetupWizard.vue';
+import { useI18n } from 'vue-i18n';
+
+const { locale } = useI18n();
+const currentLocale = computed({
+    get: () => locale.value,
+    set: (value) => {
+        locale.value = value;
+    },
+});
 
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
@@ -427,6 +436,42 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                             ]"
                                         >
                                             {{ theme }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                                Language
+                            </h2>
+                            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h3 class="font-medium text-gray-900 dark:text-white">
+                                            Interface Language
+                                        </h3>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                                            Select your preferred language
+                                        </p>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button
+                                            v-for="lang in [
+                                                { code: 'en', label: 'English' },
+                                                { code: 'ko', label: '한국어' },
+                                            ]"
+                                            :key="lang.code"
+                                            @click="currentLocale = lang.code"
+                                            :class="[
+                                                'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                                                currentLocale === lang.code
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
+                                            ]"
+                                        >
+                                            {{ lang.label }}
                                         </button>
                                     </div>
                                 </div>

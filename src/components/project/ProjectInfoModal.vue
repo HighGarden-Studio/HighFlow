@@ -8,9 +8,12 @@
  */
 
 import { computed, watch, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ProjectInfoPanel from './ProjectInfoPanel.vue';
 import ProjectMemoryPanel from './ProjectMemoryPanel.vue';
 import { getAPI } from '../../utils/electron';
+
+const { t } = useI18n();
 
 // Tab state
 const activeTab = ref<'info' | 'context'>('info');
@@ -207,29 +210,25 @@ async function handleExportProject() {
         URL.revokeObjectURL(url);
     } catch (error) {
         console.error('Failed to export project:', error);
-        alert('Failed to export project');
+        alert(t('msg.export_fail'));
     }
 }
 
 async function handleResetResults() {
     if (!props.project) return;
-    if (
-        !confirm(
-            '정말로 프로젝트 결과를 초기화하시겠습니까?\n\n이 작업은 다음 항목들을 삭제하며 되돌릴 수 없습니다:\n- 프로젝트 AI 메모리\n- 모든 태스크의 실행 결과 및 히스토리\n- 모든 태스크의 상태 (Todo로 초기화)\n\n태스크 정의와 설정은 유지됩니다.'
-        )
-    ) {
+    if (!confirm(t('msg.reset_confirm'))) {
         return;
     }
 
     try {
         const api = getAPI();
         await api.projects.resetResults(props.project.id);
-        alert('프로젝트 결과가 초기화되었습니다.');
+        alert(t('msg.reset_success'));
         emit('update');
         emit('close');
     } catch (error) {
         console.error('Failed to reset project results:', error);
-        alert('프로젝트 결과 초기화에 실패했습니다.');
+        alert(t('msg.reset_fail'));
     }
 }
 
@@ -294,7 +293,9 @@ watch(
                                     <h2 class="text-lg font-semibold text-white">
                                         {{ project.title }}
                                     </h2>
-                                    <p class="text-sm text-gray-400">프로젝트 정보</p>
+                                    <p class="text-sm text-gray-400">
+                                        {{ $t('project.info.title') }}
+                                    </p>
                                 </div>
                             </div>
                             <button
@@ -328,7 +329,7 @@ watch(
                                         : 'text-gray-400 hover:text-gray-200',
                                 ]"
                             >
-                                📋 프로젝트 정보
+                                📋 {{ $t('project.info.title') }}
                                 <div
                                     v-if="activeTab === 'info'"
                                     class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
@@ -343,7 +344,7 @@ watch(
                                         : 'text-gray-400 hover:text-gray-200',
                                 ]"
                             >
-                                ✨ AI 컨텍스트
+                                ✨ {{ $t('project.info.context') }}
                                 <div
                                     v-if="activeTab === 'context'"
                                     class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
@@ -378,10 +379,10 @@ watch(
                         <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
                             <div class="flex items-center justify-between flex-wrap gap-y-4">
                                 <div class="text-sm text-gray-400">
-                                    생성일:
+                                    {{ $t('project.info.created_at') }}:
                                     {{ new Date(project.createdAt).toLocaleDateString('ko-KR') }}
                                     <span class="mx-2">|</span>
-                                    마지막 업데이트:
+                                    {{ $t('common.update') }}:
                                     {{ new Date(project.updatedAt).toLocaleDateString('ko-KR') }}
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -402,7 +403,7 @@ watch(
                                                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                             />
                                         </svg>
-                                        Reset Results
+                                        {{ $t('project.actions.reset') }}
                                     </button>
                                     <button
                                         @click="handleExportProject"
@@ -421,13 +422,14 @@ watch(
                                                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                                             />
                                         </svg>
-                                        Export
+                                        {{ $t('project.actions.export') }}
                                     </button>
                                     <button
                                         @click="handleClose"
                                         class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors whitespace-nowrap"
                                     >
-                                        닫기
+                                        >
+                                        {{ $t('common.close') }}
                                     </button>
                                 </div>
                             </div>

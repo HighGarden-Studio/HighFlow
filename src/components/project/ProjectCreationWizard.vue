@@ -14,6 +14,7 @@
  */
 
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { marked } from 'marked';
 import {
     aiInterviewService,
@@ -58,6 +59,9 @@ const emit = defineEmits<{
 
 // Settings Store
 const settingsStore = useSettingsStore();
+
+// I18n
+const { t } = useI18n();
 
 // Chat-capable provider IDs (providers that support conversational AI)
 const CHAT_CAPABLE_PROVIDERS = [
@@ -112,31 +116,51 @@ type WizardStep =
     | 'optimize' // 6. 프롬프트 최적화
     | 'confirm'; // 7. 최종 확인
 
-const STEPS: { id: WizardStep; title: string; description: string }[] = [
-    { id: 'idea', title: '아이디어', description: '프로젝트 아이디어를 입력하세요' },
-    { id: 'provider', title: 'AI 선택', description: '인터뷰를 진행할 AI를 선택하세요' },
-    { id: 'interview', title: 'AI 인터뷰', description: 'AI와 대화하며 아이디어를 구체화합니다' },
+const steps = computed<{ id: WizardStep; title: string; description: string }[]>(() => [
+    {
+        id: 'idea',
+        title: t('project.create.wizard.steps.idea'),
+        description: t('project.create.wizard.step_desc.idea'),
+    },
+    {
+        id: 'provider',
+        title: t('project.create.wizard.steps.provider'),
+        description: t('project.create.wizard.step_desc.provider'),
+    },
+    {
+        id: 'interview',
+        title: t('project.create.wizard.steps.interview'),
+        description: t('project.create.wizard.step_desc.interview'),
+    },
     {
         id: 'concretize',
-        title: '아이디어 구체화',
-        description: '수집된 정보를 기반으로 아이디어를 구체화합니다',
+        title: t('project.create.wizard.steps.concretize'),
+        description: t('project.create.wizard.step_desc.concretize'),
     },
-    { id: 'preview', title: '실행 계획', description: '생성된 태스크와 AI 모델 추천을 확인하세요' },
+    {
+        id: 'preview',
+        title: t('project.create.wizard.steps.preview'),
+        description: t('project.create.wizard.step_desc.preview'),
+    },
     {
         id: 'optimize',
-        title: '프롬프트 최적화',
-        description: '각 태스크의 프롬프트를 최적화합니다',
+        title: t('project.create.wizard.steps.optimize'),
+        description: t('project.create.wizard.step_desc.optimize'),
     },
-    { id: 'confirm', title: '최종 확인', description: '프로젝트 생성을 완료합니다' },
-];
+    {
+        id: 'confirm',
+        title: t('project.create.wizard.steps.confirm'),
+        description: t('project.create.wizard.step_desc.confirm'),
+    },
+]);
 
 // ========================================
 // State
 // ========================================
 
 const currentStep = ref<WizardStep>('idea');
-const currentStepIndex = computed(() => STEPS.findIndex((s) => s.id === currentStep.value));
-const currentStepInfo = computed(() => STEPS[currentStepIndex.value] ?? STEPS[0]);
+const currentStepIndex = computed(() => steps.value.findIndex((s) => s.id === currentStep.value));
+const currentStepInfo = computed(() => steps.value[currentStepIndex.value] ?? steps.value[0]);
 
 // Step 1: Idea
 const ideaText = ref('');
@@ -189,28 +213,28 @@ const hasTypingBubble = computed(
 );
 
 // AI 위임 프리셋 답변 옵션
-const AI_DELEGATE_PRESETS = [
+const aiDelegatePresets = computed(() => [
     {
         id: 'ai-decide',
-        label: 'AI 판단에 맡기기',
-        description: 'AI가 최선의 선택을 하도록 위임합니다',
+        label: t('project.create.wizard.interview.presets.ai_decide.label'),
+        description: t('project.create.wizard.interview.presets.ai_decide.desc'),
     },
     {
         id: 'simple',
-        label: '가장 간단한 방법으로',
-        description: '복잡도를 최소화하는 방향으로 진행합니다',
+        label: t('project.create.wizard.interview.presets.simple.label'),
+        description: t('project.create.wizard.interview.presets.simple.desc'),
     },
     {
         id: 'best-practice',
-        label: '업계 표준/베스트 프랙티스로',
-        description: '일반적으로 권장되는 방식을 따릅니다',
+        label: t('project.create.wizard.interview.presets.best_practice.label'),
+        description: t('project.create.wizard.interview.presets.best_practice.desc'),
     },
     {
         id: 'skip',
-        label: '이 부분은 나중에 결정',
-        description: '해당 질문은 건너뛰고 나중에 결정합니다',
+        label: t('project.create.wizard.interview.presets.skip.label'),
+        description: t('project.create.wizard.interview.presets.skip.desc'),
     },
-];
+]);
 
 // Step 4: Concretization
 const concretizedIdea = ref<ConcretizedIdea | null>(null);
@@ -499,22 +523,11 @@ function selectRepo(repo: DiscoveredRepo) {
     if (repo.description) {
         projectDescription.value = repo.description;
     }
-    ideaText.value = `기존 로컬 저장소를 기반으로 프로젝트를 생성합니다.\n\n경로: ${repo.path}\n타입: ${repo.type}${repo.description ? `\n설명: ${repo.description}` : ''}`;
-}
-
-function getRepoTypeIcon(type: DiscoveredRepo['type']): string {
-    switch (type) {
-        case 'git':
-            return '📂';
-        case 'claude-code':
-            return '🤖';
-        case 'codex':
-            return '⚡';
-        case 'antigravity':
-            return '🚀';
-        default:
-            return '📁';
-    }
+    ideaText.value = t('project.create.wizard.idea.repo_template', {
+        path: repo.path,
+        type: repo.type,
+        desc: repo.description,
+    });
 }
 
 const getRepoTypeColor = (type: string) => {
@@ -535,12 +548,12 @@ function formatRelativeTime(date: Date): string {
     const diff = now.getTime() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (days === 0) return '오늘';
-    if (days === 1) return '어제';
-    if (days < 7) return `${days}일 전`;
-    if (days < 30) return `${Math.floor(days / 7)}주 전`;
-    if (days < 365) return `${Math.floor(days / 30)}개월 전`;
-    return `${Math.floor(days / 365)}년 전`;
+    if (days === 0) return t('date.today');
+    if (days === 1) return t('date.yesterday');
+    if (days < 7) return t('date.days_ago', { n: days });
+    if (days < 30) return t('date.weeks_ago', { n: Math.floor(days / 7) });
+    if (days < 365) return t('date.months_ago', { n: Math.floor(days / 30) });
+    return t('date.years_ago', { n: Math.floor(days / 365) });
 }
 
 // ========================================
@@ -549,7 +562,7 @@ function formatRelativeTime(date: Date): string {
 
 function nextStep() {
     const idx = currentStepIndex.value;
-    if (idx < STEPS.length - 1) {
+    if (idx < steps.value.length - 1) {
         // 단계별 액션
         if (currentStep.value === 'provider') {
             startInterview();
@@ -561,7 +574,7 @@ function nextStep() {
             optimizeTasks();
         }
 
-        const nextStepDef = STEPS[idx + 1];
+        const nextStepDef = steps.value[idx + 1];
         if (nextStepDef) {
             currentStep.value = nextStepDef.id;
         }
@@ -571,7 +584,7 @@ function nextStep() {
 function prevStep() {
     const idx = currentStepIndex.value;
     if (idx > 0) {
-        const prevStepDef = STEPS[idx - 1];
+        const prevStepDef = steps.value[idx - 1];
         if (prevStepDef) {
             currentStep.value = prevStepDef.id;
         }
@@ -579,7 +592,7 @@ function prevStep() {
 }
 
 function goToStep(step: WizardStep) {
-    const targetIdx = STEPS.findIndex((s) => s.id === step);
+    const targetIdx = steps.value.findIndex((s) => s.id === step);
     if (targetIdx <= currentStepIndex.value) {
         currentStep.value = step;
     }
@@ -793,7 +806,7 @@ onUnmounted(() => {
 /**
  * AI 위임 프리셋 답변 선택
  */
-function selectPresetAnswer(preset: (typeof AI_DELEGATE_PRESETS)[number]) {
+function selectPresetAnswer(preset: (typeof aiDelegatePresets.value)[number]) {
     const messages: Record<string, string> = {
         'ai-decide':
             'AI가 최선이라고 판단하는 방식으로 진행해주세요. 전문적인 판단에 맡기겠습니다.',
@@ -1417,16 +1430,6 @@ async function readLocalGuidelinesIfExists(repoPath?: string): Promise<string | 
 // Methods - Utility
 // ========================================
 
-function getRepoIcon(type: string): string {
-    const icons: Record<string, string> = {
-        git: '📁',
-        'claude-code': '🤖',
-        codex: '🔮',
-        antigravity: '🚀',
-    };
-    return icons[type] || '📁';
-}
-
 function getRepoTypeLabel(type: string): string {
     const labels: Record<string, string> = {
         git: 'Git',
@@ -1611,7 +1614,7 @@ watch(
                         <div>
                             <h2 class="text-xl font-bold text-white flex items-center gap-2">
                                 <IconRenderer emoji="🚀" class="w-5 h-5" />
-                                <span>프로젝트 생성</span> 위자드
+                                <span>{{ t('project.create.wizard.title') }}</span>
                             </h2>
                             <p class="text-sm text-gray-400 mt-1">
                                 {{ currentStepInfo?.description }}
@@ -1639,7 +1642,7 @@ watch(
 
                     <!-- Progress Steps -->
                     <div class="mt-4 flex items-center gap-1">
-                        <template v-for="(step, idx) in STEPS" :key="step.id">
+                        <template v-for="(step, idx) in steps" :key="step.id">
                             <button
                                 @click="goToStep(step.id)"
                                 :disabled="idx > currentStepIndex"
@@ -1664,7 +1667,7 @@ watch(
                                 </span>
                                 <span class="hidden sm:inline">{{ step.title }}</span>
                             </button>
-                            <div v-if="idx < STEPS.length - 1" class="w-4 h-0.5 bg-gray-700"></div>
+                            <div v-if="idx < steps.length - 1" class="w-4 h-0.5 bg-gray-700"></div>
                         </template>
                     </div>
                 </div>
@@ -1686,11 +1689,13 @@ watch(
                             >
                                 <div class="flex items-center gap-3 mb-2">
                                     <IconRenderer emoji="✨" class="w-6 h-6" />
-                                    <span class="font-medium text-white">빠른 시작</span>위자드로
-                                    생성
+                                    <span class="font-medium text-white">{{
+                                        t('project.create.wizard.quick_start.title')
+                                    }}</span
+                                    >{{ t('project.create.wizard.quick_start.sub_title') }}
                                 </div>
                                 <p class="text-sm text-gray-400">
-                                    AI와 대화하며 아이디어를 구체화하고 태스크를 자동 생성합니다.
+                                    {{ t('project.create.wizard.quick_start.desc') }}
                                 </p>
                             </button>
 
@@ -1708,10 +1713,12 @@ watch(
                             >
                                 <div class="flex items-center gap-3 mb-2">
                                     <IconRenderer emoji="📂" class="w-6 h-6" />
-                                    <span class="font-medium text-white">Import from Git</span>
+                                    <span class="font-medium text-white">{{
+                                        t('project.create.wizard.import_git.title')
+                                    }}</span>
                                 </div>
                                 <p class="text-sm text-gray-400">
-                                    기존 Git 저장소 또는 AI 에이전트 설정 폴더를 선택합니다.
+                                    {{ t('project.create.wizard.import_git.desc') }}
                                 </p>
                             </button>
                         </div>
@@ -1720,16 +1727,16 @@ watch(
                         <div v-if="creationMode === 'ai-wizard'" class="space-y-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-300 mb-2">
-                                    프로젝트 아이디어를 자유롭게 설명해주세요
+                                    {{ t('project.create.wizard.idea.label') }}
                                 </label>
                                 <textarea
                                     v-model="ideaText"
                                     rows="8"
                                     class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                                    placeholder="예: 실시간 협업이 가능한 칸반 보드 애플리케이션을 만들고 싶어요. Vue 3를 사용하고, 드래그 앤 드롭으로 태스크를 이동할 수 있어야 해요. 팀원들과 함께 사용할 수 있도록 멀티 유저 기능도 필요합니다..."
+                                    :placeholder="t('project.create.wizard.idea.placeholder')"
                                 ></textarea>
                                 <div class="flex justify-between text-xs text-gray-500 mt-1">
-                                    <span>최소 20자 이상 입력해주세요</span>
+                                    <span>{{ t('project.create.wizard.idea.min_length') }}</span>
                                     <span>{{ ideaText.length }}자</span>
                                 </div>
                             </div>
@@ -1739,15 +1746,21 @@ watch(
                                     <span class="text-2xl">💡</span>
                                     <div>
                                         <h4 class="font-medium text-blue-300">
-                                            팁: 좋은 아이디어 설명이란?
+                                            {{ t('project.create.wizard.idea.tip.title') }}
                                         </h4>
                                         <ul class="text-sm text-gray-400 mt-2 space-y-1">
                                             <li>
-                                                • 해결하고자 하는 문제나 목표를 명확히 설명하세요
+                                                • {{ t('project.create.wizard.idea.tip.item1') }}
                                             </li>
-                                            <li>• 사용 기술이나 플랫폼이 있다면 언급해주세요</li>
-                                            <li>• 대상 사용자나 비즈니스 맥락을 설명해주세요</li>
-                                            <li>• 참고하고 싶은 기존 제품이 있다면 알려주세요</li>
+                                            <li>
+                                                • {{ t('project.create.wizard.idea.tip.item2') }}
+                                            </li>
+                                            <li>
+                                                • {{ t('project.create.wizard.idea.tip.item3') }}
+                                            </li>
+                                            <li>
+                                                • {{ t('project.create.wizard.idea.tip.item4') }}
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>
@@ -1784,7 +1797,9 @@ watch(
                                         ></path>
                                     </svg>
                                     <span>{{
-                                        isScanning ? '검색 중...' : '저장소 다시 검색'
+                                        isScanning
+                                            ? t('project.create.wizard.idea.scan_btn_scanning')
+                                            : t('project.create.wizard.idea.scan_btn')
                                     }}</span>
                                 </button>
 
@@ -1805,7 +1820,7 @@ watch(
                                             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                                         />
                                     </svg>
-                                    <span>폴더 직접 선택</span>
+                                    <span>{{ t('project.create.wizard.idea.select_folder') }}</span>
                                 </button>
                             </div>
 
@@ -1836,9 +1851,11 @@ watch(
                                 <div
                                     class="animate-spin w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full mx-auto mb-3"
                                 ></div>
-                                <p class="text-gray-400">로컬 저장소를 검색하고 있습니다...</p>
+                                <p class="text-gray-400">
+                                    {{ t('project.create.wizard.idea.scanning_title') }}
+                                </p>
                                 <p class="text-xs text-gray-500 mt-1">
-                                    Development, Projects, GitHub 폴더 등을 확인합니다
+                                    {{ t('project.create.wizard.idea.scanning_desc') }}
                                 </p>
                             </div>
 
@@ -1847,9 +1864,11 @@ watch(
                                 class="text-center py-12 bg-gray-800/50 rounded-lg"
                             >
                                 <IconRenderer emoji="📭" class="w-12 h-12 mx-auto mb-3" />
-                                <p class="text-gray-400">발견된 저장소가 없습니다</p>
+                                <p class="text-gray-400">
+                                    {{ t('project.create.wizard.idea.no_repos_title') }}
+                                </p>
                                 <p class="text-xs text-gray-500 mt-1">
-                                    폴더 직접 선택 버튼을 사용하여 저장소를 추가하세요
+                                    {{ t('project.create.wizard.idea.no_repos_desc') }}
                                 </p>
                             </div>
 
@@ -1976,7 +1995,11 @@ watch(
                                 <div class="flex items-start gap-3">
                                     <IconRenderer emoji="✅" class="w-5 h-5" />
                                     <div class="flex-1">
-                                        <h4 class="font-medium text-violet-300">선택된 저장소</h4>
+                                        <h4 class="font-medium text-violet-300">
+                                            {{
+                                                t('project.create.wizard.idea.selected_repo_title')
+                                            }}
+                                        </h4>
                                         <p class="text-sm text-gray-400 mt-1">
                                             {{ selectedRepo.name }} ({{ selectedRepo.type }})
                                         </p>
@@ -1992,7 +2015,7 @@ watch(
                     <!-- Step 2: Provider Selection -->
                     <div v-if="currentStep === 'provider'" class="space-y-6">
                         <p class="text-gray-400">
-                            아이디어 구체화를 위한 인터뷰를 진행할 AI 모델을 선택하세요.
+                            {{ t('project.create.wizard.provider.guide') }}
                         </p>
 
                         <!-- No providers available warning -->
@@ -2004,17 +2027,18 @@ watch(
                                 <IconRenderer emoji="⚠️" class="w-6 h-6" />
                                 <div>
                                     <h4 class="font-medium text-yellow-300">
-                                        활성화된 AI 프로바이더가 없습니다
+                                        {{ t('project.create.wizard.provider.no_providers.title') }}
                                     </h4>
                                     <p class="text-sm text-gray-400 mt-1">
-                                        AI 인터뷰를 진행하려면 Settings > AI Providers에서 최소
-                                        하나의 AI 프로바이더를 설정하고 활성화해야 합니다.
+                                        {{ t('project.create.wizard.provider.no_providers.desc') }}
                                     </p>
                                     <button
                                         @click="emit('close')"
                                         class="mt-3 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-sm transition-colors"
                                     >
-                                        설정으로 이동
+                                        {{
+                                            t('project.create.wizard.provider.no_providers.button')
+                                        }}
                                     </button>
                                 </div>
                             </div>
@@ -2080,7 +2104,9 @@ watch(
                         <!-- Interview Progress -->
                         <div class="mb-4 bg-gray-800 rounded-lg p-3">
                             <div class="flex items-center justify-between text-sm mb-2">
-                                <span class="text-gray-400">인터뷰 진행률</span>
+                                <span class="text-gray-400">{{
+                                    t('project.create.wizard.interview.progress')
+                                }}</span>
                                 <span
                                     :class="
                                         interviewProgress >= 70
@@ -2103,8 +2129,12 @@ watch(
                             <p class="text-xs text-gray-500 mt-2">
                                 {{
                                     interviewProgress >= 70
-                                        ? '충분한 정보가 수집되었습니다. 다음 단계로 진행할 수 있습니다.'
-                                        : 'AI의 질문에 답변하여 아이디어를 구체화하세요.'
+                                        ? t(
+                                              'project.create.wizard.interview.progress_guide.complete'
+                                          )
+                                        : t(
+                                              'project.create.wizard.interview.progress_guide.ongoing'
+                                          )
                                 }}
                             </p>
                         </div>
@@ -2185,7 +2215,7 @@ watch(
                                             </div>
                                         </div>
                                         <div class="flex-1 text-sm text-white">
-                                            AI가 답변을 준비 중입니다...
+                                            {{ t('project.create.wizard.interview.typing') }}
                                         </div>
                                     </div>
                                     <div v-else>
@@ -2277,7 +2307,7 @@ watch(
                                 </div>
                                 <div class="flex-1">
                                     <div class="text-sm text-white font-medium mb-1">
-                                        AI가 답변을 준비 중입니다...
+                                        {{ t('project.create.wizard.interview.typing') }}
                                     </div>
                                     <div class="flex items-center gap-1">
                                         <span
@@ -2300,11 +2330,11 @@ watch(
                         <!-- AI 위임 프리셋 답변 옵션 -->
                         <div class="mt-4 bg-gray-800/30 rounded-lg p-3">
                             <p class="text-xs text-gray-500 mb-2">
-                                💡 답변이 어려우시면 아래 옵션을 선택하세요:
+                                💡 {{ t('project.create.wizard.interview.options_title') }}
                             </p>
                             <div class="flex flex-wrap gap-2">
                                 <button
-                                    v-for="preset in AI_DELEGATE_PRESETS"
+                                    v-for="preset in aiDelegatePresets"
                                     :key="preset.id"
                                     @click="selectPresetAnswer(preset)"
                                     :disabled="isProcessing"
@@ -2329,7 +2359,7 @@ watch(
                             <button
                                 @click="fileInput?.click()"
                                 class="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-400 hover:text-white transition-colors"
-                                title="파일 첨부"
+                                :title="t('project.create.wizard.interview.file_attach')"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -2350,7 +2380,9 @@ watch(
                                 @keyup.enter="sendMessage"
                                 type="text"
                                 class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="답변을 입력하거나 위 옵션을 선택하세요..."
+                                :placeholder="
+                                    t('project.create.wizard.interview.input_placeholder')
+                                "
                                 :disabled="isProcessing"
                             />
                             <button
@@ -2358,7 +2390,7 @@ watch(
                                 :disabled="!chatInput.trim() || isProcessing"
                                 class="px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                             >
-                                전송
+                                {{ t('project.create.wizard.interview.send') }}
                             </button>
                         </div>
 
@@ -2371,7 +2403,7 @@ watch(
                                 @click="forceCompleteInterview"
                                 class="text-sm text-gray-400 hover:text-white underline"
                             >
-                                인터뷰 조기 종료하기
+                                {{ t('project.create.wizard.interview.force_complete') }}
                             </button>
                         </div>
                     </div>

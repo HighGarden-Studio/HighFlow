@@ -4,6 +4,7 @@
  * Supports both 'ai' and 'script' task types with in_review workflow
  */
 import { computed, ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
@@ -62,6 +63,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
+const { t } = useI18n();
 const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
@@ -494,18 +496,20 @@ function hexToRgba(hex: string, alpha: number) {
                     </svg>
                     <div class="flex-1">
                         <p class="font-medium text-indigo-700 dark:text-indigo-300 mb-0.5">
-                            자동 실행
+                            {{ t('task.trigger.auto') }}
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
                             {{
-                                dependencySequences ? `Task ${dependencySequences}` : '이전 태스크'
+                                dependencySequences
+                                    ? `Task ${dependencySequences}`
+                                    : t('common.prev_task')
                             }}
                             {{
                                 task.triggerConfig.dependsOn.operator === 'all'
-                                    ? '모두'
-                                    : '하나라도'
+                                    ? t('task.trigger.all')
+                                    : t('task.trigger.any')
                             }}
-                            완료 시
+                            {{ t('task.trigger.on_complete') }}
                         </p>
                     </div>
                 </div>
@@ -527,10 +531,14 @@ function hexToRgba(hex: string, alpha: number) {
                     </svg>
                     <div class="flex-1">
                         <p class="font-medium text-indigo-700 dark:text-indigo-300 mb-0.5">
-                            예약 실행
+                            {{ t('task.trigger.scheduled') }}
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
-                            {{ task.triggerConfig.scheduledAt.type === 'once' ? '1회' : '반복' }}:
+                            {{
+                                task.triggerConfig.scheduledAt.type === 'once'
+                                    ? t('task.trigger.once')
+                                    : t('task.trigger.repeat')
+                            }}:
                             {{
                                 task.triggerConfig.scheduledAt.datetime
                                     ? new Date(
@@ -566,7 +574,7 @@ function hexToRgba(hex: string, alpha: number) {
                         />
                     </svg>
                     <span class="text-xs font-medium text-amber-800 dark:text-amber-200">
-                        Provider 연동 필요
+                        {{ t('task.message.provider_required') }}
                     </span>
                 </div>
             </div>
@@ -579,7 +587,7 @@ function hexToRgba(hex: string, alpha: number) {
                         task.status === 'in_progress' && !task.isPaused,
                 }"
                 @click.stop="emit('previewStream', task)"
-                title="클릭하여 실시간 응답 크게 보기"
+                :title="t('task.tooltip.click_expand')"
             >
                 <!-- Header with live indicator -->
                 <div class="flex items-center justify-between mb-1.5">
@@ -608,14 +616,13 @@ function hexToRgba(hex: string, alpha: number) {
                             "
                         >
                             {{
-                                task.status === 'in_progress' && !task.isPaused ? 'LIVE' : 'AI 응답'
+                                task.status === 'in_progress' && !task.isPaused
+                                    ? t('task.status.live')
+                                    : t('task.status.ai_response')
                             }}
                         </span>
                     </div>
-                    <span
-                        class="text-[10px] text-gray-500 dark:text-gray-400 group-hover:text-blue-500 transition-colors"
-                        >자세히 보기 &rarr;</span
-                    >
+                    <span>{{ t('task.actions.view_detail') }} &rarr;</span>
                 </div>
 
                 <!-- Streaming content -->
@@ -647,7 +654,7 @@ function hexToRgba(hex: string, alpha: number) {
                                   : streamedContent ||
                                     (task as any).executionResult?.content?.slice(0, 300) ||
                                     (task as any).result?.slice(0, 300) ||
-                                    '이전 결과 없음'
+                                    t('task.status.no_result')
                         }}
                     </p>
                     <p
@@ -656,8 +663,8 @@ function hexToRgba(hex: string, alpha: number) {
                     >
                         {{
                             task.status === 'in_progress'
-                                ? '⏳ 응답 대기중...'
-                                : '아직 실행되지 않음'
+                                ? `⏳ ${t('task.status.waiting')}`
+                                : t('task.status.not_started')
                         }}
                     </p>
                 </div>
@@ -684,7 +691,9 @@ function hexToRgba(hex: string, alpha: number) {
                             >REVIEWING</span
                         >
                     </div>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400">AI 검토중</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400">{{
+                        t('task.status.ai_reviewing')
+                    }}</span>
                 </div>
                 <div class="relative overflow-hidden" style="min-height: 36px; max-height: 48px">
                     <p
@@ -702,7 +711,7 @@ function hexToRgba(hex: string, alpha: number) {
                         v-else
                         class="text-gray-400 dark:text-gray-500 italic animate-pulse text-[10px]"
                     >
-                        🔍 검토 시작중...
+                        🔍 {{ t('task.status.review_starting') }}
                     </p>
                 </div>
             </div>
@@ -721,7 +730,7 @@ function hexToRgba(hex: string, alpha: number) {
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-amber-500 text-white hover:bg-amber-600 flex items-center justify-center gap-1 shadow-sm"
                         @click.stop="handleConnectProviderClick"
                     >
-                        연동하기
+                        {{ t('task.actions.connect') }}
                     </button>
                     <template v-else>
                         <button
@@ -734,14 +743,18 @@ function hexToRgba(hex: string, alpha: number) {
                             "
                             @click="handlePreviewPrompt"
                         >
-                            {{ isMissingExecutionSettings ? '설정' : '프롬프트' }}
+                            {{
+                                isMissingExecutionSettings
+                                    ? t('common.settings')
+                                    : t('task.detail.prompt')
+                            }}
                         </button>
                         <button
                             v-if="!props.hidePromptActions"
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center gap-1"
                             @click="handleEnhancePrompt"
                         >
-                            고도화
+                            {{ t('task.actions.enhance') }}
                         </button>
                         <!-- Previous Result Button (Only if result exists) -->
                         <button
@@ -749,7 +762,7 @@ function hexToRgba(hex: string, alpha: number) {
                             class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center gap-1 shadow-sm"
                             @click="handlePreviewResult"
                         >
-                            이전 결과보기
+                            {{ t('task.actions.view_prev_result') }}
                         </button>
                         <button
                             v-if="!task.triggerConfig?.dependsOn"
@@ -775,7 +788,7 @@ function hexToRgba(hex: string, alpha: number) {
                                     d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                                 />
                             </svg>
-                            실행
+                            {{ t('task.card.execute') }}
                         </button>
                     </template>
                 </template>

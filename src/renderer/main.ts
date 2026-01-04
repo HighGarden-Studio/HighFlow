@@ -20,5 +20,9 @@ app.use(pinia);
 // Use Vue Router
 app.use(router);
 
+// Use i18n
+import i18n from '../i18n';
+app.use(i18n);
+
 // Mount app
 app.mount('#app');

@@ -12,6 +12,8 @@ import { getAPI } from '../../utils/electron';
 import type { Task } from '@core/types/database';
 import ProjectCreationWizard from '../../components/project/ProjectCreationWizard.vue';
 import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import IconRenderer from '../../components/common/IconRenderer.vue';
+import { getProviderIcon } from '../../utils/iconMapping';
 
 const router = useRouter();
 const projectStore = useProjectStore();
@@ -342,7 +344,7 @@ onUnmounted(() => {
         <header class="border-b border-gray-800 px-6 py-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-white">Projects</h1>
+                    <h1 class="text-2xl font-bold text-white">{{ $t('nav.projects') }}</h1>
                     <p class="text-gray-400 text-sm mt-1">Manage your AI-powered projects</p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -351,7 +353,7 @@ onUnmounted(() => {
                         class="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-500/20"
                     >
                         <span class="text-lg">✨</span>
-                        AI 프로젝트 생성
+                        {{ $t('project.create.button') }}
                     </button>
                     <button
                         @click="triggerImport"
@@ -365,7 +367,7 @@ onUnmounted(() => {
                                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                             />
                         </svg>
-                        Import
+                        {{ $t('project.create.import') }}
                     </button>
                     <input
                         ref="fileInput"
@@ -386,7 +388,7 @@ onUnmounted(() => {
                                 d="M12 4v16m8-8H4"
                             />
                         </svg>
-                        빈 프로젝트
+                        {{ $t('project.create.empty') }}
                     </button>
                 </div>
             </div>
@@ -410,7 +412,7 @@ onUnmounted(() => {
                     <input
                         v-model="searchQuery"
                         type="text"
-                        placeholder="Search projects..."
+                        :placeholder="$t('project.list.search_placeholder')"
                         class="w-full max-w-md pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>
@@ -442,21 +444,23 @@ onUnmounted(() => {
                         d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                     />
                 </svg>
-                <h3 class="text-lg font-medium text-gray-300 mb-2">No projects yet</h3>
-                <p class="text-gray-500 mb-4">Create your first project to get started</p>
+                <h3 class="text-lg font-medium text-gray-300 mb-2">
+                    {{ $t('project.list.empty_title') }}
+                </h3>
+                <p class="text-gray-500 mb-4">{{ $t('project.list.empty_desc') }}</p>
                 <div class="flex items-center gap-3">
                     <button
                         @click="showAIWizard = true"
                         class="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
                     >
                         <span>✨</span>
-                        AI로 시작하기
+                        {{ $t('project.list.ai_start') }}
                     </button>
                     <button
                         @click="showCreateModal = true"
                         class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                     >
-                        빈 프로젝트
+                        {{ $t('project.create.empty') }}
                     </button>
                 </div>
             </div>
@@ -490,9 +494,12 @@ onUnmounted(() => {
                                     <span
                                         v-if="project.aiProvider"
                                         class="flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 border-opacity-50"
-                                        title="기본 AI 모델"
+                                        :title="$t('project.card.ai_model_title')"
                                     >
-                                        <span>✨</span>
+                                        <IconRenderer
+                                            :icon="getProviderIcon(project.aiProvider)"
+                                            class="w-3.5 h-3.5"
+                                        />
                                         {{ project.aiProvider }}
                                     </span>
                                     <span
@@ -542,7 +549,9 @@ onUnmounted(() => {
                             <!-- Progress Bar -->
                             <div class="w-32 flex-shrink-0">
                                 <div class="flex items-center justify-between text-xs mb-1">
-                                    <span class="text-gray-400">진행률</span>
+                                    <span class="text-gray-400">{{
+                                        $t('project.status.progress')
+                                    }}</span>
                                     <span class="text-white font-medium">
                                         {{ taskSummaries[project.id]?.progressPercent || 0 }}%
                                     </span>
@@ -563,7 +572,7 @@ onUnmounted(() => {
                                 <div
                                     v-if="(taskSummaries[project.id]?.inConfirm ?? 0) > 0"
                                     class="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-500/20 border border-orange-500/30 rounded-lg animate-pulse"
-                                    title="승인 대기"
+                                    :title="$t('project.status.confirm')"
                                 >
                                     <span class="text-orange-400">🔔</span>
                                     <span class="text-orange-400 font-bold text-sm">
@@ -574,7 +583,7 @@ onUnmounted(() => {
                                 <!-- In Progress -->
                                 <div
                                     class="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 rounded-lg"
-                                    title="진행중"
+                                    :title="$t('project.status.in_progress')"
                                 >
                                     <div class="w-2 h-2 rounded-full bg-blue-500" />
                                     <span class="text-blue-400 text-sm font-medium">
@@ -585,7 +594,7 @@ onUnmounted(() => {
                                 <!-- In Review -->
                                 <div
                                     class="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 rounded-lg"
-                                    title="검토중"
+                                    :title="$t('project.status.in_review')"
                                 >
                                     <div class="w-2 h-2 rounded-full bg-yellow-500" />
                                     <span class="text-yellow-400 text-sm font-medium">
@@ -596,7 +605,7 @@ onUnmounted(() => {
                                 <!-- Done -->
                                 <div
                                     class="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 rounded-lg"
-                                    title="완료"
+                                    :title="$t('project.status.done')"
                                 >
                                     <div class="w-2 h-2 rounded-full bg-green-500" />
                                     <span class="text-green-400 text-sm font-medium">
@@ -607,7 +616,7 @@ onUnmounted(() => {
                                 <!-- Total Tasks -->
                                 <div
                                     class="flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-lg"
-                                    title="전체 태스크"
+                                    :title="$t('project.status.total')"
                                 >
                                     <svg
                                         class="w-4 h-4 text-gray-400"
@@ -632,7 +641,7 @@ onUnmounted(() => {
                             <div
                                 v-if="(taskSummaries[project.id]?.blocked ?? 0) > 0"
                                 class="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded-lg"
-                                title="차단됨"
+                                :title="$t('project.status.blocked')"
                             >
                                 <svg
                                     class="w-4 h-4 text-red-400"
@@ -656,7 +665,7 @@ onUnmounted(() => {
                             <button
                                 @click="openProjectInfo(project, $event)"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                title="프로젝트 정보"
+                                :title="$t('project.actions.info')"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -677,8 +686,8 @@ onUnmounted(() => {
                                 class="p-2 text-red-400 hover:text-white hover:bg-red-700/40 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                 :title="
                                     deletingProjectId === project.id
-                                        ? '삭제 중...'
-                                        : '프로젝트 삭제'
+                                        ? $t('project.actions.deleting')
+                                        : $t('project.actions.delete')
                                 "
                             >
                                 <svg
@@ -752,7 +761,8 @@ onUnmounted(() => {
                                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                                 />
                             </svg>
-                            {{ project.actualHours?.toFixed(1) || 0 }}h 소요
+                            {{ project.actualHours?.toFixed(1) || 0 }}
+                            {{ $t('project.card.hours') }}
                         </span>
                         <span class="flex items-center gap-1.5">
                             <svg
@@ -768,7 +778,8 @@ onUnmounted(() => {
                                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                                 />
                             </svg>
-                            {{ new Date(project.updatedAt).toLocaleDateString('ko-KR') }} 업데이트
+                            {{ new Date(project.updatedAt).toLocaleDateString() }}
+                            {{ $t('project.card.updated') }}
                         </span>
                     </div>
                 </div>
@@ -782,17 +793,19 @@ onUnmounted(() => {
                 <div
                     class="relative bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-xl"
                 >
-                    <h2 class="text-xl font-bold text-white mb-4">Create New Project</h2>
+                    <h2 class="text-xl font-bold text-white mb-4">
+                        {{ $t('project.modal.create_title') }}
+                    </h2>
 
                     <form @submit.prevent="handleCreateProject" class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">
-                                Project Name
+                                {{ $t('project.modal.name_label') }}
                             </label>
                             <input
                                 v-model="newProjectTitle"
                                 type="text"
-                                placeholder="My Awesome Project"
+                                :placeholder="$t('project.modal.name_placeholder')"
                                 class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 autofocus
                             />

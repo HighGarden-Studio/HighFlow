@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Task, TaskHistoryEntry, InputTaskConfig } from '@core/types/database';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
 import PromptEnhancerPanel from '../prompt/PromptEnhancerPanel.vue';
@@ -68,7 +69,9 @@ const settingsStore = useSettingsStore();
 const projectStore = useProjectStore();
 
 // Task store for global execution state
+// Task store for global execution state
 const taskStore = useTaskStore();
+const { t } = useI18n();
 
 // Local Agent execution
 const localAgentExecution = useLocalAgentExecution();
@@ -122,7 +125,7 @@ const activeTab = ref<'prompt' | 'settings' | 'details' | 'notifications' | 'com
 );
 const promptText = ref('');
 const scriptCode = ref('');
-const showScriptGuide = ref(false);
+
 const scriptLanguage = ref<ScriptLanguage>('javascript');
 const aiProvider = ref<AIProvider | null>(null);
 const aiModel = ref<string | null>(null);
@@ -139,7 +142,7 @@ const providerModelOptions = computed(() => {
     const models = provider.models && provider.models.length > 0 ? provider.models : [];
     return models.map((modelId) => ({
         id: modelId,
-        label: modelId === provider.defaultModel ? `${modelId} (기본)` : modelId,
+        label: modelId === provider.defaultModel ? `${modelId} ${t('common.default')}` : modelId,
     }));
 });
 const currentReviewProvider = computed(() =>
@@ -155,7 +158,7 @@ const reviewProviderModelOptions = computed(() => {
     const models = provider.models && provider.models.length > 0 ? provider.models : [];
     return models.map((modelId) => ({
         id: modelId,
-        label: modelId === provider.defaultModel ? `${modelId} (기본)` : modelId,
+        label: modelId === provider.defaultModel ? `${modelId} ${t('common.default')}` : modelId,
     }));
 });
 function getDefaultModelForProvider(providerId: string | null): string | null {
@@ -234,25 +237,26 @@ function toggleHistoryExpansion(id: number) {
 }
 
 // Output format options
-const outputFormatOptions = [
-    { value: 'text', label: '텍스트 (Text)' },
-    { value: 'markdown', label: '마크다운 (Markdown)' },
-    { value: 'json', label: 'JSON' },
-    { value: 'code', label: '코드 (Code)' },
-    { value: 'html', label: 'HTML' },
-    { value: 'pdf', label: 'PDF' },
-    { value: 'csv', label: 'CSV' },
-    { value: 'yaml', label: 'YAML' },
-    { value: 'sql', label: 'SQL' },
-    { value: 'shell', label: 'Shell Script' },
-    { value: 'mermaid', label: 'Mermaid 다이어그램' },
-    { value: 'svg', label: 'SVG 이미지' },
-    { value: 'png', label: 'PNG 이미지' },
-    { value: 'mp4', label: 'MP4 비디오' },
-    { value: 'mp3', label: 'MP3 오디오' },
-    { value: 'diff', label: 'Diff (코드 변경사항)' },
-    { value: 'log', label: 'Log 파일' },
-];
+// Output format options
+const outputFormatOptions = computed(() => [
+    { value: 'text', label: t('task.output.text') },
+    { value: 'markdown', label: t('task.output.markdown') },
+    { value: 'json', label: t('task.output.json') },
+    { value: 'code', label: t('task.output.code') },
+    { value: 'html', label: t('task.output.html') },
+    { value: 'pdf', label: t('task.output.pdf') },
+    { value: 'csv', label: t('task.output.csv') },
+    { value: 'yaml', label: t('task.output.yaml') },
+    { value: 'sql', label: t('task.output.sql') },
+    { value: 'shell', label: t('task.output.shell') },
+    { value: 'mermaid', label: t('task.output.mermaid') },
+    { value: 'svg', label: t('task.output.svg') },
+    { value: 'png', label: t('task.output.png') },
+    { value: 'mp4', label: t('task.output.mp4') },
+    { value: 'mp3', label: t('task.output.mp3') },
+    { value: 'diff', label: t('task.output.diff') },
+    { value: 'log', label: t('task.output.log') },
+]);
 
 // 프롬프트 도구 상태
 const showPromptEnhancer = ref(false);
@@ -1136,7 +1140,7 @@ async function handleLocalAgentExecute() {
         }
     } catch (error) {
         console.error('Local Agent execution failed:', error);
-        streamingResult.value = `실행 오류: ${(error as Error).message}`;
+        streamingResult.value = `${t('task.alert.execution_error')}: ${(error as Error).message}`;
 
         // Update task status to blocked
         if (localTask.value) {
@@ -1237,7 +1241,7 @@ async function handleExecute() {
             console.log(`Executing script task ${localTask.value.id}`);
 
             if (!localTask.value.scriptCode) {
-                alert('스크립트 코드가 없습니다.');
+                alert(t('task.alert.no_script'));
                 return;
             }
 
@@ -1277,7 +1281,9 @@ async function handleExecute() {
         }
     } catch (error) {
         console.error('Task execution error:', error);
-        alert(`실행 오류: ${error instanceof Error ? error.message : String(error)}`);
+        alert(
+            `${t('task.alert.execution_error')}: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 }
 
@@ -1321,7 +1327,9 @@ async function handleUpdateNotificationConfig(config: any) {
         }
     } catch (error) {
         console.error('[TaskDetailPanel] Failed to update notification config:', error);
-        alert(`알림 설정 저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+        alert(
+            `${t('task.alert.save_error')}: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 }
 
@@ -1333,12 +1341,12 @@ async function handleTestNotification(config: any) {
     try {
         const api = getAPI();
         if (!api) {
-            alert('Electron API를 사용할 수 없습니다.');
+            alert(t('task.alert.electron_unavailable'));
             return;
         }
 
         if (!config || (!config.slack?.webhookUrl && !config.webhook?.url)) {
-            alert('알림 설정을 먼저 입력해주세요. (Slack Webhook URL 또는 Custom Webhook URL)');
+            alert(t('task.alert.config_required'));
             return;
         }
 
@@ -1350,10 +1358,12 @@ async function handleTestNotification(config: any) {
             config
         );
 
-        alert('테스트 알림이 전송되었습니다. 웹훅 URL을 확인해주세요.');
+        alert(t('task.alert.test_sent'));
     } catch (error) {
         console.error('Failed to send test notification:', error);
-        alert(`테스트 알림 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+        alert(
+            `${t('task.alert.test_fail')}: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 }
 
@@ -1365,7 +1375,7 @@ function addComment() {
 
     comments.value.push({
         id: Date.now(),
-        author: '현재 사용자', // TODO: Get from auth
+        author: t('common.current_user'), // TODO: Get from auth
         text: newComment.value,
         timestamp: new Date(),
     });
@@ -1469,21 +1479,21 @@ function getHistoryEventColor(eventType: string): string {
 // Get history event title
 function getHistoryEventTitle(eventType: string): string {
     const titles: Record<string, string> = {
-        execution_started: '실행 시작',
-        execution_completed: '실행 완료',
-        execution_failed: '실행 실패',
-        ai_review_requested: 'AI 검토 요청',
-        ai_review_completed: 'AI 검토 완료',
-        prompt_refined: '프롬프트 수정',
-        status_changed: '상태 변경',
-        paused: '일시정지',
-        resumed: '재개',
-        stopped: '중지',
-        approval_requested: '승인 요청',
-        approved: '승인됨',
-        rejected: '거절됨',
-        review_completed: '리뷰 완료',
-        changes_requested: '수정 요청',
+        execution_started: t('task.history_event.execution_started'),
+        execution_completed: t('task.history_event.execution_completed'),
+        execution_failed: t('task.history_event.execution_failed'),
+        ai_review_requested: t('task.history_event.ai_review_requested'),
+        ai_review_completed: t('task.history_event.ai_review_completed'),
+        prompt_refined: t('task.history_event.prompt_refined'),
+        status_changed: t('task.history_event.status_changed'),
+        paused: t('task.history_event.paused'),
+        resumed: t('task.history_event.resumed'),
+        stopped: t('task.history_event.stopped'),
+        approval_requested: t('task.history_event.approval_requested'),
+        approved: t('task.history_event.approved'),
+        rejected: t('task.history_event.rejected'),
+        review_completed: t('task.history_event.review_completed'),
+        changes_requested: t('task.history_event.changes_requested'),
     };
     return titles[eventType] || eventType;
 }
@@ -1506,37 +1516,37 @@ function formatHistoryEventData(entry: TaskHistoryEntry, skipContent: boolean = 
     if (!skipContent && data.content && typeof data.content === 'string') {
         // Check if it's an image (base64)
         if (isBase64Image(data.content)) {
-            parts.push(`결과: [이미지 생성됨]`);
+            parts.push(t('task.history_msg.result_image'));
         } else if (data.content.length > 1200) {
             // Truncate long text
-            parts.push(`결과: ${data.content.substring(0, 1200)}...`);
+            parts.push(`${t('task.history_msg.result')}: ${data.content.substring(0, 1200)}...`);
         } else {
-            parts.push(`결과: ${data.content}`);
+            parts.push(`${t('task.history_msg.result')}: ${data.content}`);
         }
     }
     if (data.error) {
-        parts.push(`오류: ${data.error}`);
+        parts.push(`${t('task.history_msg.error')}: ${data.error}`);
     }
     if (data.prompt) {
-        parts.push(`프롬프트: ${data.prompt}`);
+        parts.push(`${t('task.history_msg.prompt')}: ${data.prompt}`);
     }
     if (data.reviewPrompt) {
-        parts.push(`검토 요청: ${data.reviewPrompt}`);
+        parts.push(`${t('task.history_msg.review_req')}: ${data.reviewPrompt}`);
     }
     if (data.reviewResult) {
-        parts.push(`검토 결과: ${data.reviewResult}`);
+        parts.push(`${t('task.history_msg.review_res')}: ${data.reviewResult}`);
     }
     if (data.reviewFeedback) {
-        parts.push(`피드백: ${data.reviewFeedback}`);
+        parts.push(`${t('task.history_msg.feedback')}: ${data.reviewFeedback}`);
     }
     if (data.refinementPrompt) {
-        parts.push(`수정 요청: ${data.refinementPrompt}`);
+        parts.push(`${t('task.history_msg.refine_req')}: ${data.refinementPrompt}`);
     }
     if (data.question) {
-        parts.push(`질문: ${data.question}`);
+        parts.push(`${t('task.history_msg.question')}: ${data.question}`);
     }
     if (data.response) {
-        parts.push(`응답: ${data.response}`);
+        parts.push(`${t('task.history_msg.response')}: ${data.response}`);
     }
 
     return parts.join('\n');
@@ -1594,15 +1604,6 @@ async function handleOpenFile(filePath: string) {
         console.error('Failed to open file:', error);
     }
 }
-
-// Format file size
-function formatFileSize(bytes: number): string {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
 </script>
 
 <template>
@@ -1644,13 +1645,13 @@ function formatFileSize(bytes: number): string {
                                             class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 whitespace-nowrap"
                                             @click="saveTitle"
                                         >
-                                            저장
+                                            {{ t('task.detail.edit_title.save') }}
                                         </button>
                                         <button
                                             class="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 whitespace-nowrap"
                                             @click="cancelEditTitle"
                                         >
-                                            취소
+                                            {{ t('task.detail.edit_title.cancel') }}
                                         </button>
                                     </div>
                                     <div v-else class="flex-1 flex items-center gap-2 group">
@@ -1658,12 +1659,12 @@ function formatFileSize(bytes: number): string {
                                             class="text-xl font-semibold text-gray-900 dark:text-white cursor-pointer hover:underline decoration-dashed decoration-gray-400 decoration-1 underline-offset-4"
                                             @click="startEditTitle"
                                         >
-                                            {{ localTask?.title || '태스크 상세' }}
+                                            {{ localTask?.title || t('task.detail.title_default') }}
                                         </h2>
                                         <button
                                             class="p-1 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-500"
                                             @click="startEditTitle"
-                                            title="제목 편집"
+                                            :title="t('task.detail.edit_title.edit')"
                                         >
                                             <svg
                                                 class="w-4 h-4"
@@ -1710,7 +1711,7 @@ function formatFileSize(bytes: number): string {
                                         v-if="localTask?.executionOrder"
                                         class="px-2 py-1 text-xs font-medium rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
                                     >
-                                        순서: {{ localTask.executionOrder }}
+                                        {{ t('task.detail.order') }}: {{ localTask.executionOrder }}
                                     </span>
                                 </div>
                             </div>
@@ -1763,16 +1764,16 @@ function formatFileSize(bytes: number): string {
                             >
                                 {{
                                     tab === 'prompt'
-                                        ? '실행 설정'
+                                        ? t('task.tabs.prompt')
                                         : tab === 'settings'
-                                          ? 'AI 설정'
+                                          ? t('task.tabs.settings')
                                           : tab === 'details'
-                                            ? '상세 정보'
+                                            ? t('task.tabs.detail')
                                             : tab === 'notifications'
-                                              ? '알림'
+                                              ? t('task.tabs.notification')
                                               : tab === 'comments'
-                                                ? '댓글'
-                                                : '히스토리'
+                                                ? t('task.tabs.comment')
+                                                : t('task.tabs.history')
                                 }}
                             </button>
                         </div>
@@ -1841,10 +1842,10 @@ function formatFileSize(bytes: number): string {
                                     <span
                                         class="text-sm font-medium text-yellow-800 dark:text-yellow-200"
                                     >
-                                        실행 중에는 설정을 변경할 수 없습니다
+                                        {{ t('task.warning.readonly_title') }}
                                     </span>
                                     <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                                        설정을 변경하려면 먼저 태스크를 중지(STOP)하세요
+                                        {{ t('task.warning.readonly_desc') }}
                                     </p>
                                 </div>
                             </div>
@@ -1860,7 +1861,7 @@ function formatFileSize(bytes: number): string {
                                             <label
                                                 class="block text-sm font-medium text-gray-700 dark:text-gray-300"
                                             >
-                                                프롬프트 (작업 설명)
+                                                {{ t('task.detail.prompt_label') }}
                                             </label>
                                             <div class="flex items-center gap-2">
                                                 <MacroInsertButton
@@ -1891,7 +1892,7 @@ function formatFileSize(bytes: number): string {
                                                             d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"
                                                         />
                                                     </svg>
-                                                    템플릿
+                                                    {{ t('task.detail.template') }}
                                                 </button>
                                                 <button
                                                     :disabled="isReadOnly"
@@ -1916,7 +1917,7 @@ function formatFileSize(bytes: number): string {
                                                             d="M13 10V3L4 14h7v7l9-11h-7z"
                                                         />
                                                     </svg>
-                                                    AI 고도화
+                                                    {{ t('task.detail.ai_enhance') }}
                                                 </button>
                                             </div>
                                         </div>
@@ -1935,11 +1936,7 @@ function formatFileSize(bytes: number): string {
                                                 :disabled="isReadOnly"
                                                 @insert="handleMacroInsert"
                                             />
-                                            <span v-pre
-                                                >💡 <strong>Tip:</strong> {{ prev }}, {{ task.N }},
-                                                {{ project.name }} 등 매크로 자동완성 지원
-                                                (Ctrl+Space 또는 {{ 입력)</span
-                                            >
+                                            <span v-pre v-html="t('task.detail.macro_tip')"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -1951,7 +1948,7 @@ function formatFileSize(bytes: number): string {
                                     <label
                                         class="text-sm font-medium text-gray-700 dark:text-gray-300"
                                     >
-                                        스크립트 코드
+                                        {{ t('task.script.code_label') }}
                                     </label>
                                     <select
                                         v-model="scriptLanguage"
@@ -1977,11 +1974,7 @@ function formatFileSize(bytes: number): string {
                                         :disabled="isReadOnly"
                                         @insert="handleMacroInsert"
                                     />
-                                    <span v-pre
-                                        >💡 <strong>Tip:</strong> {{ prev }}, {{ task.N }},
-                                        {{ project.name }} 등 매크로 자동완성 지원 (Ctrl+Space 또는
-                                        {{ 입력)</span
-                                    >
+                                    <span v-pre v-html="t('task.detail.macro_tip')"></span>
                                 </div>
                             </div>
 
@@ -2006,7 +1999,7 @@ function formatFileSize(bytes: number): string {
                                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                                         />
                                     </svg>
-                                    Input Task 설정
+                                    {{ t('task.input.settings_title') }}
                                 </div>
 
                                 <!-- Source Type Selection -->
@@ -2014,24 +2007,24 @@ function formatFileSize(bytes: number): string {
                                     <label
                                         class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                     >
-                                        입력 소스 유형
+                                        {{ t('task.input.source_type') }}
                                     </label>
                                     <div class="grid grid-cols-3 gap-2">
                                         <button
                                             v-for="type in [
                                                 {
                                                     id: 'USER_INPUT',
-                                                    label: 'User Input',
+                                                    label: t('task.input.type.user'),
                                                     icon: '👤',
                                                 },
                                                 {
                                                     id: 'LOCAL_FILE',
-                                                    label: 'Local File',
+                                                    label: t('task.input.type.local'),
                                                     icon: '📂',
                                                 },
                                                 {
                                                     id: 'REMOTE_RESOURCE',
-                                                    label: 'Remote URL',
+                                                    label: t('task.input.type.remote'),
                                                     icon: '🌐',
                                                 },
                                             ]"
@@ -2059,7 +2052,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            입력 모드
+                                            {{ t('task.input.mode') }}
                                         </label>
                                         <div class="flex gap-2">
                                             <button
@@ -2087,7 +2080,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            요청 메시지
+                                            {{ t('task.input.message_label') }}
                                         </label>
                                         <input
                                             :value="getInputConfig().userInput?.message || ''"
@@ -2100,7 +2093,7 @@ function formatFileSize(bytes: number): string {
                                             "
                                             type="text"
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
-                                            placeholder="사용자에게 보여질 메시지"
+                                            :placeholder="t('task.input.message_placeholder')"
                                         />
                                     </div>
 
@@ -2108,7 +2101,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            Placeholder (선택)
+                                            {{ t('task.input.placeholder_label') }}
                                         </label>
                                         <input
                                             :value="getInputConfig().userInput?.placeholder || ''"
@@ -2121,7 +2114,7 @@ function formatFileSize(bytes: number): string {
                                             "
                                             type="text"
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            placeholder="입력 예시"
+                                            :placeholder="t('task.input.placeholder_placeholder')"
                                         />
                                     </div>
 
@@ -2130,7 +2123,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            선택 옵션 목록 (콤마 분리)
+                                            {{ t('task.input.options_label') }}
                                         </label>
                                         <input
                                             :value="
@@ -2151,7 +2144,7 @@ function formatFileSize(bytes: number): string {
                                             "
                                             type="text"
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            placeholder="예: 옵션A, 옵션B, 옵션C"
+                                            :placeholder="t('task.input.options_placeholder')"
                                         />
                                     </div>
 
@@ -2178,8 +2171,9 @@ function formatFileSize(bytes: number): string {
                                                 "
                                                 class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                             />
-                                            <span class="text-sm text-gray-700 dark:text-gray-300"
-                                                >사용자 직접 입력 허용</span
+                                            <span
+                                                class="text-sm text-gray-700 dark:text-gray-300"
+                                                >{{ t('task.input.allow_custom') }}</span
                                             >
                                         </label>
                                     </div>
@@ -2199,9 +2193,9 @@ function formatFileSize(bytes: number): string {
                                             "
                                             class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                         />
-                                        <span class="text-sm text-gray-700 dark:text-gray-300"
-                                            >필수 입력</span
-                                        >
+                                        <span class="text-sm text-gray-700 dark:text-gray-300">{{
+                                            t('task.input.required')
+                                        }}</span>
                                     </label>
                                 </div>
 
@@ -2214,7 +2208,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            허용 확장자
+                                            {{ t('task.input.local.extensions') }}
                                         </label>
                                         <div class="flex flex-wrap gap-2">
                                             <label
@@ -2261,7 +2255,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            읽기 모드
+                                            {{ t('task.input.local.read_mode') }}
                                         </label>
                                         <select
                                             :value="getInputConfig().localFile?.readMode || 'text'"
@@ -2275,11 +2269,17 @@ function formatFileSize(bytes: number): string {
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                         >
                                             <option value="auto">
-                                                자동 (형식 감지 - 이미지 등)
+                                                {{ t('task.input.local.mode.auto') }}
                                             </option>
-                                            <option value="text">텍스트 (기본)</option>
-                                            <option value="table">테이블 (CSV/Excel)</option>
-                                            <option value="binary">바이너리</option>
+                                            <option value="text">
+                                                {{ t('task.input.local.mode.text') }}
+                                            </option>
+                                            <option value="table">
+                                                {{ t('task.input.local.mode.table') }}
+                                            </option>
+                                            <option value="binary">
+                                                {{ t('task.input.local.mode.binary') }}
+                                            </option>
                                         </select>
                                     </div>
 
@@ -2287,7 +2287,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            대상 파일
+                                            {{ t('task.input.local.target_file') }}
                                         </label>
                                         <div class="flex items-center gap-2">
                                             <input
@@ -2295,13 +2295,15 @@ function formatFileSize(bytes: number): string {
                                                 readonly
                                                 :value="getInputConfig().localFile?.filePath || ''"
                                                 class="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                                                placeholder="파일을 선택하세요"
+                                                :placeholder="
+                                                    t('task.input.local.file_placeholder')
+                                                "
                                             />
                                             <button
                                                 @click="handleSelectLocalFile"
                                                 class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                                             >
-                                                파일 선택
+                                                {{ t('task.input.local.select_file') }}
                                             </button>
                                         </div>
                                     </div>
@@ -2316,14 +2318,16 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            리소스 유형
+                                            {{ t('task.input.remote.resource_type') }}
                                         </label>
                                         <select
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                         >
-                                            <option value="general">일반 웹페이지 URL</option>
+                                            <option value="general">
+                                                {{ t('task.input.remote.type.general') }}
+                                            </option>
                                             <option value="google_drive" disabled>
-                                                Google Drive (준비 중)
+                                                {{ t('task.input.remote.type.drive') }}
                                             </option>
                                         </select>
                                     </div>
@@ -2332,7 +2336,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            기본 URL (선택)
+                                            {{ t('task.input.remote.url_label') }}
                                         </label>
                                         <input
                                             :value="getInputConfig().remoteResource?.url || ''"
@@ -2344,7 +2348,7 @@ function formatFileSize(bytes: number): string {
                                             "
                                             type="text"
                                             class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            placeholder="https://example.com"
+                                            :placeholder="t('task.input.remote.url_placeholder')"
                                         />
                                     </div>
                                 </div>
@@ -2367,7 +2371,7 @@ function formatFileSize(bytes: number): string {
                                 <summary
                                     class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                                 >
-                                    📖 매크로 사용 가이드
+                                    {{ t('task.macro.guide_title') }}
                                 </summary>
                                 <div class="px-4 pb-4 text-xs">
                                     <!-- 의존성 태스크 결과 -->
@@ -2375,8 +2379,7 @@ function formatFileSize(bytes: number): string {
                                         <h4
                                             class="font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1"
                                         >
-                                            <span class="text-indigo-500">📋</span> 의존성 태스크
-                                            결과
+                                            {{ t('task.macro.dep_result_title') }}
                                         </h4>
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
@@ -2385,9 +2388,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{task.23}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >특정 태스크(ID)의 결과 content</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.content')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2395,9 +2398,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{task.23.output}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >전체 output 객체 (JSON)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.json')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2405,9 +2408,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{task.23.status}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >태스크 상태</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.status')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2415,9 +2418,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{task.23.summary}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >결과 요약 (500자)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.summary')
+                                                }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2427,7 +2430,7 @@ function formatFileSize(bytes: number): string {
                                         <h4
                                             class="font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1"
                                         >
-                                            <span class="text-blue-500">⬆️</span> 이전 태스크 참조
+                                            {{ t('task.macro.prev_task_title') }}
                                         </h4>
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
@@ -2436,9 +2439,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ prev }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >바로 이전 태스크(마지막 dependency)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.prev')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2446,9 +2449,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{prev.0}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >마지막 dependency (prev와 동일)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.prev_0')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2456,9 +2459,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{prev.1}}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >두 번째 최근 dependency</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.prev_1')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2466,9 +2469,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ prev.summary }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >이전 결과 요약</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.prev_summary')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2476,9 +2479,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ all_results }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >모든 이전 결과 (JSON 배열)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.all_results')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2486,9 +2489,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ all_results.summary }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >모든 결과 요약</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.all_summary')
+                                                }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2498,7 +2501,7 @@ function formatFileSize(bytes: number): string {
                                         <h4
                                             class="font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1"
                                         >
-                                            <span class="text-gray-500">⚙️</span> 시스템 매크로
+                                            {{ t('task.macro.system_title') }}
                                         </h4>
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
@@ -2507,9 +2510,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ date }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >오늘 날짜 (YYYY-MM-DD)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.date')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2517,9 +2520,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ datetime }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >현재 날짜/시간 (ISO 형식)</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.datetime')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2527,9 +2530,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ project.name }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >현재 프로젝트 이름</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.project_name')
+                                                }}</span>
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
@@ -2537,9 +2540,9 @@ function formatFileSize(bytes: number): string {
                                                     v-pre
                                                     >{{ project.description }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >프로젝트 설명</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.project_desc')
+                                                }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2549,18 +2552,18 @@ function formatFileSize(bytes: number): string {
                                         <h4
                                             class="font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1"
                                         >
-                                            <span class="text-green-500">🔤</span> 컨텍스트 변수
+                                            {{ t('task.macro.context_title') }}
                                         </h4>
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
                                                 <code
                                                     class="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded font-mono shrink-0"
-                                                    v-pre
-                                                    >{{var:변수명}}</code
+                                                    >{{ '{{var:' + t('task.macro.variable_name') + '
+                                                    }}' }}</code
                                                 >
-                                                <span class="text-gray-600 dark:text-gray-400"
-                                                    >사용자 정의 변수 참조</span
-                                                >
+                                                <span class="text-gray-600 dark:text-gray-400">{{
+                                                    t('task.macro.desc.var_ref')
+                                                }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2570,7 +2573,7 @@ function formatFileSize(bytes: number): string {
                                         <h4
                                             class="font-semibold text-gray-700 dark:text-gray-300 mb-2"
                                         >
-                                            💡 사용 예시
+                                            {{ t('task.macro.example_title') }}
                                         </h4>
                                         <div
                                             class="bg-gray-900 dark:bg-gray-800 rounded p-2 text-gray-100 font-mono text-[11px] leading-relaxed overflow-x-auto"
@@ -2578,15 +2581,24 @@ function formatFileSize(bytes: number): string {
                                             <div class="text-gray-400">
                                                 # 이전 태스크 결과를 기반으로 분석
                                             </div>
-                                            <div>다음 데이터를 분석해주세요:</div>
+                                            <div>{{ t('task.macro_example.analyze') }}</div>
                                             <div class="text-indigo-400" v-pre>{{ prev }}</div>
                                             <div class="mt-2 text-gray-400">
                                                 # 여러 태스크 결과 종합
                                             </div>
-                                            <div v-pre>Task #1 결과: {{task.1.summary}}</div>
-                                            <div v-pre>Task #2 결과: {{task.2.summary}}</div>
+                                            <div>
+                                                Task #1 {{ t('task.macro_example.result_prefix') }}
+                                                <span v-pre>{{task.1.summary}}</span>
+                                            </div>
+                                            <div>
+                                                Task #2 {{ t('task.macro_example.result_prefix') }}
+                                                <span v-pre>{{task.2.summary}}</span>
+                                            </div>
                                             <div class="mt-2 text-gray-400"># 날짜 포함</div>
-                                            <div v-pre>{{ date }} 기준 보고서를 작성해주세요.</div>
+                                            <div>
+                                                <span v-pre>{{ date }}</span>
+                                                {{ t('task.macro_example.report_suffix') }}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -2610,14 +2622,14 @@ function formatFileSize(bytes: number): string {
                                         />
                                     </svg>
                                     <span class="text-sm text-blue-700 dark:text-blue-300">
-                                        AI 비서가 프롬프트를 개선할 수 있습니다
+                                        {{ t('task.suggestion.title') }}
                                     </span>
                                 </div>
                                 <button
                                     class="px-3 py-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
                                     @click="showPromptEnhancer = true"
                                 >
-                                    개선 제안 받기
+                                    {{ t('task.suggestion.button') }}
                                 </button>
                             </div>
                         </div>
@@ -2640,10 +2652,11 @@ function formatFileSize(bytes: number): string {
                                         />
                                     </svg>
                                     <div>
-                                        <div class="font-medium">스크립트 태스크</div>
+                                        <div class="font-medium">
+                                            {{ t('task.script_notice.title') }}
+                                        </div>
                                         <div class="text-xs mt-0.5">
-                                            작성한 코드를 직접 실행합니다. AI 실행 설정이 필요하지
-                                            않습니다.
+                                            {{ t('task.script_notice.desc') }}
                                         </div>
                                     </div>
                                 </div>
@@ -2670,14 +2683,15 @@ function formatFileSize(bytes: number): string {
                                             d="M13 10V3L4 14h7v7l9-11h-7z"
                                         />
                                     </svg>
-                                    AI 실행 정보
+                                    {{ t('task.ai_info.title') }}
                                 </h4>
 
                                 <div class="grid grid-cols-2 gap-4 text-sm">
                                     <!-- Execution Order -->
                                     <div v-if="localTask?.executionOrder">
-                                        <span class="text-gray-500 dark:text-gray-400 block text-xs"
-                                            >실행 순서</span
+                                        <span
+                                            class="text-gray-500 dark:text-gray-400 block text-xs"
+                                            >{{ t('task.ai_info.order') }}</span
                                         >
                                         <span
                                             class="font-mono font-medium text-gray-900 dark:text-white"
@@ -2687,8 +2701,9 @@ function formatFileSize(bytes: number): string {
 
                                     <!-- Estimated Duration -->
                                     <div v-if="localTask?.estimatedMinutes">
-                                        <span class="text-gray-500 dark:text-gray-400 block text-xs"
-                                            >예상 소요 시간</span
+                                        <span
+                                            class="text-gray-500 dark:text-gray-400 block text-xs"
+                                            >{{ t('task.ai_info.estimated_time') }}</span
                                         >
                                         <span class="font-medium text-gray-900 dark:text-white">
                                             {{ Math.floor(localTask.estimatedMinutes / 60) }}h
@@ -2701,7 +2716,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="text-gray-500 dark:text-gray-400 block text-xs mb-1"
                                         >
-                                            결과물 형식 (예상)
+                                            {{ t('task.ai_info.output_format') }}
                                         </label>
                                         <select
                                             v-if="localTask"
@@ -2709,7 +2724,9 @@ function formatFileSize(bytes: number): string {
                                             class="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
                                             @change="persistExecutionSettings"
                                         >
-                                            <option :value="undefined">자동 감지</option>
+                                            <option :value="undefined">
+                                                {{ t('task.ai_info.auto_detect') }}
+                                            </option>
                                             <option
                                                 v-for="opt in outputFormatOptions"
                                                 :key="opt.value"
@@ -2728,8 +2745,9 @@ function formatFileSize(bytes: number): string {
                                         "
                                         class="col-span-2"
                                     >
-                                        <span class="text-gray-500 dark:text-gray-400 block text-xs"
-                                            >의존성 태스크</span
+                                        <span
+                                            class="text-gray-500 dark:text-gray-400 block text-xs"
+                                            >{{ t('task.ai_info.dependencies') }}</span
                                         >
                                         <div class="flex flex-wrap gap-1 mt-1">
                                             <span
@@ -2750,8 +2768,9 @@ function formatFileSize(bytes: number): string {
                                         "
                                         class="col-span-2"
                                     >
-                                        <span class="text-gray-500 dark:text-gray-400 block text-xs"
-                                            >필요 MCP 도구</span
+                                        <span
+                                            class="text-gray-500 dark:text-gray-400 block text-xs"
+                                            >{{ t('task.ai_info.required_mcp') }}</span
                                         >
                                         <div class="flex flex-wrap gap-1 mt-1">
                                             <span
@@ -2776,7 +2795,7 @@ function formatFileSize(bytes: number): string {
                                     v-if="assignedOperatorId"
                                     class="mt-2 text-xs text-amber-600 dark:text-amber-400"
                                 >
-                                    ⚠️ Operator가 할당되어 있어 하단 AI 설정이 비활성화되었습니다.
+                                    {{ t('task.operator_warning') }}
                                 </p>
                             </div>
 
@@ -2788,7 +2807,7 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3"
                                 >
-                                    실행 방식
+                                    {{ t('task.execution_mode.label') }}
                                 </label>
                                 <div class="grid grid-cols-2 gap-3">
                                     <!-- AI API Mode -->
@@ -2829,8 +2848,9 @@ function formatFileSize(bytes: number): string {
                                                 class="block text-sm font-medium text-gray-900 dark:text-white"
                                                 >AI API</span
                                             >
-                                            <span class="text-xs text-gray-500 dark:text-gray-400"
-                                                >클라우드 AI 서비스</span
+                                            <span
+                                                class="text-xs text-gray-500 dark:text-gray-400"
+                                                >{{ t('task.execution_mode.api_desc') }}</span
                                             >
                                         </div>
                                     </label>
@@ -2875,8 +2895,9 @@ function formatFileSize(bytes: number): string {
                                                 class="block text-sm font-medium text-gray-900 dark:text-white"
                                                 >Local Agent</span
                                             >
-                                            <span class="text-xs text-gray-500 dark:text-gray-400"
-                                                >로컬 CLI 에이전트</span
+                                            <span
+                                                class="text-xs text-gray-500 dark:text-gray-400"
+                                                >{{ t('task.execution_mode.local_desc') }}</span
                                             >
                                         </div>
                                     </label>
@@ -2908,7 +2929,7 @@ function formatFileSize(bytes: number): string {
                                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                                         />
                                     </svg>
-                                    Local Agent 설정
+                                    {{ t('task.local_agent.settings_title') }}
                                 </h4>
 
                                 <!-- Agent Selection -->
@@ -2916,7 +2937,7 @@ function formatFileSize(bytes: number): string {
                                     <label
                                         class="block text-sm font-medium text-green-700 dark:text-green-300 mb-2"
                                     >
-                                        에이전트 선택
+                                        {{ t('task.local_agent.select_label') }}
                                     </label>
 
                                     <div class="space-y-2">
@@ -2960,7 +2981,11 @@ function formatFileSize(bytes: number): string {
                                                             : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
                                                     ]"
                                                 >
-                                                    {{ agent.installed ? '설치됨' : '미설치' }}
+                                                    {{
+                                                        agent.installed
+                                                            ? t('task.local_agent.installed')
+                                                            : t('task.local_agent.not_installed')
+                                                    }}
                                                 </span>
                                             </div>
                                         </label>
@@ -2972,7 +2997,7 @@ function formatFileSize(bytes: number): string {
                                     <label
                                         class="block text-sm font-medium text-green-700 dark:text-green-300 mb-2"
                                     >
-                                        작업 디렉토리
+                                        {{ t('task.local_agent.workdir_label') }}
                                     </label>
                                     <div class="flex gap-2">
                                         <input
@@ -2986,7 +3011,7 @@ function formatFileSize(bytes: number): string {
                                             @click="selectWorkingDirectory"
                                             class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                                         >
-                                            찾아보기
+                                            {{ t('task.local_agent.browse') }}
                                         </button>
                                     </div>
                                 </div>
@@ -3002,7 +3027,7 @@ function formatFileSize(bytes: number): string {
                                 <AIProviderSelector
                                     v-model:provider="aiProvider"
                                     v-model:model="aiModel"
-                                    label="AI 제공자"
+                                    :label="t('task.ai_provider.label')"
                                     :disabled="!!assignedOperatorId"
                                 />
 
@@ -3014,7 +3039,7 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Temperature: {{ temperature }}
+                                    {{ t('task.cost.temperature') }}: {{ temperature }}
                                 </label>
                                 <input
                                     v-model.number="temperature"
@@ -3025,8 +3050,8 @@ function formatFileSize(bytes: number): string {
                                     class="w-full"
                                 />
                                 <div class="flex justify-between text-xs text-gray-500 mt-1">
-                                    <span>정확함</span>
-                                    <span>창의적</span>
+                                    <span>{{ t('task.cost.accurate') }}</span>
+                                    <span>{{ t('task.cost.creative') }}</span>
                                 </div>
                             </div>
 
@@ -3035,7 +3060,7 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    최대 토큰: {{ maxTokens }}
+                                    {{ t('task.cost.max_tokens') }}: {{ maxTokens }}
                                 </label>
                                 <input
                                     v-model.number="maxTokens"
@@ -3053,7 +3078,7 @@ function formatFileSize(bytes: number): string {
                                     <span
                                         class="text-sm font-medium text-green-700 dark:text-green-300"
                                     >
-                                        예상 비용
+                                        {{ t('task.cost.estimated_cost') }}
                                     </span>
                                     <span
                                         class="text-lg font-bold text-green-700 dark:text-green-300"
@@ -3102,14 +3127,12 @@ function formatFileSize(bytes: number): string {
                                             <h4
                                                 class="text-sm font-semibold text-teal-900 dark:text-teal-100 mb-1"
                                             >
-                                                테스크 세분화
+                                                {{ t('task.subdivide.button') }}
                                             </h4>
                                             <p
                                                 class="text-xs text-teal-700 dark:text-teal-300 mb-3"
                                             >
-                                                이 테스크의 작업 범위가 크다면 서브테스크로 나눌 수
-                                                있습니다. 세분화 후 상위 테스크는 그룹핑 용도로만
-                                                사용되며, 실행 기능이 비활성화됩니다.
+                                                {{ t('task.subdivide.desc') }}
                                             </p>
                                             <button
                                                 class="w-full px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
@@ -3128,7 +3151,7 @@ function formatFileSize(bytes: number): string {
                                                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                                                     />
                                                 </svg>
-                                                테스크 세분화 하기
+                                                {{ t('task.subdivide.button') }}
                                             </button>
                                         </div>
                                     </div>
@@ -3157,12 +3180,14 @@ function formatFileSize(bytes: number): string {
                                             <h4
                                                 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1"
                                             >
-                                                그룹 테스크
+                                                {{ t('task.group.title') }}
                                             </h4>
                                             <p class="text-xs text-gray-600 dark:text-gray-400">
-                                                이 테스크는 {{ localTask.subtaskCount }}개의
-                                                서브테스크로 세분화되어 있습니다. 그룹핑 용도로만
-                                                사용되며 직접 실행할 수 없습니다.
+                                                {{
+                                                    t('task.group.desc', {
+                                                        count: localTask.subtaskCount,
+                                                    })
+                                                }}
                                             </p>
                                         </div>
                                     </div>
@@ -3177,17 +3202,19 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Priority
+                                    {{ t('task.priority_label') }}
                                 </label>
                                 <select
                                     v-model="priority"
                                     class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                    <option value="urgent">Urgent</option>
-                                    <option value="critical">Critical</option>
+                                    <option value="low">{{ t('task.priority.low') }}</option>
+                                    <option value="medium">{{ t('task.priority.medium') }}</option>
+                                    <option value="high">{{ t('task.priority.high') }}</option>
+                                    <option value="urgent">{{ t('task.priority.urgent') }}</option>
+                                    <option value="critical">
+                                        {{ t('task.priority.critical') }}
+                                    </option>
                                 </select>
                             </div>
 
@@ -3196,9 +3223,12 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Tags
+                                    {{ t('task.tags_label') }}
                                 </label>
-                                <TagInput v-model="tags" placeholder="Add tags..." />
+                                <TagInput
+                                    v-model="tags"
+                                    :placeholder="t('task.tags_placeholder')"
+                                />
                             </div>
 
                             <!-- Estimated Duration -->
@@ -3206,21 +3236,25 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Estimated Duration (minutes)
+                                    {{ t('task.duration_label') }}
                                 </label>
                                 <input
                                     v-model.number="estimatedMinutes"
                                     type="number"
                                     min="0"
                                     class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="Enter estimated minutes"
+                                    :placeholder="t('task.duration_placeholder')"
                                 />
                                 <p
                                     v-if="estimatedMinutes > 0"
                                     class="mt-1 text-xs text-gray-500 dark:text-gray-400"
                                 >
-                                    Approximately {{ Math.floor(estimatedMinutes / 60) }}h
-                                    {{ estimatedMinutes % 60 }}m
+                                    {{
+                                        t('task.duration_format', {
+                                            h: Math.floor(estimatedMinutes / 60),
+                                            m: estimatedMinutes % 60,
+                                        })
+                                    }}
                                 </p>
                             </div>
 
@@ -3229,7 +3263,7 @@ function formatFileSize(bytes: number): string {
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Due Date
+                                    {{ t('task.due_date_label') }}
                                 </label>
                                 <input
                                     v-model="dueDate"
@@ -3258,7 +3292,7 @@ function formatFileSize(bytes: number): string {
                                             d="M13 10V3L4 14h7v7l9-11h-7z"
                                         />
                                     </svg>
-                                    자동 실행 트리거
+                                    {{ t('task.trigger_title') }}
                                 </h4>
 
                                 <!-- 트리거 유형 선택 -->
@@ -3266,15 +3300,21 @@ function formatFileSize(bytes: number): string {
                                     <label
                                         class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                     >
-                                        트리거 유형
+                                        {{ t('task.trigger_type') }}
                                     </label>
                                     <select
                                         v-model="triggerType"
                                         class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="none">없음 (수동 실행)</option>
-                                        <option value="dependency">태스크 의존성</option>
-                                        <option value="time">시간 기반</option>
+                                        <option value="none">
+                                            {{ t('task.trigger_types.none') }}
+                                        </option>
+                                        <option value="dependency">
+                                            {{ t('task.trigger_types.dependency') }}
+                                        </option>
+                                        <option value="time">
+                                            {{ t('task.trigger_types.time') }}
+                                        </option>
                                     </select>
                                 </div>
 
@@ -3287,18 +3327,18 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            의존하는 태스크 ID (쉼표로 구분)
+                                            {{ t('task.dependency.ids_label') }}
                                         </label>
                                         <input
                                             v-model="dependencyTaskIds"
                                             type="text"
                                             class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="예: 1, 2, 3"
+                                            :placeholder="t('task.dependency.ids_placeholder')"
                                         />
                                         <p
                                             class="text-xs text-indigo-600 dark:text-indigo-400 mt-1"
                                         >
-                                            지정한 태스크들이 완료되면 자동으로 실행됩니다
+                                            {{ t('task.dependency.desc') }}
                                         </p>
                                     </div>
 
@@ -3313,13 +3353,12 @@ function formatFileSize(bytes: number): string {
                                             v-model="dependencyExpression"
                                             type="text"
                                             class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                                            placeholder="예: (!2 && !3) || 6"
+                                            :placeholder="t('task.dependency.advanced_placeholder')"
                                         />
                                         <p
                                             class="text-xs text-indigo-600 dark:text-indigo-400 mt-1"
                                         >
-                                            복잡한 논리 조건을 설정합니다. ! (Not) 연산자를 사용하여
-                                            '완료되지 않음' 조건을 설정할 수 있습니다.
+                                            {{ t('task.dependency.advanced_desc') }}
                                         </p>
                                     </div>
 
@@ -3332,7 +3371,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            실행 조건
+                                            {{ t('task.dependency.condition_label') }}
                                         </label>
                                         <div class="space-y-2">
                                             <label class="flex items-center gap-2">
@@ -3344,7 +3383,7 @@ function formatFileSize(bytes: number): string {
                                                 />
                                                 <span
                                                     class="text-sm text-indigo-700 dark:text-indigo-300"
-                                                    >모든 태스크가 완료되어야 함</span
+                                                    >{{ t('task.dependency.all') }}</span
                                                 >
                                             </label>
                                             <label class="flex items-center gap-2">
@@ -3356,7 +3395,7 @@ function formatFileSize(bytes: number): string {
                                                 />
                                                 <span
                                                     class="text-sm text-indigo-700 dark:text-indigo-300"
-                                                    >하나라도 완료되면 실행</span
+                                                    >{{ t('task.dependency.any') }}</span
                                                 >
                                             </label>
                                         </div>
@@ -3366,7 +3405,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            자동 실행 정책
+                                            {{ t('task.dependency.policy_label') }}
                                         </label>
                                         <div class="space-y-2">
                                             <label class="flex items-center gap-2">
@@ -3379,11 +3418,11 @@ function formatFileSize(bytes: number): string {
                                                 <div class="flex flex-col">
                                                     <span
                                                         class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
-                                                        >1회만 실행</span
+                                                        >{{ t('task.dependency.once') }}</span
                                                     >
                                                     <span
                                                         class="text-xs text-indigo-500 dark:text-indigo-400"
-                                                        >TODO 상태일 때만 자동 실행</span
+                                                        >{{ t('task.dependency.once_desc') }}</span
                                                     >
                                                 </div>
                                             </label>
@@ -3397,12 +3436,13 @@ function formatFileSize(bytes: number): string {
                                                 <div class="flex flex-col">
                                                     <span
                                                         class="text-sm text-indigo-700 dark:text-indigo-300 font-medium"
-                                                        >매번 자동 실행 (권장)</span
+                                                        >{{ t('task.dependency.repeat') }}</span
                                                     >
                                                     <span
                                                         class="text-xs text-indigo-500 dark:text-indigo-400"
-                                                        >조건 충족 시 현재 상태와 무관하게
-                                                        실행</span
+                                                        >{{
+                                                            t('task.dependency.repeat_desc')
+                                                        }}</span
                                                     >
                                                 </div>
                                             </label>
@@ -3419,14 +3459,18 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            스케줄 유형
+                                            {{ t('task.schedule.type_label') }}
                                         </label>
                                         <select
                                             v-model="scheduleType"
                                             class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                         >
-                                            <option value="once">1회 실행</option>
-                                            <option value="recurring">반복 실행</option>
+                                            <option value="once">
+                                                {{ t('task.schedule.once') }}
+                                            </option>
+                                            <option value="recurring">
+                                                {{ t('task.schedule.recurring') }}
+                                            </option>
                                         </select>
                                     </div>
 
@@ -3434,7 +3478,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            실행 날짜/시간
+                                            {{ t('task.schedule.datetime_label') }}
                                         </label>
                                         <input
                                             v-model="scheduledDatetime"
@@ -3447,18 +3491,18 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            Cron 표현식
+                                            {{ t('task.schedule.cron_label') }}
                                         </label>
                                         <input
                                             v-model="cronExpression"
                                             type="text"
                                             class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="0 9 * * 1-5"
+                                            :placeholder="t('task.schedule.cron_placeholder')"
                                         />
                                         <p
                                             class="text-xs text-indigo-600 dark:text-indigo-400 mt-1"
                                         >
-                                            예: "0 9 * * 1-5" = 평일 오전 9시
+                                            {{ t('task.schedule.cron_desc') }}
                                         </p>
                                     </div>
 
@@ -3466,7 +3510,7 @@ function formatFileSize(bytes: number): string {
                                         <label
                                             class="block text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-2"
                                         >
-                                            타임존
+                                            {{ t('task.schedule.timezone_label') }}
                                         </label>
                                         <select
                                             v-model="timezone"
@@ -3500,11 +3544,10 @@ function formatFileSize(bytes: number): string {
                                         <span
                                             class="text-sm font-medium text-gray-700 dark:text-gray-300"
                                         >
-                                            자동 REVIEW 활성화
+                                            {{ t('task.auto_review.label') }}
                                         </span>
                                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            AI가 프롬프트 결과물이 의도대로 나왔는지 자동으로
-                                            검토합니다
+                                            {{ t('task.auto_review.desc') }}
                                         </p>
                                     </div>
                                 </label>
@@ -3518,17 +3561,17 @@ function formatFileSize(bytes: number): string {
                                         <p
                                             class="text-sm font-semibold text-blue-900 dark:text-blue-100"
                                         >
-                                            리뷰용 AI 설정
+                                            {{ t('task.auto_review.settings_title') }}
                                         </p>
                                         <p class="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                                            자동 리뷰 실행 시 사용할 Provider와 모델을 지정하세요
+                                            {{ t('task.auto_review.settings_desc') }}
                                         </p>
                                     </div>
                                     <div>
                                         <AIProviderSelector
                                             v-model:provider="reviewAiProvider"
                                             v-model:model="reviewAiModel"
-                                            label="리뷰 AI (제공자/모델)"
+                                            :label="t('task.auto_review.ai_label')"
                                         />
                                     </div>
                                 </div>
@@ -3549,10 +3592,10 @@ function formatFileSize(bytes: number): string {
                                         <span
                                             class="text-sm font-medium text-gray-700 dark:text-gray-300"
                                         >
-                                            자동 승인
+                                            {{ t('task.auto_approve.label') }}
                                         </span>
                                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            실행 성공 시 검토 없이 바로 완료(DONE) 처리
+                                            {{ t('task.auto_approve.desc') }}
                                         </p>
                                     </div>
                                 </label>
@@ -3578,8 +3621,7 @@ function formatFileSize(bytes: number): string {
                                             />
                                         </svg>
                                         <p class="text-xs text-amber-700 dark:text-amber-300">
-                                            이 태스크는 프로젝트 자동 검토 대신 자동 승인을
-                                            사용합니다
+                                            {{ t('task.auto_approve.project_warning') }}
                                         </p>
                                     </div>
                                 </div>
@@ -3606,7 +3648,7 @@ function formatFileSize(bytes: number): string {
                                             />
                                         </svg>
                                         <p class="text-xs text-blue-700 dark:text-blue-300">
-                                            실행 완료 후 수동 검토가 필요합니다
+                                            {{ t('task.auto_approve.manual_info') }}
                                         </p>
                                     </div>
                                 </div>
@@ -3620,7 +3662,7 @@ function formatFileSize(bytes: number): string {
                                     @click="handleDetailsUpdate"
                                     class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                                 >
-                                    Update Details
+                                    {{ t('task.update_details') }}
                                 </button>
                             </div>
                         </div>
@@ -3638,13 +3680,12 @@ function formatFileSize(bytes: number): string {
                                     />
                                 </svg>
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                                    알림 설정
+                                    {{ t('task.notification_settings.title') }}
                                 </h3>
                             </div>
 
                             <p class="text-sm text-gray-600 dark:text-gray-400">
-                                태스크 실행, 리뷰 이벤트 발생 시 Slack 또는 Webhook으로 알림을 받을
-                                수 있습니다. 태스크별 설정이 프로젝트 설정보다 우선합니다.
+                                {{ t('task.notification_settings.desc') }}
                             </p>
 
                             <NotificationSettings
@@ -3685,7 +3726,7 @@ function formatFileSize(bytes: number): string {
                                     v-if="comments.length === 0"
                                     class="text-center py-8 text-gray-500"
                                 >
-                                    아직 댓글이 없습니다
+                                    {{ t('task.comments.empty') }}
                                 </div>
                             </div>
 
@@ -3695,13 +3736,13 @@ function formatFileSize(bytes: number): string {
                                     v-model="newComment"
                                     rows="3"
                                     class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    placeholder="댓글을 입력하세요..."
+                                    :placeholder="t('task.comments.placeholder')"
                                 />
                                 <button
                                     class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
                                     @click="addComment"
                                 >
-                                    댓글 추가
+                                    {{ t('task.comments.add') }}
                                 </button>
                             </div>
                         </div>
@@ -3716,9 +3757,9 @@ function formatFileSize(bytes: number): string {
                                 <div
                                     class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"
                                 ></div>
-                                <span class="ml-2 text-gray-500 dark:text-gray-400"
-                                    >히스토리 로딩 중...</span
-                                >
+                                <span class="ml-2 text-gray-500 dark:text-gray-400">{{
+                                    t('task.history.loading')
+                                }}</span>
                             </div>
 
                             <!-- Empty State -->
@@ -3728,7 +3769,7 @@ function formatFileSize(bytes: number): string {
                             >
                                 <div class="text-4xl mb-2">📜</div>
                                 <p class="text-gray-500 dark:text-gray-400">
-                                    아직 기록된 히스토리가 없습니다.
+                                    {{ t('task.history.empty') }}
                                 </p>
                             </div>
 
@@ -3788,7 +3829,11 @@ function formatFileSize(bytes: number): string {
                                                             <p
                                                                 class="text-sm text-gray-600 dark:text-gray-400"
                                                             >
-                                                                결과: [이미지 생성됨]
+                                                                {{
+                                                                    t(
+                                                                        'task.history_msg.result_image'
+                                                                    )
+                                                                }}
                                                             </p>
                                                             <div
                                                                 class="flex items-center justify-center bg-gray-900 rounded p-2"
@@ -3841,8 +3886,12 @@ function formatFileSize(bytes: number): string {
                                                                         expandedHistoryItems.has(
                                                                             entry.id
                                                                         )
-                                                                            ? '이미지 접기'
-                                                                            : '이미지 확대'
+                                                                            ? t(
+                                                                                  'task.history.collapse_image'
+                                                                              )
+                                                                            : t(
+                                                                                  'task.history.expand_image'
+                                                                              )
                                                                     }}
                                                                 </button>
                                                             </div>
@@ -3863,7 +3912,11 @@ function formatFileSize(bytes: number): string {
                                                                 <span
                                                                     class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                                                 >
-                                                                    Output Content
+                                                                    {{
+                                                                        t(
+                                                                            'task.history.output_content_label'
+                                                                        )
+                                                                    }}
                                                                 </span>
                                                                 <div class="flex gap-2">
                                                                     <!-- Auto-scroll control (only for accumulated results) -->
@@ -3883,7 +3936,12 @@ function formatFileSize(bytes: number): string {
                                                                         "
                                                                         title="Scroll to bottom"
                                                                     >
-                                                                        ⬇ Bottom
+                                                                        ⬇
+                                                                        {{
+                                                                            t(
+                                                                                'task.history.scroll_bottom'
+                                                                            )
+                                                                        }}
                                                                     </button>
                                                                     <button
                                                                         class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
@@ -3910,7 +3968,11 @@ function formatFileSize(bytes: number): string {
                                                                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
                                                                             />
                                                                         </svg>
-                                                                        Open File
+                                                                        {{
+                                                                            t(
+                                                                                'task.output.open_file'
+                                                                            )
+                                                                        }}
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -4018,8 +4080,12 @@ function formatFileSize(bytes: number): string {
                                                                     expandedHistoryItems.has(
                                                                         entry.id
                                                                     )
-                                                                        ? '접기'
-                                                                        : '더 보기'
+                                                                        ? t(
+                                                                              'task.history_action.collapse'
+                                                                          )
+                                                                        : t(
+                                                                              'task.history_action.expand'
+                                                                          )
                                                                 }}
                                                             </button>
                                                         </div>
@@ -4044,12 +4110,14 @@ function formatFileSize(bytes: number): string {
                                 <p
                                     class="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium"
                                 >
-                                    기본 정보
+                                    {{ t('task.info.basic_info') }}
                                 </p>
 
                                 <div class="grid grid-cols-2 gap-2 text-xs">
                                     <div class="p-2 bg-gray-50 dark:bg-gray-900 rounded">
-                                        <span class="text-gray-500">생성일:</span>
+                                        <span class="text-gray-500">{{
+                                            t('task.info.created_at')
+                                        }}</span>
                                         <span class="ml-1 text-gray-700 dark:text-gray-300">
                                             {{ formatDate(localTask?.createdAt) }}
                                         </span>
@@ -4058,7 +4126,9 @@ function formatFileSize(bytes: number): string {
                                         v-if="localTask?.updatedAt"
                                         class="p-2 bg-gray-50 dark:bg-gray-900 rounded"
                                     >
-                                        <span class="text-gray-500">수정일:</span>
+                                        <span class="text-gray-500">{{
+                                            t('task.info.updated_at')
+                                        }}</span>
                                         <span class="ml-1 text-gray-700 dark:text-gray-300">
                                             {{ formatDate(localTask.updatedAt) }}
                                         </span>
@@ -4067,7 +4137,9 @@ function formatFileSize(bytes: number): string {
                                         v-if="localTask?.startedAt"
                                         class="p-2 bg-gray-50 dark:bg-gray-900 rounded"
                                     >
-                                        <span class="text-gray-500">시작일:</span>
+                                        <span class="text-gray-500">{{
+                                            t('task.info.started_at')
+                                        }}</span>
                                         <span class="ml-1 text-gray-700 dark:text-gray-300">
                                             {{ formatDate(localTask.startedAt) }}
                                         </span>
@@ -4076,7 +4148,9 @@ function formatFileSize(bytes: number): string {
                                         v-if="localTask?.completedAt"
                                         class="p-2 bg-gray-50 dark:bg-gray-900 rounded"
                                     >
-                                        <span class="text-gray-500">완료일:</span>
+                                        <span class="text-gray-500">{{
+                                            t('task.info.completed_at')
+                                        }}</span>
                                         <span class="ml-1 text-gray-700 dark:text-gray-300">
                                             {{ formatDate(localTask.completedAt) }}
                                         </span>
@@ -4109,7 +4183,7 @@ function formatFileSize(bytes: number): string {
                                                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                                                 />
                                             </svg>
-                                            Provider 연동 필요
+                                            {{ t('task.footer.provider_required') }}
                                         </div>
                                     </template>
                                     <template v-else>
@@ -4143,7 +4217,7 @@ function formatFileSize(bytes: number): string {
                                                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                                     ></path>
                                                 </svg>
-                                                <span>실행 중...</span>
+                                                <span>{{ t('task.footer.executing') }}</span>
                                             </template>
                                             <template v-else>
                                                 <svg
@@ -4153,7 +4227,7 @@ function formatFileSize(bytes: number): string {
                                                 >
                                                     <path d="M8 5v14l11-7z" />
                                                 </svg>
-                                                <span>실행</span>
+                                                <span>{{ t('task.footer.execute') }}</span>
                                             </template>
                                         </button>
                                     </template>
@@ -4162,7 +4236,7 @@ function formatFileSize(bytes: number): string {
                                         class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
                                         @click="handleSave"
                                     >
-                                        저장
+                                        {{ t('task.footer.save') }}
                                     </button>
                                 </div>
 
@@ -4170,7 +4244,7 @@ function formatFileSize(bytes: number): string {
                                     class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                     @click="handleClose"
                                 >
-                                    닫기
+                                    {{ t('task.footer.close') }}
                                 </button>
                             </div>
                         </div>

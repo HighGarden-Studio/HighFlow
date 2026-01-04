@@ -229,6 +229,9 @@ dependencies:
   vue-echarts:
     specifier: ^6.7.0
     version: 6.7.3(echarts@5.6.0)(vue@3.5.26)
+  vue-i18n:
+    specifier: '9'
+    version: 9.14.5(vue@3.5.26)
   vue-router:
     specifier: ^4.3.0
     version: 4.6.4(vue@3.5.26)
@@ -1786,6 +1789,27 @@ packages:
     dependencies:
       '@swc/helpers': 0.5.17
     dev: true
+
+  /@intlify/core-base@9.14.5:
+    resolution: {integrity: sha512-5ah5FqZG4pOoHjkvs8mjtv+gPKYU0zCISaYNjBNNqYiaITxW8ZtVih3GS/oTOqN8d9/mDLyrjD46GBApNxmlsA==}
+    engines: {node: '>= 16'}
+    dependencies:
+      '@intlify/message-compiler': 9.14.5
+      '@intlify/shared': 9.14.5
+    dev: false
+
+  /@intlify/message-compiler@9.14.5:
+    resolution: {integrity: sha512-IHzgEu61/YIpQV5Pc3aRWScDcnFKWvQA9kigcINcCBXN8mbW+vk9SK+lDxA6STzKQsVJxUPg9ACC52pKKo3SVQ==}
+    engines: {node: '>= 16'}
+    dependencies:
+      '@intlify/shared': 9.14.5
+      source-map-js: 1.2.1
+    dev: false
+
+  /@intlify/shared@9.14.5:
+    resolution: {integrity: sha512-9gB+E53BYuAEMhbCAxVgG38EZrk59sxBtv3jSizNL2hEWlgjBjAw1AwpLHtNaeda12pe6W20OGEa0TwuMSRbyQ==}
+    engines: {node: '>= 16'}
+    dev: false
 
   /@isaacs/cliui@8.0.2:
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -10769,6 +10793,19 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
+
+  /vue-i18n@9.14.5(vue@3.5.26):
+    resolution: {integrity: sha512-0jQ9Em3ymWngyiIkj0+c/k7WgaPO+TNzjKSNq9BvBQaKJECqn9cd9fL4tkDhB5G1QBskGl9YxxbDAhgbFtpe2g==}
+    engines: {node: '>= 16'}
+    deprecated: v9 and v10 no longer supported. please migrate to v11. about maintenance status, see https://vue-i18n.intlify.dev/guide/maintenance.html
+    peerDependencies:
+      vue: ^3.0.0
+    dependencies:
+      '@intlify/core-base': 9.14.5
+      '@intlify/shared': 9.14.5
+      '@vue/devtools-api': 6.6.4
+      vue: 3.5.26(typescript@5.9.3)
+    dev: false
 
   /vue-router@4.6.4(vue@3.5.26):
     resolution: {integrity: sha512-Hz9q5sa33Yhduglwz6g9skT8OBPii+4bFn88w6J+J4MfEo4KRRpmiNG/hHHkdbRFlLBOqxN8y8gf2Fb0MTUgVg==}

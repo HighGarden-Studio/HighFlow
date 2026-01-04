@@ -10,6 +10,7 @@ import { useUIStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useUserStore } from './stores/userStore';
+import { useI18n } from 'vue-i18n';
 import GlobalSearch from '../components/search/GlobalSearch.vue';
 import AssistantChat from '../components/assistant/AssistantChat.vue';
 import InitialSetupWizard from '../components/setup/InitialSetupWizard.vue';
@@ -28,6 +29,15 @@ const settingsStore = useSettingsStore();
 const historyStore = useHistoryStore();
 const activityLogStore = useActivityLogStore();
 const userStore = useUserStore();
+const { t, locale } = useI18n();
+
+const currentLocaleLabel = computed(() => {
+    return locale.value === 'ko' ? '한국어' : 'English';
+});
+
+function toggleLanguage() {
+    locale.value = locale.value === 'ko' ? 'en' : 'ko';
+}
 
 // State
 const sidebarOpen = ref(true);
@@ -77,26 +87,26 @@ const userInitials = computed(() => {
 const userPhotoUrl = computed(() => userStore.user?.photoUrl || null);
 
 // Navigation items
-const navItems = [
+const navItems = computed(() => [
     {
         name: 'projects',
-        label: 'Projects',
+        label: t('nav.projects'),
         icon: 'folder',
         path: '/projects',
     },
     {
         name: 'marketplace',
-        label: 'Marketplace',
+        label: t('nav.marketplace'),
         icon: 'store',
         path: '/marketplace',
     },
     {
         name: 'settings',
-        label: 'Settings',
+        label: t('nav.settings'),
         icon: 'settings',
         path: '/settings',
     },
-];
+]);
 
 // Actions
 function navigateTo(path: string) {
@@ -201,9 +211,9 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
-    if (confirm('로그아웃하시겠습니까?')) {
+    if (confirm(t('auth.logout_confirm'))) {
         await userStore.logout();
-        uiStore.showToast('Logged out', 'info');
+        uiStore.showToast(t('auth.logout'), 'info');
     }
 }
 
@@ -299,7 +309,7 @@ onUnmounted(() => {
         <!-- Sidebar -->
         <aside
             :class="[
-                'flex-shrink-0 bg-gray-950 border-r border-gray-800 transition-all duration-300 flex flex-col pt-12',
+                'flex-shrink-0 bg-gray-950 border-r border-gray-800 transition-all duration-300 flex flex-col pt-12 pb-14',
                 sidebarOpen ? 'w-64' : 'w-16',
             ]"
         >
@@ -425,7 +435,7 @@ onUnmounted(() => {
                             <button
                                 @click="handleLogout"
                                 class="p-1 text-gray-500 hover:text-red-400 hover:bg-gray-800 rounded transition-colors"
-                                title="Logout"
+                                :title="$t('auth.logout')"
                             >
                                 <svg
                                     class="w-4 h-4"
@@ -448,7 +458,7 @@ onUnmounted(() => {
                         >
                             <div class="flex items-center gap-1.5">
                                 <span class="text-xs">💰</span>
-                                <span class="text-xs text-gray-400">Credits</span>
+                                <span class="text-xs text-gray-400">{{ $t('auth.credits') }}</span>
                             </div>
                             <span class="text-sm font-bold text-yellow-400">{{
                                 userStore.creditBalance
@@ -474,7 +484,7 @@ onUnmounted(() => {
                         <div
                             class="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-700 text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap"
                         >
-                            Logout
+                            {{ $t('auth.logout') }}
                         </div>
                     </div>
                 </template>
@@ -505,8 +515,9 @@ onUnmounted(() => {
                                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                             />
                         </svg>
-                        <span v-if="!userStore.isLoading">Google로 로그인</span>
-                        <span v-else>로그인 중...</span>
+
+                        <span v-if="!userStore.isLoading">{{ $t('auth.login') }}</span>
+                        <span v-else>{{ $t('auth.login_loading') }}</span>
                     </button>
                     <button
                         v-else
@@ -536,9 +547,18 @@ onUnmounted(() => {
                     </button>
                 </template>
 
-                <!-- HighGarden Credit -->
+                <!-- HighGarden Credit & Lang Switch -->
                 <div v-if="sidebarOpen" class="mt-3 pt-3 border-t border-gray-800/50">
-                    <p class="text-[10px] text-gray-600 text-center">© HighGarden</p>
+                    <div class="flex items-center justify-between mb-2">
+                        <button
+                            @click="toggleLanguage"
+                            class="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/50"
+                        >
+                            <span class="text-sm">{{ locale === 'ko' ? '🇰🇷' : '🇺🇸' }}</span>
+                            <span>{{ currentLocaleLabel }}</span>
+                        </button>
+                        <p class="text-[10px] text-gray-600">© HighGarden</p>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -652,7 +672,7 @@ onUnmounted(() => {
                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                             />
                         </svg>
-                        <span class="text-xs text-gray-500">검색...</span>
+                        <span class="text-xs text-gray-500">{{ $t('common.search') }}</span>
                         <kbd
                             class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 bg-gray-700/50 rounded"
                         >
@@ -781,7 +801,7 @@ onUnmounted(() => {
             v-if="!showAssistant"
             @click="toggleAssistant"
             class="fixed bottom-12 right-4 z-40 w-14 h-14 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-full shadow-lg shadow-purple-500/25 flex items-center justify-center transition-all hover:scale-105 group"
-            title="AI 비서 (⌘J)"
+            :title="$t('common.ai_assistant')"
         >
             <span class="text-2xl group-hover:scale-110 transition-transform">🤖</span>
         </button>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import { useTaskStatus } from '../../../composables/task/useTaskStatus';
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
+const { t } = useI18n();
 const { isWaitingForInput, outputFormatInfo } = useTaskStatus(props);
 
 // Operator state
@@ -87,9 +89,9 @@ const dependencySequences = computed(() => {
 const inputTypeLabel = computed(() => {
     if (!props.task.inputConfig) return 'User Input';
     const type = props.task.inputConfig.sourceType;
-    if (type === 'USER_INPUT') return 'User Input';
-    if (type === 'LOCAL_FILE') return 'Local File';
-    if (type === 'REMOTE_RESOURCE') return 'Remote URL';
+    if (type === 'USER_INPUT') return t('task.input.type.user');
+    if (type === 'LOCAL_FILE') return t('task.input.type.local');
+    if (type === 'REMOTE_RESOURCE') return t('task.input.type.remote');
     return type;
 });
 
@@ -97,9 +99,9 @@ const inputModeLabel = computed(() => {
     if (!props.task.inputConfig) return 'Manual';
     if (props.task.inputConfig.sourceType === 'USER_INPUT') {
         const mode = props.task.inputConfig.userInput?.mode;
-        if (mode === 'confirm') return 'Confirmation';
-        if (mode === 'short') return 'Short Text';
-        if (mode === 'long') return 'Long Text';
+        if (mode === 'confirm') return t('task.input.mode.confirm');
+        if (mode === 'short') return t('task.input.mode.short');
+        if (mode === 'long') return t('task.input.mode.long');
     }
     return ''; // Less relevant for other types unless specified
 });
@@ -320,7 +322,9 @@ function hexToRgba(hex: string, alpha: number) {
                 >
                     {{ task.description }}
                 </p>
-                <p v-else class="text-xs text-gray-400 dark:text-gray-500 italic">입력 태스크</p>
+                <p v-else class="text-xs text-gray-400 dark:text-gray-500 italic">
+                    {{ t('task.type.input_desc') }}
+                </p>
             </div>
 
             <!-- Waiting for Input UI (Takes precedence or sits alongside triggers) -->
@@ -346,7 +350,7 @@ function hexToRgba(hex: string, alpha: number) {
                     </svg>
                 </div>
                 <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                    사용자 입력 대기중
+                    {{ t('task.status.waiting_input') }}
                 </p>
             </div>
 
@@ -376,14 +380,16 @@ function hexToRgba(hex: string, alpha: number) {
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
                             {{
-                                dependencySequences ? `Task ${dependencySequences}` : '이전 태스크'
+                                dependencySequences
+                                    ? `Task ${dependencySequences}`
+                                    : t('common.prev_task')
                             }}
                             {{
                                 task.triggerConfig.dependsOn.operator === 'all'
-                                    ? '모두'
-                                    : '하나라도'
+                                    ? t('task.trigger.all')
+                                    : t('task.trigger.any')
                             }}
-                            완료 시
+                            {{ t('task.trigger.on_complete') }}
                         </p>
                     </div>
                 </div>
@@ -405,10 +411,14 @@ function hexToRgba(hex: string, alpha: number) {
                     </svg>
                     <div class="flex-1">
                         <p class="font-medium text-indigo-700 dark:text-indigo-300 mb-0.5">
-                            예약 실행
+                            {{ t('task.trigger.scheduled') }}
                         </p>
                         <p class="text-[10px] text-indigo-600 dark:text-indigo-400 leading-tight">
-                            {{ task.triggerConfig.scheduledAt.type === 'once' ? '1회' : '반복' }}:
+                            {{
+                                task.triggerConfig.scheduledAt.type === 'once'
+                                    ? t('task.trigger.once')
+                                    : t('task.trigger.repeat')
+                            }}:
                             {{
                                 task.triggerConfig.scheduledAt.datetime
                                     ? new Date(
@@ -447,7 +457,7 @@ function hexToRgba(hex: string, alpha: number) {
                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                         />
                     </svg>
-                    입력하기
+                    {{ t('task.actions.input') }}
                 </button>
 
                 <!-- Execute Button (TODO) -->
@@ -470,7 +480,7 @@ function hexToRgba(hex: string, alpha: number) {
                             d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                     </svg>
-                    실행
+                    {{ t('task.card.execute') }}
                 </button>
 
                 <!--Stop Button (In Progress) - Including waiting for input -->
@@ -479,7 +489,7 @@ function hexToRgba(hex: string, alpha: number) {
                     class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                     @click="handleStop"
                 >
-                    중지
+                    {{ t('common.stop') }}
                 </button>
 
                 <!-- DONE Status Actions -->
@@ -493,7 +503,7 @@ function hexToRgba(hex: string, alpha: number) {
                             }
                         "
                     >
-                        결과보기
+                        {{ t('task.actions.view_result') }}
                     </button>
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
@@ -514,7 +524,7 @@ function hexToRgba(hex: string, alpha: number) {
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                             />
                         </svg>
-                        재실행
+                        {{ t('common.retry') }}
                     </button>
                     <button
                         class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
@@ -525,7 +535,7 @@ function hexToRgba(hex: string, alpha: number) {
                             }
                         "
                     >
-                        히스토리
+                        {{ t('task.detail.history') }}
                     </button>
                 </template>
             </div>
