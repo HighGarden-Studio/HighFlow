@@ -1263,6 +1263,8 @@ async function createProject() {
                 (task.suggestedAIProvider ? [task.suggestedAIProvider] : []),
             requiredMCPs: task.requiredMCPs || [],
             codeLanguage: task.codeLanguage,
+            taskType: task.taskType,
+            autoExecute: task.autoExecute,
             tags:
                 task.tags && task.tags.length > 0
                     ? task.tags

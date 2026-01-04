@@ -234,8 +234,12 @@ async function handleAIWizardCreated(projectData: any) {
             if (projectData.executionPlan) {
                 await taskStore.createTasksFromExecutionPlan(project.id, projectData.executionPlan);
             } else if (projectData.tasks && projectData.tasks.length > 0) {
+                // 1. First Pass: Create all tasks
+                const titleToIdMap = new Map<string, number>();
+                const createdTasks: any[] = []; // Store created tasks for second pass
+
                 for (const task of projectData.tasks) {
-                    await taskStore.createTask({
+                    const createdTask = await taskStore.createTask({
                         projectId: project.id,
                         title: task.title,
                         description: task.description || '',
@@ -245,9 +249,64 @@ async function handleAIWizardCreated(projectData: any) {
                         estimatedMinutes: task.estimatedMinutes,
                         outputFormat: task.outputFormat || 'markdown',
                         codeLanguage: task.codeLanguage,
-                        promptTemplate: task.promptTemplate,
+                        generatedPrompt: task.promptTemplate,
+                        aiOptimizedPrompt: task.aiOptimizedPrompt,
                         tags: task.tags,
+                        taskType: task.taskType,
+                        // Don't set triggerConfig yet, as we need dependencies resolved
                     });
+
+                    if (createdTask) {
+                        titleToIdMap.set(task.title, createdTask.id);
+                        createdTasks.push(createdTask);
+                    } else {
+                        createdTasks.push(null); // Keep index alignment
+                    }
+                }
+
+                // 2. Second Pass: Resolve dependencies and set trigger/auto-execute
+                for (let i = 0; i < projectData.tasks.length; i++) {
+                    const taskData = projectData.tasks[i];
+                    const createdTask = createdTasks[i];
+
+                    if (!createdTask) continue;
+
+                    const updates: any = {};
+                    const dependencyTitles = taskData.dependencies || [];
+                    const dependencyIds: number[] = [];
+
+                    // Resolve string titles to IDs
+                    for (const title of dependencyTitles) {
+                        const id = titleToIdMap.get(title);
+                        if (id) dependencyIds.push(id);
+                    }
+
+                    if (dependencyIds.length > 0) {
+                        updates.dependencies = dependencyIds;
+                    }
+
+                    // Set Auto-Execute / Trigger Config
+                    if (taskData.autoExecute) {
+                        updates.triggerConfig = {
+                            type: 'dependency',
+                            dependencyOperator: 'all',
+                            executionPolicy: 'repeat',
+                            dependencyTaskIds: dependencyIds,
+                        };
+                    } else if (dependencyIds.length > 0) {
+                        // Even if not auto-execute, but has dependencies, we might want to link them?
+                        // But triggerConfig implies automation. Explicit dependencies list is enough for visual graph.
+                        // However, if we want strict blocking, we might use triggerConfig without repeat?
+                        // For now, only set triggerConfig if autoExecute is requested.
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        await taskStore.updateTask(
+                            project.id,
+                            createdTask.projectSequence,
+                            updates
+                        );
+                    }
                 }
             }
 
@@ -427,6 +486,15 @@ onUnmounted(() => {
                                     >
                                         {{ project.title }}
                                     </h3>
+                                    <!-- AI Provider Badge -->
+                                    <span
+                                        v-if="project.aiProvider"
+                                        class="flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 border-opacity-50"
+                                        title="기본 AI 모델"
+                                    >
+                                        <span>✨</span>
+                                        {{ project.aiProvider }}
+                                    </span>
                                     <span
                                         class="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
                                         :class="{
@@ -701,10 +769,6 @@ onUnmounted(() => {
                                 />
                             </svg>
                             {{ new Date(project.updatedAt).toLocaleDateString('ko-KR') }} 업데이트
-                        </span>
-                        <span v-if="project.aiProvider" class="flex items-center gap-1.5">
-                            <span class="text-purple-400">✨</span>
-                            {{ project.aiProvider }}
                         </span>
                     </div>
                 </div>

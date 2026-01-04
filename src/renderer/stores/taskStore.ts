@@ -25,7 +25,7 @@ import { useHistoryStore } from './historyStore';
 import { UpdateTaskCommand } from '../../core/commands/TaskCommands';
 
 // Re-export Task, TaskStatus type for convenience
-export type { Task, TaskStatus, TaskType };
+export type { Task, TaskStatus, TaskType, TaskPriority };
 
 // Removed local TaskPriority definition as it's now imported
 // export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
