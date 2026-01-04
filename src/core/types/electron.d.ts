@@ -126,6 +126,7 @@ export interface TaskExecutionOptions {
     };
     enabledProviders?: EnabledProviderInfo[];
     mcpServers?: MCPServerRuntimeConfig[];
+    language?: string;
 }
 
 export interface RunCommandOptions {
@@ -630,6 +631,14 @@ export interface OperatorsAPI {
     delete: (id: number) => Promise<void>;
 }
 
+export interface ScriptTemplatesAPI {
+    list: () => Promise<any[]>;
+    get: (id: number) => Promise<any | null>;
+    create: (data: any) => Promise<any>;
+    update: (id: number, data: any) => Promise<any>;
+    delete: (id: number) => Promise<void>;
+}
+
 // Cloud User Authentication
 export interface CloudUser {
     id: string;
@@ -686,6 +695,7 @@ export interface ElectronAPI {
     taskExecution: TaskExecutionAPI;
     taskHistory: TaskHistoryAPI;
     operators: OperatorsAPI;
+    scriptTemplates: ScriptTemplatesAPI;
     auth: AuthAPI;
     ai: AiAPI;
     store?: StoreAPI;

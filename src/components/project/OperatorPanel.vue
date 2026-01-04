@@ -1,114 +1,163 @@
 <template>
     <div class="operator-panel" :class="{ collapsed: isCollapsed }">
-        <!-- Toggle Button -->
-        <button
-            @click="togglePanel"
-            class="toggle-btn"
-            :title="isCollapsed ? 'Show Operators' : 'Hide Operators'"
-        >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    :d="isCollapsed ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'"
-                />
-            </svg>
-            <span class="ml-2">AI Operators</span>
-            <span v-if="operators.length > 0" class="operator-count">{{ operators.length }}</span>
-        </button>
+        <!-- Header / Toggle -->
+        <div class="flex items-center justify-between px-2 py-1 border-b border-gray-700/50">
+            <button
+                @click="togglePanel"
+                class="toggle-btn flex-1 text-left"
+                :title="isCollapsed ? 'Show Library' : 'Hide Library'"
+            >
+                <div class="flex items-center">
+                    <svg
+                        class="w-5 h-5 flex-shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            :d="isCollapsed ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'"
+                        />
+                    </svg>
+                    <span class="ml-2 font-medium text-gray-200">Library</span>
+                </div>
+            </button>
+        </div>
 
-        <!-- Operators List -->
+        <!-- Expanded Content -->
         <Transition
             enter-active-class="transition-all duration-200 ease-out"
             enter-from-class="opacity-0 max-h-0"
-            enter-to-class="opacity-100 max-h-96"
+            enter-to-class="opacity-100 max-h-[800px]"
             leave-active-class="transition-all duration-200 ease-in"
-            leave-from-class="opacity-100 max-h-96"
+            leave-from-class="opacity-100 max-h-[800px]"
             leave-to-class="opacity-0 max-h-0"
         >
-            <div v-show="!isCollapsed" class="operators-container">
-                <!-- Filter Bar -->
-                <div v-if="uniqueTags.length > 0" class="filter-bar">
+            <div v-show="!isCollapsed" class="flex flex-col h-auto max-h-[200px]">
+                <!-- Tabs -->
+                <div class="flex border-b border-gray-700/50">
                     <button
-                        @click="selectTag(null)"
-                        class="filter-chip"
-                        :class="{ active: selectedTag === null }"
+                        @click="activeTab = 'operators'"
+                        class="flex-1 py-2 text-sm font-medium text-center transition-colors border-b-2"
+                        :class="
+                            activeTab === 'operators'
+                                ? 'text-blue-400 border-blue-400 bg-blue-500/10'
+                                : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-700/30'
+                        "
                     >
-                        All
-                    </button>
-                    <button
-                        v-for="tag in uniqueTags"
-                        :key="tag"
-                        @click="selectTag(tag)"
-                        class="filter-chip"
-                        :class="{ active: selectedTag === tag }"
-                    >
-                        {{ tag }}
-                    </button>
-                </div>
-
-                <!-- Operators List -->
-                <div v-if="loading" class="loading-state">
-                    <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                        <circle
-                            class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"
-                        ></circle>
-                        <path
-                            class="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                    </svg>
-                    <span>Loading operators...</span>
-                </div>
-
-                <div v-else-if="operators.length === 0" class="empty-state">
-                    <p>No operators available</p>
-                    <p class="text-sm">Create operators in Settings</p>
-                </div>
-
-                <div v-else class="operators-scroll-area">
-                    <div
-                        v-for="operator in filteredOperators"
-                        :key="operator.id"
-                        class="operator-card"
-                        draggable="true"
-                        @dragstart="handleDragStart($event, operator)"
-                        @dragend="handleDragEnd"
-                        :style="{ borderColor: operator.color || undefined }"
-                    >
-                        <div
-                            class="operator-avatar"
-                            :style="{ backgroundColor: operator.color || undefined }"
+                        Operators
+                        <span v-if="operators.length > 0" class="ml-1 text-xs opacity-70"
+                            >({{ operators.length }})</span
                         >
-                            {{ operator.avatar || '🤖' }}
+                    </button>
+                    <button
+                        @click="activeTab = 'scripts'"
+                        class="flex-1 py-2 text-sm font-medium text-center transition-colors border-b-2"
+                        :class="
+                            activeTab === 'scripts'
+                                ? 'text-blue-400 border-blue-400 bg-blue-500/10'
+                                : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-700/30'
+                        "
+                    >
+                        Scripts
+                    </button>
+                </div>
+
+                <!-- Tab Content: Operators -->
+                <div v-if="activeTab === 'operators'" class="flex-1 flex flex-col min-h-0">
+                    <!-- Filter Bar -->
+                    <div v-if="uniqueTags.length > 0" class="filter-bar">
+                        <button
+                            @click="selectTag(null)"
+                            class="filter-chip"
+                            :class="{ active: selectedTag === null }"
+                        >
+                            All
+                        </button>
+                        <button
+                            v-for="tag in uniqueTags"
+                            :key="tag"
+                            @click="selectTag(tag)"
+                            class="filter-chip"
+                            :class="{ active: selectedTag === tag }"
+                        >
+                            {{ tag }}
+                        </button>
+                    </div>
+
+                    <!-- Operators List (Horizontal Scroll) -->
+                    <div
+                        class="flex-1 overflow-x-auto overflow-y-hidden operators-scroll-area custom-scrollbar"
+                    >
+                        <div v-if="loading" class="loading-state">
+                            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                <circle
+                                    class="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    stroke-width="4"
+                                ></circle>
+                                <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                ></path>
+                            </svg>
+                            <span>Loading operators...</span>
                         </div>
-                        <div class="operator-info">
-                            <div class="operator-name">{{ operator.name }}</div>
-                            <div class="operator-role">{{ operator.role }}</div>
-                            <div v-if="operator.aiProvider" class="operator-ai-info">
-                                <span class="ai-provider">{{
-                                    getProviderLabel(operator.aiProvider)
-                                }}</span>
-                                <span v-if="operator.aiModel" class="ai-model">{{
-                                    operator.aiModel
-                                }}</span>
+
+                        <div v-else-if="operators.length === 0" class="empty-state">
+                            <p>No operators available</p>
+                            <p class="text-sm">Create operators in Settings</p>
+                        </div>
+
+                        <div v-else class="flex flex-row gap-3 p-3 min-w-max">
+                            <div
+                                v-for="operator in filteredOperators"
+                                :key="operator.id"
+                                class="operator-card"
+                                draggable="true"
+                                @dragstart="handleDragStart($event, operator)"
+                                @dragend="handleDragEnd"
+                                :style="{ borderColor: operator.color || undefined }"
+                            >
+                                <div
+                                    class="operator-avatar"
+                                    :style="{ backgroundColor: operator.color || undefined }"
+                                >
+                                    {{ operator.avatar || '🤖' }}
+                                </div>
+                                <div class="operator-info">
+                                    <div class="operator-name">{{ operator.name }}</div>
+                                    <div class="operator-role">{{ operator.role }}</div>
+                                    <div v-if="operator.aiProvider" class="operator-ai-info">
+                                        <span class="ai-provider">{{
+                                            getProviderLabel(operator.aiProvider)
+                                        }}</span>
+                                        <span v-if="operator.aiModel" class="ai-model">{{
+                                            operator.aiModel
+                                        }}</span>
+                                    </div>
+                                </div>
+                                <div class="drag-indicator">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M9 3h2v2H9V3zm0 4h2v2H9V7zm0 4h2v2H9V7zm0 4h2v2H9v-2zm0 4h2v2H9v-2zm0 4h2v2H9v-2zm4-16h2v2h-2V3zm0 4h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"
+                                        />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
-                        <div class="drag-indicator">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    d="M9 3h2v2H9V3zm0 4h2v2H9V7zm0 4h2v2H9v-2zm0 4h2v2H9v-2zm0 4h2v2H9v-2zm4-16h2v2h-2V3zm0 4h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"
-                                />
-                            </svg>
-                        </div>
                     </div>
+                </div>
+
+                <!-- Tab Content: Script Templates -->
+                <div v-if="activeTab === 'scripts'" class="flex-1 min-h-0 bg-gray-900/30">
+                    <ScriptTemplateList />
                 </div>
             </div>
         </Transition>
@@ -118,6 +167,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import type { Operator } from '@core/types/database';
+import ScriptTemplateList from './ScriptTemplateList.vue';
 
 const props = defineProps<{
     projectId: number | null;
@@ -126,6 +176,7 @@ const props = defineProps<{
 const operators = ref<Operator[]>([]);
 const loading = ref(true);
 const isCollapsed = ref(true);
+const activeTab = ref<'operators' | 'scripts'>('operators');
 
 const selectedTag = ref<string | null>(null);
 
@@ -247,7 +298,7 @@ function getProviderLabel(providerId: string): string {
     display: flex;
     align-items: center;
     width: 100%;
-    padding: 0.75rem 1.5rem;
+    padding: 0.5rem 1rem;
     background: transparent;
     border: none;
     color: #e0e0e0;
@@ -279,7 +330,7 @@ function getProviderLabel(providerId: string): string {
 .filter-bar {
     display: flex;
     gap: 0.5rem;
-    padding: 0.75rem 1rem 0;
+    padding: 0.5rem 1rem 0.5rem;
     overflow-x: auto;
     scrollbar-width: none; /* Firefox */
 }
@@ -323,10 +374,9 @@ function getProviderLabel(providerId: string): string {
 }
 
 .operators-scroll-area {
-    display: flex;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
+    padding: 0; /* Remove padding, let inner div handle it */
     overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: thin;
 }
 

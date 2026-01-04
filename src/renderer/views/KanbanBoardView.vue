@@ -267,8 +267,38 @@ function isTaskDragging(task: Task): boolean {
     return draggedTask.value === `${task.projectId}_${task.projectSequence}`;
 }
 
-async function handleDrop(status: TaskStatus) {
+async function handleDrop(status: TaskStatus, event?: DragEvent) {
     console.log('📦 Handle Drop:', status, 'DraggedTask:', draggedTask.value);
+
+    // 1. Check for Script Template Drop
+    if (event?.dataTransfer) {
+        const templateData = event.dataTransfer.getData('application/x-script-template');
+        if (templateData) {
+            try {
+                const template = JSON.parse(templateData);
+                console.log('📜 Script Template Dropped:', template);
+
+                // Create new task from template
+                await taskStore.createTask({
+                    projectId: projectId.value,
+                    title: template.name,
+                    description: template.description || undefined,
+                    taskType: 'script',
+                    status: status,
+                    scriptCode: template.scriptCode,
+                    scriptLanguage: template.scriptLanguage,
+                    scriptRuntime: template.scriptRuntime,
+                    tags: template.tags,
+                } as any);
+
+                return;
+            } catch (e) {
+                console.error('Failed to process script template drop:', e);
+            }
+        }
+    }
+
+    // 2. Existing Task Move Logic
     if (!draggedTask.value) return;
 
     const [pIdStr, seqStr] = draggedTask.value.split('_');
@@ -1211,7 +1241,7 @@ onMounted(async () => {
                     :key="column.id"
                     class="w-80 flex-shrink-0 flex flex-col bg-gray-800/50 rounded-xl"
                     @dragover.prevent
-                    @drop="handleDrop(column.id)"
+                    @drop="handleDrop(column.id, $event)"
                 >
                     <!-- Column Header -->
                     <div class="p-4 flex items-center justify-between">

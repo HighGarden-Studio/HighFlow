@@ -100,4 +100,32 @@ export function registerSystemHandlers(): void {
             }
         }
     );
+
+    // TEMPORARY: Debug handler to execute migration SQL
+    // TODO: Remove this after migration is complete
+    ipcMain.handle('debug:execute-sql', async (_event, sqlStatements: string[]) => {
+        try {
+            const { db } = await import('../database/client');
+            const { sql } = await import('drizzle-orm');
+
+            console.log('🔧 [DEBUG] Executing SQL statements...');
+
+            const results = [];
+            for (const statement of sqlStatements) {
+                const trimmed = statement.trim();
+                if (trimmed) {
+                    console.log(`Executing: ${trimmed.substring(0, 50)}...`);
+                    db.run(sql.raw(trimmed));
+                    results.push({ success: true, sql: trimmed.substring(0, 100) });
+                }
+            }
+
+            console.log('✅ [DEBUG] SQL execution completed');
+            return { success: true, results };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error('❌ [DEBUG] SQL execution failed:', message);
+            return { success: false, error: message };
+        }
+    });
 }

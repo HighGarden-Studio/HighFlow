@@ -190,6 +190,18 @@ const operatorsAPI = {
 };
 
 // ========================================
+// Script Templates API
+// ========================================
+
+const scriptTemplatesAPI = {
+    list: () => ipcRenderer.invoke('script-templates:list'),
+    get: (id: number) => ipcRenderer.invoke('script-templates:get', id),
+    create: (data: unknown) => ipcRenderer.invoke('script-templates:create', data),
+    update: (id: number, data: unknown) => ipcRenderer.invoke('script-templates:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('script-templates:delete', id),
+};
+
+// ========================================
 // Event System
 // ========================================
 
@@ -304,6 +316,12 @@ const systemAPI = {
     }) => ipcRenderer.invoke('system:runCommand', payload),
 
     getPrompts: (): Promise<Record<string, string>> => ipcRenderer.invoke('system:get-prompts'),
+
+    // TEMPORARY: Debug SQL execution (remove after migration)
+    debugExecuteSql: (
+        sqlStatements: string[]
+    ): Promise<{ success: boolean; results?: any[]; error?: string }> =>
+        ipcRenderer.invoke('debug:execute-sql', sqlStatements),
 };
 
 // ========================================
@@ -1222,6 +1240,7 @@ const electronAPI = {
     taskExecution: taskExecutionAPI,
     taskHistory: taskHistoryAPI,
     operators: operatorsAPI,
+    scriptTemplates: scriptTemplatesAPI,
     auth: authAPI,
     http: httpAPI,
     ai: aiAPI,

@@ -22,6 +22,7 @@ import { registerTaskHistoryHandlers } from './ipc/task-history-handlers';
 import { registerSystemHandlers } from './ipc/system-handlers';
 import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { registerAuthHandlers } from './ipc/auth-handlers';
+import { registerScriptTemplateHandlers } from './ipc/script-template-handlers';
 import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
@@ -589,6 +590,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register operator handlers
     registerOperatorHandlers();
+
+    // Register script template handlers
+    registerScriptTemplateHandlers();
 
     console.log('IPC handlers registered');
 }

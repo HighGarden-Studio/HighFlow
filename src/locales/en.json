@@ -161,7 +161,9 @@
             "enhance": "Enhance",
             "view_prev_result": "View Prev Result",
             "approve": "Approve",
-            "input": "Input"
+            "input": "Input",
+            "save_template": "Save as Template",
+            "view_result": "View Result"
         },
         "msg": {
             "reset_confirm": "Are you sure you want to reset project results?\n\nThis will delete:\n- Project AI Memory\n- All Task Results & History\n- Task Statuses (Reset to Todo)\n\nTask definitions and settings will be preserved.",
@@ -219,6 +221,16 @@
             "output": "Output",
             "input": "Input",
             "dependencies": "Dependencies"
+        },
+        "actions": {
+            "view_result": "View Result",
+            "save_template": "Save as Template",
+            "approve": "Approve",
+            "input": "Input",
+            "view_detail": "View Detail",
+            "connect": "Connect",
+            "enhance": "Enhance",
+            "view_prev_result": "View Prev Result"
         },
         "detail": {
             "title": "Task Detail",
@@ -307,6 +319,11 @@
                 "local": "Local File",
                 "remote": "Remote URL"
             },
+            "mode": {
+                "confirm": "Confirm/Cancel",
+                "short": "Short Answer",
+                "long": "Long Answer"
+            },
             "local": {
                 "extensions": "Allowed Extensions",
                 "read_mode": "Read Mode",
@@ -332,6 +349,7 @@
         },
         "macro": {
             "guide_title": "📖 Macro Usage Guide",
+            "variable_name": "Variable Name",
             "dep_result_title": "📋 Dependency Task Result",
             "prev_task_title": "⬆️ Previous Task Reference",
             "system_title": "⚙️ System Macro",
@@ -399,10 +417,7 @@
             "button": "Subdivide Task",
             "title": "Task Subdivision"
         },
-        "macro": {
-            "variable_name": "variable_name",
-            "guide_title": "Macro Usage Guide"
-        },
+
         "group": {
             "title": "Group Task",
             "desc": "This task is subdivided into {count} subtasks. It is used for grouping only and cannot be executed directly."

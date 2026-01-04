@@ -9,7 +9,6 @@ import { ref, computed } from 'vue';
 import type { Task, TaskStatus } from '@core/types/database';
 import type { TaskPriority, TaskType } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
-import type { ExecutionProgress } from '@core/types/electron.d';
 import {
     TASK_STATUS_TRANSITIONS,
     isValidStatusTransition,
@@ -21,8 +20,8 @@ import { buildEnabledProvidersPayload, buildRuntimeMCPServers } from '../utils/r
 import { aiInterviewService } from '../../services/ai/AIInterviewService';
 // Removed unused commands
 import { normalizeAiResult } from '../utils/aiResultHelpers';
-import { useHistoryStore } from './historyStore';
-import { UpdateTaskCommand } from '../../core/commands/TaskCommands';
+import i18n from '../../i18n';
+import { unref } from 'vue';
 
 // Re-export Task, TaskStatus type for convenience
 export type { Task, TaskStatus, TaskType, TaskPriority };
@@ -62,7 +61,6 @@ export const useTaskStore = defineStore('tasks', () => {
     const error = ref<string | null>(null);
     const filters = ref<TaskFilters>({});
     const settingsStore = useSettingsStore();
-    const historyStore = useHistoryStore();
 
     // Helper for composite keys
     function getTaskKey(
@@ -318,7 +316,7 @@ export const useTaskStore = defineStore('tasks', () => {
             return null;
         }
 
-        const originalTask = { ...tasks.value[index] };
+        const originalTask = { ...tasks.value[index] } as Task;
 
         // Optimistic update logic
         const mergedUpdate = {
@@ -857,6 +855,9 @@ export const useTaskStore = defineStore('tasks', () => {
                           .filter((provider) => !!provider.apiKey)
                           .map((provider) => provider.id);
 
+            const currentLocale = unref(i18n.global.locale);
+            const language = typeof currentLocale === 'string' ? currentLocale : 'en';
+
             const payload = JSON.parse(
                 JSON.stringify({
                     streaming: true,
@@ -865,6 +866,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     mcpServers: runtimeMCPServers,
                     fallbackProviders,
                     triggerChain: options?.triggerChain, // Pass triggerChain if present
+                    language,
                 })
             );
 
@@ -2704,7 +2706,7 @@ export const useTaskStore = defineStore('tasks', () => {
             return fallback;
         }
 
-        return enabledProviders.length > 0 ? enabledProviders[0].id : null;
+        return enabledProviders.length > 0 ? enabledProviders[0]!.id : null;
     }
 
     return {

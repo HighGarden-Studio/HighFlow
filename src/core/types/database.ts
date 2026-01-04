@@ -23,7 +23,8 @@ export type TaskStatus =
     | 'in_review'
     | 'done'
     | 'blocked'
-    | 'needs_approval';
+    | 'needs_approval'
+    | 'failed';
 
 /**
  * Task Status Transition Rules
@@ -76,6 +77,7 @@ export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
     done: ['in_progress', 'blocked'],
     blocked: ['todo'],
     needs_approval: ['in_progress', 'todo', 'blocked'],
+    failed: ['todo', 'in_progress'], // Allow retry
 };
 
 // Check if a status transition is valid
@@ -599,6 +601,7 @@ export interface Task extends BaseEntity {
 
     output?: TaskOutput | null; // Standardized output for all task types
     notificationConfig?: unknown; // Notification settings for this task
+    metadata?: any; // Additional metadata (e.g., DAG position)
 }
 
 export interface TaskExecutionResult {
@@ -1147,3 +1150,11 @@ export interface CreateSkillDTO {
 
 export type NewProject = Partial<Project>;
 export type NewTask = Partial<Task>;
+
+export interface ScriptTemplate extends BaseEntity {
+    name: string;
+    description: string;
+    scriptCode: string;
+    defaultOptions: Record<string, unknown>;
+    tags: string[];
+}

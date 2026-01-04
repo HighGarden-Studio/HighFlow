@@ -622,7 +622,10 @@ function hexToRgba(hex: string, alpha: number) {
                             }}
                         </span>
                     </div>
-                    <span>{{ t('task.actions.view_detail') }} &rarr;</span>
+                    <span
+                        class="text-xs text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors"
+                        >{{ t('task.actions.view_detail') }} &rarr;</span
+                    >
                 </div>
 
                 <!-- Streaming content -->

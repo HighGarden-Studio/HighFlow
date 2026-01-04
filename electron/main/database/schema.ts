@@ -555,6 +555,27 @@ export const templateTasks = sqliteTable(
     })
 );
 
+export const scriptTemplates = sqliteTable(
+    'script_templates',
+    {
+        id: integer('id').primaryKey({ autoIncrement: true }),
+        name: text('name').notNull(),
+        description: text('description').notNull(),
+        scriptCode: text('script_code').notNull(),
+        defaultOptions: text('default_options', { mode: 'json' }).notNull().default('{}'),
+        tags: text('tags', { mode: 'json' }).notNull().default('[]'),
+        createdAt: integer('created_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+        updatedAt: integer('updated_at', { mode: 'timestamp' })
+            .notNull()
+            .default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => ({
+        createdAtIndex: index('script_template_created_at_idx').on(table.createdAt),
+    })
+);
+
 export const skills = sqliteTable(
     'skills',
     {

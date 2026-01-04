@@ -5,11 +5,9 @@
  * Modern DAG visualization using Vue Flow with automatic layout
  */
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
+// Removed unused addEdges
 import { useRoute, useRouter } from 'vue-router';
-import { VueFlow, useVueFlow, Position, MarkerType } from '@vue-flow/core';
-import { Background } from '@vue-flow/background';
-import { Controls } from '@vue-flow/controls';
-import { MiniMap } from '@vue-flow/minimap';
+import { VueFlow, useVueFlow, MarkerType } from '@vue-flow/core';
 import type { Node, Edge } from '@vue-flow/core';
 import dagre from 'dagre';
 import { useTaskStore, type TaskStatus } from '../stores/taskStore';
@@ -27,10 +25,6 @@ import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import TaskExecutionProgress from '../../components/task/TaskExecutionProgress.vue';
-import { getAPI } from '../../utils/electron';
-import { tagService } from '../../services/task/TagService';
-import { estimationService } from '../../services/task/EstimationService';
-import { aiInterviewService } from '../../services/ai/AIInterviewService';
 import {
     taskSubdivisionService,
     type SubdivisionSuggestion,
@@ -39,8 +33,8 @@ import {
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
-import '@vue-flow/controls/dist/style.css';
-import '@vue-flow/minimap/dist/style.css';
+import '@vue-flow/core/dist/style.css';
+import '@vue-flow/core/dist/theme-default.css';
 
 const route = useRoute();
 const router = useRouter();
@@ -109,8 +103,10 @@ const resultPreviewTask = computed(() => {
     });
 
     // Augment with execution progress if available
-    const progress = taskStore.executionProgress.get(task.id);
-    const reviewProgressEntry = taskStore.reviewProgress.get(task.id);
+    // Augment with execution progress if available
+    const taskKey = `${task.projectId}_${task.projectSequence}`;
+    const progress = taskStore.executionProgress.get(taskKey);
+    const reviewProgressEntry = taskStore.reviewProgress.get(taskKey);
 
     return {
         ...task,
@@ -526,7 +522,7 @@ function updateNodeByKey(compositeKey: string) {
  * Uses VueFlow's updateNodeData for smooth updates
  */
 function updateNodesDataSmooth() {
-    // console.log('[DAGView] Updating nodes data smoothly...');
+    // console.log('[DAGView] Nodes data updated');
 
     // Update each node's data using VueFlow's API
     taskStore.tasks.forEach((task) => {
@@ -536,22 +532,6 @@ function updateNodesDataSmooth() {
     });
 
     // console.log('[DAGView] Nodes data updated');
-}
-
-/**
- * Get edge color based on task status
- */
-function getEdgeColor(task: Task): string {
-    switch (task.status) {
-        case 'done':
-            return '#10B981'; // Green
-        case 'in_progress':
-            return '#3B82F6'; // Blue
-        case 'blocked':
-            return '#EF4444'; // Red
-        default:
-            return '#6B7280'; // Gray
-    }
 }
 
 /**
@@ -576,7 +556,6 @@ function getOutputFormatInfo(
         'c',
         'cpp',
         'c++',
-        'c#',
         'csharp',
         'rust',
         'ruby',
@@ -748,6 +727,7 @@ function isDependencyActive(expression: string, targetId: number, allTasks: Task
     const winningGroup = validGroups[0];
 
     // 3. Is our targetId in the winning group?
+    if (!winningGroup) return false; // Fix: Ensure winningGroup is not undefined
     return winningGroup.segment.includes(String(targetId));
 }
 
@@ -905,23 +885,6 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
 /**
  * Check for circular dependencies
  */
-function wouldCreateCircularDependency(sourceId: number, targetId: number): boolean {
-    const visited = new Set<number>();
-    const queue = [sourceId];
-
-    while (queue.length > 0) {
-        const current = queue.shift()!;
-        if (current === targetId) return true;
-        if (visited.has(current)) continue;
-
-        visited.add(current);
-        const task = tasks.value.find((t) => t.id === current);
-        const deps = task?.triggerConfig?.dependsOn?.taskIds || [];
-        queue.push(...deps);
-    }
-
-    return false;
-}
 
 /**
  * Close detail panel
@@ -1032,7 +995,7 @@ async function confirmSubdivision() {
             await taskStore.createTask({
                 projectId: projectId.value,
                 title: subtask.title,
-                description: subtask.description,
+                description: subtask.description || '',
                 priority: subtask.priority || 'medium',
                 tags: subtask.tags,
                 estimatedMinutes: subtask.estimatedMinutes || undefined,
@@ -1309,10 +1272,59 @@ async function handleOperatorDrop(projectId: number, sequence: number, operatorI
  * Handle drop on wrapper div (VueFlow pattern)
  */
 function onDrop(event: DragEvent) {
-    console.log('🔴 Wrapper div drop event!', event);
+    // console.log('🔴 Wrapper div drop event!', event);
     const operatorData = event.dataTransfer?.getData('application/x-operator');
-    console.log('🔴 Operator data:', operatorData);
+    const templateData = event.dataTransfer?.getData('application/x-script-template');
 
+    // console.log('🔴 Drop data:', { operatorData: !!operatorData, templateData: !!templateData });
+
+    // Handle Script Template Drop (Create New Task)
+    if (templateData) {
+        event.preventDefault();
+        try {
+            const template = JSON.parse(templateData);
+
+            // Calculate position using VueFlow's projection
+            let position = { x: 0, y: 0 };
+            if (projectToFlowCoords) {
+                position = projectToFlowCoords({ x: event.clientX, y: event.clientY });
+            }
+
+            // Create new Script Task
+            taskStore
+                .createTask({
+                    projectId: projectId.value,
+                    title: template.name,
+                    description: template.description || '',
+                    taskType: 'script',
+                    status: 'todo',
+                    priority: 'medium',
+                    scriptCode: template.scriptCode,
+                    scriptLanguage: template.scriptLanguage || 'javascript',
+                    scriptRuntime: template.scriptRuntime || 'browser',
+                    tags: template.tags,
+                    metadata: {
+                        dagPosition: position, // Save position for DAG layout
+                    },
+                })
+                .then(() => {
+                    rebuildGraphDebounced();
+                    uiStore.showToast({
+                        type: 'success',
+                        message: `Created script task from template: ${template.name}`,
+                    });
+                });
+        } catch (error) {
+            console.error('Failed to create task from template:', error);
+            uiStore.showToast({
+                type: 'error',
+                message: 'Failed to create task from template',
+            });
+        }
+        return;
+    }
+
+    // Handle Operator Drop (Assign to Task)
     if (operatorData) {
         event.preventDefault();
 
@@ -1321,15 +1333,20 @@ function onDrop(event: DragEvent) {
         const nodeElement = target.closest('.vue-flow__node');
         if (nodeElement) {
             const nodeId = nodeElement.getAttribute('data-id');
-            console.log('🔴 Node ID:', nodeId);
+            // console.log('🔴 Node ID:', nodeId);
 
             if (nodeId) {
                 try {
                     const operator = JSON.parse(operatorData);
-                    console.log('🔴 Calling handleOperatorDrop:', nodeId, operator.id);
+                    // console.log('🔴 Calling handleOperatorDrop:', nodeId, operator.id);
                     // Parse composite key "projectId_sequence"
                     const [pId, seq] = nodeId.split('_').map(Number);
-                    if (!isNaN(pId) && !isNaN(seq)) {
+                    if (
+                        pId !== undefined &&
+                        seq !== undefined &&
+                        Number.isFinite(pId) &&
+                        Number.isFinite(seq)
+                    ) {
                         handleOperatorDrop(pId, seq, operator.id);
                     } else {
                         console.error('Invalid Node ID format:', nodeId);
@@ -1347,7 +1364,10 @@ function onDrop(event: DragEvent) {
  */
 function onDragOver(event: DragEvent) {
     const types = event.dataTransfer?.types || [];
-    if (types.includes('application/x-operator')) {
+    if (
+        types.includes('application/x-operator') ||
+        types.includes('application/x-script-template')
+    ) {
         event.preventDefault();
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = 'copy';
@@ -1521,8 +1541,8 @@ onMounted(async () => {
             <VueFlow
                 v-model:nodes="nodes"
                 v-model:edges="edges"
-                :node-types="nodeTypes"
-                :edge-types="edgeTypes"
+                :node-types="nodeTypes as any"
+                :edge-types="edgeTypes as any"
                 :default-viewport="{ zoom: 0.8 }"
                 :min-zoom="0.2"
                 :max-zoom="2"

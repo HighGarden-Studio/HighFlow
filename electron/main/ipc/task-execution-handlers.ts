@@ -811,6 +811,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 source?: string;
                 recursive?: boolean;
                 control?: { next: number[]; reason?: string };
+                language?: string;
             }
         ) => {
             // Get task from database using composite key
@@ -1650,6 +1651,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 }
                             }
 
+                            // Language Instruction (Local Agent)
+                            if (options?.language && options.language !== 'auto') {
+                                const lang =
+                                    options.language === 'ko' ? 'Korean' : options.language;
+                                prompt += `\n## Language Instruction\nIMPORTANT: You MUST complete this task and provide all responses, code comments, and explanations in **${lang}**.\n\n`;
+                            }
+
                             return prompt;
                         };
 
@@ -1845,7 +1853,15 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // Context Injection & Prompt Construction (Consolidated)
                     const contextPackage = buildContextPackage(freshProject || project, task);
                     let basePrompt = task.generatedPrompt || task.description || '';
-                    task.description = `${contextPackage}\n${basePrompt}`;
+
+                    // Language Instruction (Standard AI)
+                    let languageInstruction = '';
+                    if (options?.language && options.language !== 'auto') {
+                        const lang = options.language === 'ko' ? 'Korean' : options.language;
+                        languageInstruction = `\n\n## Language Instruction\nIMPORTANT: You MUST complete this task and provide all responses, code comments, and explanations in **${lang}**.\n`;
+                    }
+
+                    task.description = `${contextPackage}\n${basePrompt}${languageInstruction}`;
 
                     // Ensure generatedPrompt matches description for consistency, though Executor uses description
                     task.generatedPrompt = task.description;

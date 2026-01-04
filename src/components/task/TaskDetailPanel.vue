@@ -24,6 +24,7 @@ import TaskExecutionLog from './TaskExecutionLog.vue';
 import type { ScriptLanguage } from '@core/types/database';
 import NotificationSettings from '../common/NotificationSettings.vue';
 import { getAPI } from '../../utils/electron';
+import ScriptTemplateModal from '../project/ScriptTemplateModal.vue';
 
 // Helper to check if a provider is a local agent
 function isLocalAgentProvider(provider: string | null): {
@@ -320,6 +321,37 @@ const scheduleType = ref<'once' | 'recurring'>('once');
 const scheduledDatetime = ref('');
 const cronExpression = ref('');
 const timezone = ref('Asia/Seoul');
+
+// Script Template Modal
+const showSaveTemplateModal = ref(false);
+const templateToCreate = computed(() => {
+    if (!localTask.value) return null;
+    return {
+        name: localTask.value.title,
+        description: localTask.value.description,
+        scriptCode: localTask.value.scriptCode,
+        scriptLanguage: localTask.value.scriptLanguage,
+        scriptRuntime: localTask.value.scriptRuntime,
+        tags: localTask.value.tags
+            ? typeof localTask.value.tags === 'string'
+                ? JSON.parse(localTask.value.tags)
+                : localTask.value.tags
+            : [],
+        defaultOptions: (localTask.value as any).defaultOptions || {},
+    };
+});
+
+async function handleSaveTemplate(data: any) {
+    try {
+        await window.electron.scriptTemplates.create(data);
+        showSaveTemplateModal.value = false;
+        // Optional: Show success toast
+        console.log('Template saved successfully');
+    } catch (error) {
+        console.error('Failed to save template:', error);
+        alert('Failed to save template');
+    }
+}
 
 // Helper: Convert task IDs (sequences) to string for display
 const taskIdsToSequences = (taskIds: number[] | undefined): string => {
@@ -1958,6 +1990,33 @@ async function handleOpenFile(filePath: string) {
                                         <option value="typescript">TypeScript</option>
                                         <option value="python">Python</option>
                                     </select>
+
+                                    <button
+                                        :disabled="isReadOnly"
+                                        @click="showSaveTemplateModal = true"
+                                        :class="[
+                                            'ml-2 inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-all shadow-sm',
+                                            isReadOnly
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700',
+                                        ]"
+                                        title="Save current script as a reusable template"
+                                    >
+                                        <svg
+                                            class="w-4 h-4 mr-1.5 text-blue-500"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                                            />
+                                        </svg>
+                                        {{ t('task.actions.save_template') }}
+                                    </button>
                                 </div>
 
                                 <CodeEditor
@@ -2558,8 +2617,12 @@ async function handleOpenFile(filePath: string) {
                                             <div class="flex items-start gap-2">
                                                 <code
                                                     class="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded font-mono shrink-0"
-                                                    >{{ '{{var:' + t('task.macro.variable_name') + '
-                                                    }}' }}</code
+                                                    >{{
+                                                        '{{var:' +
+                                                        t('task.macro.variable_name') +
+                                                        '}' +
+                                                        '}'
+                                                    }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
                                                     t('task.macro.desc.var_ref')
@@ -4287,6 +4350,13 @@ async function handleOpenFile(filePath: string) {
             </div>
         </div>
     </Teleport>
+
+    <ScriptTemplateModal
+        :open="showSaveTemplateModal"
+        :template="templateToCreate"
+        @close="showSaveTemplateModal = false"
+        @save="handleSaveTemplate"
+    />
 </template>
 
 <style scoped>

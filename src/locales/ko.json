@@ -166,7 +166,9 @@
             "enhance": "고도화",
             "view_prev_result": "이전 결과보기",
             "approve": "승인",
-            "input": "입력하기"
+            "input": "입력하기",
+            "save_template": "템플릿으로 저장",
+            "view_result": "결과 보기"
         },
         "msg": {
             "reset_confirm": "정말로 프로젝트 결과를 초기화하시겠습니까?\n\n이 작업은 다음 항목들을 삭제하며 되돌릴 수 없습니다:\n- 프로젝트 AI 메모리\n- 모든 태스크의 실행 결과 및 히스토리\n- 모든 태스크의 상태 (Todo로 초기화)\n\n태스크 정의와 설정은 유지됩니다.",
@@ -224,6 +226,16 @@
             "output": "출력",
             "input": "입력",
             "dependencies": "의존성"
+        },
+        "actions": {
+            "view_result": "결과 보기",
+            "save_template": "템플릿으로 저장",
+            "approve": "승인",
+            "input": "입력하기",
+            "view_detail": "자세히 보기",
+            "connect": "연동하기",
+            "enhance": "고도화",
+            "view_prev_result": "이전 결과보기"
         },
         "detail": {
             "title": "태스크 상세",
@@ -312,6 +324,11 @@
                 "local": "로컬 파일",
                 "remote": "원격 URL"
             },
+            "mode": {
+                "confirm": "확인/취소",
+                "short": "짧은 답변",
+                "long": "긴 답변"
+            },
             "local": {
                 "extensions": "허용 확장자",
                 "read_mode": "읽기 모드",
@@ -337,6 +354,7 @@
         },
         "macro": {
             "guide_title": "📖 매크로 사용 가이드",
+            "variable_name": "변수명",
             "dep_result_title": "📋 의존성 태스크 결과",
             "prev_task_title": "⬆️ 이전 태스크 참조",
             "system_title": "⚙️ 시스템 매크로",
@@ -404,10 +422,7 @@
             "button": "테스크 세분화 하기",
             "title": "테스크 세분화"
         },
-        "macro": {
-            "variable_name": "변수명",
-            "guide_title": "매크로 사용 가이드"
-        },
+
         "group": {
             "title": "그룹 테스크",
             "desc": "이 테스크는 {count}개의 서브테스크로 세분화되어 있습니다. 그룹핑 용도로만 사용되며 직접 실행할 수 없습니다."
