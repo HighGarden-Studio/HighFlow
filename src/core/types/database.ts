@@ -1053,19 +1053,66 @@ export interface CreateProjectDTO {
     gitRepository?: string;
 }
 
+export interface CleanTaskExport {
+    // Core identity
+    tempId: number;
+    title: string;
+    description: string | null;
+    taskType: 'ai' | 'script' | 'input' | 'output';
+
+    // Configuration
+    prompt: string | null;
+    generatedPrompt: string | null;
+    aiProvider: string | null;
+    aiModel: string | null;
+    scriptCode: string | null;
+    scriptLanguage: 'javascript' | 'python' | 'bash' | null;
+    inputConfig: any | null;
+    outputFormat: string | null;
+    mcpConfig: any | null;
+    notificationConfig: any | null;
+
+    // Assignment & Organization
+    assignedOperatorId: number | null; // Keep for operator mapping
+    order: number;
+    projectSequence: number;
+    tags: string[] | null;
+    requiredMCPs: string[] | null;
+    outputConfig: any | null;
+
+    // Execution settings (NO results)
+    triggerConfig: any | null;
+    dependsOn: number[]; // For dependency mapping
+
+    // Always reset to clean state
+    status: 'todo';
+}
+
+export interface OperatorExport {
+    tempId: number;
+    name: string;
+    role: string | null;
+    avatar: string | null;
+    color: string | null;
+    systemPrompt: string | null;
+    aiProvider: string | null;
+    aiModel: string | null;
+    tags: string[] | null;
+}
+
 export interface ProjectExportData {
-    version: number;
+    version: string;
     exportedAt: string;
-    project: Omit<Project, 'id' | 'ownerId' | 'teamId' | 'createdAt' | 'updatedAt'>;
-    tasks: Array<
-        Omit<
-            Task,
-            'id' | 'projectId' | 'assigneeId' | 'createdAt' | 'updatedAt' | 'dependencies'
-        > & {
-            tempId: number;
-            dependencies: number[]; // Array of tempIds
-        }
-    >;
+    project: {
+        title: string;
+        description: string | null;
+        status: 'active' | 'archived';
+        goal: string | null;
+        baseDevFolder: string | null;
+        tags: string[] | null;
+    };
+    tasks: CleanTaskExport[];
+    operators: OperatorExport[];
 }
 
 export interface UpdateProjectDTO extends Partial<CreateProjectDTO> {

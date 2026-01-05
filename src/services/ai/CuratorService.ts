@@ -49,7 +49,8 @@ export class CuratorService {
         taskOutput: string,
         project: Project,
         executionService: any, // Not used directly but kept for interface compatibility
-        repo: any // Pass repository
+        repo: any, // Pass repository
+        preComputedContext?: any // Optional pre-computed context from agent
     ): Promise<void> {
         console.log(`[Curator] Starting memory update for task ${projectId}-${projectSequence}...`);
 
@@ -171,113 +172,141 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             let aiResponse: string | null = null;
 
             try {
-                // ===============================
-                // CURATOR OPERATOR HIERARCHY
-                // ===============================
-                // 1. Check project curator setting
-                // 2. Fallback to global curator
-                // 3. Fallback to cost-effective provider
+                if (preComputedContext) {
+                    console.log('[Curator] Using pre-computed context, skipping AI execution');
+                    // We can just use the pre-computed context as theAI response if it matches the format,
+                    // or better, handle it directly.
+                    // If preComputedContext IS the decision structure, we can verify it.
 
-                const { operatorRepository } =
-                    await import('../../../electron/main/database/repositories/operator-repository');
-                let curatorOperator = null;
+                    // Let's assume preComputedContext is the PARSED object structure we want.
+                    // But the code below expects `aiResponse` string and parses it.
+                    // To minimize changes, we can serialize it back to JSON string if needed,
+                    // or split the logic. Serializing is safest to reuse parsing/cleaning logic below
+                    // if we are unsure of format, but if we trust it, we can skip.
 
-                // Priority 1: Project curator
-                if (project.curatorOperatorId) {
-                    curatorOperator = await operatorRepository.findById(project.curatorOperatorId);
-                    if (curatorOperator) {
-                        console.log(`[Curator] Using project curator: ${curatorOperator.name}`);
-                    }
-                }
-
-                // Priority 2: Global curator
-                if (!curatorOperator) {
-                    curatorOperator = await operatorRepository.findGlobalCurator();
-                    if (curatorOperator) {
-                        console.log(`[Curator] Using global curator: ${curatorOperator.name}`);
-                    }
-                }
-
-                // Use ProviderFactory to get a configured provider
-                const { ProviderFactory } = await import('./providers/ProviderFactory');
-                const providerFactory = new ProviderFactory();
-
-                let providerResult = null;
-
-                // Priority 3: Use curator operator's AI settings if found
-                if (curatorOperator) {
-                    providerFactory.setApiKeys(this.apiKeys);
-                    const provider = await providerFactory.getProvider(curatorOperator.aiProvider);
-                    providerResult = {
-                        provider,
-                        model: curatorOperator.aiModel,
-                    };
+                    // Actually, let's allow `aiResponse` to be null if `preComputedContext` is present
+                    // and handle it in step 3.
                 } else {
-                    // Priority 4: Fallback to cost-effective provider
+                    // ===============================
+                    // CURATOR OPERATOR HIERARCHY
+                    // ===============================
+                    // 1. Check project curator setting
+                    // 2. Fallback to global curator
+                    // 3. Fallback to cost-effective provider
+
+                    const { operatorRepository } =
+                        await import('../../../electron/main/database/repositories/operator-repository');
+                    let curatorOperator = null;
+
+                    // Priority 1: Project curator
+                    if (project.curatorOperatorId) {
+                        curatorOperator = await operatorRepository.findById(
+                            project.curatorOperatorId
+                        );
+                        if (curatorOperator) {
+                            console.log(`[Curator] Using project curator: ${curatorOperator.name}`);
+                        }
+                    }
+
+                    // Priority 2: Global curator
+                    if (!curatorOperator) {
+                        curatorOperator = await operatorRepository.findGlobalCurator();
+                        if (curatorOperator) {
+                            console.log(`[Curator] Using global curator: ${curatorOperator.name}`);
+                        }
+                    }
+
+                    // Use ProviderFactory to get a configured provider
+                    const { ProviderFactory } = await import('./providers/ProviderFactory');
+                    const providerFactory = new ProviderFactory();
+
+                    let providerResult = null;
+
+                    // Priority 3: Use curator operator's AI settings if found
+                    if (curatorOperator) {
+                        providerFactory.setApiKeys(this.apiKeys);
+                        const provider = await providerFactory.getProvider(
+                            curatorOperator.aiProvider
+                        );
+                        providerResult = {
+                            provider,
+                            model: curatorOperator.aiModel,
+                        };
+                    } else {
+                        // Priority 4: Fallback to cost-effective provider
+                        console.log(
+                            '[Curator] No curator operator found, using cost-effective provider'
+                        );
+                        providerResult = await this.selectCostEffectiveProvider(providerFactory);
+                    }
+
+                    if (!providerResult) {
+                        throw new Error(
+                            'No configured AI provider available. Please configure at least one AI provider in Settings.'
+                        );
+                    }
+
+                    const { provider, model } = providerResult;
+                    console.log(`[Curator] Using provider: ${provider.name}, model: ${model}`);
+
+                    const response = await provider.execute(prompt, {
+                        model: model,
+                        temperature: 0.3,
+                        maxTokens: 1000,
+                    });
+
+                    aiResponse = response.content;
                     console.log(
-                        '[Curator] No curator operator found, using cost-effective provider'
-                    );
-                    providerResult = await this.selectCostEffectiveProvider(providerFactory);
-                }
-
-                if (!providerResult) {
-                    throw new Error(
-                        'No configured AI provider available. Please configure at least one AI provider in Settings.'
+                        `[Curator] AI response received (${aiResponse?.length || 0} chars)`
                     );
                 }
-
-                const { provider, model } = providerResult;
-                console.log(`[Curator] Using provider: ${provider.name}, model: ${model}`);
-
-                const response = await provider.execute(prompt, {
-                    model: model,
-                    temperature: 0.3,
-                    maxTokens: 1000,
-                });
-
-                aiResponse = response.content;
-                console.log(`[Curator] AI response received (${aiResponse?.length || 0} chars)`);
             } catch (aiError) {
                 console.warn('[Curator] AI execution failed, using fallback:', aiError);
                 // Fallback: Simple extraction without AI
                 aiResponse = this.extractDecisionsSimple(taskTitle, taskOutput);
             }
 
-            if (!aiResponse) {
-                console.log('[Curator] No AI response, skipping update');
+            if (!aiResponse && !preComputedContext) {
+                console.log(
+                    '[Curator] No AI response and no pre-computed context, skipping update'
+                );
                 return;
             }
 
             // 3. Parse Output
             let parsed: any;
-            try {
-                // Clean cleanup function
-                const cleanJson = (str: string) => {
-                    // Remove markdown code blocks with optional language identifier
-                    // Matches ```json, ```markdown, ```, etc.
-                    str = str.replace(/```[a-zA-Z]*\s*|\s*```/g, '');
+            if (preComputedContext) {
+                parsed = preComputedContext;
+            } else {
+                try {
+                    // Clean cleanup function
+                    const cleanJson = (str: string) => {
+                        // Remove markdown code blocks with optional language identifier
+                        // Matches ```json, ```markdown, ```, etc.
+                        str = str.replace(/```[a-zA-Z]*\s*|\s*```/g, '');
 
-                    // Find the outer-most JSON object
-                    const firstBrace = str.indexOf('{');
-                    const lastBrace = str.lastIndexOf('}');
+                        // Find the outer-most JSON object
+                        const firstBrace = str.indexOf('{');
+                        const lastBrace = str.lastIndexOf('}');
 
-                    if (firstBrace !== -1 && lastBrace !== -1) {
-                        return str.substring(firstBrace, lastBrace + 1);
+                        if (firstBrace !== -1 && lastBrace !== -1) {
+                            return str.substring(firstBrace, lastBrace + 1);
+                        }
+
+                        return str;
+                    };
+
+                    const cleaned = cleanJson(aiResponse || '{}');
+                    // Ensure we have something effectively JSON-like before parsing to avoid "unexpected token" on plain text
+                    if (!cleaned || cleaned.trim().length === 0 || cleaned.indexOf('{') === -1) {
+                        throw new Error('No JSON object found in response');
                     }
-
-                    return str;
-                };
-
-                const cleaned = cleanJson(aiResponse || '{}');
-                // Ensure we have something effectively JSON-like before parsing to avoid "unexpected token" on plain text
-                if (!cleaned || cleaned.trim().length === 0 || cleaned.indexOf('{') === -1) {
-                    throw new Error('No JSON object found in response');
+                    parsed = JSON.parse(cleaned);
+                } catch (parseError) {
+                    console.error('[Curator] Failed to parse AI response:', parseError);
+                    console.debug('[Curator] Raw response:', aiResponse);
+                    return;
                 }
-                parsed = JSON.parse(cleaned);
-            } catch (parseError) {
-                console.error('[Curator] Failed to parse AI response:', parseError);
-                console.debug('[Curator] Raw response:', aiResponse);
-                return;
             }
 
             // 4. Update Project Memory

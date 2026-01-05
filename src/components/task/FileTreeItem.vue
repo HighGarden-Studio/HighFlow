@@ -52,6 +52,7 @@ const isSelected = computed(() => props.node.path === props.selectedPath);
         <div
             class="flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-sm"
             :class="[
+                'min-w-fit w-max',
                 isSelected
                     ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800',
@@ -95,7 +96,7 @@ const isSelected = computed(() => props.node.path === props.selectedPath);
             </svg>
 
             <!-- Name -->
-            <span class="truncate flex-1">{{ node.name }}</span>
+            <span class="whitespace-nowrap flex-1">{{ node.name }}</span>
 
             <!-- Status Indicator -->
             <span

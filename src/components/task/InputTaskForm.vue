@@ -2,6 +2,7 @@
 import { reactive, computed, ref } from 'vue';
 import type { Task, InputTaskConfig } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
+import { FolderOpen } from 'lucide-vue-next';
 
 interface Props {
     task: Task;
@@ -306,32 +307,23 @@ const handleSubmit = () => {
                         <span class="text-red-500">*</span>
                     </label>
 
-                    <div
-                        class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-                        @click="triggerFileSelect"
-                    >
-                        <div v-if="formData.value" class="text-center">
-                            <div class="text-2xl mb-2">📄</div>
-                            <div
-                                class="text-sm font-medium text-gray-900 dark:text-white break-all"
-                            >
-                                {{ formData.value }}
-                            </div>
-                            <div class="text-xs text-blue-500 mt-2">클릭하여 변경</div>
-                        </div>
-                        <div v-else class="text-center">
-                            <div class="text-2xl mb-2">📂</div>
-                            <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                파일을 선택하세요
-                            </div>
-                            <div class="text-xs text-gray-500 mt-1">
-                                {{
-                                    config.localFile?.acceptedExtensions?.length
-                                        ? `허용: ${config.localFile.acceptedExtensions.join(', ')}`
-                                        : '모든 파일'
-                                }}
-                            </div>
-                        </div>
+                    <div class="flex gap-2">
+                        <input
+                            type="text"
+                            :value="formData.value"
+                            readonly
+                            placeholder="파일을 선택하세요"
+                            class="flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                            @click="triggerFileSelect"
+                        />
+                        <button
+                            type="button"
+                            @click="triggerFileSelect"
+                            class="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 transition-colors"
+                            title="파일 선택"
+                        >
+                            <FolderOpen class="w-4 h-4" />
+                        </button>
                         <input
                             type="file"
                             ref="fileInput"
@@ -344,8 +336,13 @@ const handleSubmit = () => {
                             "
                         />
                     </div>
-                    <div class="text-xs text-gray-400">
+                    <div class="text-xs text-gray-500 dark:text-gray-400">
                         * 선택된 파일 경로는 시스템에 의해 자동으로 읽힙니다.
+                        {{
+                            config.localFile?.acceptedExtensions?.length
+                                ? `(허용: ${config.localFile.acceptedExtensions.join(', ')})`
+                                : ''
+                        }}
                     </div>
                 </div>
             </div>

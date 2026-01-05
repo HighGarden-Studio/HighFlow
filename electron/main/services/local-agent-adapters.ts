@@ -80,19 +80,26 @@ export class ClaudeCodeAdapter implements LocalAgentMessageAdapter {
  */
 export class CodexAdapter implements LocalAgentMessageAdapter {
     formatMessage(content: string, options?: { model?: string }): string {
-        return JSON.stringify({
-            prompt: content,
-            ...(options?.model && { model: options.model }),
-        });
+        // Return raw text prompt for CLI argument
+        return content;
     }
 
     parseResponse(output: string): { type: string; content: string; done?: boolean } {
+        // Unused in new logic (handled in handleParsedMessage for events),
+        // but kept for compatibility or fallback.
         try {
             const parsed = JSON.parse(output);
+            if (parsed.type === 'turn.completed') {
+                return { type: 'response', content: '', done: true };
+            }
+            if (parsed.type === 'item.completed' && parsed.item?.text) {
+                return { type: 'text', content: parsed.item.text, done: false };
+            }
+            // Fallback for standard JSONL line
             return {
                 type: 'response',
                 content: parsed.completion || parsed.output || String(parsed),
-                done: parsed.done || parsed.finished || false,
+                done: parsed.done || false,
             };
         } catch {
             return {
@@ -110,10 +117,7 @@ export class CodexAdapter implements LocalAgentMessageAdapter {
  */
 export class AntigravityAdapter implements LocalAgentMessageAdapter {
     formatMessage(content: string, options?: { model?: string }): string {
-        return JSON.stringify({
-            prompt: content,
-            ...(options?.model && { model: options.model }),
-        });
+        return content;
     }
 
     parseResponse(output: string): { type: string; content: string; done?: boolean } {

@@ -212,6 +212,7 @@
             "ai": "AI Task",
             "script": "Script",
             "input": "Input Request",
+            "input_desc": "User input required",
             "output": "Output"
         },
         "card": {

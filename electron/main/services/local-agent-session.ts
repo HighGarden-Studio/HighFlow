@@ -134,6 +134,8 @@ export class LocalAgentSession extends EventEmitter {
     private currentOnChunk: ((chunk: string) => void) | null = null;
     private responseTimeout: NodeJS.Timeout | null = null;
     private isClosing: boolean = false; // Track intentional shutdown
+    private executionMode: 'persistent' | 'oneshot' = 'persistent';
+    private remoteThreadId: string | null = null; // Captured thread ID from agent
 
     constructor(
         agentType: 'claude' | 'codex' | 'antigravity',
@@ -147,6 +149,11 @@ export class LocalAgentSession extends EventEmitter {
         this.adapter = getAdapterForAgent(agentType);
         this.createdAt = new Date();
         this.lastActivityAt = new Date();
+        this.executionMode = agentType === 'claude' ? 'persistent' : 'oneshot';
+    }
+
+    getStatus(): SessionStatus {
+        return this.status;
     }
 
     /**
@@ -155,6 +162,15 @@ export class LocalAgentSession extends EventEmitter {
     async start(): Promise<void> {
         if (this.process) {
             throw new Error('Session already started');
+        }
+
+        if (this.executionMode === 'oneshot') {
+            console.log(
+                `[LocalAgentSession] Starting ${this.agentType} session in one-shot mode (lazy spawn)`
+            );
+            this.status = 'idle';
+            this.emit('started', this.getInfo());
+            return;
         }
 
         const command = this.getCommand();
@@ -182,7 +198,11 @@ export class LocalAgentSession extends EventEmitter {
      * Send a message to the agent and wait for response
      */
     async sendMessage(message: string, options: SendMessageOptions = {}): Promise<AgentResponse> {
-        if (!this.process || this.status === 'closed' || this.status === 'error') {
+        if (
+            (!this.process && this.executionMode === 'persistent') ||
+            this.status === 'closed' ||
+            this.status === 'error'
+        ) {
             throw new Error('Session not active');
         }
 
@@ -209,13 +229,75 @@ export class LocalAgentSession extends EventEmitter {
                 }, timeout);
             }
 
-            // Send message based on agent type
-            const input = this.formatInput(message, options);
             console.log(
                 `[LocalAgentSession] Sending message to ${this.agentType}:`,
-                input.substring(0, 100) + '...'
+                message.substring(0, 100) + '...'
             );
 
+            if (this.executionMode === 'oneshot') {
+                // Spawn new process for this message
+                const command = this.getCommand();
+
+                // Construct args for exec: exec [--json] [resume ID] "prompt"
+                const args = ['exec', '--json'];
+
+                // If we have history/ID, we might want to resume.
+                // However, codex exec resume <ID> syntax is specific.
+                // If it's the FIRST message, we might not use resume?
+                // Actually, passing the ID to --session or resume is key.
+                // Docs: "codex exec resume <SESSION_ID>"
+                // Check if we have created a thread yet?
+                // For simplicity, let's try `codex exec --json` first.
+                // If we want to maintain session, we might need to parse output thread_id.
+                // Based on docs: `codex exec resume <ID> "prompt"`
+
+                // Basic logic: if messageCount > 0, resume?
+                // Or always try to resume using our generated ID?
+                // If the ID assumes existing session, it might fail if not found.
+                // Docs say: `codex exec` starts new.
+                // `codex exec resume <ID>` resumes.
+
+                if (this.remoteThreadId) {
+                    args.push('resume', this.remoteThreadId);
+                } else if (this.messageCount > 0) {
+                    args.push('resume', this.id);
+                }
+
+                // Add --skip-git-repo-check to bypass trusted directory check
+                args.push('--skip-git-repo-check');
+
+                // Add --dangerously-bypass-approvals-and-sandbox to allow execution and file creation
+                args.push('--dangerously-bypass-approvals-and-sandbox');
+
+                // Add prompt as argument
+                args.push(message);
+
+                console.log(`[LocalAgentSession] One-shot command: ${command} ${args.join(' ')}`);
+
+                this.process = spawn(command, args, {
+                    cwd: this.workingDirectory,
+                    env: { ...process.env, PATH: getEnhancedPath() },
+                    stdio: ['ignore', 'pipe', 'pipe'], // Ignore stdin as we pass prompt in args
+                });
+
+                // Handle spawn errors immediately
+                this.process.on('error', (err) => {
+                    console.error(`[LocalAgentSession] Process spawn error:`, err);
+                    if (this.currentReject) {
+                        this.currentReject(err);
+                    }
+                    this.status = 'error';
+                });
+
+                this.setupProcessHandlers();
+                this.messageCount++;
+                this.emit('messageSent', { message, options });
+
+                return;
+            }
+
+            // Persistent mode
+            const input = this.formatInput(message, options);
             this.process!.stdin!.write(input + '\n');
             this.messageCount++;
 
@@ -300,13 +382,8 @@ export class LocalAgentSession extends EventEmitter {
                     '--permission-mode',
                     'acceptEdits', // Automatically approve file edits and creations
                 ];
-            case 'codex':
-                // Codex CLI args (adjust based on actual CLI)
-                return ['--json', '--session', this.id];
-            case 'antigravity':
-                // Antigravity CLI args (adjust based on actual CLI)
-                return ['--json', '--session', this.id];
             default:
+                // Codex/Antigravity use oneshot exec mode, so start args are unused/empty
                 return [];
         }
     }
@@ -343,6 +420,7 @@ export class LocalAgentSession extends EventEmitter {
 
         // Handle process exit
         this.process.on('exit', (code, signal) => {
+            const wasRunning = this.status === 'running';
             console.log(
                 `[LocalAgentSession] ${this.agentType} exited with code ${code}, signal ${signal}`
             );
@@ -355,11 +433,15 @@ export class LocalAgentSession extends EventEmitter {
                 this.currentReject(new Error(`Process exited unexpectedly with code ${code}`));
                 this.currentReject = null;
                 this.currentResolve = null;
-            } else if (this.isClosing) {
-                // Clean up on intentional close
-                this.currentReject = null;
-                this.currentResolve = null;
                 this.currentOnChunk = null;
+            } else if (this.executionMode === 'oneshot' && wasRunning) {
+                // For oneshot agents (Codex), process exit usually means completion.
+                // If we haven't received a 'turn.completed' event, we should assume it's done.
+                console.log(`[LocalAgentSession] Oneshot process exited, assuming completion.`);
+
+                // Synthesize a turn.completed event if needed, or just complete.
+                // We'll use the accumulated responseBuffer or transcript.
+                this.completeResponse({ type: 'turn.completed', finished: true });
             }
 
             this.emit('exit', { code, signal });
@@ -409,7 +491,59 @@ export class LocalAgentSession extends EventEmitter {
      */
     private handleParsedMessage(message: Record<string, unknown>): void {
         console.log(`[LocalAgentSession] Received message type:`, message.type);
+        if (message.type === 'item.completed' || message.type === 'item.started') {
+            // Log content for debugging loop
+            const item = message.item as any;
+            if (item) {
+                console.log(
+                    `[LocalAgentSession] Item (${message.type}):`,
+                    JSON.stringify(item).substring(0, 300)
+                );
+            }
+        }
 
+        // Codex/Antigravity event handling
+        if (this.agentType === 'codex' || this.agentType === 'antigravity') {
+            if (message.type === 'thread.started') {
+                // If we didn't specify an ID (initial run), we might want to capture this.
+                // But we are using our own ID for resumption.
+                // Just log it.
+                console.log(`[LocalAgentSession] Thread started: ${message.thread_id}`);
+                if (message.thread_id) {
+                    this.remoteThreadId = message.thread_id;
+                }
+            } else if (message.type === 'item.completed' || message.type === 'item.started') {
+                const item = message.item as any;
+                if (item?.type === 'agent_message' && item.text) {
+                    // This is the content!
+                    // For streaming, we might get partials? Docs say "agent_message".
+                    // Assuming 'item.completed' has the full text.
+                    if (message.type === 'item.completed') {
+                        // Synthesize an 'assistant' message for compatibility
+                        const compatibleMsg = {
+                            type: 'assistant',
+                            message: {
+                                content: [{ type: 'text', text: item.text }],
+                            },
+                        };
+                        this.captureTranscript(compatibleMsg);
+                        this.emit('message', compatibleMsg);
+
+                        if (this.currentOnChunk) {
+                            this.currentOnChunk(item.text);
+                        }
+                    }
+                }
+            } else if (message.type === 'turn.completed') {
+                // This indicates completion
+                this.completeResponse({ ...message, finished: true });
+            } else if (message.type === 'error') {
+                console.error('[LocalAgentSession] Codex Error Event:', message);
+            }
+            return;
+        }
+
+        // Claude handling
         // Capture transcript
         this.captureTranscript(message);
 
@@ -422,11 +556,6 @@ export class LocalAgentSession extends EventEmitter {
         } else if (this.currentOnChunk && message.type === 'assistant') {
             const msgBody = message.message as any;
             if (msgBody?.content && Array.isArray(msgBody.content)) {
-                // Extract last text chunk
-                // Note: Claude stream-json might send full content or delta.
-                // Assuming typical stream behavior, we might need to handle aggregation or just send raw content.
-                // For simplicity, we'll serialize the content and let frontend handle it,
-                // OR better, send the plain text representation if available.
                 const text = msgBody.content
                     .filter((c: any) => c.type === 'text')
                     .map((c: any) => c.text)
@@ -470,15 +599,16 @@ export class LocalAgentSession extends EventEmitter {
      * Check if message indicates completion
      */
     private isCompletionMessage(message: Record<string, unknown>): boolean {
+        // For Codex/Antigravity, handled in handleParsedMessage (turn.completed)
+        // But for completeness:
+        if (message.type === 'turn.completed') return true;
+
         // For Claude Code
         if (message.type === 'result') {
             return true;
         }
 
         if (message.type === 'assistant') {
-            // Only consider it complete if stop_reason is end_turn
-            // This prevents resolving on intermediate thought chunks or tool use requests
-            // (assuming Claude Code CLI handles tools internally and we just wait for final output)
             const msgBody = message.message as Record<string, unknown>;
             return msgBody?.stop_reason === 'end_turn';
         }
@@ -510,7 +640,17 @@ export class LocalAgentSession extends EventEmitter {
 
         const response: AgentResponse = {
             success: !isError,
-            content: String(message.content || message.text || message.result || ''),
+            // For Codex, turn.completed doesn't have content.
+            // We should use the accumulated content from item.completed events or responseBuffer?
+            // Since we synthesized 'message' events for item.completed, the frontend might have it.
+            // But we need to return it here.
+            // Let's use the transcript to verify content.
+            content: String(
+                message.content ||
+                    message.text ||
+                    message.result ||
+                    (this.transcript.length > 0 ? 'See transcript' : '')
+            ),
             duration: Date.now() - this.lastActivityAt.getTime(),
             tokenUsage: message.usage as AgentResponse['tokenUsage'],
             transcript: this.transcript,
@@ -568,6 +708,7 @@ export class LocalAgentSession extends EventEmitter {
 export class LocalAgentSessionManager {
     private sessions: Map<string, LocalAgentSession> = new Map();
     private taskSessions: Map<string, string> = new Map(); // taskKey (projectId-sequence) → sessionId
+    private projectSessions: Map<number, string> = new Map(); // projectId -> sessionId (Persistent session)
     private static instance: LocalAgentSessionManager;
 
     static getInstance(): LocalAgentSessionManager {
@@ -587,6 +728,26 @@ export class LocalAgentSessionManager {
         projectId?: number,
         projectSequence?: number
     ): Promise<SessionInfo> {
+        // Reuse existing session for project if available (Persistence)
+        if (projectId !== undefined) {
+            const existingSessionId = this.projectSessions.get(projectId);
+            if (existingSessionId) {
+                const existingSession = this.sessions.get(existingSessionId);
+                if (
+                    existingSession &&
+                    existingSession.getStatus() !== 'closed' &&
+                    existingSession.getStatus() !== 'error'
+                ) {
+                    console.log(
+                        `[SessionManager] Reusing session ${existingSession.id} for project ${projectId}`
+                    );
+                    return existingSession.getInfo();
+                }
+                // Clean up stale mapping
+                this.projectSessions.delete(projectId);
+            }
+        }
+
         const session = new LocalAgentSession(agentType, workingDirectory, sessionId);
 
         // Setup event forwarding
@@ -601,12 +762,20 @@ export class LocalAgentSessionManager {
                 const taskKey = `${projectId}-${projectSequence}`;
                 this.taskSessions.delete(taskKey);
             }
+            // Clean up project mapping if exists
+            if (projectId !== undefined && this.projectSessions.get(projectId) === session.id) {
+                this.projectSessions.delete(projectId);
+            }
         });
 
         await session.start();
         this.sessions.set(session.id, session);
 
-        // Register task-session mapping
+        // Register mappings
+        if (projectId !== undefined) {
+            this.projectSessions.set(projectId, session.id);
+        }
+
         if (projectId !== undefined && projectSequence !== undefined) {
             const taskKey = `${projectId}-${projectSequence}`;
             this.taskSessions.set(taskKey, session.id);

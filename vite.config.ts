@@ -8,7 +8,7 @@ export default defineConfig({
     plugins: [
         vue(),
         monacoEditorPlugin({
-            languageWorkers: ['editorWorkerService', 'typescript', 'json', 'html'],
+            languageWorkers: ['editorWorkerService', 'typescript', 'json', 'html', 'css'],
         }),
     ],
     resolve: {

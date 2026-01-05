@@ -41,6 +41,7 @@ import { eventBus, type BaseEvent } from '../../services/events/EventBus';
 import { aiGuidelinesService } from '../../services/ai/AIGuidelinesService';
 import { aiProviderSelectionService } from '../../services/ai/AIProviderSelection';
 import type { TaskPriority } from '../../renderer/stores/taskStore';
+import { FolderOpen } from 'lucide-vue-next';
 
 // ========================================
 // Props & Emits
@@ -2962,10 +2963,11 @@ watch(
                                     />
                                     <button
                                         type="button"
-                                        class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors"
+                                        class="p-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
                                         @click="selectBaseDevFolder"
+                                        title="폴더 선택"
                                     >
-                                        폴더 선택
+                                        <FolderOpen class="w-5 h-5" />
                                     </button>
                                 </div>
                             </div>

@@ -5,20 +5,20 @@
 /**
  * Item type in marketplace
  */
-export type ItemType = 'project' | 'operator';
+export type ItemType = 'project' | 'operator' | 'script-template';
 
 /**
  * Marketplace categories
  */
 export type MarketplaceCategory =
-    | 'data-processing'
-    | 'data-tools'
-    | 'automation'
-    | 'ai-ml'
-    | 'web-scraping'
-    | 'api-integration'
-    | 'utilities'
-    | 'templates'
+    | 'content-creation'
+    | 'development'
+    | 'productivity'
+    | 'data-analysis'
+    | 'business-ops'
+    | 'education'
+    | 'personal'
+    | 'automated-agents'
     | 'other';
 
 /**

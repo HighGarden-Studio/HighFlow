@@ -4,10 +4,23 @@
  * Data access layer for projects with comprehensive query methods
  */
 
+import { app } from 'electron';
 import { db } from '../client';
-import { projects, projectMembers, tasks, type Project, type NewProject } from '../schema';
-import { eq, desc, and, sql, or, like, asc, isNull } from 'drizzle-orm';
-import type { ProjectStatus, ProjectExportData } from '@core/types/database';
+import {
+    projects,
+    projectMembers,
+    tasks,
+    operators,
+    type Project,
+    type NewProject,
+} from '../schema';
+import { eq, desc, and, sql, or, like, asc, isNull, inArray } from 'drizzle-orm';
+import type {
+    ProjectStatus,
+    ProjectExportData,
+    CleanTaskExport,
+    OperatorExport,
+} from '@core/types/database';
 
 export class ProjectRepository {
     /**
@@ -385,28 +398,77 @@ export class ProjectRepository {
     /**
      * Export project data to JSON
      */
+    /**
+     * Export project data to JSON
+     */
     async exportProject(id: number): Promise<ProjectExportData> {
         const project = await this.findById(id);
         if (!project) {
             throw new Error('Project not found');
         }
 
-        // Fetch all tasks
+        // 1. Fetch all tasks
         const allTasks = await db
             .select()
             .from(tasks)
             .where(and(eq(tasks.projectId, id), isNull(tasks.deletedAt)))
             .orderBy(asc(tasks.order));
 
-        // Map tasks to export format
-        const exportTasks = allTasks.map((task) => {
-            const { id, projectId, assigneeId, createdAt, updatedAt, dependencies, ...rest } = task;
-            return {
-                ...rest,
-                tempId: id, // Keep original ID as tempId for dependency mapping
-                dependencies: dependencies || [], // Use existing dependencies array
-            };
+        // 2. Collect unique operator IDs
+        const operatorIds = new Set<number>();
+        allTasks.forEach((task) => {
+            if (task.assignedOperatorId) {
+                operatorIds.add(task.assignedOperatorId);
+            }
         });
+
+        // 3. Fetch operators
+        let operatorData: OperatorExport[] = [];
+        if (operatorIds.size > 0) {
+            const ops = await db
+                .select()
+                .from(operators)
+                .where(inArray(operators.id, Array.from(operatorIds)));
+
+            operatorData = ops.map((op) => ({
+                tempId: op.id,
+                name: op.name,
+                role: op.role,
+                avatar: op.avatar,
+                color: op.color,
+                systemPrompt: op.systemPrompt,
+                aiProvider: op.aiProvider,
+                aiModel: op.aiModel,
+                tags: (op as any).tags || [], // Cast to handle potential schema type mismatch
+            }));
+        }
+
+        // 4. Clean tasks - strip execution results and force TODO status
+        const cleanTasks: CleanTaskExport[] = allTasks.map((task) => ({
+            tempId: task.projectSequence, // Use projectSequence as tempId (composite PK, id doesn't exist)
+            title: task.title,
+            description: task.description,
+            taskType: task.taskType as any,
+            prompt: task.prompt,
+            generatedPrompt: task.generatedPrompt,
+            aiProvider: task.aiProvider,
+            aiModel: task.aiModel,
+            scriptCode: task.scriptCode,
+            scriptLanguage: task.scriptLanguage as any,
+            inputConfig: task.inputConfig,
+            outputFormat: task.outputFormat,
+            outputConfig: task.outputConfig,
+            mcpConfig: sanitizeMcpConfig(task.mcpConfig),
+            requiredMCPs: task.requiredMCPs || [],
+            notificationConfig: task.notificationConfig,
+            assignedOperatorId: task.assignedOperatorId,
+            order: task.order,
+            projectSequence: task.projectSequence,
+            tags: task.tags,
+            triggerConfig: task.triggerConfig,
+            dependsOn: task.dependencies || [],
+            status: 'todo', // Always export as TODO
+        }));
 
         const {
             id: _id,
@@ -418,61 +480,110 @@ export class ProjectRepository {
         } = project;
 
         return {
-            version: 1,
+            version: app.getVersion(),
             exportedAt: new Date().toISOString(),
-            project: projectRest,
-            tasks: exportTasks,
+            project: {
+                title: projectRest.title,
+                description: projectRest.description,
+                status: projectRest.status as any,
+                goal: projectRest.goal,
+                baseDevFolder: projectRest.baseDevFolder,
+                tags: projectRest.tags,
+                mainPrompt: projectRest.mainPrompt,
+                aiProvider: projectRest.aiProvider,
+                aiModel: projectRest.aiModel,
+                aiOptimizedPrompt: projectRest.aiOptimizedPrompt,
+                outputType: projectRest.outputType,
+                outputPath: projectRest.outputPath,
+                mcpConfig: sanitizeMcpConfig(projectRest.mcpConfig),
+                requiredMCPs: projectRest.requiredMCPs,
+                notificationConfig: projectRest.notificationConfig,
+            },
+            tasks: cleanTasks,
+            operators: operatorData,
         };
     }
 
     /**
      * Import project from JSON
      */
+    /**
+     * Import project from JSON
+     */
     async importProject(data: ProjectExportData, ownerId: number): Promise<Project> {
         // 1. Create Project
         const newProject = await this.create({
-            ...data.project,
+            title: `${data.project.title} (Imported)`,
+            description: data.project.description,
+            status: 'active',
+            goal: data.project.goal || null,
+            baseDevFolder: data.project.baseDevFolder || null,
+            tags: data.project.tags || [],
             ownerId,
-            title: `${data.project.title} (Imported)`, // Avoid name collision
+            // Import specific fields
+            mainPrompt: data.project.mainPrompt || null,
+            aiProvider: data.project.aiProvider || null,
+            aiModel: data.project.aiModel || null,
+            aiOptimizedPrompt: data.project.aiOptimizedPrompt || null,
+            outputType: data.project.outputType || null,
+            outputPath: data.project.outputPath || null,
+            mcpConfig: data.project.mcpConfig || null,
+            notificationConfig: data.project.notificationConfig || null,
+
+            // Defaults for other fields
+            templateId: null,
+            coverImage: null,
+            color: null,
+            emoji: null,
+            estimatedHours: null,
+            teamId: null,
+            gitRepository: null,
         });
 
-        // 2. Create Tasks and Build ID Map
-        const idMap = new Map<number, number>(); // tempId -> newId
-
-        // First pass: Create tasks without dependencies
-        for (const taskData of data.tasks) {
-            const { tempId, dependencies, ...rest } = taskData;
-
-            const [newTask] = await db
-                .insert(tasks)
-                .values({
-                    ...rest,
-                    projectId: newProject.id,
-                    assigneeId: null, // Reset assignee
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                    dependencies: [], // Set empty first
-                })
-                .returning();
-
-            idMap.set(tempId, newTask.id);
+        // 2. Import Operators & Build ID Map
+        const operatorIdMap = new Map<number, number>();
+        if (data.operators && data.operators.length > 0) {
+            for (const opData of data.operators) {
+                const { tempId, ...rest } = opData;
+                // Check if similar operator already exists (optional, keeping it simple for now by creating new ones)
+                const [newOp] = await db
+                    .insert(operators)
+                    .values({
+                        ...rest,
+                        tags: rest.tags || [],
+                        projectId: newProject.id, // Assign to new project
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    })
+                    .returning();
+                operatorIdMap.set(tempId, newOp.id);
+            }
         }
 
-        // Second pass: Update dependencies
+        // 3. Create Tasks
+        // Tasks use composite PK (projectId, projectSequence).
+        // Dependencies are array of sequences (or IDs if legacy, but we assume sequences now).
+        // Since we preserve projectSequence, we don't need to remap dependencies if they refer to sequences.
+
         for (const taskData of data.tasks) {
-            const newId = idMap.get(taskData.tempId);
-            if (!newId) continue;
+            const { tempId, dependsOn, assignedOperatorId, ...rest } = taskData;
 
-            const newDependencies = taskData.dependencies
-                .map((oldId) => idMap.get(oldId))
-                .filter((id): id is number => id !== undefined);
+            // Remap operator ID
+            const newOperatorId = assignedOperatorId
+                ? operatorIdMap.get(assignedOperatorId) || null
+                : null;
 
-            if (newDependencies.length > 0) {
-                await db
-                    .update(tasks)
-                    .set({ dependencies: newDependencies })
-                    .where(eq(tasks.id, newId));
-            }
+            await db.insert(tasks).values({
+                ...rest,
+                projectId: newProject.id,
+                projectSequence: rest.projectSequence, // Keep original sequence
+                assignedOperatorId: newOperatorId,
+                assigneeId: null, // Reset assignee
+                status: 'todo', // Ensure todo status
+                dependencies: dependsOn || [], // Keep dependencies as is
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
         }
 
         return newProject;
@@ -497,3 +608,61 @@ export class ProjectRepository {
 
 // Export singleton instance
 export const projectRepository = new ProjectRepository();
+
+/**
+ * Helper to sanitize MCP configuration
+ * Keep keys but strip sensitive values from env and params
+ */
+function sanitizeMcpConfig(config: any): any {
+    if (!config || typeof config !== 'object') return null;
+
+    // Handle Project-style config with 'servers'
+    if (config.servers && typeof config.servers === 'object') {
+        return {
+            ...config,
+            servers: sanitizeMcpMap(config.servers),
+        };
+    }
+
+    // Handle Task-style config with 'tools'
+    if (config.tools && typeof config.tools === 'object') {
+        return {
+            ...config,
+            tools: sanitizeMcpMap(config.tools),
+        };
+    }
+
+    // Fallback: Attempt to sanitize as a direct map
+    return sanitizeMcpMap(config);
+}
+
+function sanitizeMcpMap(map: Record<string, any>): Record<string, any> {
+    const sanitized: any = {};
+    for (const [key, entry] of Object.entries(map)) {
+        if (!entry || typeof entry !== 'object') {
+            sanitized[key] = entry; // Keep primitives
+            continue;
+        }
+
+        sanitized[key] = { ...(entry as any) };
+
+        // Sanitize 'env' - keep keys, empty values
+        if (sanitized[key].env && typeof sanitized[key].env === 'object') {
+            const clean: Record<string, string> = {};
+            for (const k of Object.keys(sanitized[key].env)) {
+                clean[k] = ''; // Strip value
+            }
+            sanitized[key].env = clean;
+        }
+
+        // Sanitize 'params' - keep keys, empty values
+        if (sanitized[key].params && typeof sanitized[key].params === 'object') {
+            const clean: Record<string, string> = {};
+            for (const k of Object.keys(sanitized[key].params)) {
+                clean[k] = ''; // Strip value
+            }
+            sanitized[key].params = clean;
+        }
+    }
+    return sanitized;
+}

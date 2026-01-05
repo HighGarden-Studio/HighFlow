@@ -2071,7 +2071,7 @@ ${
     }
 
     private buildToolUsageDirective(required: string[] = []): string {
-        if (!required || required.length === 0) {
+        if (!Array.isArray(required) || required.length === 0) {
             return '';
         }
 
@@ -2374,7 +2374,10 @@ ${
     }
 
     private async collectRequiredMCPContext(task: Task): Promise<MCPContextInsight[]> {
-        const normalizedRequired = (task.requiredMCPs || []) as Array<string | null | undefined>;
+        const rawInput = task.requiredMCPs;
+        const normalizedRequired = (Array.isArray(rawInput) ? rawInput : []) as Array<
+            string | null | undefined
+        >;
         const rawRequired = Array.from(new Set(normalizedRequired));
         const required: string[] = rawRequired.filter(
             (req): req is string => typeof req === 'string' && req.length > 0

@@ -21,6 +21,7 @@ import UnifiedAISelector from '../common/UnifiedAISelector.vue';
 import MCPToolSelector from '../common/MCPToolSelector.vue';
 import IconRenderer from '../common/IconRenderer.vue';
 import { useConfigurationInheritance } from '../../composables/useConfigurationInheritance';
+import { FolderOpen } from 'lucide-vue-next';
 
 const { resolveAIProvider, resolveAutoReviewProvider } = useConfigurationInheritance();
 
@@ -1139,7 +1140,7 @@ function getAssistantLabel(type: string): string {
                         v-model:provider="editedAIProvider"
                         v-model:model="editedAIModel"
                         v-model:localAgent="editedLocalAgent"
-                        :isDevProject="!!project.baseDevFolder"
+                        :isDevProject="true"
                         label="프로젝트 기본 AI 설정"
                     />
 
@@ -1198,14 +1199,7 @@ function getAssistantLabel(type: string): string {
                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
                         title="폴더 변경"
                     >
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                            />
-                        </svg>
+                        <FolderOpen class="w-4 h-4" />
                     </button>
                 </div>
             </div>

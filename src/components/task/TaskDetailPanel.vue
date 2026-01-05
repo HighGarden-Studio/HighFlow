@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { Task, TaskHistoryEntry, InputTaskConfig } from '@core/types/database';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
@@ -2360,9 +2361,10 @@ async function handleOpenFile(filePath: string) {
                                             />
                                             <button
                                                 @click="handleSelectLocalFile"
-                                                class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                                                class="p-2bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors"
+                                                :title="t('task.input.local.select_file')"
                                             >
-                                                {{ t('task.input.local.select_file') }}
+                                                <FolderOpen class="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
@@ -3072,9 +3074,10 @@ async function handleOpenFile(filePath: string) {
                                         <button
                                             type="button"
                                             @click="selectWorkingDirectory"
-                                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                            class="p-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors border border-gray-600"
+                                            :title="t('task.local_agent.browse')"
                                         >
-                                            {{ t('task.local_agent.browse') }}
+                                            <FolderOpen class="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
@@ -4290,7 +4293,12 @@ async function handleOpenFile(filePath: string) {
                                                 >
                                                     <path d="M8 5v14l11-7z" />
                                                 </svg>
-                                                <span>{{ t('task.footer.execute') }}</span>
+                                                <span>{{
+                                                    localTask?.status === 'blocked' ||
+                                                    localTask?.status === 'failed'
+                                                        ? t('task.retry') || '재시도'
+                                                        : t('task.footer.execute')
+                                                }}</span>
                                             </template>
                                         </button>
                                     </template>

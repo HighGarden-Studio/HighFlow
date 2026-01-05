@@ -6,6 +6,14 @@ export interface TaskResultPayload {
     provider?: string;
     model?: string;
     language?: string;
+    files?: Array<{
+        path: string;
+        absolutePath: string;
+        type: 'add' | 'modify' | 'delete';
+        content?: string;
+        size?: number;
+        extension?: string;
+    }>;
 }
 
 type TaskLike = {
@@ -16,6 +24,14 @@ type TaskLike = {
         model?: string;
         language?: string;
         text?: string;
+        files?: Array<{
+            path: string;
+            absolutePath: string;
+            type: 'add' | 'modify' | 'delete';
+            content?: string;
+            size?: number;
+            extension?: string;
+        }>;
     } | null;
     aiReviewResult?: {
         content?: string;
@@ -98,5 +114,6 @@ export function extractTaskResult(task?: TaskLike | null): TaskResultPayload {
         provider: provider || undefined,
         model: model || undefined,
         language,
+        files: executionResult?.files || [],
     };
 }

@@ -602,7 +602,8 @@ const triggerCurator = async (
     task: any,
     output: string,
     project: any,
-    apiKeysOverrides?: Record<string, string>
+    apiKeysOverrides?: Record<string, string>,
+    preComputedContext?: any
 ) => {
     // Only trigger if task is marked as done (fully completed)
     // If it goes to in_review, we wait until review is approved
@@ -659,7 +660,8 @@ const triggerCurator = async (
                 output,
                 project,
                 null,
-                projectRepository
+                projectRepository,
+                preComputedContext
             );
         } catch (err: any) {
             console.error('[CuratorTrigger] Failed:', err);
@@ -1658,6 +1660,23 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 prompt += `\n## Language Instruction\nIMPORTANT: You MUST complete this task and provide all responses, code comments, and explanations in **${lang}**.\n\n`;
                             }
 
+                            // Inject instructions for Project Memory Update (Local Agent)
+                            prompt += `\n## Project Memory Update\n`;
+                            prompt += `You are working in a persistent session. Your work is part of a larger project.\n`;
+                            prompt += `At the END of your response, you MUST provide a structured update for the Project Memory using the following XML format:\n`;
+                            prompt += `\`\`\`xml
+<project_memory_update>
+  <summary_update>
+    Provide a concise summary of what you accomplished in this task and how it affects the overall project state. 
+    Merge this with the existing summary if provided previously.
+  </summary_update>
+  <new_decisions>
+    <decision date="YYYY-MM-DD">Describe any key technical or design decisions made.</decision>
+  </new_decisions>
+</project_memory_update>
+\`\`\`\n`;
+                            prompt += `This XML block is CRITICAL for maintaining context across sessions. Do not omit it.\n\n`;
+
                             return prompt;
                         };
 
@@ -1701,8 +1720,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             },
                         });
 
-                        // Close session
-                        await sessionManager.closeSession(sessionInfo.id);
+                        // Session is now persistent for local agents.
+                        // Do NOT close here. Process cleanup is handled by application exit or manual termination.
+                        // await sessionManager.closeSession(sessionInfo.id);
 
                         const fileChanges = fsMonitor.getChanges({ includeContent: true });
                         console.log(`[TaskExecution] Detected ${fileChanges.length} file changes`);
@@ -1812,12 +1832,68 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                             : undefined,
                                     }
                                 );
+
+                                // Extract Project Memory Update from response
+                                const memoryRegex =
+                                    /<project_memory_update>([\s\S]*?)<\/project_memory_update>/;
+                                const match = response.content.match(memoryRegex);
+                                let preComputedContext = undefined;
+
+                                if (match && match[1]) {
+                                    try {
+                                        const innerXml = match[1];
+                                        const summaryMatch =
+                                            /<summary_update>([\s\S]*?)<\/summary_update>/;
+                                        const decisionsRegex =
+                                            /<decision date="([^"]+)">([\s\S]*?)<\/decision>/g;
+
+                                        const summaryUpdate =
+                                            innerXml.match(summaryMatch)?.[1]?.trim() || null;
+                                        const newDecisions = [];
+
+                                        let decisionMatch;
+                                        while (
+                                            (decisionMatch = decisionsRegex.exec(innerXml)) !== null
+                                        ) {
+                                            newDecisions.push({
+                                                date: decisionMatch[1],
+                                                summary: decisionMatch[2].trim(),
+                                            });
+                                        }
+
+                                        if (summaryUpdate || newDecisions.length > 0) {
+                                            preComputedContext = {
+                                                summaryUpdate,
+                                                newDecisions,
+                                                glossaryUpdates: {}, // XML doesn't support glossary yet to keep it simple
+                                                conflicts: [],
+                                            };
+                                            console.log(
+                                                `[LocalAgent] Extracted pre-computed memory update:`,
+                                                preComputedContext
+                                            );
+                                        }
+                                    } catch (e) {
+                                        console.warn(
+                                            `[LocalAgent] Failed to parse project_memory_update XML:`,
+                                            e
+                                        );
+                                    }
+                                }
+
+                                // Re-fetch Project to get LATEST memory before triggering curator
+                                const freshProject = await projectRepository.findById(
+                                    task.projectId
+                                );
+
                                 await triggerCurator(
                                     projectId,
                                     projectSequence,
                                     task,
                                     response.content,
-                                    project
+                                    freshProject || project, // Use fresh project if available
+                                    undefined,
+                                    preComputedContext
                                 ); // Trigger Curator
                                 await checkAndExecuteDependentTasks(
                                     projectId,
