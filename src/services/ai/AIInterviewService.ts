@@ -494,7 +494,7 @@ export class AIInterviewService {
         'qwen',
         'baidu',
         'claude-code',
-        'antigravity',
+
         'codex',
         'local',
     ];

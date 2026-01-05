@@ -58,7 +58,6 @@ export function getProviderIcon(providerId: string): string {
         // Local Agents
         'claude-code': 'logos:claude-icon',
         codex: 'logos:openai-icon',
-        antigravity: 'custom:highflow-logo',
         // Default HighFlow
         'default-highflow': 'custom:highflow-logo',
     };

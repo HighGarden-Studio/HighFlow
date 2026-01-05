@@ -111,7 +111,7 @@ watch(
             const localRepoTypes = currentProject?.metadata?.localRepo?.types;
 
             if (localRepoTypes && Array.isArray(localRepoTypes)) {
-                // Priority: claude-code > antigravity > codex
+                // Priority: claude-code > codex
                 let autoProvider: AIProvider | null = null;
                 let autoModel: string | null = null;
 
@@ -124,7 +124,7 @@ watch(
                 if (localRepoTypes.includes('claude-code')) {
                     autoProvider = 'anthropic';
                     autoModel = currentProject.aiModel || 'claude-3-5-sonnet-20240620';
-                } else if (localRepoTypes.includes('antigravity')) {
+
                     autoProvider = 'google';
                     autoModel = currentProject.aiModel || 'gemini-2.5-pro';
                 } else if (localRepoTypes.includes('codex')) {
@@ -174,7 +174,7 @@ const aiProviderOptions: Array<{
     { value: 'openai', label: 'GPT', icon: '🟢', description: 'OpenAI GPT-4' },
     { value: 'google', label: 'Gemini', icon: '🔵', description: 'Google Gemini' },
     { value: 'claude-code', label: 'Claude Code', icon: '💻', description: 'Claude Code Agent' },
-    { value: 'antigravity', label: 'Antigravity', icon: '🚀', description: 'Antigravity AI Agent' },
+
     { value: 'codex', label: 'Codex', icon: '⚡', description: 'Codex AI Agent' },
     { value: 'local', label: 'Local', icon: '🏠', description: 'Local LLM' },
 ];
@@ -203,7 +203,7 @@ const providerModelOptions: Record<string, { value: string; label: string }[]> =
         { value: 'llama3-8b-8192', label: 'Llama 3 8B' },
     ],
     'claude-code': [{ value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' }],
-    antigravity: [{ value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Agent)' }],
+
     codex: [{ value: 'gpt-4o', label: 'GPT-4o (Codex)' }],
     local: [
         { value: 'llama3', label: 'Llama 3' },

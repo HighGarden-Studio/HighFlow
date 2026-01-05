@@ -147,7 +147,7 @@ const hasPreviousResult = computed(() => {
 
 const isLocalProvider = computed(() => {
     const provider = assignedOperator.value?.aiProvider || props.task.aiProvider;
-    return ['claude-code', 'antigravity', 'codex'].includes(provider || '');
+    return ['claude-code', 'codex'].includes(provider || '');
 });
 
 const displayModel = computed(() => {
@@ -574,7 +574,7 @@ function hexToRgba(hex: string, alpha: number) {
                         />
                     </svg>
                     <span class="text-xs font-medium text-amber-800 dark:text-amber-200">
-                        {{ t('task.message.provider_required') }}
+                        {{ missingProvider?.message || t('task.message.provider_required') }}
                     </span>
                 </div>
             </div>

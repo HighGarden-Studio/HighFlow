@@ -173,7 +173,7 @@ const creationMode = ref<CreationMode>('ai-wizard');
 interface DiscoveredRepo {
     path: string;
     name: string;
-    type: 'git' | 'claude-code' | 'codex' | 'antigravity';
+    type: 'git' | 'claude-code' | 'codex';
     types?: string[]; // All detected assistant types
     lastModified: Date;
     description?: string;
@@ -183,7 +183,7 @@ interface DiscoveredRepo {
 const discoveredRepos = ref<DiscoveredRepo[]>([]);
 const isScanning = ref(false);
 const selectedRepo = ref<DiscoveredRepo | null>(null);
-const repoFilter = ref<'all' | 'git' | 'claude-code' | 'codex' | 'antigravity'>('all');
+const repoFilter = ref<'all' | 'git' | 'claude-code' | 'codex'>('all');
 const repoSearchQuery = ref('');
 
 // Step 2: Provider - will be set to first available provider
@@ -440,7 +440,6 @@ async function scanLocalRepositories() {
             includeGit: true,
             includeClaudeCode: true,
             includeCodex: true,
-            includeAntigravity: true,
             maxDepth: 4,
         });
 
@@ -536,7 +535,6 @@ const getRepoTypeColor = (type: string) => {
     if (t === 'git') return 'bg-gray-600 text-white';
     if (t === 'claude-code') return 'bg-violet-500 text-white';
     if (t === 'codex') return 'bg-cyan-500 text-white';
-    if (t.includes('antigravity')) return 'bg-fuchsia-500 text-white'; // Handle Antigravity (Gemini)
     if (t === 'cursor') return 'bg-blue-500 text-white';
     if (t === 'windsurf') return 'bg-teal-500 text-white';
     if (t === 'aider') return 'bg-green-500 text-white';
@@ -1345,10 +1343,8 @@ async function createProjectFromLocalRepo() {
     if (selectedRepo.value) {
         const repoTypes = selectedRepo.value.types || [selectedRepo.value.type];
 
-        // Priority: Antigravity > Codex > Claude Code
-        if (repoTypes.includes('antigravity')) {
-            aiProvider = 'antigravity';
-        } else if (repoTypes.includes('codex')) {
+        // Priority: Codex > Claude Code
+        if (repoTypes.includes('codex')) {
             aiProvider = 'codex';
         } else if (repoTypes.includes('claude-code')) {
             aiProvider = 'claude-code';
@@ -1436,7 +1432,7 @@ function getRepoTypeLabel(type: string): string {
         git: 'Git',
         'claude-code': 'Claude Code',
         codex: 'Codex',
-        antigravity: 'Antigravity',
+
         cursor: 'Cursor',
         windsurf: 'Windsurf',
         aider: 'Aider',
@@ -1452,7 +1448,7 @@ function getProviderIcon(provider: AIProvider): string {
         google: 'G',
         local: 'L',
         'claude-code': 'C',
-        antigravity: '🚀',
+
         codex: '⚡',
         'azure-openai': 'Az',
         mistral: 'M',
@@ -1488,7 +1484,7 @@ function getProviderColor(provider: AIProvider): string {
         google: 'bg-blue-500',
         local: 'bg-gray-500',
         'claude-code': 'bg-violet-500',
-        antigravity: 'bg-rose-500',
+
         codex: 'bg-cyan-500',
         'azure-openai': 'bg-cyan-600',
         mistral: 'bg-indigo-500',
@@ -1843,7 +1839,6 @@ watch(
                                     <option value="git">Git 저장소</option>
                                     <option value="claude-code">Claude Code</option>
                                     <option value="codex">Codex</option>
-                                    <option value="antigravity">Antigravity</option>
                                 </select>
                             </div>
 

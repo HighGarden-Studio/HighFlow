@@ -2198,7 +2198,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
      */
     function providerSupportsStreaming(providerId: string): boolean {
         // Local Agent Providers always support streaming
-        if (['antigravity', 'claude-code', 'codex'].includes(providerId)) {
+        if (['claude-code', 'codex'].includes(providerId)) {
             return true;
         }
         const provider = aiProviders.value.find((p) => p.id === providerId);

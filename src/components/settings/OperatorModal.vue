@@ -396,8 +396,6 @@ function handleLocalAgentChange(agent: string | null) {
         form.value.aiProvider = 'claude-code' as any;
     } else if (agent === 'codex') {
         form.value.aiProvider = 'codex' as any;
-    } else if (agent === 'antigravity') {
-        form.value.aiProvider = 'antigravity' as any;
     }
 }
 
@@ -447,12 +445,11 @@ watch(
 
             // Detect Local Agent
             const provider = operator.aiProvider;
-            if (['claude-code', 'codex', 'antigravity'].includes(provider as string)) {
+            if (['claude-code', 'codex'].includes(provider as string)) {
                 aiMode.value = 'local';
                 const reverseMap: Record<string, string> = {
                     'claude-code': 'claude',
                     codex: 'codex',
-                    antigravity: 'antigravity',
                 };
                 localAgent.value = reverseMap[provider as string] || null;
             } else {

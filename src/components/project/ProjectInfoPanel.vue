@@ -35,7 +35,6 @@ function isLocalAgentProvider(provider: string | null): {
     const localAgentMap: Record<string, string> = {
         'claude-code': 'claude',
         codex: 'codex',
-        antigravity: 'antigravity',
     };
 
     const agentType = localAgentMap[provider];
@@ -135,7 +134,7 @@ const aiProviderDisplay = computed(() => {
     const providerId = isEditingAI.value ? editedAIProvider.value : effectiveAI.value.provider;
 
     // Check if it's a local agent
-    if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
+    if (providerId && ['claude-code', 'codex'].includes(providerId)) {
         return {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
@@ -330,7 +329,7 @@ const autoReviewProviderDisplay = computed(() => {
           effectiveAutoReview.value.provider;
 
     // Check if it's a local agent
-    if (providerId && ['claude-code', 'antigravity', 'codex'].includes(providerId)) {
+    if (providerId && ['claude-code', 'codex'].includes(providerId)) {
         return {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
@@ -509,7 +508,6 @@ async function saveAISettings(): Promise<void> {
         const agentMap: Record<string, string> = {
             claude: 'claude-code',
             codex: 'codex',
-            antigravity: 'antigravity',
         };
         providerToSave = agentMap[editedLocalAgent.value] || editedLocalAgent.value;
         // For local agents, the model might be redundant or same as provider ID, but let's keep it clean
@@ -642,8 +640,6 @@ function getAssistantIcon(type: string): string {
         'claude-code':
             'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11.89-8.42l-22.26-3a16.09,16.09,0,0,0-13.38,4.93L40,132.19A88,88,0,0,1,128,40a87.53,87.53,0,0,1,15.87,1.46L159.3,56a16,16,0,0,0,12.26,5.61h19.41A88.22,88.22,0,0,1,216,128Z',
         codex: 'M229.66,90.34l-64-64a8,8,0,0,0-11.32,0l-64,64a8,8,0,0,0,11.32,11.32L152,51.31V96a8,8,0,0,0,16,0V51.31l50.34,50.35a8,8,0,0,0,11.32-11.32ZM208,144a40,40,0,1,0-40,40A40,40,0,0,0,208,144Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,144,144ZM88,104A40,40,0,1,0,48,144,40,40,0,0,0,88,104ZM64,144a24,24,0,1,1,24-24A24,24,0,0,1,64,144Zm176,72a40,40,0,1,0-40,40A40,40,0,0,0,240,216Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,176,216Z',
-        antigravity:
-            'M101.85,178.22,90.19,169c-15.51,25.75-19.2,46.24-19.83,54.86a7.86,7.86,0,0,1-1.25,3.84L32,280h64l49.34-74,7.13,5.44a8,8,0,0,0,11.3-1.79l30.86-41.15-31.66-24.12Zm92.27,11.45a8,8,0,0,0-1.79,11.29L201.57,213,176,235.28l-13.95-10.63a8,8,0,1,0-9.51,12.85l20,15.23a8,8,0,0,0,11.3-1.79L224,185A8,8,0,0,0,194.12,189.67ZM229.16,50.26a16,16,0,0,0-18.41-3.89L90.05,107.82,103.85,117l-3.57,4.69L184,124.09V80a16,16,0,0,1,32,0v44.09l19.13,2.31a16,16,0,0,1,13,18.59l-8,48.37a8,8,0,0,1-15.74-2.6l8-48.37L190.74,139a16,16,0,0,1-13.89-11.76L144,64H115.59L77,97.39l33.78,25.74L96.79,143.41,40.47,99.57a16,16,0,0,1-4.19-22.25l24-32a16,16,0,0,1,20.94-3.47l143.35,83.62a16,16,0,0,0,23.7-14.82Z',
     };
     return icons[type] || icons.git;
 }
@@ -653,7 +649,7 @@ function getAssistantLabel(type: string): string {
         git: 'Git',
         'claude-code': 'Claude Code',
         codex: 'Codex',
-        antigravity: 'Antigravity',
+
         cursor: 'Cursor',
         windsurf: 'Windsurf',
         aider: 'Aider',

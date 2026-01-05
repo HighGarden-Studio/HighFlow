@@ -126,7 +126,6 @@ export type AIProvider =
     | 'qwen'
     | 'baidu'
     | 'claude-code'
-    | 'antigravity'
     | 'codex'
     | 'local';
 
@@ -685,6 +684,13 @@ export interface TaskOutput {
         size?: number;
         sha256?: string;
     };
+    files?: Array<{
+        name: string;
+        path?: string;
+        url?: string;
+        size?: number;
+        mimeType?: string;
+    }>;
     metadata?: Record<string, any>;
 }
 
@@ -701,7 +707,8 @@ export interface InputTaskConfig {
         allowCustom?: boolean; // Allow custom value if options provided
     };
     localFile?: {
-        filePath?: string;
+        filePath?: string; // Legacy support
+        filePaths?: string[]; // Multi-file support
         acceptedExtensions: string[];
         readMode: 'text' | 'table' | 'binary' | 'auto';
         parser?: {

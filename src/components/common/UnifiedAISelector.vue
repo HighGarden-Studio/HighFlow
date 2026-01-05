@@ -57,7 +57,6 @@ const availableLocalAgents = computed(() => {
     }[] = [
         { id: 'claude', name: 'Claude Code', icon: '🤖', installed: false },
         { id: 'codex', name: 'OpenAI Codex', icon: '💻', installed: false },
-        { id: 'antigravity', name: 'Antigravity', icon: '🚀', installed: false },
     ];
 
     agents.forEach((agent) => {

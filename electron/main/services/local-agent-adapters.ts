@@ -112,45 +112,14 @@ export class CodexAdapter implements LocalAgentMessageAdapter {
 }
 
 /**
- * Antigravity Adapter
- * Formats messages for Antigravity CLI
- */
-export class AntigravityAdapter implements LocalAgentMessageAdapter {
-    formatMessage(content: string, options?: { model?: string }): string {
-        return content;
-    }
-
-    parseResponse(output: string): { type: string; content: string; done?: boolean } {
-        try {
-            const parsed = JSON.parse(output);
-            return {
-                type: 'response',
-                content: parsed.result || parsed.output || String(parsed),
-                done: parsed.done || false,
-            };
-        } catch {
-            return {
-                type: 'text',
-                content: output,
-                done: false,
-            };
-        }
-    }
-}
-
-/**
  * Get adapter for agent type
  */
-export function getAdapterForAgent(
-    agentType: 'claude' | 'codex' | 'antigravity'
-): LocalAgentMessageAdapter {
+export function getAdapterForAgent(agentType: 'claude' | 'codex'): LocalAgentMessageAdapter {
     switch (agentType) {
         case 'claude':
             return new ClaudeCodeAdapter();
         case 'codex':
             return new CodexAdapter();
-        case 'antigravity':
-            return new AntigravityAdapter();
         default:
             throw new Error(`Unknown agent type: ${agentType}`);
     }

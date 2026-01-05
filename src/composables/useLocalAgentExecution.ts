@@ -9,7 +9,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import type { Task } from '@core/types/database';
 
 // Type definitions matching preload API
-type LocalAgentType = 'claude' | 'codex' | 'antigravity';
+type LocalAgentType = 'claude' | 'codex';
 type SessionStatus = 'idle' | 'running' | 'waiting' | 'error' | 'closed';
 
 interface SessionInfo {
@@ -84,7 +84,7 @@ export function useLocalAgentExecution() {
     async function checkInstalledAgents(): Promise<
         Map<LocalAgentType, { installed: boolean; version?: string }>
     > {
-        const agents: LocalAgentType[] = ['claude', 'codex', 'antigravity'];
+        const agents: LocalAgentType[] = ['claude', 'codex'];
         const results = new Map<LocalAgentType, { installed: boolean; version?: string }>();
 
         for (const agent of agents) {

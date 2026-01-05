@@ -43,7 +43,6 @@ export type AIProvider =
     | 'qwen'
     | 'baidu'
     | 'claude-code'
-    | 'antigravity'
     | 'codex'
     | 'local';
 
@@ -108,8 +107,6 @@ export type AIModel =
     | 'mixtral-8x7b-32768'
     | 'gemma2-9b-it'
     | 'local-model'
-    | 'antigravity-pro'
-    | 'antigravity-standard'
     | 'codex-latest'
     | 'codex-standard'
     // Allow dynamic model names from API

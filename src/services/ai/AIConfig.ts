@@ -20,7 +20,6 @@ export class AIServiceConfig {
         openai: 'gpt-4o-mini',
         google: 'gemini-2.5-pro',
         'claude-code': 'claude-3-5-sonnet-20250219',
-        antigravity: 'antigravity-pro',
         codex: 'codex-latest',
         local: 'gpt-3.5-turbo', // Placeholder
         'default-highflow': 'gemini-2.5-flash',
@@ -78,10 +77,6 @@ export class AIServiceConfig {
         sonar: { input: 1.0, output: 1.0 }, // Est
         'sonar-pro': { input: 3.0, output: 3.0 }, // Est
         'sonar-reasoning': { input: 3.0, output: 10.0 }, // Est
-
-        // Antigravity
-        'antigravity-pro': { input: 5.0, output: 20.0 },
-        'antigravity-standard': { input: 2.0, output: 8.0 },
 
         // Codex
         'codex-latest': { input: 4.0, output: 16.0 },
@@ -146,7 +141,6 @@ export class AIServiceConfig {
             case 'google':
                 return !!process.env.GOOGLE_API_KEY;
             case 'claude-code':
-            case 'antigravity':
             case 'codex':
                 return true; // Local agents are always considered "configured" (available)
             default:
@@ -158,9 +152,9 @@ export class AIServiceConfig {
      * Get available providers
      */
     static getAvailableProviders(): AIProvider[] {
-        return (
-            ['anthropic', 'openai', 'google', 'claude-code', 'antigravity', 'codex'] as AIProvider[]
-        ).filter((provider) => this.isProviderConfigured(provider));
+        return (['anthropic', 'openai', 'google', 'claude-code', 'codex'] as AIProvider[]).filter(
+            (provider) => this.isProviderConfigured(provider)
+        );
     }
 
     /**

@@ -172,6 +172,9 @@ export interface FsAPI {
     stat: (path: string) => Promise<FileStat>;
     selectDirectory: () => Promise<string | null>;
     selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
+    selectMultipleFiles: (
+        filters?: { name: string; extensions: string[] }[]
+    ) => Promise<string[] | null>;
 }
 
 export type WorkflowStatus =
@@ -266,7 +269,7 @@ export interface StoreAPI {
 }
 
 // Local Agents Types
-export type LocalAgentType = 'claude' | 'codex' | 'antigravity';
+export type LocalAgentType = 'claude' | 'codex';
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error' | 'closed';
 
 export interface AgentCheckResult {

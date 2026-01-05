@@ -37,6 +37,7 @@ const config = computed<InputTaskConfig | null>(() => {
 // Form state
 const formData = reactive({
     value: '',
+    filePaths: [] as string[],
     confirmed: false,
     selectedOptionType: '', // 'option' or '__custom__' (for radio)
     customValue: '',
@@ -48,8 +49,8 @@ const validate = (): boolean => {
     error.message = '';
 
     if (config.value?.sourceType === 'LOCAL_FILE') {
-        if (!formData.value) {
-            error.message = '파일을 선택해주세요.';
+        if (formData.filePaths.length === 0 && !formData.value) {
+            error.message = '최소 하나의 파일을 선택해주세요.';
             return false;
         }
         return true;
@@ -97,10 +98,31 @@ const validate = (): boolean => {
 const triggerFileSelect = async () => {
     // Try Electron native dialog first
     try {
-        const result = await getAPI().fs.selectFile();
-        if (result) {
-            formData.value = result;
-            return;
+        const api = getAPI();
+        if (api.fs.selectMultipleFiles) {
+            const results = await api.fs.selectMultipleFiles();
+            if (results && results.length > 0) {
+                // Determine if we append or replace? Let's append to be friendly.
+                // Actually, standard dialog usage usually replaces unless "Add" is specific.
+                // But for "Select Files" button, users often expect adding if they click again?
+                // Let's implement ADD behavior, but filter duplicates.
+                const newPaths = results.filter((p: string) => !formData.filePaths.includes(p));
+                formData.filePaths.push(...newPaths);
+
+                // Update legacy value for display/compat
+                formData.value = formData.filePaths.join(', ');
+                return;
+            }
+        } else {
+            // Fallback to single select if new API missing
+            const result = await api.fs.selectFile();
+            if (result) {
+                if (!formData.filePaths.includes(result)) {
+                    formData.filePaths.push(result);
+                    formData.value = formData.filePaths.join(', ');
+                }
+                return;
+            }
         }
     } catch (e) {
         // Fallback to HTML input
@@ -114,19 +136,31 @@ const triggerFileSelect = async () => {
 const handleFileChange = (event: Event) => {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
-        const file = input.files[0];
-        if (!file) return;
-
-        // In Electron, File object usually has 'path' property
-        if ('path' in file) {
-            formData.value = (file as any).path;
-        } else {
-            // Web fallback (might not work for backend file reading)
-            formData.value = (file as any).name;
-            error.message =
-                '파일 경로를 가져올 수 없습니다. (브라우저 제한). 직접 경로를 입력해야 할 수도 있습니다.';
+        const newFiles: string[] = [];
+        for (let i = 0; i < input.files.length; i++) {
+            const file = input.files[i];
+            if (!file) continue;
+            // In Electron, File object usually has 'path' property
+            if ('path' in file) {
+                newFiles.push((file as any).path);
+            } else {
+                // Web fallback
+                newFiles.push((file as any).name);
+            }
         }
+
+        const uniqueNew = newFiles.filter((p) => !formData.filePaths.includes(p));
+        formData.filePaths.push(...uniqueNew);
+        formData.value = formData.filePaths.join(', ');
+
+        // Clear input value to allow selecting same file again
+        input.value = '';
     }
+};
+
+const removeFile = (index: number) => {
+    formData.filePaths.splice(index, 1);
+    formData.value = formData.filePaths.join(', ');
 };
 
 const handleSubmit = () => {
@@ -134,7 +168,10 @@ const handleSubmit = () => {
         let submission: any;
 
         if (config.value?.sourceType === 'LOCAL_FILE') {
-            submission = { filePath: formData.value };
+            submission = {
+                filePaths: [...formData.filePaths],
+                filePath: formData.filePaths[0], // Legacy/Compat
+            };
         } else if (config.value?.userInput?.mode === 'confirm') {
             submission = { confirmed: formData.confirmed };
         } else {
@@ -305,28 +342,66 @@ const handleSubmit = () => {
                     <label class="block text-base font-medium text-gray-800 dark:text-gray-200">
                         파일 선택
                         <span class="text-red-500">*</span>
+                        <span class="ml-2 text-xs font-normal text-gray-500"
+                            >({{ formData.filePaths.length }} files selected)</span
+                        >
                     </label>
 
+                    <!-- File List -->
+                    <div v-if="formData.filePaths.length > 0" class="space-y-2 mb-4">
+                        <div
+                            v-for="(path, idx) in formData.filePaths"
+                            :key="path"
+                            class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm group"
+                        >
+                            <span
+                                class="truncate text-gray-700 dark:text-gray-300 mr-2"
+                                :title="path"
+                            >
+                                {{ path.split(/[/\\]/).pop() }}
+                                <span class="text-xs text-gray-400">({{ path }})</span>
+                            </span>
+                            <button
+                                type="button"
+                                @click="removeFile(idx)"
+                                class="text-gray-400 hover:text-red-500 transition-colors p-1"
+                                title="Remove"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="flex gap-2">
-                        <input
-                            type="text"
-                            :value="formData.value"
-                            readonly
-                            placeholder="파일을 선택하세요"
-                            class="flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                            @click="triggerFileSelect"
-                        />
                         <button
                             type="button"
                             @click="triggerFileSelect"
-                            class="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 transition-colors"
-                            title="파일 선택"
+                            class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-600 dark:text-gray-400 transition-all group"
                         >
-                            <FolderOpen class="w-4 h-4" />
+                            <FolderOpen
+                                class="w-5 h-5 group-hover:text-blue-500 transition-colors"
+                            />
+                            <span class="group-hover:text-blue-500 transition-colors"
+                                >파일 추가...</span
+                            >
                         </button>
+
                         <input
                             type="file"
                             ref="fileInput"
+                            multiple
                             class="hidden"
                             @change="handleFileChange"
                             :accept="
@@ -336,6 +411,7 @@ const handleSubmit = () => {
                             "
                         />
                     </div>
+
                     <div class="text-xs text-gray-500 dark:text-gray-400">
                         * 선택된 파일 경로는 시스템에 의해 자동으로 읽힙니다.
                         {{

@@ -35,6 +35,7 @@ interface MissingProviderInfo {
     id: string;
     name: string;
     requiredTags?: string[];
+    message?: string;
 }
 
 const route = useRoute();
@@ -199,6 +200,14 @@ onMounted(() => {
             updateMissingProviderCacheDebounced();
         },
         { detached: true }
+    );
+
+    // Watch for project changes to update missing provider cache (e.g. after project load)
+    watch(
+        () => projectStore.currentProject,
+        () => {
+            updateMissingProviderCacheDebounced();
+        }
     );
 
     onUnmounted(() => {
@@ -488,12 +497,16 @@ function handlePreviewResult(task: Task) {
     openResultPreview(task);
 }
 
-async function handleRetry(task: Task) {
-    // Retry task execution
-    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
-    // Immediately execute the task after resetting to todo
-    await taskStore.executeTask(task.projectId, task.projectSequence);
-    console.log('Retry task executed:', task.projectId, task.projectSequence);
+async function handleRetry(task: Task, feedback?: string) {
+    // Retry task execution with optional feedback
+    console.log(
+        '[KanbanBoard] Retrying task:',
+        task.projectId,
+        task.projectSequence,
+        'Feedback:',
+        feedback
+    );
+    await taskStore.retryTask(task.projectId, task.projectSequence, feedback);
 }
 
 function handleViewHistory(task: Task) {
@@ -829,7 +842,6 @@ async function getMissingProviderForTask(task: Task): Promise<MissingProviderInf
         const localAgentMap: Record<string, string> = {
             'claude-code': 'claude',
             codex: 'codex',
-            antigravity: 'antigravity',
         };
 
         const localAgentType = localAgentMap[providerToCheck];
@@ -847,6 +859,7 @@ async function getMissingProviderForTask(task: Task): Promise<MissingProviderInf
             return {
                 id: providerToCheck as string,
                 name: providerInfo?.name || (providerToCheck as string),
+                message: '개발 베이스 폴더 설정이 필요합니다.',
             };
         }
 
@@ -1934,6 +1947,7 @@ onMounted(async () => {
             @close="closeResultPreview"
             @approve="handleResultApprove"
             @rollback="handleVersionRestore"
+            @retry="handleRetry"
         />
 
         <!-- Project Info Modal -->

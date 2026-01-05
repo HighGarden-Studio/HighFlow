@@ -233,7 +233,7 @@ function isAIProviderCompleted(): boolean {
     if (isProviderLocal(provider)) {
         return selectedProviderStatus.value.status === 'available';
     }
-    return apiKey.value.length >= 10 || isOAuthConnected.value;
+    return apiKey.value.length >= 10 || (isOAuthConnected.value ?? false);
 }
 
 const progressPercent = computed(() => {
@@ -1427,9 +1427,7 @@ watch(
                                                     ? '🤖'
                                                     : repo.type === 'codex'
                                                       ? '⚡'
-                                                      : repo.type === 'antigravity'
-                                                        ? '🚀'
-                                                        : '📂'
+                                                      : '📂'
                                             }}
                                         </span>
                                         <div class="flex-1 min-w-0">

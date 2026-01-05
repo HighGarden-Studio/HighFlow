@@ -37,7 +37,6 @@ function isLocalAgentProvider(provider: string | null): {
     const localAgentMap: Record<string, LocalAgentType> = {
         'claude-code': 'claude',
         codex: 'codex',
-        antigravity: 'antigravity',
     };
 
     const agentType = localAgentMap[provider];
@@ -48,7 +47,7 @@ function isLocalAgentProvider(provider: string | null): {
 }
 
 // Local Agent types
-type LocalAgentType = 'claude' | 'codex' | 'antigravity';
+type LocalAgentType = 'claude' | 'codex';
 
 interface Props {
     task: Task | null;
@@ -532,7 +531,6 @@ watch(selectedLocalAgent, (newAgent) => {
         const agentTypeToProviderId: Record<LocalAgentType, string> = {
             claude: 'claude-code',
             codex: 'codex',
-            antigravity: 'antigravity',
         };
         const newProvider = agentTypeToProviderId[newAgent] as AIProvider;
         if (aiProvider.value !== newProvider) {
@@ -551,7 +549,6 @@ watch(executionMode, (newMode) => {
             const agentTypeToProviderId: Record<LocalAgentType, string> = {
                 claude: 'claude-code',
                 codex: 'codex',
-                antigravity: 'antigravity',
             };
             const newProvider = agentTypeToProviderId[selectedLocalAgent.value] as AIProvider;
             if (aiProvider.value !== newProvider) {
@@ -910,7 +907,6 @@ const availableLocalAgents = computed(() => {
     }[] = [
         { id: 'claude', name: 'Claude Code', icon: '🤖', installed: false },
         { id: 'codex', name: 'OpenAI Codex', icon: '💻', installed: false },
-        { id: 'antigravity', name: 'Antigravity', icon: '🚀', installed: false },
     ];
 
     agents.forEach((agent) => {

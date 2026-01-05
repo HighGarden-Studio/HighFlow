@@ -76,13 +76,6 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
         executionStrategy: 'local-session',
         agentCommand: 'codex',
     },
-    antigravity: {
-        id: 'antigravity',
-        name: 'Antigravity',
-        type: 'local-agent',
-        executionStrategy: 'local-session',
-        agentCommand: 'antigravity',
-    },
 };
 
 /**
@@ -111,15 +104,14 @@ export function isApiProvider(providerId: string): boolean {
 /**
  * Get local agent type for provider
  */
-export function getLocalAgentType(providerId: string): 'claude' | 'codex' | 'antigravity' | null {
+export function getLocalAgentType(providerId: string): 'claude' | 'codex' | null {
     const config = getProviderConfig(providerId);
     if (config?.type !== 'local-agent') return null;
 
     // Map provider ID to agent type
-    const agentMap: Record<string, 'claude' | 'codex' | 'antigravity'> = {
+    const agentMap: Record<string, 'claude' | 'codex'> = {
         'claude-code': 'claude',
         codex: 'codex',
-        antigravity: 'antigravity',
     };
 
     return agentMap[providerId] || null;

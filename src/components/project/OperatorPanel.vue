@@ -280,7 +280,7 @@ function getProviderLabel(providerId: string): string {
         google: 'Gemini',
         groq: 'Groq',
         'claude-code': 'Claude Code',
-        antigravity: 'Antigravity',
+
         codex: 'Codex',
     };
     return providerMap[providerId] || providerId;

@@ -25,7 +25,7 @@ export interface AgentMessage {
 
 export interface SessionInfo {
     id: string;
-    agentType: 'claude' | 'codex' | 'antigravity';
+    agentType: 'claude' | 'codex';
     status: SessionStatus;
     workingDirectory: string;
     createdAt: Date;
@@ -118,7 +118,7 @@ function getEnhancedPath(): string {
  */
 export class LocalAgentSession extends EventEmitter {
     readonly id: string;
-    readonly agentType: 'claude' | 'codex' | 'antigravity';
+    readonly agentType: 'claude' | 'codex';
     readonly workingDirectory: string;
     private adapter: LocalAgentMessageAdapter;
 
@@ -136,12 +136,9 @@ export class LocalAgentSession extends EventEmitter {
     private isClosing: boolean = false; // Track intentional shutdown
     private executionMode: 'persistent' | 'oneshot' = 'persistent';
     private remoteThreadId: string | null = null; // Captured thread ID from agent
+    private fullOutput: string = ''; // Capture full stdout for fallback
 
-    constructor(
-        agentType: 'claude' | 'codex' | 'antigravity',
-        workingDirectory: string,
-        sessionId?: string
-    ) {
+    constructor(agentType: 'claude' | 'codex', workingDirectory: string, sessionId?: string) {
         super();
         this.id = sessionId || randomUUID();
         this.agentType = agentType;
@@ -238,36 +235,22 @@ export class LocalAgentSession extends EventEmitter {
                 // Spawn new process for this message
                 const command = this.getCommand();
 
-                // Construct args for exec: exec [--json] [resume ID] "prompt"
-                const args = ['exec', '--json'];
+                // Construct command args
+                const args: string[] = [];
 
-                // If we have history/ID, we might want to resume.
-                // However, codex exec resume <ID> syntax is specific.
-                // If it's the FIRST message, we might not use resume?
-                // Actually, passing the ID to --session or resume is key.
-                // Docs: "codex exec resume <SESSION_ID>"
-                // Check if we have created a thread yet?
-                // For simplicity, let's try `codex exec --json` first.
-                // If we want to maintain session, we might need to parse output thread_id.
-                // Based on docs: `codex exec resume <ID> "prompt"`
-
-                // Basic logic: if messageCount > 0, resume?
-                // Or always try to resume using our generated ID?
-                // If the ID assumes existing session, it might fail if not found.
-                // Docs say: `codex exec` starts new.
-                // `codex exec resume <ID>` resumes.
-
-                if (this.remoteThreadId) {
-                    args.push('resume', this.remoteThreadId);
-                } else if (this.messageCount > 0) {
-                    args.push('resume', this.id);
+                if (this.agentType === 'codex') {
+                    args.push('exec', '--json');
+                    if (this.remoteThreadId) {
+                        args.push('resume', this.remoteThreadId);
+                    } else if (this.messageCount > 0) {
+                        args.push('resume', this.id);
+                    }
+                    args.push('--skip-git-repo-check');
+                    args.push('--dangerously-bypass-approvals-and-sandbox');
+                } else {
+                    // Default fallback (should vary by agent)
+                    args.push('exec');
                 }
-
-                // Add --skip-git-repo-check to bypass trusted directory check
-                args.push('--skip-git-repo-check');
-
-                // Add --dangerously-bypass-approvals-and-sandbox to allow execution and file creation
-                args.push('--dangerously-bypass-approvals-and-sandbox');
 
                 // Add prompt as argument
                 args.push(message);
@@ -357,8 +340,6 @@ export class LocalAgentSession extends EventEmitter {
                 return 'claude';
             case 'codex':
                 return 'codex';
-            case 'antigravity':
-                return 'antigravity';
             default:
                 throw new Error(`Unknown agent type: ${this.agentType}`);
         }
@@ -383,7 +364,7 @@ export class LocalAgentSession extends EventEmitter {
                     'acceptEdits', // Automatically approve file edits and creations
                 ];
             default:
-                // Codex/Antigravity use oneshot exec mode, so start args are unused/empty
+                // Codex use oneshot exec mode, so start args are unused/empty
                 return [];
         }
     }
@@ -405,6 +386,7 @@ export class LocalAgentSession extends EventEmitter {
         this.process.stdout?.on('data', (data: Buffer) => {
             const text = data.toString();
             this.responseBuffer += text;
+            this.fullOutput += text;
             this.emit('data', text);
 
             // Try to parse complete JSON responses
@@ -415,7 +397,7 @@ export class LocalAgentSession extends EventEmitter {
         this.process.stderr?.on('data', (data: Buffer) => {
             const text = data.toString();
             console.error(`[LocalAgentSession] ${this.agentType} stderr:`, text);
-            this.emit('error', text);
+            // Do NOT emit 'error' here as it crashes the app for non-fatal warnings
         });
 
         // Handle process exit
@@ -427,6 +409,18 @@ export class LocalAgentSession extends EventEmitter {
             this.status = 'closed';
             this.process = null;
 
+            // Handle oneshot completions (exit code 0 is success)
+            if (this.executionMode === 'oneshot' && code === 0) {
+                if (this.currentResolve) {
+                    console.log(
+                        `[LocalAgentSession] ${this.agentType} oneshot finished successfully.`
+                    );
+                    // If we haven't received a specific completion event, construct one
+                    this.completeResponse({ type: 'turn.completed', finished: true });
+                }
+                return;
+            }
+
             // Only reject if not intentionally closing
             // Exit code 143 = 128 + 15 = SIGTERM (normal termination)
             if (this.currentReject && !this.isClosing) {
@@ -435,13 +429,10 @@ export class LocalAgentSession extends EventEmitter {
                 this.currentResolve = null;
                 this.currentOnChunk = null;
             } else if (this.executionMode === 'oneshot' && wasRunning) {
-                // For oneshot agents (Codex), process exit usually means completion.
-                // If we haven't received a 'turn.completed' event, we should assume it's done.
-                console.log(`[LocalAgentSession] Oneshot process exited, assuming completion.`);
-
-                // Synthesize a turn.completed event if needed, or just complete.
-                // We'll use the accumulated responseBuffer or transcript.
-                this.completeResponse({ type: 'turn.completed', finished: true });
+                // Should not happen if code 0 is handled above, but catch-all for non-zero exit in oneshot
+                console.log(`[LocalAgentSession] Oneshot process exited with non-zero code.`);
+                // This case falls through to event emission, but we might want to ensure cleanup?
+                // Actually the currentReject check above handles non-zero exits (Error).
             }
 
             this.emit('exit', { code, signal });
@@ -502,15 +493,15 @@ export class LocalAgentSession extends EventEmitter {
             }
         }
 
-        // Codex/Antigravity event handling
-        if (this.agentType === 'codex' || this.agentType === 'antigravity') {
+        // Codex event handling
+        if (this.agentType === 'codex') {
             if (message.type === 'thread.started') {
                 // If we didn't specify an ID (initial run), we might want to capture this.
                 // But we are using our own ID for resumption.
                 // Just log it.
                 console.log(`[LocalAgentSession] Thread started: ${message.thread_id}`);
                 if (message.thread_id) {
-                    this.remoteThreadId = message.thread_id;
+                    this.remoteThreadId = message.thread_id as string;
                 }
             } else if (message.type === 'item.completed' || message.type === 'item.started') {
                 const item = message.item as any;
@@ -599,7 +590,7 @@ export class LocalAgentSession extends EventEmitter {
      * Check if message indicates completion
      */
     private isCompletionMessage(message: Record<string, unknown>): boolean {
-        // For Codex/Antigravity, handled in handleParsedMessage (turn.completed)
+        // For Codex, handled in handleParsedMessage (turn.completed)
         // But for completeness:
         if (message.type === 'turn.completed') return true;
 
@@ -649,6 +640,7 @@ export class LocalAgentSession extends EventEmitter {
                 message.content ||
                     message.text ||
                     message.result ||
+                    (this.executionMode === 'oneshot' && this.fullOutput ? this.fullOutput : '') ||
                     (this.transcript.length > 0 ? 'See transcript' : '')
             ),
             duration: Date.now() - this.lastActivityAt.getTime(),
@@ -722,7 +714,7 @@ export class LocalAgentSessionManager {
      * Create a new session
      */
     async createSession(
-        agentType: 'claude' | 'codex' | 'antigravity',
+        agentType: 'claude' | 'codex',
         workingDirectory: string,
         sessionId?: string,
         projectId?: number,

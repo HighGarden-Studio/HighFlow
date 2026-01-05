@@ -105,7 +105,6 @@ const DEFAULT_MODELS: Partial<Record<AIProvider, AIModel>> = {
     google: 'gemini-2.5-pro',
     groq: 'llama-3.3-70b-versatile',
     'claude-code': 'claude-3-5-sonnet-20250219',
-    antigravity: 'antigravity-pro',
     codex: 'codex-latest',
     local: 'gpt-3.5-turbo',
     lmstudio: 'local-model',
@@ -516,9 +515,18 @@ export class AIServiceManager {
                     task.dependencies.includes(r.taskId)
                 );
                 for (const res of depResults) {
+                    // Collect from TaskResult.attachments
                     if (res.attachments && res.attachments.length > 0) {
                         for (const att of res.attachments) {
-                            // Ensure compatibility
+                            dependencyAttachments.push(att as any);
+                        }
+                    }
+                    // Collect from TaskResult.output.metadata.attachments (LocalFileProvider puts them here)
+                    if (
+                        res.output?.metadata?.attachments &&
+                        Array.isArray(res.output.metadata.attachments)
+                    ) {
+                        for (const att of res.output.metadata.attachments) {
                             dependencyAttachments.push(att as any);
                         }
                     }
@@ -2029,9 +2037,21 @@ ${
                         if (typeof result.output === 'string') {
                             prompt += `${result.output}\n`;
                         } else if (typeof result.output === 'object') {
+                            // Support for 'files' array in output
+                            if (result.output.files && Array.isArray(result.output.files)) {
+                                prompt += `[Files Analyzed]:\n`;
+                                result.output.files.forEach((f: any) => {
+                                    prompt += `- ${f.name} (${f.mimeType || 'unknown'})\n`;
+                                });
+                                prompt += `\n`;
+                            }
+
                             // Handle special output structures if needed, else JSON verify
                             if (result.output.content) {
                                 prompt += `${result.output.content}\n`;
+                            } else if (result.output.text) {
+                                // If text property exists (e.g. from LocalFileProvider), use it
+                                prompt += `${result.output.text}\n`;
                             } else {
                                 prompt += `${JSON.stringify(result.output, null, 2)}\n`;
                             }

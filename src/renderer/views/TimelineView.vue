@@ -64,6 +64,21 @@ async function handleExecuteTask(task: Task) {
     }
 }
 
+async function handleRetry(task: Task, feedback?: string) {
+    try {
+        console.log(
+            '[TimelineView] Retrying task:',
+            task.projectId,
+            task.projectSequence,
+            'Feedback:',
+            feedback
+        );
+        await taskStore.retryTask(task.projectId, task.projectSequence, feedback);
+    } catch (error) {
+        console.error('Failed to retry task:', error);
+    }
+}
+
 async function handleApproveTask(task: Task) {
     try {
         await taskStore.approveTask(task.projectId, task.projectSequence);
@@ -239,6 +254,7 @@ onMounted(async () => {
             :task="selectedTask"
             :open="showResultPreview"
             @close="closeResultPreview"
+            @retry="handleRetry"
         />
     </div>
 </template>

@@ -157,6 +157,26 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
     );
 
     // ========================================
+    // Select Multiple Files Dialog
+    // ========================================
+
+    ipcMain.handle(
+        'fs:selectMultipleFiles',
+        async (_event, filters?: { name: string; extensions: string[] }[]) => {
+            const result = await dialog.showOpenDialog({
+                properties: ['openFile', 'multiSelections'],
+                filters: filters || [{ name: 'All Files', extensions: ['*'] }],
+            });
+
+            if (result.canceled || result.filePaths.length === 0) {
+                return null;
+            }
+
+            return result.filePaths;
+        }
+    );
+
+    // ========================================
     // Shell: Open Path
     // ========================================
 
@@ -184,7 +204,6 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
                 includeGit?: boolean;
                 includeClaudeCode?: boolean;
                 includeCodex?: boolean;
-                includeAntigravity?: boolean;
             }
         ) => {
             const {
@@ -193,7 +212,6 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
                 includeGit = true,
                 includeClaudeCode = true,
                 includeCodex = true,
-                includeAntigravity = true,
             } = options || {};
 
             const repos: DiscoveredRepo[] = [];
@@ -240,65 +258,7 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
                     }
                     if (hasCodex && includeCodex) types.push('codex');
 
-                    // Check for Antigravity - check root, .gemini, and docs/
-                    let hasAntigravity = entries.some(
-                        (e) =>
-                            e.name === '.antigravity' ||
-                            e.name === 'antigravity.config.json' ||
-                            e.name === '.gemini'
-                    );
-                    let antigravityLabel = 'Antigravity';
-
-                    // Content-based detection for Antigravity
-                    if (!hasAntigravity) {
-                        try {
-                            // Check AGENTS.md in root
-                            if (entries.some((e) => e.name === 'AGENTS.md' && e.isFile())) {
-                                const content = await fs.promises.readFile(
-                                    path.join(dirPath, 'AGENTS.md'),
-                                    'utf-8'
-                                );
-                                if (content.includes('Antigravity')) {
-                                    hasAntigravity = true;
-                                    if (content.includes('Gemini'))
-                                        antigravityLabel = 'Antigravity (Gemini)';
-                                }
-                            }
-
-                            // Check docs/AI_SERVICES.md or docs/AGENTS.md
-                            if (entries.some((e) => e.name === 'docs' && e.isDirectory())) {
-                                const docsPath = path.join(dirPath, 'docs');
-                                const docsEntries = await fs.promises.readdir(docsPath);
-
-                                for (const docFile of [
-                                    'AI_SERVICES.md',
-                                    'AGENTS.md',
-                                    'SESSION_2_SUMMARY.md',
-                                ]) {
-                                    if (docsEntries.includes(docFile)) {
-                                        const content = await fs.promises.readFile(
-                                            path.join(docsPath, docFile),
-                                            'utf-8'
-                                        );
-                                        if (content.includes('Antigravity')) {
-                                            hasAntigravity = true;
-                                            if (content.includes('Gemini'))
-                                                antigravityLabel = 'Antigravity (Gemini)';
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        } catch {
-                            // Ignore read errors
-                        }
-                    } else {
-                        // If detected via config files, still check for Gemini in them if possible, or default to just Antigravity
-                        // For now, let's just check if we can find Gemini in the config file name or content if we were to read it
-                        // But sticking to the requested feature for content detection is safer for now.
-                    }
-
-                    if (hasAntigravity && includeAntigravity) types.push(antigravityLabel);
+                    if (hasCodex && includeCodex) types.push('codex');
 
                     const hasCursor = entries.some(
                         (e) => e.name === '.cursor' || e.name === '.cursorrules'
@@ -476,16 +436,6 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
             ) {
                 console.log('[fs:checkRepoType] Detected codex');
                 types.push('codex');
-            }
-
-            // Antigravity uses .gemini directory
-            if (
-                entries.includes('.antigravity') ||
-                entries.includes('antigravity.config.json') ||
-                entries.includes('.gemini')
-            ) {
-                console.log('[fs:checkRepoType] Detected antigravity');
-                types.push('antigravity');
             }
 
             if (entries.includes('.cursor') || entries.includes('.cursorrules')) {

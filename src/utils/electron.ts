@@ -340,6 +340,7 @@ export const mockElectronAPI = {
         stat: async () => ({ size: 0, isDirectory: false, mtime: new Date() }),
         selectDirectory: async () => null,
         selectFile: async () => null,
+        selectMultipleFiles: async () => null,
     },
     database: {
         query: async () => [],

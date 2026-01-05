@@ -2229,15 +2229,14 @@ function handleRetry() {
     if (feedbackItems.value.length > 0) {
         finalFeedback += '\n\n# Attached Comments:\n';
         feedbackItems.value.forEach((item, index) => {
-            finalFeedback += `\n--- Comment ${index + 1} ---\n`;
-            if (item.file) finalFeedback += `File: ${item.file}\n`;
-            if (item.range) {
-                if (item.type === 'code') {
-                    finalFeedback += `Lines: ${item.range.startLineNumber}-${item.range.endLineNumber}\n`;
-                }
+            // finalFeedback += `\n--- Comment ${index + 1} ---\n`;
+            if (item.file && item.range) {
+                finalFeedback += `@${item.file}:${item.range.startLineNumber} ${item.comment}\n`;
+            } else if (item.range) {
+                finalFeedback += `@Line ${item.range.startLineNumber} ${item.comment}\n`;
+            } else {
+                finalFeedback += `${item.comment}\n`;
             }
-            finalFeedback += `Selection: "${item.selection}"\n`;
-            finalFeedback += `Instruction: ${item.comment}\n`;
         });
     }
 
@@ -4280,9 +4279,15 @@ Invalid JSON</pre
                             >
                                 <span class="font-bold shrink-0"
                                     >[{{
-                                        item.type === 'code'
-                                            ? 'Line ' + item.range?.startLineNumber
-                                            : 'Text'
+                                        item.file
+                                            ? item.file +
+                                              ':' +
+                                              (item.type === 'code'
+                                                  ? 'Line ' + item.range?.startLineNumber
+                                                  : 'Text')
+                                            : item.type === 'code'
+                                              ? 'Line ' + item.range?.startLineNumber
+                                              : 'Text'
                                     }}]</span
                                 >
                                 <span class="truncate max-w-[150px]">{{ item.comment }}</span>
@@ -4300,7 +4305,7 @@ Invalid JSON</pre
                             <label
                                 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                             >
-                                수정 요청
+                                피드백 요청
                             </label>
                             <textarea
                                 v-model="feedback"
@@ -4325,7 +4330,7 @@ Invalid JSON</pre
                                         :disabled="!feedback.trim()"
                                         @click="handleRetry"
                                     >
-                                        피드백과 함께 재시도
+                                        피드백 요청
                                     </button>
                                     <button
                                         v-if="task?.status === 'in_review'"

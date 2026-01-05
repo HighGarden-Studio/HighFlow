@@ -332,7 +332,7 @@ const systemAPI = {
 interface DiscoveredRepo {
     path: string;
     name: string;
-    type: 'git' | 'claude-code' | 'codex' | 'antigravity';
+    type: 'git' | 'claude-code' | 'codex';
     lastModified: Date;
     description?: string;
     remoteUrl?: string;
@@ -367,18 +367,22 @@ const fsAPI = {
     // Select directory dialog
     selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('fs:selectDirectory'),
 
-    // Select file dialog
+    // Select file dialog (single)
     selectFile: (filters?: { name: string; extensions: string[] }[]): Promise<string | null> =>
         ipcRenderer.invoke('fs:selectFile', filters),
 
-    // Scan for local repositories (git, claude-code, codex, antigravity)
+    // Select multiple files dialog
+    selectMultipleFiles: (
+        filters?: { name: string; extensions: string[] }[]
+    ): Promise<string[] | null> => ipcRenderer.invoke('fs:selectMultipleFiles', filters),
+
+    // Scan for local repositories (git, claude-code, codex)
     scanRepositories: (options?: {
         searchPaths?: string[];
         maxDepth?: number;
         includeGit?: boolean;
         includeClaudeCode?: boolean;
         includeCodex?: boolean;
-        includeAntigravity?: boolean;
     }): Promise<DiscoveredRepo[]> => ipcRenderer.invoke('fs:scanRepositories', options),
 
     // Check directory for repository type
@@ -516,7 +520,7 @@ type SessionStatus = 'idle' | 'running' | 'waiting' | 'error' | 'closed';
 
 interface SessionInfo {
     id: string;
-    agentType: 'claude' | 'codex' | 'antigravity';
+    agentType: 'claude' | 'codex';
     status: SessionStatus;
     workingDirectory: string;
     createdAt: Date;
@@ -556,7 +560,7 @@ const localAgentsAPI = {
 
     // Create a new agent session
     createSession: (
-        agentType: 'claude' | 'codex' | 'antigravity',
+        agentType: 'claude' | 'codex',
         workingDirectory: string,
         sessionId?: string
     ): Promise<SessionInfo> =>

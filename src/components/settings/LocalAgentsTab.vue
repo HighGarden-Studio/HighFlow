@@ -60,20 +60,6 @@ const agents = reactive<LocalAgent[]>([
         isInstalled: false,
         isChecking: true,
     },
-    {
-        id: 'antigravity',
-        name: 'Antigravity',
-        description: '로컬 환경에서 동작하는 AI 코딩 에이전트. 다양한 AI 모델을 지원합니다.',
-        icon: '🚀',
-        gradient: 'bg-gradient-to-br from-purple-500 to-indigo-600',
-        command: 'antigravity',
-        installCommand: 'npm install -g antigravity',
-        website: 'https://antigravity.dev',
-        docsUrl: 'https://antigravity.dev/docs',
-        requiresApiKey: false,
-        isInstalled: false,
-        isChecking: true,
-    },
 ]);
 
 const selectedAgent = ref<LocalAgent | null>(null);

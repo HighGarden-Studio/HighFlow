@@ -1062,9 +1062,15 @@ async function handleStop(task: Task) {
     }
 }
 
-async function handleTaskRetry(task: Task) {
-    await taskStore.updateTask(task.projectId, task.projectSequence, { status: 'todo' });
-    await taskStore.executeTask(task.projectId, task.projectSequence);
+async function handleTaskRetry(task: Task, feedback?: string) {
+    console.log(
+        '[DAGView] Retrying task:',
+        task.projectId,
+        task.projectSequence,
+        'Feedback:',
+        feedback
+    );
+    await taskStore.retryTask(task.projectId, task.projectSequence, feedback);
 }
 
 /**
@@ -1625,6 +1631,7 @@ onMounted(async () => {
             :task="resultPreviewTask"
             :taskId="resultPreviewTask.id"
             @close="showResultPreview = false"
+            @retry="handleTaskRetry"
         />
 
         <!-- Execution Progress Modal -->

@@ -762,6 +762,65 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     /**
+     * Retry task with feedback and session preservation
+     */
+    async function retryTask(
+        idOrProjectId: number,
+        sequenceOrFeedback?: number | string,
+        maybeFeedback?: string
+    ): Promise<{ success: boolean; error?: string }> {
+        let projectId: number;
+        let sequence: number;
+        let feedback: string | undefined;
+
+        if (typeof sequenceOrFeedback === 'number') {
+            projectId = idOrProjectId;
+            sequence = sequenceOrFeedback;
+            feedback = maybeFeedback;
+        } else {
+            const id = idOrProjectId;
+            const t = tasks.value.find((t) => t.id === id);
+            if (!t) return { success: false, error: 'Task not found' };
+            projectId = t.projectId;
+            sequence = t.projectSequence;
+            feedback = sequenceOrFeedback as string | undefined;
+        }
+
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
+        if (!task) return { success: false, error: 'Task not found' };
+
+        // 1. Incorporate history and feedback into prompt if provided
+        if (feedback) {
+            // Get previous result to include in context
+            const previousResult =
+                (task as any).result ||
+                (task as any).executionResult?.content ||
+                (task as any).output?.result ||
+                '';
+
+            const historyContext = `\n\n---\n### Previous Result\n${previousResult}\n\n### User Feedback\n${feedback}\n\nplease try again based on this feedback.`;
+
+            const currentPrompt = (task as any).aiPrompt || task.description || task.title;
+            const newPrompt = currentPrompt + historyContext;
+
+            // Update local state first
+            await updateTask(projectId, sequence, {
+                // @ts-ignore - aiPrompt likely exists on task but type might be missing it explicitly in some versions
+                aiPrompt: newPrompt,
+                status: 'todo',
+            });
+        } else {
+            // Simple retry reset
+            await updateTask(projectId, sequence, { status: 'todo' });
+        }
+
+        // 2. Execute
+        return executeTask(projectId, sequence);
+    }
+
+    /**
      * Execute task - starts AI execution via IPC
      */
     async function executeTask(
@@ -2770,6 +2829,7 @@ export const useTaskStore = defineStore('tasks', () => {
         approveTask,
         rejectTask,
         completeReview,
+        retryTask,
         requestChanges,
         requestAdditionalWork,
         blockTask,
