@@ -13,6 +13,7 @@ import type {
     AIResponse,
     StreamChunk,
     AIMessage,
+    AiResult,
 } from '@core/types/ai';
 
 import { BACKEND_URL } from '../../../config';
@@ -455,11 +456,34 @@ export class DefaultHighFlowProvider extends GeminiProvider {
         const startTime = Date.now();
 
         return this.executeWithRetry(async () => {
-            const systemPrompt = config.systemPrompt
-                ? this.buildSystemPrompt(config, context)
+            // Sanitize tools in config for System Prompt consistency
+            // Sanitize tools in config for System Prompt consistency
+            const sanitizedConfig = { ...config };
+            const toolNameReplacements = new Map<string, string>();
+
+            if (config.tools) {
+                sanitizedConfig.tools = config.tools.map((t: any) => {
+                    const sanitizedName = t.name.replace(/-/g, '_');
+                    toolNameReplacements.set(t.name, sanitizedName);
+                    return {
+                        ...t,
+                        name: sanitizedName,
+                    };
+                });
+            }
+
+            let systemPrompt = config.systemPrompt
+                ? this.buildSystemPrompt(sanitizedConfig, context)
                 : undefined;
 
-            const toolDeclarations = this.mapTools(config.tools);
+            // Sanitize system prompt text if it exists
+            if (systemPrompt) {
+                for (const [original, sanitized] of toolNameReplacements) {
+                    systemPrompt = systemPrompt.split(original).join(sanitized);
+                }
+            }
+
+            const toolDeclarations = this.mapTools(sanitizedConfig.tools);
 
             // Build Gemini API format request
             const request: any = {
@@ -482,10 +506,15 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             }
 
             if (toolDeclarations) {
-                // Transform to snake_case for REST API
+                // Transform to snake_case for REST API and sanitize names
                 const sanitizedTools = toolDeclarations.map((td: any) => {
                     if (td.functionDeclarations) {
-                        return { function_declarations: td.functionDeclarations };
+                        return {
+                            function_declarations: td.functionDeclarations.map((fd: any) => ({
+                                ...fd,
+                                name: fd.name.replace(/-/g, '_'),
+                            })),
+                        };
                     }
                     return td;
                 });
@@ -502,6 +531,14 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             }
 
             // Call backend proxy
+            if (config.tools && config.tools.length > 0) {
+                console.log('[DefaultHighFlowProvider] Sending request with tools:', {
+                    toolCount: toolDeclarations?.length,
+                    toolConfig: request.tool_config,
+                    firstTool: request.tools?.[0]?.function_declarations?.[0]?.name,
+                });
+            }
+
             const result = await this.callBackendProxy(request, auth.token!);
 
             // Parse Gemini API response
@@ -510,6 +547,27 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             const textParts = parts.filter((part) => part.text).map((part) => part.text as string);
 
             const toolCalls = this.extractGeminiToolCalls(parts);
+
+            // Restore original tool names
+            if (toolCalls) {
+                const toolNameMap = new Map<string, string>();
+                if (toolDeclarations) {
+                    toolDeclarations.forEach((td: any) => {
+                        td.functionDeclarations?.forEach((fd: any) => {
+                            toolNameMap.set(fd.name.replace(/-/g, '_'), fd.name);
+                        });
+                    });
+                }
+
+                toolCalls.forEach((tc) => {
+                    if (tc.name) {
+                        const originalName = toolNameMap.get(tc.name);
+                        if (originalName) {
+                            tc.name = originalName;
+                        }
+                    }
+                });
+            }
             const finishReason =
                 toolCalls && toolCalls.length > 0
                     ? ('tool_calls' as const)
@@ -578,8 +636,43 @@ export class DefaultHighFlowProvider extends GeminiProvider {
         const startTime = Date.now();
 
         return this.executeWithRetry(async () => {
-            const { systemInstruction, contents } = this.buildGeminiConversation(messages, config);
-            const toolDeclarations = this.mapTools(config.tools);
+            // Sanitize tools in config for System Prompt consistency
+            // We need to ensure the System Prompt descriptions match the sanitized names we send to the API.
+            // Sanitize tools in config for System Prompt consistency
+            // We need to ensure the System Prompt descriptions match the sanitized names we send to the API.
+            const sanitizedConfig = { ...config };
+            const toolNameReplacements = new Map<string, string>();
+
+            if (config.tools) {
+                sanitizedConfig.tools = config.tools.map((t: any) => {
+                    const sanitizedName = t.name.replace(/-/g, '_');
+                    toolNameReplacements.set(t.name, sanitizedName);
+                    return {
+                        ...t,
+                        name: sanitizedName,
+                    };
+                });
+            }
+
+            // Also sanitize the system prompt within messages to ensure it references the sanitized tool names
+            const sanitizedMessages = messages.map((msg) => {
+                if (msg.role === 'system') {
+                    let content = msg.content;
+                    // Replace all known tool names in the system prompt
+                    for (const [original, sanitized] of toolNameReplacements) {
+                        // Use global replacement
+                        content = content.split(original).join(sanitized);
+                    }
+                    return { ...msg, content };
+                }
+                return msg;
+            });
+
+            const { systemInstruction, contents } = this.buildGeminiConversation(
+                sanitizedMessages,
+                sanitizedConfig
+            );
+            const toolDeclarations = this.mapTools(sanitizedConfig.tools);
 
             // Build Gemini API format request
             const request: any = {
@@ -597,14 +690,27 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             }
 
             if (toolDeclarations) {
-                // Transform to snake_case for REST API
+                // Transform to snake_case for REST API and sanitize names
                 const sanitizedTools = toolDeclarations.map((td: any) => {
                     if (td.functionDeclarations) {
-                        return { function_declarations: td.functionDeclarations };
+                        return {
+                            function_declarations: td.functionDeclarations.map((fd: any) => ({
+                                ...fd,
+                                name: fd.name.replace(/-/g, '_'),
+                            })),
+                        };
                     }
                     return td;
                 });
                 request.tools = sanitizedTools;
+
+                // Create reverse mapping for restoring tool names
+                const toolNameMap = new Map<string, string>();
+                toolDeclarations.forEach((td: any) => {
+                    td.functionDeclarations?.forEach((fd: any) => {
+                        toolNameMap.set(fd.name.replace(/-/g, '_'), fd.name);
+                    });
+                });
 
                 // When tools are present, we should set mode to ANY to force usage if applicable
                 if (config.tools && config.tools.length > 0) {
@@ -625,6 +731,27 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             const textParts = parts.filter((part) => part.text).map((part) => part.text as string);
 
             const toolCalls = this.extractGeminiToolCalls(parts);
+
+            // Restore original tool names
+            if (toolCalls) {
+                const toolNameMap = new Map<string, string>();
+                if (toolDeclarations) {
+                    toolDeclarations.forEach((td: any) => {
+                        td.functionDeclarations?.forEach((fd: any) => {
+                            toolNameMap.set(fd.name.replace(/-/g, '_'), fd.name);
+                        });
+                    });
+                }
+
+                toolCalls.forEach((tc) => {
+                    if (tc.name) {
+                        const originalName = toolNameMap.get(tc.name);
+                        if (originalName) {
+                            tc.name = originalName;
+                        }
+                    }
+                });
+            }
             const finishReason =
                 toolCalls && toolCalls.length > 0
                     ? ('tool_calls' as const)

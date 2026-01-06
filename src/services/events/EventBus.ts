@@ -316,6 +316,16 @@ export interface MCPResponseEvent extends BaseEvent {
     };
 }
 
+export interface MCPErrorEvent extends BaseEvent {
+    category: 'ai';
+    type: 'ai.mcp_error';
+    payload: {
+        mcpId: number;
+        error: string;
+        context?: string;
+    };
+}
+
 export interface CuratorStartedEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.curator_started';
@@ -440,6 +450,7 @@ export type AppEvent =
     | AIPromptGeneratedEvent
     | MCPRequestEvent
     | MCPResponseEvent
+    | MCPErrorEvent
     | CuratorStartedEvent
     | CuratorStepEvent
     | CuratorCompletedEvent

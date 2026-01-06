@@ -964,7 +964,7 @@ function persistExecutionSettings() {
     // Reset flag after save completes (use timeout to ensure task prop update happens first)
     setTimeout(() => {
         isSavingInternally.value = false;
-    }, 100);
+    }, 500);
 }
 
 // function createKeyValuePair removed
@@ -1082,6 +1082,7 @@ function handleSave() {
         scriptLanguage: scriptLanguage.value,
     };
 
+    console.log('[TaskDetailPanel] Saving task manually:', updatedTask);
     emit('save', updatedTask as Task);
 }
 
@@ -2108,7 +2109,7 @@ async function handleOpenFile(filePath: string) {
                                         <label
                                             class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
                                         >
-                                            {{ t('task.input.mode') }}
+                                            {{ t('task.input.mode_label') }}
                                         </label>
                                         <div class="flex gap-2">
                                             <button

@@ -196,6 +196,7 @@
         }
     },
     "task": {
+        "retry": "재시도",
         "status": {
             "todo": "대기중",
             "in_progress": "진행중",
@@ -311,7 +312,7 @@
         "input": {
             "settings_title": "Input Task 설정",
             "source_type": "입력 소스 유형",
-            "mode": "입력 모드",
+            "mode_label": "입력 모드",
             "message_label": "요청 메시지",
             "message_placeholder": "사용자에게 보여질 메시지",
             "placeholder_label": "Placeholder (선택)",

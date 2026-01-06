@@ -334,6 +334,23 @@ export abstract class BaseAIProvider {
                 context.mcpTools.forEach((mcp) => {
                     systemPrompt += `- ${mcp.name}: ${mcp.description}\n`;
                 });
+
+                // Add specific guidance for Rovo/Atlassian tools
+                const hasAtlassianTools = context.mcpTools.some((tool) =>
+                    tool.name.includes('atlassian')
+                );
+                if (hasAtlassianTools) {
+                    systemPrompt += `
+### Tool Usage Guidelines for Atlassian/Rovo
+- **CRITICAL FOR "RECENT" or "DATE" QUERIES**: You MUST use 'atlassian-rovo_searchJiraIssuesUsingJql' or 'atlassian-rovo_searchConfluenceUsingCql' IMMEDIATELY.
+    - ❌ DO NOT use 'atlassian-rovo_search' for dates (it ignores them).
+    - ❌ DO NOT use 'atlassian-rovo_getPagesInConfluenceSpace' (it returns old/stale pages).
+    - ❌ DO NOT use 'atlassian-rovo_getConfluenceSpaces' (it is for structure, not content).
+- **JQL Example** (Last 7 days): "project = AD AND updated >= -7d ORDER BY updated DESC"
+- **CQL Example** (Last 7 days): "space = AD AND lastModified >= now('-7d') ORDER BY lastModified DESC"
+- Trust the search results. If search returns nothing, report "No recent updates found" rather than crawling the hierarchy.
+`;
+                }
             }
 
             if (context.previousExecutions && context.previousExecutions.length > 0) {

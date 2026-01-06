@@ -426,19 +426,17 @@ export const useTaskStore = defineStore('tasks', () => {
         idOrProjectId: number,
         dataOrSequence: Partial<Task> | number,
         maybeDataOrDescription?: Partial<Task> | string,
-        maybeDescription?: string
+        _maybeDescription?: string
     ): Promise<Task | null> {
         let projectId: number;
         let sequence: number;
         let data: Partial<Task>;
-        let description: string | undefined;
 
         if (typeof dataOrSequence === 'number') {
             // (projectId, sequence, data, description?)
             projectId = idOrProjectId;
             sequence = dataOrSequence;
             data = maybeDataOrDescription as Partial<Task>;
-            description = maybeDescription;
         } else {
             // (id, data, description?)
             const id = idOrProjectId;
@@ -451,7 +449,6 @@ export const useTaskStore = defineStore('tasks', () => {
             projectId = t.projectId;
             sequence = t.projectSequence;
             data = dataOrSequence;
-            description = maybeDataOrDescription as string | undefined;
         }
 
         const previousTask = tasks.value.find(
@@ -624,7 +621,7 @@ export const useTaskStore = defineStore('tasks', () => {
                   blockedReason?: string;
               }
             | TaskStatus,
-        maybeOptions?: {
+        _maybeOptions?: {
             approvalResponse?: string;
             refinementPrompt?: string;
             additionalWorkPrompt?: string;
@@ -634,14 +631,12 @@ export const useTaskStore = defineStore('tasks', () => {
         let projectId: number;
         let sequence: number;
         let newStatus: TaskStatus;
-        let options: any;
 
         if (typeof newStatusOrSequence === 'number') {
             // (projectId, sequence, newStatus, options)
             projectId = idOrProjectId;
             sequence = newStatusOrSequence;
             newStatus = optionsOrNewStatus as TaskStatus;
-            options = maybeOptions;
         } else {
             // (id, newStatus, options)
             const id = idOrProjectId;
@@ -651,7 +646,6 @@ export const useTaskStore = defineStore('tasks', () => {
             projectId = t.projectId;
             sequence = t.projectSequence;
             newStatus = newStatusOrSequence as TaskStatus;
-            options = optionsOrNewStatus;
         }
 
         const task = tasks.value.find(

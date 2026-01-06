@@ -456,7 +456,6 @@ export class MCPManager {
             eventBus.emit<MCPRequestEvent>(
                 'ai.mcp_request',
                 {
-                    taskId: options.taskId,
                     projectId: options.projectId,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
@@ -486,7 +485,6 @@ export class MCPManager {
 
             this.emitMCPResponse(
                 {
-                    taskId: options.taskId,
                     projectId: options.projectId,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
@@ -533,7 +531,6 @@ export class MCPManager {
                 );
                 this.emitMCPResponse(
                     {
-                        taskId: options.taskId,
                         projectId: options.projectId,
                         taskTitle: options.taskTitle,
                         projectName: options.projectName,
@@ -552,7 +549,6 @@ export class MCPManager {
 
             this.emitMCPResponse(
                 {
-                    taskId: options.taskId,
                     projectId: options.projectId,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
@@ -824,6 +820,25 @@ export class MCPManager {
             ...overrideEnv,
             ...envFromOverrideConfig,
         };
+
+        // Sanitize all environment variables (trim, remove non-ASCII) to prevent spawn errors
+        for (const key of Object.keys(transportEnv)) {
+            const value = transportEnv[key];
+            if (typeof value === 'string') {
+                // Remove non-printable characters and trim
+                transportEnv[key] = value.replace(/[^\x20-\x7E]/g, '').trim();
+            }
+        }
+
+        // Trace Slack Token
+        if (transportEnv.SLACK_BOT_TOKEN) {
+            const token = transportEnv.SLACK_BOT_TOKEN;
+            console.log(
+                `[MCPManager] Slack Token Check - Length: ${token.length}, StartsWith: ${token.substring(0, 5)}..., ValidChars: ${/^[a-zA-Z0-9-]+$/.test(token)}`
+            );
+        } else {
+            console.log('[MCPManager] Slack Token Check - MISSING in transportEnv');
+        }
 
         if (runtimeConfig?.command) {
             console.log(`[MCPManager Debug] Starting MCP #${mcpId} with custom command:`, {

@@ -2253,8 +2253,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             projectId,
                             projectSequence
                         );
+
+                        // Check for 429/Quota errors to force BLOCKED status
+                        const isRateLimit =
+                            shortError.includes('429') ||
+                            shortError.includes('Quota') ||
+                            shortError.includes('limit') ||
+                            shortError.includes('한도');
+
+                        const failureStatus = isRateLimit
+                            ? 'blocked'
+                            : hasDependents
+                              ? 'blocked'
+                              : 'failed';
+
                         await taskRepository.updateByKey(projectId, projectSequence, {
-                            status: hasDependents ? 'blocked' : 'failed',
+                            status: failureStatus,
                         });
 
                         const win = getMainWindow();
@@ -2262,7 +2276,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             win.webContents.send('task:status-changed', {
                                 projectId,
                                 projectSequence,
-                                status: 'in_review',
+                                status: failureStatus,
                             });
                             win.webContents.send('taskExecution:failed', {
                                 projectId: task.projectId,
@@ -2291,15 +2305,30 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         projectId,
                         projectSequence
                     );
+
+                    const errorMsgForStatus =
+                        error instanceof Error ? error.message : String(error);
+                    const isRateLimit =
+                        errorMsgForStatus.includes('429') ||
+                        errorMsgForStatus.includes('Quota') ||
+                        errorMsgForStatus.includes('limit') ||
+                        errorMsgForStatus.includes('한도');
+
+                    const failureStatus = isRateLimit
+                        ? 'blocked'
+                        : hasDependents
+                          ? 'blocked'
+                          : 'failed';
+
                     await taskRepository
                         .updateByKey(projectId, projectSequence, {
-                            status: hasDependents ? 'blocked' : 'failed',
+                            status: failureStatus,
                         })
                         .catch(() => {});
                     getMainWindow()?.webContents.send('task:status-changed', {
                         projectId,
                         projectSequence,
-                        status: 'failed',
+                        status: failureStatus,
                     });
                     getMainWindow()?.webContents.send('taskExecution:failed', {
                         projectId: task.projectId,
@@ -2330,15 +2359,29 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     projectId,
                     projectSequence
                 );
+
+                const errorMsgForStatus = error instanceof Error ? error.message : String(error);
+                const isRateLimit =
+                    errorMsgForStatus.includes('429') ||
+                    errorMsgForStatus.includes('Quota') ||
+                    errorMsgForStatus.includes('limit') ||
+                    errorMsgForStatus.includes('한도');
+
+                const failureStatus = isRateLimit
+                    ? 'blocked'
+                    : hasDependents
+                      ? 'blocked'
+                      : 'failed';
+
                 await taskRepository
                     .updateByKey(projectId, projectSequence, {
-                        status: hasDependents ? 'blocked' : 'failed',
+                        status: failureStatus,
                     })
                     .catch(() => {});
                 getMainWindow()?.webContents.send('task:status-changed', {
                     projectId,
                     projectSequence,
-                    status: 'failed',
+                    status: failureStatus,
                 });
                 getMainWindow()?.webContents.send('taskExecution:failed', {
                     projectId: task.projectId,

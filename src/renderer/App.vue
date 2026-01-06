@@ -21,6 +21,8 @@ import { indexManager } from '../services/search/IndexManager';
 import { useActivityLogStore } from './stores/activityLogStore';
 import { versionAPI } from './api/version';
 import type { VersionInfo } from './api/version';
+import { eventBus } from '../services/events/EventBus';
+import type { MCPErrorEvent } from '../services/events/EventBus';
 
 const router = useRouter();
 const route = useRoute();
@@ -204,16 +206,16 @@ const contentPaddingBottom = computed(() => {
 async function handleLogin() {
     const success = await userStore.login();
     if (success) {
-        uiStore.showToast('Login successful!', 'success');
+        uiStore.showToast({ message: 'Login successful!', type: 'success' });
     } else {
-        uiStore.showToast(userStore.error || 'Login failed', 'error');
+        uiStore.showToast({ message: userStore.error || 'Login failed', type: 'error' });
     }
 }
 
 async function handleLogout() {
     if (confirm(t('auth.logout_confirm'))) {
         await userStore.logout();
-        uiStore.showToast(t('auth.logout'), 'info');
+        uiStore.showToast({ message: t('auth.logout'), type: 'info' });
     }
 }
 
@@ -288,7 +290,7 @@ onMounted(async () => {
     if (window.electron?.app?.onNotification) {
         const cleanup = window.electron.app.onNotification((data: any) => {
             console.log('[App] Received notification:', data);
-            uiStore.showToast(data.message, data.type || 'info');
+            uiStore.showToast({ message: data.message, type: data.type || 'info' });
         });
 
         // Clean up on unmount
@@ -296,6 +298,15 @@ onMounted(async () => {
             cleanup();
         });
     }
+
+    // Listen for MCP errors
+    eventBus.on<MCPErrorEvent>('ai.mcp_error', (event) => {
+        uiStore.showToast({
+            message: `MCP Error: ${event.payload.error}`,
+            type: 'error',
+            duration: 7000,
+        });
+    });
 });
 
 onUnmounted(() => {

@@ -38,6 +38,9 @@ export class ClaudeProvider extends BaseAIProvider {
     /**
      * Fetch available models from Anthropic API
      */
+    /**
+     * Fetch available models from Anthropic API
+     */
     async fetchModels(): Promise<ModelInfo[]> {
         try {
             if (!this.injectedApiKey) {
@@ -47,48 +50,38 @@ export class ClaudeProvider extends BaseAIProvider {
                 return await providerModelsRepository.getModels('anthropic');
             }
 
-            // Anthropic models API endpoint
-            const response = await fetch('https://api.anthropic.com/v1/models', {
-                headers: {
-                    'x-api-key': this.injectedApiKey || '',
-                    'anthropic-version': '2023-06-01',
-                    'content-type': 'application/json',
-                },
-            });
+            const client = this.getClient();
+            const models: ModelInfo[] = [];
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch models: ${response.status}`);
+            // Use SDK to list models with auto-pagination
+            for await (const model of client.models.list()) {
+                models.push({
+                    name: model.id,
+                    provider: 'anthropic',
+                    displayName: model.display_name || model.id,
+                    contextWindow: 200000, // Default fallback, as API might not return this yet
+                    maxOutputTokens: 8192, // Default updated for Sonnet 3.5
+                    costPerInputToken: 0, // Costs would need a separate map or manual update
+                    costPerOutputToken: 0,
+                    averageLatency: 1000,
+                    features: ['streaming', 'system_prompt', 'vision', 'function_calling'],
+                    bestFor: [],
+                });
             }
 
-            const data = await response.json();
-            const models = (data.data || []).map((m: any) => {
-                return {
-                    name: m.id,
-                    provider: 'anthropic' as const,
-                    displayName: m.display_name || m.id,
-                    contextWindow: 200000,
-                    maxOutputTokens: 4096,
-                    costPerInputToken: 0,
-                    costPerOutputToken: 0,
-                    averageLatency: 1500,
-                    features: ['streaming'] as AIFeature[],
-                    bestFor: [],
-                };
-            });
-
             // Save to DB cache
-            const { providerModelsRepository: repo1 } =
+            const { providerModelsRepository } =
                 await import('../../../../electron/main/database/repositories/provider-models-repository');
-            await repo1.saveModels('anthropic', models);
+            await providerModelsRepository.saveModels('anthropic', models);
             console.log(`[ClaudeProvider] Saved ${models.length} models to DB cache`);
 
             return models;
         } catch (error) {
             console.error('[ClaudeProvider] Failed to fetch models from API:', error);
             // Fallback to DB cache
-            const { providerModelsRepository: repo2 } =
+            const { providerModelsRepository } =
                 await import('../../../../electron/main/database/repositories/provider-models-repository');
-            const cachedModels = await repo2.getModels('anthropic');
+            const cachedModels = await providerModelsRepository.getModels('anthropic');
             if (cachedModels.length > 0) {
                 console.log('[ClaudeProvider] Using cached models from DB');
                 return cachedModels;

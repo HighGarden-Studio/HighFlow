@@ -61,11 +61,28 @@ const routes: RouteRecordRaw[] = [
     },
     {
         path: '/marketplace',
-        name: 'marketplace',
-        component: () => import('../views/MarketplaceView.vue'),
-        meta: {
-            title: 'Marketplace',
-        },
+        component: () => import('../../layouts/MarketplaceLayout.vue'),
+        children: [
+            {
+                path: '',
+                name: 'marketplace-home',
+                component: () => import('../views/marketplace/MarketplaceHomeView.vue'),
+                meta: { title: 'Marketplace' },
+            },
+            {
+                path: 'item/:id',
+                name: 'marketplace-item-detail',
+                component: () => import('../views/marketplace/MarketplaceItemDetailView.vue'),
+                props: true,
+                meta: { title: 'Item Details' },
+            },
+            {
+                path: 'library',
+                name: 'marketplace-library',
+                component: () => import('../views/marketplace/MarketplaceLibraryView.vue'),
+                meta: { title: 'My Library' },
+            },
+        ],
     },
     {
         path: '/settings',

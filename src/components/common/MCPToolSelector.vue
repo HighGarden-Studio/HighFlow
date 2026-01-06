@@ -120,8 +120,8 @@ function mapToPairs(source?: Record<string, string>): KeyValuePair[] {
 
 function pairsToRecord(pairs: KeyValuePair[]): Record<string, string> {
     return pairs.reduce<Record<string, string>>((acc, pair) => {
-        if (pair.key && pair.value) {
-            acc[pair.key] = pair.value;
+        if (pair.key) {
+            acc[pair.key] = pair.value || '';
         }
         return acc;
     }, {});
@@ -191,9 +191,8 @@ function buildConfigPayload(): MCPConfig | null {
         if (Object.keys(params).length > 0) configEntry.params = params;
         if (notes) configEntry.context = { notes };
 
-        if (Object.keys(configEntry).length > 0) {
-            payload[serverId] = configEntry;
-        }
+        // Always include if selected, even if empty
+        payload[serverId] = configEntry;
     }
     return Object.keys(payload).length > 0 ? payload : null;
 }
@@ -268,8 +267,13 @@ watch(
     () => props.selectedIds,
     () => {
         props.selectedIds.forEach((id) => ensureConfigEntry(id));
-        emitChanges();
-    }
+        // We do NOT emit change here immediately to avoid overwrite on load
+        // But the deep watcher on localConfigForm will trigger if ensureConfigEntry modified something
+        // that wasn't there.
+        // If we just loaded, localConfigForm might be empty, ensureConfigEntry fills it.
+        // deep watcher fires -> emits config. This is desired (populates default).
+    },
+    { immediate: true }
 );
 
 // Watch deep changes in form to emit config

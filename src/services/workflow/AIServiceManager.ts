@@ -124,7 +124,7 @@ export class AIServiceManager {
     private enabledProviders: EnabledProviderInfo[] = []; // 연동된 Provider 목록
     private runtimeMCPServers: MCPServerRuntimeConfig[] = [];
     private mcpManager: MCPManager | null = null;
-    private static readonly MAX_TOOL_ITERATIONS = 5;
+    private static readonly MAX_TOOL_ITERATIONS = 10;
     private static readonly TOOL_RESULT_CHAR_LIMIT = 6000;
     private autoDetectMCPsEnabled = false;
     private static instance: AIServiceManager;
@@ -383,20 +383,43 @@ export class AIServiceManager {
 
         if (projectMcpConfig) {
             // Merge logic: Project Config acts as a base, Task Config overrides it.
-            // However, we only care about keys that are relevant to this task (though merging all is safe).
-            effectiveMcpConfig = {
-                ...projectMcpConfig,
-                ...effectiveMcpConfig,
-            };
+            // We need a DEEP MERGE for 'env' and 'config' to prevent task settings (e.g. just enabled: true)
+            // from wiping out project-level env vars.
+            const mergedConfig: MCPConfig = { ...projectMcpConfig };
 
-            // Deep merge for nested objects if necessary (e.g. env vars)?
-            // For now, simple spread merges the Server Config Entry level.
-            // If task defines 'slack', it completely overwrites project 'slack'.
-            // To allow partial inheritance (e.g. update one env var but keep others), we'd need deep merge.
-            // User request implies: "If AI task enables MCP, it inherits project settings".
-            // So if task has NO config for 'slack' but enables 'slack', it should use Project 'slack'.
-            // If task HAS config for 'slack', it uses Task 'slack'.
-            // So shallow merge at the Server ID level is correct per requirement.
+            Object.entries(effectiveMcpConfig).forEach(([key, taskEntry]) => {
+                const projectEntry = mergedConfig[key];
+                if (!projectEntry) {
+                    // No project config for this MCP, just use task config
+                    mergedConfig[key] = taskEntry;
+                } else if (!taskEntry) {
+                    // Should be covered by initial spread, but for safety
+                    mergedConfig[key] = projectEntry;
+                } else {
+                    // Both exist, merge deep
+                    mergedConfig[key] = {
+                        ...projectEntry,
+                        ...taskEntry,
+                        // Deep merge env
+                        env: {
+                            ...(projectEntry.env || {}),
+                            ...(taskEntry.env || {}),
+                        },
+                        // Deep merge config (settings)
+                        config: {
+                            ...(projectEntry.config || {}),
+                            ...(taskEntry.config || {}),
+                        },
+                    };
+                }
+            });
+            effectiveMcpConfig = mergedConfig;
+        }
+
+        // Apply the merged config back to the task object so downstream helpers
+        // (like extractSlackHistoryHints, getTaskMCPConfigEntry) use the correct env vars.
+        if (effectiveMcpConfig !== task.mcpConfig) {
+            task.mcpConfig = effectiveMcpConfig;
         }
 
         const hasTaskOverrides = Boolean(
@@ -408,7 +431,7 @@ export class AIServiceManager {
 
         try {
             // Determine provider and model
-            const provider = this.resolveProvider(task.aiProvider as AIProvider | null);
+            const provider = this.resolveProvider(task.aiProvider as AIProvider | null, context);
 
             // If we fell back to a different provider, we must reset the model to the new provider's default
             // to avoid sending an incompatible model (e.g. Claude) to the fallback provider (e.g. OpenAI).
@@ -416,7 +439,8 @@ export class AIServiceManager {
             const shouldUseRequestedModel = task.aiProvider === provider;
             const model = this.resolveModel(
                 provider,
-                shouldUseRequestedModel ? (task.aiModel as AIModel | null) : null
+                shouldUseRequestedModel ? (task.aiModel as AIModel | null) : null,
+                context
             );
             const explicitMCPs = this.normalizeExplicitRequiredMCPs(task.requiredMCPs);
             const shouldAutoDetect = this.autoDetectMCPsEnabled && explicitMCPs.length === 0;
@@ -1464,7 +1488,7 @@ export class AIServiceManager {
 
         // Valid image models for each provider
         const validImageModels = AIServiceManager.IMAGE_MODELS;
-        const models = validImageModels[provider] || [];
+        // const models = validImageModels[provider] || [];
 
         // Check if preferred model is actually a valid image model
         if (preferredModel && validImageModels[provider]?.includes(preferredModel)) {
@@ -1697,10 +1721,13 @@ export class AIServiceManager {
     // Private Helper Methods
     // ========================================
 
-    private resolveProvider(taskProvider: AIProvider | null): AIProvider {
+    private resolveProvider(
+        taskProvider: AIProvider | null,
+        context?: ExecutionContext
+    ): AIProvider {
         const enabledProviderIds = this.getEnabledProviderIds();
 
-        // 1. taskProvider가 연동된 목록에 있는지 확인
+        // 1. Check Task-level Provider
         if (
             taskProvider &&
             enabledProviderIds.includes(taskProvider) &&
@@ -1709,23 +1736,49 @@ export class AIServiceManager {
             return taskProvider;
         }
 
-        // 2. taskProvider가 연동 목록에 없으면 첫 번째 연동된 Provider 사용
+        // 2. Check Project-level Provider (Inheritance)
+        const projectProvider = context?.metadata?.project?.aiProvider as AIProvider | undefined;
+        if (
+            projectProvider &&
+            enabledProviderIds.includes(projectProvider) &&
+            this.providerFactory.isProviderAvailable(projectProvider)
+        ) {
+            return projectProvider;
+        }
+
+        // 3. Fallback to First Available Provider
         for (const providerId of enabledProviderIds) {
             if (this.providerFactory.isProviderAvailable(providerId)) {
                 return providerId;
             }
         }
 
-        // 3. Fallback to anthropic (기본값)
+        // 4. Ultimate Fallback
         return 'anthropic';
     }
 
-    private resolveModel(provider: AIProvider, taskModel: AIModel | null): AIModel {
-        if (taskModel) {
+    private resolveModel(
+        provider: AIProvider,
+        taskModel: AIModel | null,
+        context?: ExecutionContext
+    ): AIModel {
+        // Inheritance: Task > Project
+        let candidateModel = taskModel;
+
+        if (!candidateModel && context?.metadata?.project?.aiModel) {
+            // Use project model if task model is not specified (or forced null due to provider mismatch check)
+            // Note: If provider changed (mismatched), reusing project model might be risky if Project Provider != Current Provider
+            // But typically if we are here, Current Provider == Project Provider (via resolveProvider inheritance).
+            // If Current Provider != Project Provider, then 'project.aiModel' is likely incompatible.
+            // Check compatibility before using it.
+            candidateModel = context.metadata.project.aiModel as AIModel;
+        }
+
+        if (candidateModel) {
             // Check for obvious mismatches (heuristic)
-            const isClaude = taskModel.includes('claude');
-            const isGPT = taskModel.includes('gpt') || taskModel.includes('o1-');
-            const isGemini = taskModel.includes('gemini');
+            const isClaude = candidateModel.includes('claude');
+            const isGPT = candidateModel.includes('gpt') || candidateModel.includes('o1-');
+            const isGemini = candidateModel.includes('gemini');
 
             let isValid = true;
             if (provider === 'openai' && (isClaude || isGemini)) isValid = false;
@@ -1733,10 +1786,10 @@ export class AIServiceManager {
             if (provider === 'google' && (isClaude || isGPT)) isValid = false;
 
             if (isValid) {
-                return taskModel;
+                return candidateModel;
             } else {
                 console.warn(
-                    `[AIServiceManager] Model mismatch detected: ${taskModel} is not valid for ${provider}. Using default.`
+                    `[AIServiceManager] Model mismatch detected: ${candidateModel} is not valid for ${provider}. Using default.`
                 );
             }
         }

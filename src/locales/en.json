@@ -191,6 +191,7 @@
         }
     },
     "task": {
+        "retry": "Retry",
         "status": {
             "todo": "To Do",
             "in_progress": "In Progress",
@@ -306,7 +307,7 @@
         "input": {
             "settings_title": "Input Task Settings",
             "source_type": "Data Source Type",
-            "mode": "Input Mode",
+            "mode_label": "Input Mode",
             "message_label": "Request Message",
             "message_placeholder": "Message to show to user",
             "placeholder_label": "Placeholder (Optional)",

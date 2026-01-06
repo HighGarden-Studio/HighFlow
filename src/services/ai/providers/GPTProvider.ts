@@ -22,6 +22,8 @@ import type {
 } from '@core/types/ai';
 import { detectTextSubType } from '../utils/aiResultUtils';
 
+import { getOpenAIAdapter } from './openai/OpenAIModelAdapter';
+
 export class GPTProvider extends BaseAIProvider {
     readonly name: AIProvider = 'openai';
 
@@ -129,22 +131,24 @@ export class GPTProvider extends BaseAIProvider {
         const startTime = Date.now();
         const client = this.getClient();
 
+        // 1. Get Adapter
+        const adapter = getOpenAIAdapter(config.model);
+
         return this.executeWithRetry(async () => {
-            const convertedMessages = this.buildChatMessages(messages);
-            const response = await client.chat.completions.create({
-                model: config.model,
-                messages: convertedMessages,
-                tools: this.mapTools(config.tools),
-                tool_choice: config.toolChoice === 'none' ? undefined : config.toolChoice,
-                max_tokens: config.maxTokens || 4096,
-                temperature: config.temperature,
-                top_p: config.topP,
-                frequency_penalty: config.frequencyPenalty,
-                presence_penalty: config.presencePenalty,
-                stop: config.stopSequences,
-                response_format:
-                    config.responseFormat === 'json' ? { type: 'json_object' } : undefined,
-            });
+            // 2. Build Base Messages (Provider Logic)
+            const baseMessages = this.buildChatMessages(messages);
+
+            // 3. Adapt Messages (Adapter Logic)
+            const adaptedMessages = adapter.adaptMessages(
+                baseMessages as any
+            ) as OpenAI.Chat.ChatCompletionMessageParam[];
+
+            // 4. Adapt Request (Adapter Logic)
+            const requestPayload = adapter.adaptRequest(config, adaptedMessages);
+
+            const response = (await client.chat.completions.create(
+                requestPayload
+            )) as OpenAI.Chat.Completions.ChatCompletion;
 
             const choice = response.choices[0];
             const toolCalls = this.parseToolCalls(choice?.message?.tool_calls);
@@ -186,31 +190,41 @@ export class GPTProvider extends BaseAIProvider {
     async generateText(
         messages: AIMessage[],
         config: AIConfig,
-        context?: ExecutionContext
+        _context?: ExecutionContext
     ): Promise<AiResult> {
         this.validateConfig(config);
 
         const client = this.getClient();
-        const convertedMessages = this.buildChatMessages(messages);
 
-        let response;
+        // 1. Get Adapter
+        const adapter = getOpenAIAdapter(config.model);
+
+        // 2. Build Base Messages
+        const baseMessages = this.buildChatMessages(messages);
+
+        // 3. Adapt Messages
+        const adaptedMessages = adapter.adaptMessages(
+            baseMessages as any
+        ) as OpenAI.Chat.ChatCompletionMessageParam[];
+
+        // 4. Adapt Request
+        // Force json format for generateText if not already handled by logic
+        // But adapter might handle it if config has responseFormat='json'.
+        // Original logic forced it here:
+        const configForJson = { ...config, responseFormat: 'json' as const };
+        const requestPayload = adapter.adaptRequest(configForJson, adaptedMessages);
+
+        let response: OpenAI.Chat.Completions.ChatCompletion;
         try {
-            response = await client.chat.completions.create({
-                model: config.model,
-                messages: convertedMessages,
-                temperature: config.temperature,
-                top_p: config.topP,
-                frequency_penalty: config.frequencyPenalty,
-                presence_penalty: config.presencePenalty,
-                max_tokens: config.maxTokens || 4096,
-                response_format: { type: 'json_object' },
-            });
+            response = (await client.chat.completions.create(
+                requestPayload
+            )) as OpenAI.Chat.Completions.ChatCompletion;
         } catch (error: any) {
             console.error('[GPTProvider] API Error:', error);
             // Enhance error message with details if available from OpenAI library
             const status = error.status || error.statusCode;
             const code = error.code;
-            const type = error.type;
+
             const message = error.message;
 
             let detailedMessage = `OpenAI API Error: ${message}`;
@@ -377,7 +391,12 @@ export class GPTProvider extends BaseAIProvider {
         const startTime = Date.now();
         const client = this.getClient();
 
+        // 1. Get Adapter
+        const adapter = getOpenAIAdapter(config.model);
+
         return this.executeWithRetry(async () => {
+            // System prompt Construction still happens here conceptually for 'execute'
+            // because 'execute' takes a single string prompt.
             const systemPrompt = this.buildSystemPrompt(config, context);
 
             const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
@@ -394,18 +413,18 @@ export class GPTProvider extends BaseAIProvider {
                 content: prompt,
             });
 
-            const response = await client.chat.completions.create({
-                model: config.model,
-                messages,
-                max_tokens: config.maxTokens || 4096,
-                temperature: config.temperature,
-                top_p: config.topP,
-                frequency_penalty: config.frequencyPenalty,
-                presence_penalty: config.presencePenalty,
-                stop: config.stopSequences,
-                response_format:
-                    config.responseFormat === 'json' ? { type: 'json_object' } : undefined,
-            });
+            // 2. Adapt Messages
+            // Note: Adapter might change 'system' to 'developer'
+            const adaptedMessages = adapter.adaptMessages(
+                messages as any
+            ) as OpenAI.Chat.ChatCompletionMessageParam[];
+
+            // 3. Adapt Request
+            const requestPayload = adapter.adaptRequest(config, adaptedMessages);
+
+            const response = (await client.chat.completions.create(
+                requestPayload
+            )) as OpenAI.Chat.Completions.ChatCompletion;
 
             const duration = Date.now() - startTime;
             const tokensUsed = {
@@ -456,6 +475,7 @@ export class GPTProvider extends BaseAIProvider {
         this.validateConfig(config);
 
         const client = this.getClient();
+        const adapter = getOpenAIAdapter(config.model);
 
         // Handle input as messages or text
         let messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
@@ -478,16 +498,28 @@ export class GPTProvider extends BaseAIProvider {
             });
         }
 
-        let stream;
+        // Adapt Messages and Request
+        const adaptedMessages = adapter.adaptMessages(
+            messages as any
+        ) as OpenAI.Chat.ChatCompletionMessageParam[];
+        // NOTE: O1 beta often doesn't support streaming. Adapter (or request builder) should perhaps enforce stream: false?
+        // But the user requested generic adapter support. If config says stream=true, we try.
+        // Some adapters might override stream to false if model doesn't support it.
+        // For now, allow adapter to adapt request.
+
+        // Small caveat: streamExecute implies streaming.
+        // If Model (e.g. o1-preview) doesn't support streaming, we might need to fallback to non-streaming and yield all at once?
+        // Let's assume for now adapter just configures params, and if API errors, it's on the user/model.
+        // OR the adapter could throw if streaming is requested but not supported.
+
+        const requestPayload = adapter.adaptRequest({ ...config }, adaptedMessages);
+        (requestPayload as any).stream = true;
+
+        let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
         try {
-            stream = await client.chat.completions.create({
-                model: config.model,
-                messages,
-                max_tokens: config.maxTokens || 4096,
-                temperature: config.temperature,
-                top_p: config.topP,
-                stream: true,
-            });
+            stream = (await client.chat.completions.create(
+                requestPayload
+            )) as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
         } catch (error: any) {
             console.error('[GPTProvider] Stream API Error:', error);
             const status = error.status || error.statusCode;
@@ -680,18 +712,6 @@ export class GPTProvider extends BaseAIProvider {
                 content: message.content,
             };
         });
-    }
-
-    private mapTools(tools?: AIConfig['tools']) {
-        if (!tools || tools.length === 0) return undefined;
-        return tools.map((tool) => ({
-            type: 'function' as const,
-            function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-            },
-        }));
     }
 
     private parseToolCalls(

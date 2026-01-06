@@ -48,7 +48,7 @@
         "release": "pnpm build && electron-builder --publish always"
     },
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.18.0",
+        "@anthropic-ai/sdk": "^0.26.0",
         "@google/genai": "^1.31.0",
         "@iconify/vue": "^5.0.0",
         "@mistralai/mistralai": "^1.11.0",

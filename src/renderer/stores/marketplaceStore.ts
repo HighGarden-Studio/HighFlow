@@ -1,352 +1,197 @@
-/**
- * Marketplace Store - Pinia State Management
- */
-
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { marketplaceAPI } from '../api/marketplace';
-import type {
-    MarketplaceItem,
-    MarketplaceItemDetail,
-    MarketplaceFilters,
-    ReviewsResponse,
-    ReviewSubmission,
-    PurchaseResponse,
-    MarketplaceSubmission,
-    ItemType,
-    MarketplaceCategory,
-} from '@core/types/marketplace';
-import { isCompatible } from '../../utils/versionCompat';
+import type { AIProvider } from '../../core/types/ai';
+
+export type MarketplaceItemType = 'project' | 'operator' | 'script_template';
+
+export interface MarketplaceAuthor {
+    id: string;
+    name: string;
+    avatarUrl?: string;
+    isVerified: boolean;
+}
+
+export interface MarketplaceItemStats {
+    installCount: number;
+    viewCount: number;
+    rating: number;
+    reviewCount: number;
+}
+
+export interface MarketplaceItem {
+    id: string;
+    type: MarketplaceItemType;
+    name: string;
+    summary: string;
+    description: string;
+    author: MarketplaceAuthor;
+    price: number;
+    currency: 'credit';
+    stats: MarketplaceItemStats;
+    version: string;
+    lastUpdated: string;
+    iconUrl?: string;
+    previewImages: string[];
+    tags: string[];
+    categories: string[];
+    // Optional workflow preview
+    previewGraph?: {
+        nodes: any[];
+        edges: any[];
+    };
+    isOwned: boolean;
+}
 
 export const useMarketplaceStore = defineStore('marketplace', () => {
     // State
     const items = ref<MarketplaceItem[]>([]);
-    const selectedItem = ref<MarketplaceItemDetail | null>(null);
-    const reviews = ref<ReviewsResponse | null>(null);
-    const purchasedItems = ref<Set<string>>(new Set());
-
-    // Filters
-    const filters = ref<MarketplaceFilters>({
-        search: '',
-        category: undefined,
-        itemType: undefined,
-        limit: 50,
-        offset: 0,
-    });
-
-    // Loading states
+    const currentItem = ref<MarketplaceItem | null>(null);
     const loading = ref(false);
-    const loadingDetails = ref(false);
-    const loadingReviews = ref(false);
-    const purchasing = ref(false);
-    const submittingReview = ref(false);
-    const submittingItem = ref(false);
-
-    // Error
     const error = ref<string | null>(null);
 
-    // Current app version (will be fetched from electron)
-    const currentVersion = ref<string>('1.0.0');
+    // Filters
+    const searchQuery = ref('');
+    const selectedCategory = ref<string | null>(null);
+    const selectedType = ref<MarketplaceItemType | null>(null);
 
-    // Computed
-    const filteredItems = computed(() => {
-        let result = items.value;
-
-        // Apply search filter
-        if (filters.value.search) {
-            const searchLower = filters.value.search.toLowerCase();
-            result = result.filter(
-                (item) =>
-                    item.name.toLowerCase().includes(searchLower) ||
-                    item.description.toLowerCase().includes(searchLower) ||
-                    item.tags?.some((tag) => tag.toLowerCase().includes(searchLower))
-            );
-        }
-
-        // Apply category filter
-        if (filters.value.category) {
-            result = result.filter((item) => item.category === filters.value.category);
-        }
-
-        // Apply item type filter
-        if (filters.value.itemType) {
-            result = result.filter((item) => item.itemType === filters.value.itemType);
-        }
-
-        return result;
-    });
+    // Mock Data Generator
+    const generateMockItems = (): MarketplaceItem[] => {
+        return [
+            {
+                id: 'proj_1',
+                type: 'project',
+                name: 'Advanced RAG Workflow',
+                summary:
+                    'Complete RAG implementation with vector database integration and citation capability.',
+                description:
+                    '# Advanced RAG\nThis workflow demonstrates a production-grade RAG setup...',
+                author: {
+                    id: 'auth_1',
+                    name: 'HighFlow Team',
+                    isVerified: true,
+                    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=HighFlow',
+                },
+                price: 0,
+                currency: 'credit',
+                stats: {
+                    installCount: 1250,
+                    viewCount: 5000,
+                    rating: 4.8,
+                    reviewCount: 42,
+                },
+                version: '1.2.0',
+                lastUpdated: new Date().toISOString(),
+                iconUrl: '🤖',
+                previewImages: [],
+                tags: ['ai', 'rag', 'search'],
+                categories: ['AI Modules'],
+                previewGraph: { nodes: [], edges: [] },
+                isOwned: false,
+            },
+            {
+                id: 'op_1',
+                type: 'operator',
+                name: 'Slack Notifier',
+                summary: 'Send formatted messages to Slack channels with support for blocks.',
+                description: '# Slack Notifier\nSend updates to your team...',
+                author: {
+                    id: 'auth_2',
+                    name: 'Community Dev',
+                    isVerified: false,
+                    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
+                },
+                price: 0,
+                currency: 'credit',
+                stats: {
+                    installCount: 890,
+                    viewCount: 2100,
+                    rating: 4.5,
+                    reviewCount: 15,
+                },
+                version: '1.0.1',
+                lastUpdated: new Date().toISOString(),
+                iconUrl: '📢',
+                previewImages: [],
+                tags: ['integration', 'slack', 'notification'],
+                categories: ['Integrations'],
+                isOwned: true,
+            },
+            {
+                id: 'script_1',
+                type: 'script_template',
+                name: 'JSON Transformer',
+                summary: 'Efficiently transform deeply nested JSON structures using Lodash.',
+                description:
+                    '# JSON Transformer\nUtility script for common data transformations...',
+                author: {
+                    id: 'auth_1',
+                    name: 'HighFlow Team',
+                    isVerified: true,
+                },
+                price: 10,
+                currency: 'credit',
+                stats: {
+                    installCount: 300,
+                    viewCount: 800,
+                    rating: 4.9,
+                    reviewCount: 8,
+                },
+                version: '1.0.0',
+                lastUpdated: new Date().toISOString(),
+                iconUrl: '⚡️',
+                previewImages: [],
+                tags: ['utility', 'json', 'data-processing'],
+                categories: ['Utilities'],
+                isOwned: false,
+            },
+        ];
+    };
 
     // Actions
-    async function initialize() {
-        try {
-            // Get current app version
-            const version = await window.electron.app.getVersion();
-            currentVersion.value = version;
-            console.log('[Marketplace] Initialized with version:', version);
-        } catch (err) {
-            console.error('[Marketplace] Failed to get app version:', err);
-        }
-    }
-
-    /**
-     * Fetch marketplace items with current filters
-     */
-    async function fetchItems(newFilters?: Partial<MarketplaceFilters>) {
+    async function fetchItems() {
         loading.value = true;
         error.value = null;
-
         try {
-            // Update filters if provided
-            if (newFilters) {
-                filters.value = { ...filters.value, ...newFilters };
-            }
-
-            const response = await marketplaceAPI.getItems(filters.value);
-            items.value = response.items || [];
-
-            console.log(`[Marketplace] Fetched ${items.value.length} items`);
-        } catch (err: any) {
-            error.value = err.message || 'Failed to fetch marketplace items';
-            console.error('[Marketplace] Fetch error:', err);
+            // TODO: Replace with API call
+            await new Promise((resolve) => setTimeout(resolve, 800)); // Simulate latency
+            items.value = generateMockItems();
+        } catch (e: any) {
+            error.value = e.message;
         } finally {
             loading.value = false;
         }
     }
 
-    /**
-     * Fetch details for a specific item
-     */
-    async function fetchItemDetails(itemId: string) {
-        loadingDetails.value = true;
+    async function fetchItemDetails(id: string) {
+        loading.value = true;
         error.value = null;
-
         try {
-            const details = await marketplaceAPI.getItemDetails(itemId);
-            selectedItem.value = details;
-
-            console.log('[Marketplace] Fetched item details:', details.name);
-        } catch (err: any) {
-            error.value = err.message || 'Failed to fetch item details';
-            console.error('[Marketplace] Fetch details error:', err);
-        } finally {
-            loadingDetails.value = false;
-        }
-    }
-
-    /**
-     * Purchase an item
-     */
-    async function purchaseItem(itemId: string): Promise<PurchaseResponse | null> {
-        purchasing.value = true;
-        error.value = null;
-
-        try {
-            const response = await marketplaceAPI.purchaseItem(itemId);
-
-            // Mark as purchased
-            purchasedItems.value.add(itemId);
-
-            console.log('[Marketplace] Purchased item:', itemId, response);
-
-            return response;
-        } catch (err: any) {
-            // Handle specific errors
-            if (err.response?.status === 402) {
-                error.value = 'Insufficient credits. Please top up your account.';
-            } else if (err.response?.status === 403) {
-                error.value = 'You do not have permission to purchase this item.';
+            // TODO: Replace with API call
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            const found = items.value.find((i) => i.id === id);
+            if (found) {
+                currentItem.value = found;
             } else {
-                error.value = err.message || 'Failed to purchase item';
+                // If not in list (direct link), fetch specific or mock
+                currentItem.value = generateMockItems()[0]; // Fallback for demo
+                currentItem.value.id = id;
             }
-
-            console.error('[Marketplace] Purchase error:', err);
-            return null;
+        } catch (e: any) {
+            error.value = e.message;
         } finally {
-            purchasing.value = false;
+            loading.value = false;
         }
-    }
-
-    /**
-     * Fetch reviews for an item
-     */
-    async function fetchReviews(itemId: string, limit = 20, offset = 0) {
-        loadingReviews.value = true;
-        error.value = null;
-
-        try {
-            const response = await marketplaceAPI.getReviews(itemId, limit, offset);
-            reviews.value = response;
-
-            console.log('[Marketplace] Fetched reviews:', response.reviews.length);
-        } catch (err: any) {
-            error.value = err.message || 'Failed to fetch reviews';
-            console.error('[Marketplace] Fetch reviews error:', err);
-        } finally {
-            loadingReviews.value = false;
-        }
-    }
-
-    /**
-     * Submit a review
-     */
-    async function submitReview(itemId: string, review: ReviewSubmission): Promise<boolean> {
-        submittingReview.value = true;
-        error.value = null;
-
-        try {
-            await marketplaceAPI.submitReview(itemId, review);
-
-            // Refresh reviews
-            await fetchReviews(itemId);
-
-            console.log('[Marketplace] Submitted review for:', itemId);
-            return true;
-        } catch (err: any) {
-            // Handle specific errors
-            if (err.response?.status === 403) {
-                error.value = 'You must purchase this item before reviewing it.';
-            } else if (err.response?.status === 409) {
-                error.value = 'You have already reviewed this item.';
-            } else {
-                error.value = err.message || 'Failed to submit review';
-            }
-
-            console.error('[Marketplace] Submit review error:', err);
-            return false;
-        } finally {
-            submittingReview.value = false;
-        }
-    }
-
-    /**
-     * Submit an item to marketplace
-     */
-    async function submitToMarketplace(submission: Omit<MarketplaceSubmission, 'clientVersion'>) {
-        submittingItem.value = true;
-        error.value = null;
-
-        try {
-            // Add current version
-            const fullSubmission: MarketplaceSubmission = {
-                ...submission,
-                clientVersion: currentVersion.value,
-                minClientVersion: submission.minClientVersion || currentVersion.value,
-            };
-
-            const response = await marketplaceAPI.submitToMarketplace(fullSubmission);
-
-            console.log('[Marketplace] Submitted item:', response);
-            return response;
-        } catch (err: any) {
-            // Handle specific errors
-            if (err.response?.status === 400) {
-                error.value = 'Invalid submission data. Please check all fields.';
-            } else if (err.response?.status === 404) {
-                error.value = 'Workflow not found or access denied.';
-            } else if (err.response?.status === 409) {
-                error.value = 'This workflow has already been submitted.';
-            } else {
-                error.value = err.message || 'Failed to submit to marketplace';
-            }
-
-            console.error('[Marketplace] Submit error:', err);
-            return null;
-        } finally {
-            submittingItem.value = false;
-        }
-    }
-
-    /**
-     * Check if an item is compatible with current version
-     */
-    function checkCompatibility(item: MarketplaceItem | MarketplaceItemDetail): boolean {
-        return isCompatible(currentVersion.value, item.minClientVersion);
-    }
-
-    /**
-     * Check if item is purchased
-     */
-    function isPurchased(itemId: string): boolean {
-        return purchasedItems.value.has(itemId);
-    }
-
-    /**
-     * Update search filter
-     */
-    function setSearch(search: string) {
-        filters.value.search = search;
-    }
-
-    /**
-     * Update category filter
-     */
-    function setCategory(category: MarketplaceCategory | undefined) {
-        filters.value.category = category;
-    }
-
-    /**
-     * Update item type filter
-     */
-    function setItemType(itemType: ItemType | undefined) {
-        filters.value.itemType = itemType;
-    }
-
-    /**
-     * Clear all filters
-     */
-    function clearFilters() {
-        filters.value = {
-            search: '',
-            category: undefined,
-            itemType: undefined,
-            limit: 50,
-            offset: 0,
-        };
-    }
-
-    /**
-     * Clear selected item
-     */
-    function clearSelectedItem() {
-        selectedItem.value = null;
-        reviews.value = null;
     }
 
     return {
-        // State
         items,
-        filteredItems,
-        selectedItem,
-        reviews,
-        filters,
-        currentVersion,
-        purchasedItems,
-
-        // Loading states
+        currentItem,
         loading,
-        loadingDetails,
-        loadingReviews,
-        purchasing,
-        submittingReview,
-        submittingItem,
-
-        // Error
         error,
-
-        // Actions
-        initialize,
+        searchQuery,
+        selectedCategory,
+        selectedType,
         fetchItems,
         fetchItemDetails,
-        purchaseItem,
-        fetchReviews,
-        submitReview,
-        submitToMarketplace,
-        checkCompatibility,
-        isPurchased,
-        setSearch,
-        setCategory,
-        setItemType,
-        clearFilters,
-        clearSelectedItem,
     };
 });
