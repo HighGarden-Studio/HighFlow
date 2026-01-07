@@ -54,7 +54,7 @@ interface RuntimeServerEntry {
     slug: string;
 }
 
-interface TaskMCPOverrideEntry {
+export interface TaskMCPOverrideEntry {
     env?: Record<string, string>;
     config?: Record<string, unknown>;
     params?: Record<string, unknown>;
@@ -67,7 +67,7 @@ export class MCPManager {
     private runtimeIntegrationMap: Map<number, RuntimeServerEntry> = new Map();
     private readonly HEALTH_CACHE_TTL = 60000; // 1 minute
     private slackClients: Map<number, WebClient> = new Map();
-    private taskOverrides: Map<number, Record<string, TaskMCPOverrideEntry>> = new Map();
+    private taskOverrides: Map<string, Record<string, TaskMCPOverrideEntry>> = new Map();
 
     constructor() {
         this.activeClients = new Map();
@@ -120,9 +120,13 @@ export class MCPManager {
         }
     }
 
-    setTaskOverrides(taskId: number, overrides: MCPConfig | null): void {
+    setTaskOverrides(
+        projectId: number,
+        projectSequence: number,
+        overrides: MCPConfig | null
+    ): void {
         if (!overrides || Object.keys(overrides).length === 0) {
-            this.clearTaskOverrides(taskId);
+            this.clearTaskOverrides(projectId, projectSequence);
             return;
         }
 
@@ -154,14 +158,16 @@ export class MCPManager {
             });
         }
 
-        this.taskOverrides.set(taskId, normalized);
+        const compositeKey = `${projectId}-${projectSequence}`;
+        this.taskOverrides.set(compositeKey, normalized);
     }
 
-    clearTaskOverrides(taskId: number): void {
-        this.taskOverrides.delete(taskId);
+    clearTaskOverrides(projectId: number, projectSequence: number): void {
+        const compositeKey = `${projectId}-${projectSequence}`;
+        this.taskOverrides.delete(compositeKey);
         const keysToRemove: string[] = [];
         for (const [key, client] of this.activeClients.entries()) {
-            if (key.endsWith(`:${taskId}`)) {
+            if (key.endsWith(`:${compositeKey}`)) {
                 try {
                     client.close();
                 } catch (error) {
@@ -419,8 +425,8 @@ export class MCPManager {
         toolName: string,
         params: Record<string, any>,
         options: {
-            taskId?: number;
             projectId?: number;
+            projectSequence?: number;
             source?: string;
             taskTitle?: string; // Enhanced metadata for logging
             projectName?: string; // Enhanced metadata for logging
@@ -431,7 +437,7 @@ export class MCPManager {
         const mcpInfo = await this.getMCPById(mcpId);
         const runtimeEntry = mcpInfo ? this.runtimeIntegrationMap.get(mcpInfo.id) : null;
 
-        const override = this.getTaskOverride(options.taskId, {
+        const override = this.getTaskOverride(options.projectId, options.projectSequence, {
             id: runtimeEntry?.config.id || mcpInfo?.slug || mcpInfo?.name,
             name: mcpInfo?.name,
             slug: runtimeEntry?.slug || mcpInfo?.slug,
@@ -457,6 +463,7 @@ export class MCPManager {
                 'ai.mcp_request',
                 {
                     projectId: options.projectId,
+                    projectSequence: options.projectSequence,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
                     mcpId,
@@ -470,7 +477,11 @@ export class MCPManager {
 
             // Get or create client
             console.log(`[MCP] Getting/creating client for MCP #${mcpId}...`);
-            const client = await this.getOrCreateClient(mcpId, options.taskId);
+            const client = await this.getOrCreateClient(
+                mcpId,
+                options.projectId,
+                options.projectSequence
+            );
             console.log(`[MCP] Client ready, calling tool "${toolName}"...`);
 
             // Execute tool
@@ -486,6 +497,7 @@ export class MCPManager {
             this.emitMCPResponse(
                 {
                     projectId: options.projectId,
+                    projectSequence: options.projectSequence,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
                     mcpId,
@@ -523,7 +535,8 @@ export class MCPManager {
                 runtimeEntry ?? undefined,
                 toolName,
                 mergedParams,
-                options.taskId
+                options.projectId,
+                options.projectSequence
             );
             if (slackFallback) {
                 console.log(
@@ -550,6 +563,7 @@ export class MCPManager {
             this.emitMCPResponse(
                 {
                     projectId: options.projectId,
+                    projectSequence: options.projectSequence,
                     taskTitle: options.taskTitle,
                     projectName: options.projectName,
                     mcpId,
@@ -730,9 +744,16 @@ export class MCPManager {
     /**
      * List available tools for an MCP
      */
-    async listTools(mcpId: number, options?: { taskId?: number }): Promise<MCPToolDefinition[]> {
+    async listTools(
+        mcpId: number,
+        options?: { projectId?: number; projectSequence?: number }
+    ): Promise<MCPToolDefinition[]> {
         try {
-            const client = await this.getOrCreateClient(mcpId, options?.taskId);
+            const client = await this.getOrCreateClient(
+                mcpId,
+                options?.projectId,
+                options?.projectSequence
+            );
             const result = await client.listTools();
 
             return (result.tools || []).map((tool: any) => ({
@@ -753,9 +774,13 @@ export class MCPManager {
     /**
      * Get or create MCP client
      */
-    private async getOrCreateClient(mcpId: number, taskId?: number): Promise<Client> {
+    private async getOrCreateClient(
+        mcpId: number,
+        projectId?: number,
+        projectSequence?: number
+    ): Promise<Client> {
         // Check if client already exists
-        const clientKey = this.buildClientKey(mcpId, taskId);
+        const clientKey = this.buildClientKey(mcpId, projectId, projectSequence);
         let client = this.activeClients.get(clientKey);
         if (client) {
             return client;
@@ -785,7 +810,7 @@ export class MCPManager {
         );
 
         // Connect based on runtime config or endpoint type
-        const override = this.getTaskOverride(taskId, {
+        const override = this.getTaskOverride(projectId, projectSequence, {
             id: runtimeConfig?.id || mcp.slug || mcp.name,
             name: mcp.name,
             slug: runtimeEntry?.slug || mcp.slug,
@@ -990,9 +1015,24 @@ export class MCPManager {
         if (!source) {
             return {};
         }
+
+        // Blocklist for noisy environment variables that shouldn't leak to child processes
+        const ignoredPrefixes = [
+            'npm_package_',
+            'npm_config_',
+            'ELECTRON_',
+            'VSCODE_',
+            'M3',
+            'drizzle_',
+        ];
+
         const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(source)) {
             if (typeof value === 'string') {
+                // Skip if key starts with any ignored prefix
+                if (ignoredPrefixes.some((p) => key.startsWith(p))) {
+                    continue;
+                }
                 env[key] = value;
             }
         }
@@ -1011,29 +1051,57 @@ export class MCPManager {
         return Array.from(keys).filter((key) => key.length > 0);
     }
 
-    private buildClientKey(mcpId: number, taskId?: number): string {
-        return `${mcpId}:${taskId ?? 'base'}`;
+    private buildClientKey(mcpId: number, projectId?: number, projectSequence?: number): string {
+        return `${mcpId}:${projectId !== undefined && projectSequence !== undefined ? `${projectId}-${projectSequence}` : 'base'}`;
     }
 
     private getTaskOverride(
-        taskId: number | undefined,
+        projectId: number | undefined,
+        projectSequence: number | undefined,
         meta?: { id?: string; name?: string; slug?: string }
     ): TaskMCPOverrideEntry | undefined {
-        if (!taskId) return undefined;
-        const overrides = this.taskOverrides.get(taskId);
-        if (!overrides) return undefined;
+        if (!projectId || projectSequence === undefined) {
+            console.log(
+                '[MCPManager Debug] getTaskOverride: No projectId/projectSequence provided',
+                { projectId, projectSequence }
+            );
+            return undefined;
+        }
+        // Create composite key: "projectId-projectSequence"
+        const compositeKey = `${projectId}-${projectSequence}`;
+        const overrides = this.taskOverrides.get(compositeKey as any);
+        if (!overrides) {
+            console.log(
+                `[MCPManager Debug] getTaskOverride: No overrides found for task ${projectId}-${projectSequence}`
+            );
+            return undefined;
+        }
+
+        console.log(
+            `[MCPManager Debug] getTaskOverride: Looking up override for task ${projectId}-${projectSequence}`,
+            meta
+        );
+        console.log(
+            `[MCPManager Debug] Available override keys: ${Object.keys(overrides).join(', ')}`
+        );
+
         const candidates = [meta?.id, meta?.slug, meta?.name];
         for (const candidate of candidates) {
             if (!candidate) continue;
             const trimmed = candidate.trim().toLowerCase();
             if (overrides[trimmed]) {
+                console.log(`[MCPManager Debug] Found override match for key '${trimmed}'`);
                 return overrides[trimmed];
             }
             const normalized = this.normalizeIdentifier(candidate);
             if (normalized && overrides[normalized]) {
+                console.log(
+                    `[MCPManager Debug] Found override match for normalized key '${normalized}'`
+                );
                 return overrides[normalized];
             }
         }
+        console.log('[MCPManager Debug] No matching override found');
         return undefined;
     }
 
@@ -1068,13 +1136,14 @@ export class MCPManager {
         entry: RuntimeServerEntry | undefined,
         toolName: string,
         params: Record<string, any>,
-        taskId?: number
+        projectId?: number,
+        projectSequence?: number
     ): Promise<MCPResult | null> {
         if (!entry || !entry.slug?.includes('slack')) {
             return null;
         }
 
-        const override = this.getTaskOverride(taskId, {
+        const override = this.getTaskOverride(projectId, projectSequence, {
             id: entry.config.id,
             name: entry.integration.name,
             slug: entry.slug,

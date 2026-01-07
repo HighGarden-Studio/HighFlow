@@ -124,7 +124,7 @@ export class GPTProvider extends BaseAIProvider {
     async chat(
         messages: AIMessage[],
         config: AIConfig,
-        _context?: ExecutionContext
+        context?: ExecutionContext
     ): Promise<AIResponse> {
         this.validateConfig(config);
 
@@ -137,6 +137,21 @@ export class GPTProvider extends BaseAIProvider {
         return this.executeWithRetry(async () => {
             // 2. Build Base Messages (Provider Logic)
             const baseMessages = this.buildChatMessages(messages);
+
+            // Inject Date/Context
+            const additionalSystemPrompt = this.buildSystemPrompt(config, context);
+            if (additionalSystemPrompt) {
+                const existingIndex = baseMessages.findIndex((m: any) => m.role === 'system');
+                if (existingIndex !== -1) {
+                    const existing = baseMessages[existingIndex] as any;
+                    existing.content = `${additionalSystemPrompt}\n\n${existing.content}`;
+                } else {
+                    baseMessages.unshift({
+                        role: 'system',
+                        content: additionalSystemPrompt,
+                    } as any);
+                }
+            }
 
             // 3. Adapt Messages (Adapter Logic)
             const adaptedMessages = adapter.adaptMessages(

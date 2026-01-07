@@ -124,7 +124,7 @@ export class GeminiProvider extends BaseAIProvider {
     async chat(
         messages: AIMessage[],
         config: AIConfig,
-        _context?: ExecutionContext,
+        context?: ExecutionContext,
         signal?: AbortSignal
     ): Promise<AIResponse> {
         this.validateConfig(config);
@@ -136,7 +136,14 @@ export class GeminiProvider extends BaseAIProvider {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
-            const { systemInstruction, contents } = this.buildGeminiConversation(messages, config);
+            const { systemInstruction: msgSystemInstruction, contents } =
+                this.buildGeminiConversation(messages, config);
+
+            // Inject Date/Context
+            const additionalSystemPrompt = this.buildSystemPrompt(config, context);
+            const systemInstruction = [additionalSystemPrompt, msgSystemInstruction]
+                .filter(Boolean)
+                .join('\n\n');
             const toolDeclarations = this.mapTools(config.tools);
 
             // Debug: Log tool declarations

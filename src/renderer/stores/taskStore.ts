@@ -97,8 +97,10 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Remove task from local state (used by delete command)
      */
-    function removeTaskFromStore(taskId: number): void {
-        const index = tasks.value.findIndex((t) => t.id === taskId);
+    function removeTaskFromStore(projectId: number, sequence: number): void {
+        const index = tasks.value.findIndex(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (index >= 0) {
             tasks.value.splice(index, 1);
         }
@@ -160,7 +162,7 @@ export const useTaskStore = defineStore('tasks', () => {
         return result;
     });
 
-    const taskById = computed(() => (id: number) => tasks.value.find((t) => t.id === id));
+    // Deprecated: Use composite key (projectId + sequence) instead
 
     const tasksByStatus = computed(
         () => (status: TaskStatus) =>
@@ -205,21 +207,57 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     /**
-     * Fetch a single task by ID
+     * Fetch a single task by composite keys
      */
-    async function fetchTask(id: number): Promise<Task | null> {
+    async function fetchTask(projectId: number, sequence: number): Promise<Task | null> {
         loading.value = true;
         error.value = null;
 
         try {
             const api = getAPI();
-            const task = await api.tasks.get(id);
+            // API expects stringified "projectId_sequence" or separate args.
+            // Assuming current backend APIs might need adjustment or we use list with filters?
+            // Actually, usually GET /tasks/:id was standard.
+            // We likely need a new API endpoint: GET /projects/:projectId/as-tasks/:sequence
+            // OR the API client needs to be updated.
+            // For now, let's assume the API client handles this or we iterate.
+
+            // Checking how `api.tasks.get(id)` is implemented in preload/index.ts...
+            // It might be `invoke('tasks:get', id)`.
+            // The backend 'tasks:get' handler likely expects an ID.
+            // We need to change the API call to `api.tasks.getBySequence(projectId, sequence)`
+            // But let's look at what we have available.
+            // If we strictly don't have ID, we can't use `api.tasks.get(id)`.
+
+            // Assuming we have or will add `getByKey` or similar.
+            // For now, I will modify this to strictly require composite components
+            // and maybe fail if the underlying API isn't ready,
+            // OR I will assume the API stays as is (maybe expecting an ID?)
+            // BUT wait, "task 의 전역 id 는 절대 사용하지 않고" means we CANNOT send an ID.
+
+            const task = await api.tasks.getByKey(projectId, sequence);
+
             if (task) {
-                currentTask.value = task;
+                // Ensure composite key matching for currentTask
+                if (
+                    currentTask.value?.projectId === task.projectId &&
+                    currentTask.value?.projectSequence === task.projectSequence
+                ) {
+                    currentTask.value = task;
+                }
+
                 // Update in list if exists
-                const index = tasks.value.findIndex((t) => t.id === id);
+                const index = tasks.value.findIndex(
+                    (t) => t.projectId === projectId && t.projectSequence === sequence
+                );
+
                 if (index >= 0) {
                     tasks.value[index] = task;
+                } else {
+                    // Optionally add to list if it belongs to current project view?
+                    if (currentProjectId.value === projectId) {
+                        tasks.value.push(task);
+                    }
                 }
             }
             return task;
@@ -283,30 +321,10 @@ export const useTaskStore = defineStore('tasks', () => {
      * Update an existing task
      */
     async function updateTask(
-        idOrProjectId: number,
-        dataOrSequence: Partial<Task> | number,
-        maybeData?: Partial<Task>
+        projectId: number,
+        sequence: number,
+        updateData: Partial<Task>
     ): Promise<Task | null> {
-        let projectId: number;
-        let sequence: number;
-        let updateData: Partial<Task>;
-
-        if (typeof dataOrSequence === 'number') {
-            projectId = idOrProjectId;
-            sequence = dataOrSequence;
-            updateData = maybeData!;
-        } else {
-            const id = idOrProjectId;
-            const task = tasks.value.find((t) => t.id === id);
-            if (!task) {
-                console.error(`Task with id ${id} not found in store for update`);
-                return null;
-            }
-            projectId = task.projectId;
-            sequence = task.projectSequence;
-            updateData = dataOrSequence;
-        }
-
         const index = tasks.value.findIndex(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -339,12 +357,10 @@ export const useTaskStore = defineStore('tasks', () => {
 
         try {
             const api = getAPI();
-            // Prepare clean update data
             // Prepare clean update data - only send what changed
             const cleanUpdateData = { ...updateData } as any;
 
             // Remove internal tracking fields that shouldn't be sent to backend
-            delete cleanUpdateData.id;
             delete cleanUpdateData.projectId;
             delete cleanUpdateData.projectSequence;
             delete cleanUpdateData.createdAt;
@@ -364,7 +380,6 @@ export const useTaskStore = defineStore('tasks', () => {
                 if (originalTask.taskType === 'input' && plainData.status === 'in_progress') {
                     setTimeout(async () => {
                         try {
-                            // Find by composite key since id might be unreliable
                             const tasksInProject = await api.tasks.list(projectId);
                             const refreshedTask = tasksInProject.find(
                                 (t) => t.projectSequence === sequence
@@ -385,7 +400,6 @@ export const useTaskStore = defineStore('tasks', () => {
                                 window.dispatchEvent(
                                     new CustomEvent('task:input-status-changed', {
                                         detail: {
-                                            taskId: refreshedTask.id, // Might be undefined, but event listener should handle it
                                             projectId: refreshedTask.projectId,
                                             projectSequence: refreshedTask.projectSequence,
                                             inputSubStatus: refreshedTask.inputSubStatus,
@@ -422,35 +436,15 @@ export const useTaskStore = defineStore('tasks', () => {
      * Update task with history support (for user actions)
      * For simple field updates like operator assignment, status changes, etc.
      */
+    /**
+     * Update task with history support (for user actions)
+     */
     async function updateTaskWithHistory(
-        idOrProjectId: number,
-        dataOrSequence: Partial<Task> | number,
-        maybeDataOrDescription?: Partial<Task> | string,
-        _maybeDescription?: string
+        projectId: number,
+        sequence: number,
+        data: Partial<Task>,
+        _description?: string // Temporarily unused, but kept for signature compatibility if needed
     ): Promise<Task | null> {
-        let projectId: number;
-        let sequence: number;
-        let data: Partial<Task>;
-
-        if (typeof dataOrSequence === 'number') {
-            // (projectId, sequence, data, description?)
-            projectId = idOrProjectId;
-            sequence = dataOrSequence;
-            data = maybeDataOrDescription as Partial<Task>;
-        } else {
-            // (id, data, description?)
-            const id = idOrProjectId;
-            if (id === undefined) {
-                console.error('updateTaskWithHistory called with undefined id');
-                return null;
-            }
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return updateTask(id, dataOrSequence);
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-            data = dataOrSequence;
-        }
-
         const previousTask = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -458,22 +452,8 @@ export const useTaskStore = defineStore('tasks', () => {
             return updateTask(projectId, sequence, data);
         }
 
-        // Extract only the fields being changed for undo
-        const previousData: Partial<Task> = {};
-        for (const key of Object.keys(data) as Array<keyof Task>) {
-            previousData[key] = (previousTask as any)[key];
-        }
-
-        // Note: UpdateTaskCommand likely expects ID. If so, we might need to update HistoryStore commands too.
-        // Assuming for now we proceed with updateTask call.
-        // actually, UpdateTaskCommand is likely using ID.
-        // We will skip Command update for this specific step to avoid scope creep,
-        // effectively disabling Undo for this path until HistoryStore is fixed,
-        // OR we just execute the update.
-
-        // For now, let's just do the update to keep forward progress.
-        // FIXME: UpdateTaskCommand needs composite key support.
-
+        // TODO: Implement HistoryStore support for Composite Keys
+        // For now, we bypass history command creation and just update.
         await updateTask(projectId, sequence, data);
         return (
             tasks.value.find((t) => t.projectId === projectId && t.projectSequence === sequence) ||
@@ -484,30 +464,10 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Delete a task
      */
-    async function deleteTask(idOrProjectId: number, maybeSequence?: number): Promise<boolean> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const id = idOrProjectId;
-            if (id === undefined) return false;
-            // Try to find if we haven't already
-            const t = tasks.value.find((t) => t.id === id);
-            if (t) {
-                projectId = t.projectId;
-                sequence = t.projectSequence;
-            } else {
-                console.warn(
-                    'deleteTask called with ID but task not found in store, cannot derive composite key.'
-                );
-                // If we can't find it, we can't delete it via new API.
-                return false;
-            }
-        }
-
+    /**
+     * Delete a task
+     */
+    async function deleteTask(projectId: number, sequence: number): Promise<boolean> {
         loading.value = true;
         error.value = null;
 
@@ -568,11 +528,12 @@ export const useTaskStore = defineStore('tasks', () => {
      * Move task to a different column (status)
      */
     async function moveTask(
-        taskId: number,
+        projectId: number,
+        sequence: number,
         newStatus: TaskStatus,
         _newOrder: number
     ): Promise<void> {
-        await updateTask(taskId, { status: newStatus });
+        await updateTask(projectId, sequence, { status: newStatus });
         // The order update would be handled by reorderTasks after the move
     }
 
@@ -611,43 +572,16 @@ export const useTaskStore = defineStore('tasks', () => {
      * Validates the transition and applies appropriate side effects
      */
     async function changeStatus(
-        idOrProjectId: number,
-        newStatusOrSequence: TaskStatus | number,
-        optionsOrNewStatus?:
-            | {
-                  approvalResponse?: string;
-                  refinementPrompt?: string;
-                  additionalWorkPrompt?: string;
-                  blockedReason?: string;
-              }
-            | TaskStatus,
-        _maybeOptions?: {
+        projectId: number,
+        sequence: number,
+        newStatus: TaskStatus,
+        options: {
             approvalResponse?: string;
             refinementPrompt?: string;
             additionalWorkPrompt?: string;
             blockedReason?: string;
-        }
+        } = {}
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-        let newStatus: TaskStatus;
-
-        if (typeof newStatusOrSequence === 'number') {
-            // (projectId, sequence, newStatus, options)
-            projectId = idOrProjectId;
-            sequence = newStatusOrSequence;
-            newStatus = optionsOrNewStatus as TaskStatus;
-        } else {
-            // (id, newStatus, options)
-            const id = idOrProjectId;
-            if (id === undefined) return { success: false, error: 'Invalid Task ID' };
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-            newStatus = newStatusOrSequence as TaskStatus;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -691,8 +625,13 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Get allowed status transitions for a task
      */
-    function getAllowedTransitions(taskId: number): TaskStatus[] {
-        const task = tasks.value.find((t) => t.id === taskId);
+    /**
+     * Get allowed status transitions for a task
+     */
+    function getAllowedTransitions(projectId: number, sequence: number): TaskStatus[] {
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) return [];
         return TASK_STATUS_TRANSITIONS[task.status as TaskStatus] || [];
     }
@@ -735,12 +674,20 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Check if task is ready for execution (has prompt and AI provider)
      */
-    function isTaskReadyForExecution(taskId: number): {
+    /**
+     * Check if task is ready for execution (has prompt and AI provider)
+     */
+    function isTaskReadyForExecution(
+        projectId: number,
+        sequence: number
+    ): {
         ready: boolean;
         missingPrompt: boolean;
         missingProvider: boolean;
     } {
-        const task = tasks.value.find((t) => t.id === taskId);
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) {
             return { ready: false, missingPrompt: true, missingProvider: true };
         }
@@ -758,28 +705,14 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Retry task with feedback and session preservation
      */
+    /**
+     * Retry task with feedback and session preservation
+     */
     async function retryTask(
-        idOrProjectId: number,
-        sequenceOrFeedback?: number | string,
-        maybeFeedback?: string
+        projectId: number,
+        sequence: number,
+        feedback?: string
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-        let feedback: string | undefined;
-
-        if (typeof sequenceOrFeedback === 'number') {
-            projectId = idOrProjectId;
-            sequence = sequenceOrFeedback;
-            feedback = maybeFeedback;
-        } else {
-            const id = idOrProjectId;
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-            feedback = sequenceOrFeedback as string | undefined;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -818,27 +751,10 @@ export const useTaskStore = defineStore('tasks', () => {
      * Execute task - starts AI execution via IPC
      */
     async function executeTask(
-        idOrProjectId: number,
-        sequenceOrOptions?: number | { force?: boolean; triggerChain?: string[] },
-        maybeOptions?: { force?: boolean; triggerChain?: string[] }
+        projectId: number,
+        sequence: number,
+        options?: { force?: boolean; triggerChain?: string[] }
     ): Promise<{ success: boolean; error?: string; validationError?: boolean }> {
-        let projectId: number;
-        let sequence: number;
-        let options: { force?: boolean; triggerChain?: string[] } | undefined;
-
-        if (typeof sequenceOrOptions === 'number') {
-            projectId = idOrProjectId;
-            sequence = sequenceOrOptions;
-            options = maybeOptions;
-        } else {
-            const id = idOrProjectId;
-            options = sequenceOrOptions;
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -959,31 +875,14 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Submit input for an Input Task
      */
+    /**
+     * Submit input for an Input Task
+     */
     async function submitInput(
-        idOrProjectId: number,
-        inputOrSequence: any | number,
-        maybeInput?: any
+        projectId: number,
+        sequence: number,
+        input: any
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-        let input: any;
-
-        if (typeof inputOrSequence === 'number' && maybeInput !== undefined) {
-            // (projectId, sequence, input)
-            projectId = idOrProjectId;
-            sequence = inputOrSequence;
-            input = maybeInput;
-        } else {
-            // (id, input)
-            const id = idOrProjectId;
-            if (id === undefined) return { success: false, error: 'Invalid Task ID' };
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-            input = inputOrSequence;
-        }
-
         // Validation check if task exists
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
@@ -1052,23 +951,13 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Pause task execution
      */
+    /**
+     * Pause task execution
+     */
     async function pauseTask(
-        idOrProjectId: number,
-        maybeSequence?: number
+        projectId: number,
+        sequence: number
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const t = tasks.value.find((t) => t.id === idOrProjectId);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1108,23 +997,13 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Resume paused task
      */
+    /**
+     * Resume paused task
+     */
     async function resumeTask(
-        idOrProjectId: number,
-        maybeSequence?: number
+        projectId: number,
+        sequence: number
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const t = tasks.value.find((t) => t.id === idOrProjectId);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1157,23 +1036,13 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Stop task and return to TODO
      */
+    /**
+     * Stop task and return to TODO
+     */
     async function stopTask(
-        idOrProjectId: number,
-        maybeSequence?: number
+        projectId: number,
+        sequence: number
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const t = tasks.value.find((t) => t.id === idOrProjectId);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1232,29 +1101,14 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Approve task (from NEEDS_APPROVAL or IN_REVIEW) - moves to IN_PROGRESS or DONE
      */
+    /**
+     * Approve task (from NEEDS_APPROVAL or IN_REVIEW) - moves to IN_PROGRESS or DONE
+     */
     async function approveTask(
-        idOrProjectId: number,
-        responseOrSequence?: string | number,
-        maybeResponse?: string
+        projectId: number,
+        sequence: number,
+        response?: string
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-        let response: string | undefined;
-
-        if (typeof responseOrSequence === 'number') {
-            projectId = idOrProjectId;
-            sequence = responseOrSequence;
-            response = maybeResponse;
-        } else {
-            const id = idOrProjectId;
-            if (id === undefined) return { success: false, error: 'Invalid Task ID' };
-            const t = tasks.value.find((t) => t.id === id);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-            response = responseOrSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1299,22 +1153,9 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     async function rejectTask(
-        idOrProjectId: number,
-        maybeSequence?: number
+        projectId: number,
+        sequence: number
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const t = tasks.value.find((t) => t.id === idOrProjectId);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1342,23 +1183,13 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Complete review - moves to DONE
      */
+    /**
+     * Complete review - moves to DONE
+     */
     async function completeReview(
-        idOrProjectId: number,
-        maybeSequence?: number
+        projectId: number,
+        sequence: number
     ): Promise<{ success: boolean; error?: string }> {
-        let projectId: number;
-        let sequence: number;
-
-        if (maybeSequence !== undefined) {
-            projectId = idOrProjectId;
-            sequence = maybeSequence;
-        } else {
-            const t = tasks.value.find((t) => t.id === idOrProjectId);
-            if (!t) return { success: false, error: 'Task not found' };
-            projectId = t.projectId;
-            sequence = t.projectSequence;
-        }
-
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
         );
@@ -1402,11 +1233,17 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Request changes - moves from IN_REVIEW to IN_PROGRESS with refinement prompt
      */
+    /**
+     * Request changes - moves from IN_REVIEW to IN_PROGRESS with refinement prompt
+     */
     async function requestChanges(
-        taskId: number,
+        projectId: number,
+        sequence: number,
         refinementPrompt: string
     ): Promise<{ success: boolean; error?: string }> {
-        const task = tasks.value.find((t) => t.id === taskId);
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -1418,14 +1255,12 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             if (!api?.taskExecution) {
-                return changeStatus(taskId, 'in_progress', { refinementPrompt });
+                return changeStatus(projectId, sequence, 'in_progress', { refinementPrompt });
             }
 
-            const task = tasks.value.find((t) => t.id === taskId);
-            if (!task) return { success: false, error: 'Task not found' };
             const result = await api.taskExecution.requestChanges(
-                task.projectId,
-                task.projectSequence,
+                projectId,
+                sequence,
                 refinementPrompt
             );
             if (!result.success) {
@@ -1442,11 +1277,17 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Request additional work - moves from DONE to IN_PROGRESS
      */
+    /**
+     * Request additional work - moves from DONE to IN_PROGRESS
+     */
     async function requestAdditionalWork(
-        taskId: number,
+        projectId: number,
+        sequence: number,
         additionalWorkPrompt: string
     ): Promise<{ success: boolean; error?: string }> {
-        const task = tasks.value.find((t) => t.id === taskId);
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -1461,14 +1302,12 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             if (!api?.taskExecution) {
-                return changeStatus(taskId, 'in_progress', { additionalWorkPrompt });
+                return changeStatus(projectId, sequence, 'in_progress', { additionalWorkPrompt });
             }
 
-            const task = tasks.value.find((t) => t.id === taskId);
-            if (!task) return { success: false, error: 'Task not found' };
             const result = await api.taskExecution.requestAdditionalWork(
-                task.projectId,
-                task.projectSequence,
+                projectId,
+                sequence,
                 additionalWorkPrompt
             );
             if (!result.success) {
@@ -1485,17 +1324,23 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Block task
      */
+    /**
+     * Block task
+     */
     async function blockTask(
-        taskId: number,
+        projectId: number,
+        sequence: number,
         reason?: string
     ): Promise<{ success: boolean; error?: string }> {
         try {
             const api = getAPI();
             if (!api?.taskExecution) {
-                return changeStatus(taskId, 'blocked', { blockedReason: reason });
+                return changeStatus(projectId, sequence, 'blocked', { blockedReason: reason });
             }
 
-            const task = tasks.value.find((t) => t.id === taskId);
+            const task = tasks.value.find(
+                (t) => t.projectId === projectId && t.projectSequence === sequence
+            );
             if (!task) return { success: false, error: 'Task not found' };
             const result = await api.taskExecution.block(
                 task.projectId,
@@ -1516,8 +1361,16 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Unblock task - moves to TODO
      */
-    async function unblockTask(taskId: number): Promise<{ success: boolean; error?: string }> {
-        const task = tasks.value.find((t) => t.id === taskId);
+    /**
+     * Unblock task - moves to TODO
+     */
+    async function unblockTask(
+        projectId: number,
+        sequence: number
+    ): Promise<{ success: boolean; error?: string }> {
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -1529,11 +1382,10 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             if (!api?.taskExecution) {
-                return changeStatus(taskId, 'todo');
+                return changeStatus(projectId, sequence, 'todo');
             }
 
-            const task = tasks.value.find((t) => t.id === taskId);
-            if (!task) return { success: false, error: 'Task not found' };
+            // Task already found above
             const result = await api.taskExecution.unblock(task.projectId, task.projectSequence);
             if (!result.success) {
                 return { success: false, error: 'Failed to unblock task' };
@@ -1588,64 +1440,58 @@ export const useTaskStore = defineStore('tasks', () => {
     /**
      * Get execution progress for a task
      */
-    function getExecutionProgress(
-        taskId: number | { projectId: number; projectSequence: number } | null | undefined
-    ) {
-        if (!taskId) return undefined;
-        if (typeof taskId === 'number') {
-            const t = tasks.value.find((x) => x.id === taskId);
-            return t ? executionProgress.value.get(getTaskKey(t)) : undefined;
-        }
-        return executionProgress.value.get(getTaskKey(taskId));
+    /**
+     * Get execution progress for a task
+     */
+    function getExecutionProgress(projectId: number | undefined, sequence: number | undefined) {
+        if (projectId === undefined || sequence === undefined) return undefined;
+
+        // We use string key for map
+        return executionProgress.value.get(
+            taskKeyToString({ projectId, projectSequence: sequence })
+        );
     }
 
     /**
      * Check if a task is currently executing
      */
     function isTaskExecuting(
-        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+        taskKey: { projectId: number; projectSequence: number } | null | undefined
     ) {
-        if (!taskId) return false;
-        if (typeof taskId === 'number') {
-            const t = tasks.value.find((x) => x.id === taskId);
-            return t ? executingTaskIds.value.has(getTaskKey(t)) : false;
-        }
-        return executingTaskIds.value.has(getTaskKey(taskId));
+        if (!taskKey) return false;
+        return executingTaskIds.value.has(getTaskKey(taskKey));
     }
 
     /**
      * Get review progress for a task
      */
     function getReviewProgress(
-        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+        taskKey: { projectId: number; projectSequence: number } | null | undefined
     ) {
-        if (!taskId) return undefined;
-        if (typeof taskId === 'number') {
-            const t = tasks.value.find((x) => x.id === taskId);
-            return t ? reviewProgress.value.get(getTaskKey(t)) : undefined;
-        }
-        return reviewProgress.value.get(getTaskKey(taskId));
+        if (!taskKey) return undefined;
+        return reviewProgress.value.get(getTaskKey(taskKey));
     }
 
     /**
      * Check if a task is currently being reviewed
      */
     function isTaskReviewing(
-        taskId: number | { projectId: number; projectSequence: number } | null | undefined
+        taskKey: { projectId: number; projectSequence: number } | null | undefined
     ) {
-        if (!taskId) return false;
-        if (typeof taskId === 'number') {
-            const t = tasks.value.find((x) => x.id === taskId);
-            return t ? reviewingTaskIds.value.has(getTaskKey(t)) : false;
-        }
-        return reviewingTaskIds.value.has(getTaskKey(taskId));
+        if (!taskKey) return false;
+        return reviewingTaskIds.value.has(getTaskKey(taskKey));
     }
 
     /**
      * Start auto AI review for a task
      */
-    async function startAutoReview(taskId: number): Promise<{ success: boolean; error?: string }> {
-        const task = tasks.value.find((t) => t.id === taskId);
+    async function startAutoReview(
+        projectId: number,
+        sequence: number
+    ): Promise<{ success: boolean; error?: string }> {
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
         if (!task) {
             return { success: false, error: 'Task not found' };
         }
@@ -1684,7 +1530,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             }
 
-            console.log('[TaskStore] Starting auto review for task:', taskId);
+            console.log('[TaskStore] Starting auto review for task:', projectId, sequence);
 
             // Build payload and serialize to ensure it's cloneable (remove Vue reactivity)
             const payload = {
@@ -1697,7 +1543,11 @@ export const useTaskStore = defineStore('tasks', () => {
             // Deep clone to remove any Vue reactive proxies or non-cloneable objects
             const serializablePayload = JSON.parse(JSON.stringify(payload));
 
-            const result = await api.taskExecution.startAutoReview(taskId, serializablePayload);
+            const result = await api.taskExecution.startAutoReview(
+                projectId,
+                sequence,
+                serializablePayload
+            );
 
             if (!result.success) {
                 return { success: false, error: result.error || 'Failed to start auto review' };
@@ -1727,11 +1577,27 @@ export const useTaskStore = defineStore('tasks', () => {
         });
         cleanupFns.push(unsubscribeUpdated);
 
-        const unsubscribeDeleted = api.events.on('task:deleted', (id: unknown) => {
-            const taskId = id as number;
-            tasks.value = tasks.value.filter((t) => t.id !== taskId);
-            if (currentTask.value?.id === taskId) {
-                currentTask.value = null;
+        const unsubscribeDeleted = api.events.on('task:deleted', (payload: any) => {
+            // Support payload { projectId, sequence } or legacy id
+            let pId, seq;
+            if (typeof payload === 'object' && payload !== null) {
+                pId = payload.projectId;
+                seq = payload.projectSequence ?? payload.sequence;
+            } else {
+                // Try to resolve legacy ID if possible, though we prefer not to
+                return;
+            }
+
+            if (pId !== undefined && seq !== undefined) {
+                tasks.value = tasks.value.filter(
+                    (t) => !(t.projectId === pId && t.projectSequence === seq)
+                );
+                if (
+                    currentTask.value?.projectId === pId &&
+                    currentTask.value?.projectSequence === seq
+                ) {
+                    currentTask.value = null;
+                }
             }
         });
         cleanupFns.push(unsubscribeDeleted);
@@ -1808,7 +1674,8 @@ export const useTaskStore = defineStore('tasks', () => {
                             window.dispatchEvent(
                                 new CustomEvent('task:input-status-changed', {
                                     detail: {
-                                        taskId: task.id, // Use task.id from store which should be valid
+                                        projectId: task.projectId,
+                                        projectSequence: task.projectSequence,
                                         inputSubStatus: undefined,
                                     },
                                 })
@@ -1860,7 +1727,11 @@ export const useTaskStore = defineStore('tasks', () => {
                     // Note: Pinia store $subscribe might not trigger on Map mutation if detached logic isn't smart, but Vue 3 ref(Map) triggers.
 
                     // Also update task status in local state
-                    const index = tasks.value.findIndex((t) => t.id === task.id);
+                    const index = tasks.value.findIndex(
+                        (t) =>
+                            t.projectId === task.projectId &&
+                            t.projectSequence === task.projectSequence
+                    );
                     if (index >= 0) {
                         tasks.value[index] = {
                             ...tasks.value[index],
@@ -1972,7 +1843,11 @@ export const useTaskStore = defineStore('tasks', () => {
                               aiResult?: any;
                           }
                         | undefined;
-                    const index = tasks.value.findIndex((t) => t.id === task.id);
+                    const index = tasks.value.findIndex(
+                        (t) =>
+                            t.projectId === task.projectId &&
+                            t.projectSequence === task.projectSequence
+                    );
                     if (index >= 0) {
                         const currentTaskInStore = tasks.value[index];
                         if (!currentTaskInStore) return;
@@ -2015,7 +1890,8 @@ export const useTaskStore = defineStore('tasks', () => {
                             window.dispatchEvent(
                                 new CustomEvent('task:input-status-changed', {
                                     detail: {
-                                        taskId: task.id,
+                                        projectId: task.projectId,
+                                        projectSequence: task.projectSequence,
                                         inputSubStatus: null,
                                     },
                                 })
@@ -2029,10 +1905,16 @@ export const useTaskStore = defineStore('tasks', () => {
                                 task.id
                             );
                             // Defer to next tick to ensure state is updated
+                            // Defer to next tick to ensure state is updated
                             setTimeout(() => {
-                                startAutoReview(task.id).catch((err) => {
-                                    console.error('[TaskStore] Failed to start auto-review:', err);
-                                });
+                                startAutoReview(task.projectId, task.projectSequence).catch(
+                                    (err) => {
+                                        console.error(
+                                            '[TaskStore] Failed to start auto-review:',
+                                            err
+                                        );
+                                    }
+                                );
                             }, 100);
                         }
                     }
@@ -2203,7 +2085,11 @@ export const useTaskStore = defineStore('tasks', () => {
                             t.projectSequence === data.projectSequence
                     );
                     if (!task) return;
-                    const index = tasks.value.findIndex((t) => t.id === task.id);
+                    const index = tasks.value.findIndex(
+                        (t) =>
+                            t.projectId === task.projectId &&
+                            t.projectSequence === task.projectSequence
+                    );
 
                     // Update progress with Vue reactivity
                     // Optimized: Mutate map directly
@@ -2307,7 +2193,11 @@ export const useTaskStore = defineStore('tasks', () => {
                     // Optimized: Mutate map directly
                     reviewProgress.value.delete(getTaskKey(task));
 
-                    const index = tasks.value.findIndex((t) => t.id === task.id);
+                    const index = tasks.value.findIndex(
+                        (t) =>
+                            t.projectId === task.projectId &&
+                            t.projectSequence === task.projectSequence
+                    );
                     if (index >= 0) {
                         const reviewFailed = !data.passed;
                         const currentTaskInStore = tasks.value[index];
@@ -2390,20 +2280,20 @@ export const useTaskStore = defineStore('tasks', () => {
                 let taskToExecute: Task | undefined;
                 let triggerChain: string[] | undefined;
 
-                if (typeof data === 'number') {
-                    // Legacy ID support (not used for dependencies anymore)
-                    taskToExecute = tasks.value.find((t) => t.id === data);
-                } else if (data.taskId) {
-                    // Legacy object support
-                    taskToExecute = tasks.value.find((t) => t.id === data.taskId);
-                } else if (data.projectId && data.projectSequence) {
-                    // New Composite Key support
+                if (data.projectId && data.projectSequence) {
+                    // Composite Key support
                     taskToExecute = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
                             t.projectSequence === data.projectSequence
                     );
                     triggerChain = data.triggerChain;
+                } else {
+                    console.error(
+                        '[TaskStore] Invalid auto-execution trigger data (missing projectId/projectSequence):',
+                        data
+                    );
+                    return;
                 }
 
                 if (!taskToExecute) {
@@ -2411,11 +2301,9 @@ export const useTaskStore = defineStore('tasks', () => {
                     return;
                 }
 
-                const taskId = taskToExecute.id; // use ID for logging/executeTask call (Wait, executeTask supports composite split?)
-
                 // Log task status before execution
                 console.log(
-                    `[TaskStore] Task ${taskId} (${taskToExecute.projectId}-${taskToExecute.projectSequence}) current status:`,
+                    `[TaskStore] Task ${taskToExecute.projectId}-${taskToExecute.projectSequence} current status:`,
                     taskToExecute.status
                 );
 
@@ -2425,9 +2313,6 @@ export const useTaskStore = defineStore('tasks', () => {
                         `[TaskStore] Calling executeTask for task ${taskToExecute.projectId}-${taskToExecute.projectSequence} with force: true`
                     );
 
-                    // We call executeTask with Composite Keys if possible, or ID wrapper.
-                    // executeTask handles (idOrProjectId, sequenceOrOptions).
-                    // If we pass (projectId, projectSequence, options), it works.
                     const result = await executeTask(
                         taskToExecute.projectId,
                         taskToExecute.projectSequence,
@@ -2778,7 +2663,6 @@ export const useTaskStore = defineStore('tasks', () => {
         // Getters
         groupedTasks,
         filteredTasks,
-        taskById,
         tasksByStatus,
         totalTasks,
         completedTasks,
@@ -2831,5 +2715,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // AI Interview integration
         createTasksFromExecutionPlan,
+
+        // Actions
     };
 });

@@ -286,6 +286,7 @@ export interface MCPRequestEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_request';
     payload: {
+        taskId?: number;
         projectId?: number;
         projectSequence?: number;
         taskTitle?: string;
@@ -302,6 +303,7 @@ export interface MCPResponseEvent extends BaseEvent {
     category: 'ai';
     type: 'ai.mcp_response';
     payload: {
+        taskId?: number;
         projectId?: number;
         projectSequence?: number;
         taskTitle?: string;

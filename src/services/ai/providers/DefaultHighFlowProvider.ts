@@ -613,7 +613,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
     async chat(
         messages: AIMessage[],
         config: AIConfig,
-        _context?: ExecutionContext
+        context?: ExecutionContext
     ): Promise<AIResponse> {
         // Fallback for deprecated/removed models
         if ((config.model as string) === 'gemini-2.0-flash-exp') {
@@ -668,10 +668,23 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 return msg;
             });
 
-            const { systemInstruction, contents } = this.buildGeminiConversation(
-                sanitizedMessages,
-                sanitizedConfig
-            );
+            // Build additional system prompt from context (Date, MCP, Skills)
+            let additionalSystemPrompt = this.buildSystemPrompt(sanitizedConfig, context);
+
+            // Sanitize additional prompt
+            if (additionalSystemPrompt) {
+                for (const [original, sanitized] of toolNameReplacements) {
+                    additionalSystemPrompt = additionalSystemPrompt.split(original).join(sanitized);
+                }
+            }
+
+            const { systemInstruction: msgSystemInstruction, contents } =
+                this.buildGeminiConversation(sanitizedMessages, sanitizedConfig);
+
+            // Merge system instructions
+            const systemInstruction = [additionalSystemPrompt, msgSystemInstruction]
+                .filter(Boolean)
+                .join('\n\n');
             const toolDeclarations = this.mapTools(sanitizedConfig.tools);
 
             // Build Gemini API format request
@@ -1004,5 +1017,68 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             console.error('[DefaultHighFlowProvider] Image generation error:', error);
             throw error;
         }
+    }
+
+    /**
+     * Override tool call extraction to support "tool_code" markdown blocks
+     * This is a fallback for when the HighFlow model outputs a code block instead of native tool calls
+     */
+    protected extractGeminiToolCalls(parts: any[]): ToolCall[] | undefined {
+        const calls: ToolCall[] = [];
+
+        for (const part of parts) {
+            // 1. Native Function Calls
+            if (part.functionCall) {
+                calls.push({
+                    id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    name: part.functionCall.name,
+                    arguments: part.functionCall.args || {},
+                });
+            }
+
+            // 2. Fallback: Parse "tool_code" blocks from text
+            // Format: ```tool_code \n function_name(arg="value", arg2="value") \n ```
+            if (part.text) {
+                const toolCodeRegex = /```tool_code\s+([a-zA-Z0-9_]+)\(([\s\S]*?)\)\s*```/g;
+                let match;
+                while ((match = toolCodeRegex.exec(part.text)) !== null) {
+                    const toolName = match[1];
+                    const argsString = match[2];
+                    const args: Record<string, any> = {};
+
+                    // Parse arguments: currently supports key="value" format
+                    // e.g. query="space:AD...", site="https://..."
+                    const argRegex = /([a-zA-Z0-9_]+)="([^"]*)"/g;
+                    let argMatch;
+                    while ((argMatch = argRegex.exec(argsString)) !== null) {
+                        args[argMatch[1]] = argMatch[2];
+                    }
+
+                    // Also try to match simple numbers or booleans: key=123 or key=true
+                    const primitiveRegex = /([a-zA-Z0-9_]+)=([0-9]+|true|false)(?=[,\s]|$)/g;
+                    while ((argMatch = primitiveRegex.exec(argsString)) !== null) {
+                        if (!args[argMatch[1]]) {
+                            // Don't overwrite if parsed as string
+                            if (argMatch[2] === 'true') args[argMatch[1]] = true;
+                            else if (argMatch[2] === 'false') args[argMatch[1]] = false;
+                            else args[argMatch[1]] = Number(argMatch[2]);
+                        }
+                    }
+
+                    console.log(
+                        `[DefaultHighFlowProvider] Extracted tool call from text markdown: ${toolName}`,
+                        args
+                    );
+
+                    calls.push({
+                        id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        name: toolName,
+                        arguments: args,
+                    });
+                }
+            }
+        }
+
+        return calls.length > 0 ? calls : undefined;
     }
 }

@@ -195,7 +195,10 @@ export class ClaudeProvider extends BaseAIProvider {
                     system: systemPrompt || undefined,
                     messages: conversation,
                     tools: this.mapTools(config.tools),
-                    tool_choice: config.toolChoice === 'none' ? undefined : config.toolChoice,
+                    tool_choice: this.mapToolChoice(
+                        config.toolChoice,
+                        (config.tools?.length ?? 0) > 0
+                    ),
                 });
             } catch (error: any) {
                 console.error('[ClaudeProvider] API Error:', error);
@@ -460,8 +463,8 @@ export class ClaudeProvider extends BaseAIProvider {
 
     private buildAnthropicChat(
         messages: AIMessage[],
-        _config: AIConfig,
-        _context?: ExecutionContext
+        config: AIConfig,
+        context?: ExecutionContext
     ): {
         systemPrompt: string | undefined;
         conversation: Anthropic.Messages.MessageParam[];
@@ -474,6 +477,12 @@ export class ClaudeProvider extends BaseAIProvider {
         const conversation = messages
             .filter((msg) => msg.role !== 'system')
             .map((msg) => this.mapMessageToAnthropic(msg));
+
+        // Inject System Prompt (Date/Context)
+        const additionalSystemPrompt = this.buildSystemPrompt(config, context);
+        if (additionalSystemPrompt) {
+            systemSegments.unshift(additionalSystemPrompt);
+        }
 
         return {
             systemPrompt: systemSegments.length > 0 ? systemSegments.join('\n\n') : undefined,
@@ -581,6 +590,17 @@ export class ClaudeProvider extends BaseAIProvider {
             role: message.role as 'user' | 'assistant',
             content: anthropicContent,
         };
+    }
+
+    private mapToolChoice(choice: string | object | undefined, hasTools: boolean): any {
+        if (!hasTools) return undefined;
+        if (!choice || choice === 'auto') return { type: 'auto' };
+        if (choice === 'any' || choice === 'required') return { type: 'any' };
+        if (typeof choice === 'string' && choice !== 'none') {
+            return { type: 'tool', name: choice };
+        }
+        if (typeof choice === 'object') return choice;
+        return undefined;
     }
 
     private mapTools(tools?: AIConfig['tools']) {

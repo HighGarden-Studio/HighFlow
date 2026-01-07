@@ -3,7 +3,7 @@
  * AI & Script Task Card Component
  * Supports both 'ai' and 'script' task types with in_review workflow
  */
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
@@ -95,6 +95,91 @@ watch(
     }
 );
 
+// MCP Tool  Execution State
+interface ToolExecution {
+    id: string;
+    toolName: string;
+    status: 'running' | 'success' | 'failed';
+    duration?: number;
+    phase: number;
+}
+
+const mcpExecutions = ref<ToolExecution[]>([]);
+const currentPhase = ref(0);
+let mcpEventCleanups: (() => void)[] = [];
+
+// Setup MCP event listeners
+function setupMCPListeners() {
+    if (typeof window === 'undefined' || !window.electron) return;
+
+    const api = window.electron;
+
+    // Listen for MCP requests
+    const cleanupRequest = api.events.on('ai.mcp_request', (data: any) => {
+        // Match by composite key
+        if (
+            data.projectId === props.task.projectId &&
+            data.projectSequence === props.task.projectSequence
+        ) {
+            // Increment phase if this is a new iteration
+            const lastExecution = mcpExecutions.value[mcpExecutions.value.length - 1];
+            if (lastExecution && lastExecution.status === 'success') {
+                currentPhase.value++;
+            }
+
+            mcpExecutions.value.push({
+                id: `mcp-${Date.now()}-${Math.random()}`,
+                toolName: data.toolName || 'Unknown Tool',
+                status: 'running',
+                phase: currentPhase.value,
+            });
+        }
+    });
+
+    // Listen for MCP responses
+    const cleanupResponse = api.events.on('ai.mcp_response', (data: any) => {
+        if (
+            data.projectId === props.task.projectId &&
+            data.projectSequence === props.task.projectSequence
+        ) {
+            // Find the last running tool with this name
+            const execution = mcpExecutions.value
+                .reverse()
+                .find((e) => e.toolName === data.toolName && e.status === 'running');
+
+            if (execution) {
+                execution.status = data.success ? 'success' : 'failed';
+                execution.duration = data.duration;
+            }
+
+            mcpExecutions.value.reverse(); // Restore order
+        }
+    });
+
+    mcpEventCleanups.push(cleanupRequest, cleanupResponse);
+}
+
+function clearMCPListeners() {
+    mcpEventCleanups.forEach((cleanup) => cleanup());
+    mcpEventCleanups = [];
+    mcpExecutions.value = [];
+    currentPhase.value = 0;
+}
+
+onMounted(() => setupMCPListeners());
+onUnmounted(() => clearMCPListeners());
+
+// Watch task status to reset MCP state when task starts
+watch(
+    () => props.task.status,
+    (newStatus, oldStatus) => {
+        if (newStatus === 'in_progress' && oldStatus !== 'in_progress') {
+            clearMCPListeners();
+            setupMCPListeners();
+        }
+    }
+);
+
 // Store-bound computed properties
 const streamedContent = computed(() => {
     // Legacy support for global ID lookup is preserved in store, but we prefer composite key
@@ -118,6 +203,25 @@ const reviewStreamedContent = computed(() => {
 
 const isTaskCurrentlyReviewing = computed(() => {
     return taskStore.isTaskReviewing(props.task.id);
+});
+
+// MCP execution summary for display
+const mcpSummary = computed(() => {
+    const successful = mcpExecutions.value.filter((e) => e.status === 'success').length;
+    const running = mcpExecutions.value.filter((e) => e.status === 'running').length;
+    const failed = mcpExecutions.value.filter((e) => e.status === 'failed').length;
+
+    return { successful, running, failed, total: mcpExecutions.value.length };
+});
+
+const mcpStatusText = computed(() => {
+    if (mcpSummary.value.running > 0) {
+        return `🔄 ${mcpSummary.value.running} tool${mcpSummary.value.running > 1 ? 's' : ''} running...`;
+    }
+    if (mcpSummary.value.successful > 0) {
+        return `✓ ${mcpSummary.value.successful} tool${mcpSummary.value.successful > 1 ? 's' : ''} executed`;
+    }
+    return '';
 });
 
 // Provider Icon helper - uses centralized icon mapping
@@ -626,6 +730,21 @@ function hexToRgba(hex: string, alpha: number) {
                         class="text-xs text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors"
                         >{{ t('task.actions.view_detail') }} &rarr;</span
                     >
+                </div>
+
+                <!-- MCP Tool Execution Status (if running) -->
+                <div
+                    v-if="mcpSummary.total > 0"
+                    class="mb-1.5 px-1.5 py-1 bg-white/50 dark:bg-black/20 rounded border border-blue-200/50 dark:border-blue-700/50"
+                >
+                    <div class="flex items-center justify-between text-[9px]">
+                        <span class="font-medium text-blue-700 dark:text-blue-300">{{
+                            mcpStatusText
+                        }}</span>
+                        <span v-if="mcpSummary.failed > 0" class="text-red-600 dark:text-red-400"
+                            >{{ mcpSummary.failed }} failed</span
+                        >
+                    </div>
                 </div>
 
                 <!-- Streaming content -->

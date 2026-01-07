@@ -80,7 +80,8 @@ const tasksAPI = {
     list: (projectId: number, filters?: { status?: string }) =>
         ipcRenderer.invoke('tasks:list', projectId, filters),
 
-    get: (id: number) => ipcRenderer.invoke('tasks:get', id),
+    get: (projectId: number, sequence: number) =>
+        ipcRenderer.invoke('tasks:get', projectId, sequence),
 
     create: (data: any) => ipcRenderer.invoke('tasks:create', data),
 
@@ -265,6 +266,9 @@ const eventsAPI = {
             'curator:started',
             'curator:step',
             'curator:completed',
+            // MCP Events
+            'ai.mcp_request',
+            'ai.mcp_response',
         ];
 
         if (validChannels.includes(channel)) {

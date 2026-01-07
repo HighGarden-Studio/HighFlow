@@ -21,6 +21,8 @@ import type {
     CuratorStartedEvent,
     CuratorStepEvent,
     CuratorCompletedEvent,
+    MCPRequestEvent,
+    MCPResponseEvent,
 } from '../../../src/services/events/EventBus';
 import type { TaskResult } from '../../../src/services/workflow/types';
 import { buildDependencyContext } from '../services/dependency-context-builder';
@@ -3639,6 +3641,21 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
     eventBus.on<CuratorCompletedEvent>('ai.curator_completed', (event) => {
         getMainWindow()?.webContents.send('curator:completed', event.payload);
+    });
+
+    // MCP Event Handlers - Forward to frontend
+    eventBus.on<MCPRequestEvent>('ai.mcp_request', (event) => {
+        getMainWindow()?.webContents.send('ai.mcp_request', {
+            ...event.payload,
+            source: event.source,
+        });
+    });
+
+    eventBus.on<MCPResponseEvent>('ai.mcp_response', (event) => {
+        getMainWindow()?.webContents.send('ai.mcp_response', {
+            ...event.payload,
+            source: event.source,
+        });
     });
 }
 

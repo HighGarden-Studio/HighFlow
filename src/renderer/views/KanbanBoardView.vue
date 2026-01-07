@@ -86,8 +86,8 @@ const previewTaskId = ref<{ projectId: number; projectSequence: number } | null>
 const resultPreviewTask = computed(() => {
     console.log('[KanbanBoardView] resultPreviewTask computed:', {
         previewTaskId: previewTaskId.value,
-        totalTasks: taskStore.tasks.length,
-        taskSample: taskStore.tasks[0]
+        totalTasks: taskStore.tasks?.length || 0,
+        taskSample: taskStore.tasks?.[0]
             ? {
                   projectId: taskStore.tasks[0].projectId,
                   projectSequence: taskStore.tasks[0].projectSequence,
@@ -108,10 +108,11 @@ const resultPreviewTask = computed(() => {
     if (!task) {
         console.error('[KanbanBoardView] Task not found in store!', {
             searchingFor: previewTaskId.value,
-            availableTasks: taskStore.tasks.map((t) => ({
-                projectId: t.projectId,
-                projectSequence: t.projectSequence,
-            })),
+            availableTasks:
+                taskStore.tasks?.map((t) => ({
+                    projectId: t.projectId,
+                    projectSequence: t.projectSequence,
+                })) || [],
         });
         return null;
     }
@@ -226,7 +227,10 @@ function updateMissingProviderCacheDebounced() {
 async function updateMissingProviderCache() {
     if (!isMounted.value) return;
     const newCache = new Map<string, MissingProviderInfo | null>();
-    for (const task of taskStore.tasks) {
+    const tasks = taskStore.tasks;
+    if (!tasks || !Array.isArray(tasks)) return;
+
+    for (const task of tasks) {
         const key = `${task.projectId}_${task.projectSequence}`;
         newCache.set(key, await getMissingProviderForTask(task));
     }
@@ -414,6 +418,7 @@ async function handleTaskApprove(task: Task) {
 }
 
 async function handleTaskReject(task: Task, feedback: string) {
+    if (!task) return;
     await taskStore.updateTask(task.projectId, task.projectSequence, {
         status: 'todo',
         description: task.description + '\n\n[Rejection Feedback]: ' + feedback,
@@ -455,7 +460,8 @@ async function confirmSubdivision() {
                 priority: subtask.priority || 'medium',
                 tags: subtask.tags,
                 estimatedMinutes: subtask.estimatedMinutes || undefined,
-                parentTaskId: parentTask.id,
+                // parentTaskId: parentTask.id, // Legacy ID removed
+                metadata: { parentSequence: parentTask.projectSequence },
             });
         }
 
@@ -483,7 +489,7 @@ function closeSubdivisionModal() {
 // Additional TaskCard event handlers
 async function handleEnhancePrompt(task: Task) {
     // TODO: Implement prompt enhancement with AI
-    console.log('Enhance prompt for task:', task.id);
+    console.log('Enhance prompt for task:', task.projectId, task.projectSequence);
 }
 
 function handlePreviewPrompt(task: Task) {
@@ -569,8 +575,10 @@ async function handleEditModalSave(updates: Partial<Task>) {
     closeEditModal();
 }
 
-async function handleEditModalDelete(taskId: number) {
-    await taskStore.deleteTask(taskId);
+async function handleEditModalDelete(payload: any) {
+    if (editingTask.value) {
+        await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
+    }
     closeEditModal();
 }
 
@@ -701,13 +709,17 @@ const liveResponseContent = computed(() => {
 
 // Helper to get tasks for a column, potentially merging statuses
 function getTasksForColumn(columnId: string) {
+    const groups = groupedTasks.value;
+    if (!groups) return [];
+
     if (columnId === 'blocked') {
-        const blocked = groupedTasks.value.blocked || [];
-        const failed = groupedTasks.value.failed || [];
+        const blocked = groups.blocked || [];
+        const failed = groups.failed || [];
         // Combine and sort by order
         return [...blocked, ...failed].sort((a, b) => a.order - b.order);
     }
-    return groupedTasks.value[columnId as keyof typeof groupedTasks.value] || [];
+
+    return groups[columnId as keyof typeof groups] || [];
 }
 
 const liveResponseType = computed(() => {
@@ -919,7 +931,7 @@ function handleConnectionStart(task: Task, event: DragEvent) {
     // 전역 마우스 이동 추적
     document.addEventListener('dragover', handleGlobalDragOver);
 
-    console.log('Connection started from task:', task.id, task.title);
+    console.log('Connection started from task:', task.projectId, task.projectSequence, task.title);
 }
 
 function handleGlobalDragOver(event: DragEvent) {
@@ -1054,7 +1066,10 @@ async function handleRejectTask() {
     approvalProcessing.value = true;
     try {
         // Reject: cancel the task and move to TODO
-        const result = await taskStore.rejectTask(approvalTask.value.id);
+        const result = await taskStore.rejectTask(
+            approvalTask.value.projectId,
+            approvalTask.value.projectSequence
+        );
         if (!result.success) {
             console.error('Failed to reject task:', result.error);
         }
@@ -1348,7 +1363,7 @@ onMounted(async () => {
 
                         <!-- Empty state -->
                         <div
-                            v-if="!groupedTasks[column.id]?.length"
+                            v-if="!getTasksForColumn(column.id)?.length"
                             class="flex flex-col items-center justify-center py-8 text-gray-500"
                         >
                             <svg

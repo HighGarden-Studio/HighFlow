@@ -321,6 +321,23 @@ export abstract class BaseAIProvider {
     protected buildSystemPrompt(config: AIConfig, context?: ExecutionContext): string {
         let systemPrompt = config.systemPrompt || '';
 
+        // Inject Current Date and Time
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+        const timeStr = now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZoneName: 'short',
+        });
+        systemPrompt = `Current Date: ${dateStr}\nCurrent Time: ${timeStr}\n\n${systemPrompt}`;
+
         if (context) {
             if (context.skills && context.skills.length > 0) {
                 systemPrompt += '\n\n## Available Skills\n';

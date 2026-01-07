@@ -28,7 +28,7 @@ import { ProviderFactory, type ProviderApiKeys } from '../ai/providers/ProviderF
 import { buildPlainTextResult } from '../ai/utils/aiResultUtils';
 import { MultiVendorAiClient } from '../ai/MultiVendorAiClient';
 import type { ExecutionContext } from './types';
-import type { MCPManager } from '../mcp/MCPManager';
+import type { MCPManager, TaskMCPOverrideEntry } from '../mcp/MCPManager';
 import { isMCPPermissionError } from '../mcp/errors';
 import { eventBus } from '../events/EventBus';
 import type { AIPromptGeneratedEvent } from '../events/EventBus';
@@ -426,7 +426,7 @@ export class AIServiceManager {
             effectiveMcpConfig && Object.keys(effectiveMcpConfig).length > 0 && mcpManager
         );
         if (hasTaskOverrides && mcpManager) {
-            mcpManager.setTaskOverrides(task.id, effectiveMcpConfig);
+            mcpManager.setTaskOverrides(task.projectId, task.projectSequence, effectiveMcpConfig);
         }
 
         try {
@@ -643,7 +643,8 @@ export class AIServiceManager {
                 'info',
                 `[AIServiceManager] Generated prompt for task #${task.projectSequence}`,
                 {
-                    taskId: task.id,
+                    projectId: task.projectId,
+                    projectSequence: task.projectSequence,
                     systemPromptLength: aiConfig.systemPrompt?.length,
                     userPromptLength: userPrompt.length,
                     model: aiConfig.model,
@@ -657,7 +658,8 @@ export class AIServiceManager {
                     'warn',
                     `[AIServiceManager] No MCP tools available for task #${task.projectSequence} despite required list`,
                     {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                         requiredMCPs: allRequiredMCPs,
                     }
                 );
@@ -666,7 +668,8 @@ export class AIServiceManager {
                     'info',
                     `[AIServiceManager] Collected ${toolCount} MCP tools for task #${task.projectSequence}`,
                     {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                         toolNames: (aiConfig.tools ?? []).map((t) => t.name),
                     }
                 );
@@ -684,7 +687,8 @@ export class AIServiceManager {
                         'info',
                         '[AIServiceManager] System Prompt updated with MCP Context details',
                         {
-                            taskId: task.id,
+                            projectId: task.projectId,
+                            projectSequence: task.projectSequence,
                             contextCount: mcpContext.length,
                         }
                     );
@@ -916,7 +920,7 @@ export class AIServiceManager {
         } finally {
             this.activeExecutions.delete(executionId);
             if (hasTaskOverrides && mcpManager) {
-                mcpManager.clearTaskOverrides(task.id);
+                mcpManager.clearTaskOverrides(task.projectId, task.projectSequence);
             }
         }
     }
@@ -1241,7 +1245,8 @@ export class AIServiceManager {
             details?: Record<string, any>
         ) => {
             options?.onLog?.(level, message, {
-                taskId: task.id,
+                projectId: task.projectId,
+                projectSequence: task.projectSequence,
                 ...details,
             });
         };
@@ -1292,19 +1297,48 @@ export class AIServiceManager {
                 return fail(`MCP '${mcpIdentifier}' is not registered or enabled`);
             }
 
+            // Resolve correct tool name (handling underscore vs hyphen mismatch)
+            let finalToolName = toolName;
+            try {
+                const tools = await mcpManager.listTools(mcp.id, {
+                    projectId: task.projectId,
+                    projectSequence: task.projectSequence,
+                });
+                const matchingTool =
+                    tools.find((t) => t.name === toolName) ||
+                    tools.find((t) => t.name === toolName.replace(/_/g, '-')) ||
+                    tools.find((t) => t.name.replace(/-/g, '_') === toolName);
+
+                if (matchingTool) {
+                    finalToolName = matchingTool.name;
+                    // If we found a name mismatch, log it
+                    if (finalToolName !== toolName) {
+                        logMCP(
+                            'debug',
+                            `[MCP] Resolved tool name '${toolName}' to '${finalToolName}'`
+                        );
+                    }
+                }
+            } catch (err) {
+                // If listing tools fails, proceed with original name as best effort
+                console.warn(
+                    `[MCP] Failed to list tools for name resolution: ${(err as Error).message}`
+                );
+            }
+
             logMCP('info', `[MCP] Executing ${call.name}`, {
                 toolCallId: call.id,
                 toolLabel: call.name,
-                toolName,
+                toolName: finalToolName,
                 mcpName: mcp.name,
                 parameters: args,
             });
 
             let execution;
             try {
-                execution = await mcpManager.executeMCPTool(mcp.id, toolName, args, {
-                    taskId: task.id,
+                execution = await mcpManager.executeMCPTool(mcp.id, finalToolName, args, {
                     projectId: task.projectId,
+                    projectSequence: task.projectSequence,
                     taskTitle: task.title,
                     projectName: (task as any).projectName, // Try to pass project name if available
                     source: 'ai-service',
@@ -1843,6 +1877,14 @@ export class AIServiceManager {
         task: Task,
         requiredMCPs: string[]
     ): Promise<MCPToolDefinition[]> {
+        // CRITICAL DEBUG: Check if task.id exists
+        console.log(
+            '[collectMCPTools] DEBUG - task.id:',
+            task.id,
+            'task.projectSequence:',
+            task.projectSequence
+        );
+
         if (!requiredMCPs || requiredMCPs.length === 0) {
             return [];
         }
@@ -1863,10 +1905,17 @@ export class AIServiceManager {
                 }
 
                 console.log(`[MCP Tools] Collecting tools from MCP: ${mcpName} (ID: ${mcp.id})`);
+                console.log(
+                    `[AIServiceManager Debug] Calling listTools for MCP ${mcpName} with projectId:`,
+                    task.projectId,
+                    'projectSequence:',
+                    task.projectSequence
+                );
                 let tools: MCPToolDefinition[] = [];
                 try {
                     tools = (await mcpManager.listTools(mcp.id, {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                     })) as MCPToolDefinition[];
                     console.log(
                         `[MCP Tools] Found ${tools.length} tools in ${mcpName}:`,
@@ -2184,7 +2233,6 @@ ${
         mcpContext: MCPContextInsight[] = []
     ): AIExecutionContext {
         return {
-            taskId: task.id, // Keeping for backward compatibility if needed, though mostly deprecated
             projectId: task.projectId,
             projectSequence: task.projectSequence,
             userId: context.userId,
@@ -2243,7 +2291,6 @@ ${
             'info',
             `[AI] Prompt prepared for task #${task.projectSequence} (${provider}/${model}): ${this.truncateString(prompt, 200)}`,
             {
-                taskId: task.id,
                 projectId: task.projectId,
                 projectSequence: task.projectSequence,
                 provider,
@@ -2465,6 +2512,26 @@ ${
             return []; // MCP not available in this environment
         }
 
+        const leads: MCPContextInsight[] = [];
+        const overrides: Record<string, TaskMCPOverrideEntry> = {};
+
+        // Pre-scan to set overrides before collecting tools/insights
+        // This ensures listTools() calls have access to task-specific env vars
+        for (const req of required) {
+            const entry = this.getTaskMCPConfigEntry(task, req);
+            if (entry) {
+                // Determine ID or slug to map the override to
+                // We use the requirement string as the key, but also try to resolve slug
+                overrides[req] = {
+                    config: entry.config || {},
+                    env: entry.env || {},
+                };
+            }
+        }
+
+        // Register overrides for this task
+        mcpManager.setTaskOverrides(task.projectId, task.projectSequence, overrides);
+
         const insights: MCPContextInsight[] = [];
 
         for (let i = 0; i < required.length; i++) {
@@ -2490,6 +2557,7 @@ ${
                     continue;
                 }
 
+                // Look up config again to ensure we have the entry if we want to extract context
                 const taskConfigEntry =
                     this.getTaskMCPConfigEntry(task, requirement) ||
                     this.getTaskMCPConfigEntry(task, slug) ||
@@ -2503,7 +2571,8 @@ ${
                 let tools: MCPToolDefinition[] = [];
                 try {
                     tools = (await mcpManager.listTools(mcp.id, {
-                        taskId: task.id,
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
                     })) as MCPToolDefinition[];
                 } catch (error) {
                     console.warn(
@@ -2540,8 +2609,8 @@ ${
                             specializedCall.name,
                             specializedCall.params,
                             {
-                                taskId: task.id,
                                 projectId: task.projectId,
+                                projectSequence: task.projectSequence,
                                 source: 'ai-service',
                             }
                         );
@@ -2573,11 +2642,11 @@ ${
                             {
                                 query: `${task.title}\n${task.description || ''}`.slice(0, 500),
                                 projectId: task.projectId,
-                                taskId: task.id,
+                                projectSequence: task.projectSequence,
                             },
                             {
-                                taskId: task.id,
                                 projectId: task.projectId,
+                                projectSequence: task.projectSequence,
                                 source: 'ai-service',
                             }
                         );
@@ -2607,8 +2676,8 @@ ${
                                 defaultCall.name,
                                 defaultCall.params,
                                 {
-                                    taskId: task.id,
                                     projectId: task.projectId,
+                                    projectSequence: task.projectSequence,
                                     source: 'ai-service',
                                 }
                             );

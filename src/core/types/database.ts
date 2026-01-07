@@ -530,9 +530,14 @@ export interface ImageGenerationConfig {
     extra?: Record<string, any>;
 }
 
-export interface Task extends BaseEntity {
+export interface Task {
+    // Composite Primary Key (no global id)
     projectId: number;
     projectSequence: number; // Project-scoped task number (1, 2, 3...)
+
+    // Timestamps
+    createdAt: Date;
+    updatedAt: Date;
     title: string;
     description: string | null;
     generatedPrompt: string | null;

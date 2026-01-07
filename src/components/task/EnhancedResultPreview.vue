@@ -19,6 +19,8 @@ import { useActivityLogStore } from '../../renderer/stores/activityLogStore';
 import { Diff } from 'vue-diff';
 import 'vue-diff/dist/index.css';
 import CodeEditor from '../common/CodeEditor.vue';
+import MCPToolExecutionLog, { type LogEntry as MCPLogEntry } from '../ai/MCPToolExecutionLog.vue';
+import { getAPI } from '../../utils/electron';
 
 // Output format type
 type OutputFormat =
@@ -247,6 +249,99 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// MCP Tool Execution Logs
+const mcpLogs = ref<MCPLogEntry[]>([]);
+const mcpListeners: (() => void)[] = [];
+
+// Setup MCP listeners
+function setupMcpListeners() {
+    const api = getAPI();
+    if (!api) return;
+
+    // Clear previous listeners
+    mcpListeners.forEach((cleanup) => cleanup());
+    mcpListeners.length = 0;
+
+    const currentTaskId = props.taskId || props.task?.id;
+    if (!currentTaskId) return;
+
+    // Listen for requests
+    const cleanupRequest = api.events.on('ai.mcp_request', (data: any) => {
+        if (data.taskId === currentTaskId) {
+            // Check if log entry already exists
+            const existingParam = mcpLogs.value.find((l) => l.id === data.requestId);
+            if (!existingParam) {
+                mcpLogs.value.push({
+                    id: data.requestId || `req-${Date.now()}-${Math.random()}`,
+                    tool: data.toolName,
+                    status: 'running',
+                    input: data.parameters,
+                    timestamp: new Date(),
+                });
+            }
+        }
+    });
+    mcpListeners.push(cleanupRequest);
+
+    // Listen for responses
+    const cleanupResponse = api.events.on('ai.mcp_response', (data: any) => {
+        if (data.taskId === currentTaskId) {
+            // Find corresponding request
+            const logIndex = mcpLogs.value.findIndex(
+                (l) => l.tool === data.toolName && l.status === 'running'
+            );
+            // Optionally match by ID if available, but for now tool name + running status is a decent heuristic if ID missing
+            // Ideally we pass a unique ID in the flow. Assuming we handle singular tools sequentially or have ID.
+            // If data.requestId provided:
+            const log = data.requestId
+                ? mcpLogs.value.find((l) => l.id === data.requestId)
+                : mcpLogs.value[logIndex]; // Fallback to last running
+
+            if (log) {
+                log.status = data.success ? 'success' : 'failed';
+                log.output = data.result;
+                log.error = data.error;
+                log.duration = typeof data.duration === 'number' ? `${data.duration}ms` : undefined;
+            } else {
+                // If we missed the request (or it was before mount), allow adding just the result?
+                // Maybe not, to keep it clean.
+                // Or add a completed entry
+                mcpLogs.value.push({
+                    id: `resp-${Date.now()}`,
+                    tool: data.toolName,
+                    status: data.success ? 'success' : 'failed',
+                    output: data.result,
+                    error: data.error,
+                    duration: typeof data.duration === 'number' ? `${data.duration}ms` : undefined,
+                    timestamp: new Date(),
+                });
+            }
+        }
+    });
+    mcpListeners.push(cleanupResponse);
+}
+
+// Watch task ID to reset logs and re-subscribe
+watch(
+    () => props.taskId || props.task?.id,
+    (newId, oldId) => {
+        if (newId !== oldId) {
+            mcpLogs.value = [];
+            setupMcpListeners();
+        }
+    }
+);
+
+// We need to modify the existing onMounted since it's already defined in the file (but hidden in ellipsis)
+// Actually we can have multiple onMounted hooks in Vue setup!
+onMounted(() => {
+    setupMcpListeners();
+});
+
+onUnmounted(() => {
+    mcpListeners.forEach((cleanup) => cleanup());
+});
 
 // Resolve Task ID reliably
 const resolvedTaskId = computed(() => {
@@ -809,8 +904,12 @@ const outputFormat = computed<OutputFormat>(() => {
     ) {
         let format = aiResult.value.subType as OutputFormat;
         const contentVal = fallbackResultContent.value;
-        // Check for mixed content (code blocks) in text/html to force markdown
-        if ((format === 'text' || format === 'html') && contentVal) {
+        // Always treat 'text' as markdown for better rendering
+        if (format === 'text') {
+            format = 'markdown';
+        }
+        // Check for mixed content (code blocks) in html to force markdown
+        else if (format === 'html' && contentVal) {
             if (/```[\s\S]+```/.test(contentVal)) {
                 format = 'markdown';
             }
@@ -3039,10 +3138,10 @@ onMounted(() => {
                                         </div>
                                     </div>
 
-                                    <!-- Content Container -->
+                                    <!-- Preview Content -->
                                     <div
-                                        v-if="viewMode === 'preview' || viewMode === 'split'"
                                         class="flex-1 flex flex-col overflow-hidden"
+                                        v-if="viewMode === 'preview' || viewMode === 'split'"
                                     >
                                         <!-- AI Response Header (Visible when file is selected) -->
                                         <div
@@ -3285,6 +3384,11 @@ onMounted(() => {
                                                         ref="contentContainer"
                                                         class="flex-1 w-full h-full overflow-y-auto p-6 scroll-smooth"
                                                     >
+                                                        <!-- MCP Logs interleaved -->
+                                                        <div v-if="mcpLogs.length > 0" class="mb-6">
+                                                            <MCPToolExecutionLog :logs="mcpLogs" />
+                                                        </div>
+
                                                         <div
                                                             class="prose dark:prose-invert max-w-none"
                                                             v-html="markdownHtml"
@@ -3298,6 +3402,14 @@ onMounted(() => {
                                                         ref="contentContainer"
                                                         class="flex-1 w-full h-full overflow-y-auto p-4 scroll-smooth"
                                                     >
+                                                        <!-- MCP Logs interleaved -->
+                                                        <div
+                                                            v-if="mcpLogs.length > 0"
+                                                            class="mb-6 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4"
+                                                        >
+                                                            <MCPToolExecutionLog :logs="mcpLogs" />
+                                                        </div>
+
                                                         <div
                                                             v-if="jsonMarkdownHtml"
                                                             class="prose dark:prose-invert max-w-none"
@@ -3314,30 +3426,23 @@ Invalid JSON</pre
                                                         >
                                                     </div>
 
-                                                    <!-- Default/Code Preview -->
+                                                    <!-- Default/Text Preview -->
                                                     <div
                                                         v-else
-                                                        class="flex-1 flex items-center justify-center text-gray-400"
+                                                        class="flex-1 w-full h-full overflow-y-auto p-6 scroll-smooth"
                                                     >
-                                                        <div class="text-center">
-                                                            <svg
-                                                                class="w-12 h-12 mx-auto mb-2 opacity-50"
-                                                                fill="none"
-                                                                viewBox="0 0 24 24"
-                                                                stroke="currentColor"
-                                                            >
-                                                                <path
-                                                                    stroke-linecap="round"
-                                                                    stroke-linejoin="round"
-                                                                    stroke-width="2"
-                                                                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-                                                                />
-                                                            </svg>
-                                                            <p class="text-sm">
-                                                                Preview not available for this
-                                                                format
-                                                            </p>
+                                                        <!-- MCP Logs interleaved -->
+                                                        <div
+                                                            v-if="mcpLogs.length > 0"
+                                                            class="mb-6 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4"
+                                                        >
+                                                            <MCPToolExecutionLog :logs="mcpLogs" />
                                                         </div>
+
+                                                        <pre
+                                                            class="font-mono text-sm whitespace-pre-wrap text-gray-800 dark:text-gray-200 leading-relaxed font-sans"
+                                                            >{{ content }}</pre
+                                                        >
                                                     </div>
 
                                                     <!-- Auto-scroll Info -->

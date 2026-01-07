@@ -428,8 +428,10 @@ function buildGraph(shouldFit = false) {
     );
 
     // Override positions for tasks that have saved positions in metadata
+    // Override positions for tasks that have saved positions in metadata
     const finalNodes = layoutedNodes.map((node) => {
-        const task = tasks.value.find((t) => String(t.id) === node.id);
+        // Fix: Node ID is composite "projectId_sequence". Match by composite key.
+        const task = tasks.value.find((t) => `${t.projectId}_${t.projectSequence}` === node.id);
         if (task?.metadata && typeof task.metadata === 'object' && 'dagPosition' in task.metadata) {
             const savedPosition = (task.metadata as any).dagPosition;
             if (
@@ -1502,6 +1504,12 @@ onMounted(async () => {
         const handleInputStatusChange = async (event: Event) => {
             const detail = (event as CustomEvent).detail;
             console.log('[DAGView] INPUT task status changed event:', detail);
+
+            if (detail.projectId && detail.projectSequence) {
+                // Construct key expected by updateNodeByKey (format: "projectId-sequence")
+                const key = `${detail.projectId}-${detail.projectSequence}`;
+                updateNodeByKey(key);
+            }
             await nextTick();
         };
         window.addEventListener('task:input-status-changed', handleInputStatusChange);
