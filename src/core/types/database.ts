@@ -497,6 +497,8 @@ export interface Project extends BaseEntity {
     totalTokens: number;
     metadata?: any;
     curatorOperatorId?: number | null; // Override global curator with project-specific operator
+    marketplaceItemId?: string; // ID of the original marketplace item if downloaded
+    marketplaceVersion?: string; // Version of the installed marketplace item
 }
 
 export interface ProjectMemory {
@@ -902,6 +904,8 @@ export interface Operator extends BaseEntity {
     isActive: boolean;
     usageCount: number;
     successRate: number | null;
+    marketplaceItemId?: string;
+    marketplaceVersion?: string;
 }
 
 export interface OperatorMCP extends BaseEntity {
@@ -1095,6 +1099,10 @@ export interface CleanTaskExport {
     // Execution settings (NO results)
     triggerConfig: any | null;
     dependsOn: number[]; // For dependency mapping
+    autoReview: boolean;
+    autoApprove: boolean;
+    reviewAiProvider: string | null;
+    reviewAiModel: string | null;
 
     // Always reset to clean state
     status: 'todo';
@@ -1216,4 +1224,6 @@ export interface ScriptTemplate extends BaseEntity {
     scriptCode: string;
     defaultOptions: Record<string, unknown>;
     tags: string[];
+    marketplaceItemId?: string;
+    marketplaceVersion?: string;
 }

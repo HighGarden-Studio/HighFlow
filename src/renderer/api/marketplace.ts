@@ -12,6 +12,7 @@ import type {
     PurchaseResponse,
     MarketplaceSubmission,
     SubmissionResponse,
+    LibraryResponse,
 } from '@core/types/marketplace';
 
 // Get backend URL from environment or default
@@ -217,15 +218,59 @@ export const marketplaceAPI = {
 
             const token = tokenResult.data;
 
+            const formData = new FormData();
+
+            // Append simple fields
+            formData.append('itemId', submission.itemId);
+            formData.append('name', submission.name);
+            formData.append('description', submission.description);
+            formData.append('itemType', submission.itemType);
+            formData.append('category', submission.category);
+            formData.append('suggestedPrice', submission.suggestedPrice.toString());
+            formData.append('clientVersion', submission.clientVersion);
+
+            if (submission.submissionNote) {
+                formData.append('submissionNote', submission.submissionNote);
+            }
+
+            if (submission.minClientVersion) {
+                formData.append('minClientVersion', submission.minClientVersion);
+            }
+
+            if (submission.definition) {
+                formData.append('definition', submission.definition);
+            }
+
+            // Append JSON fields
+            if (submission.tags && submission.tags.length > 0) {
+                formData.append('tags', JSON.stringify(submission.tags));
+            }
+
+            if (submission.previewGraph) {
+                formData.append('previewGraph', JSON.stringify(submission.previewGraph));
+            }
+
+            // Append Images
+            if (submission.previewImages && submission.previewImages.length > 0) {
+                submission.previewImages.forEach((file) => {
+                    formData.append('previewImages', file);
+                });
+            }
+
+            // Append Icon
+            if (submission.icon) {
+                formData.append('icon', submission.icon);
+            }
+
             const response = await axios.post<SubmissionResponse>(
                 `${BACKEND_URL}/v1/marketplace/submissions`,
-                submission,
+                formData,
                 {
                     headers: {
-                        'Content-Type': 'application/json',
                         Authorization: `Bearer ${token}`,
+                        // Content-Type is automatically set with boundary for FormData
                     },
-                    timeout: 30000,
+                    timeout: 60000, // Longer timeout for file uploads
                 }
             );
 
@@ -240,6 +285,167 @@ export const marketplaceAPI = {
                 window.location.reload();
             }
 
+            throw error;
+        }
+    },
+
+    /**
+     * Get user's library (purchased and published items)
+     */
+    async getLibrary(): Promise<LibraryResponse> {
+        try {
+            const tokenResult = await window.electron.auth.getSessionToken();
+            if (!tokenResult.success || !tokenResult.data) {
+                throw new Error('Not authenticated - please log in');
+            }
+
+            const response = await axios.get<LibraryResponse>(
+                `${BACKEND_URL}/v1/marketplace/library`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${tokenResult.data}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (error: any) {
+            console.error('Failed to fetch library:', error);
+            if (error.response?.status === 401) {
+                await window.electron.auth.logout();
+                window.location.reload();
+            }
+            throw error;
+        }
+    },
+
+    /**
+     * Get a submission by ID (for editing)
+     */
+    async getSubmission(submissionId: string): Promise<MarketplaceSubmission & { id: string }> {
+        try {
+            const tokenResult = await window.electron.auth.getSessionToken();
+            if (!tokenResult.success || !tokenResult.data) {
+                throw new Error('Not authenticated - please log in');
+            }
+
+            const response = await axios.get<MarketplaceSubmission & { id: string }>(
+                `${BACKEND_URL}/v1/marketplace/submissions/${submissionId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${tokenResult.data}`,
+                    },
+                }
+            );
+
+            return response.data;
+        } catch (error: any) {
+            console.error('Failed to fetch submission:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Update an existing submission
+     */
+    async updateSubmission(
+        submissionId: string,
+        submission: MarketplaceSubmission
+    ): Promise<SubmissionResponse> {
+        try {
+            const tokenResult = await window.electron.auth.getSessionToken();
+            if (!tokenResult.success || !tokenResult.data) {
+                throw new Error('Not authenticated - please log in');
+            }
+
+            const token = tokenResult.data;
+            const formData = new FormData();
+
+            // Append simple fields
+            formData.append('itemId', submission.itemId);
+            formData.append('name', submission.name);
+            formData.append('description', submission.description);
+            formData.append('itemType', submission.itemType);
+            formData.append('category', submission.category);
+            formData.append('suggestedPrice', submission.suggestedPrice.toString());
+            formData.append('clientVersion', submission.clientVersion);
+
+            if (submission.submissionNote) {
+                formData.append('submissionNote', submission.submissionNote);
+            }
+
+            if (submission.minClientVersion) {
+                formData.append('minClientVersion', submission.minClientVersion);
+            }
+
+            if (submission.definition) {
+                formData.append('definition', submission.definition);
+            }
+
+            // Append JSON fields
+            if (submission.tags && submission.tags.length > 0) {
+                formData.append('tags', JSON.stringify(submission.tags));
+            }
+
+            if (submission.previewGraph) {
+                formData.append('previewGraph', JSON.stringify(submission.previewGraph));
+            }
+
+            // Append Images
+            if (submission.previewImages && submission.previewImages.length > 0) {
+                submission.previewImages.forEach((file) => {
+                    formData.append('previewImages', file);
+                });
+            }
+
+            // Append Icon
+            if (submission.icon) {
+                formData.append('icon', submission.icon);
+            }
+
+            const response = await axios.put<SubmissionResponse>(
+                `${BACKEND_URL}/v1/marketplace/submissions/${submissionId}`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        // Content-Type is automatically set with boundary for FormData
+                    },
+                    timeout: 60000,
+                }
+            );
+
+            return response.data;
+        } catch (error: any) {
+            console.error('Failed to update submission:', error);
+            if (error.response?.status === 401) {
+                await window.electron.auth.logout();
+                window.location.reload();
+            }
+            throw error;
+        }
+    },
+    /**
+     * Delete (deactivate) a marketplace item
+     */
+    async deleteItem(itemId: string): Promise<void> {
+        try {
+            const tokenResult = await window.electron.auth.getSessionToken();
+            if (!tokenResult.success || !tokenResult.data) {
+                throw new Error('Not authenticated - please log in');
+            }
+
+            await axios.delete(`${BACKEND_URL}/v1/marketplace/items/${itemId}`, {
+                headers: {
+                    Authorization: `Bearer ${tokenResult.data}`,
+                },
+            });
+        } catch (error: any) {
+            console.error('Failed to delete item:', error);
+            if (error.response?.status === 401) {
+                await window.electron.auth.logout();
+                window.location.reload();
+            }
             throw error;
         }
     },

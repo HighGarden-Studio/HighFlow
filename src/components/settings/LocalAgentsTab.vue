@@ -5,62 +5,13 @@
  * Tab for managing local AI coding agents (Claude Code, Codex, Antigravity)
  * Provides installation status check and terminal launch functionality
  */
-import { ref, reactive, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { getAPI } from '../../utils/electron';
 import { getProviderIcon } from '../../utils/iconMapping';
 import IconRenderer from '../common/IconRenderer.vue';
-// Agent type definition
-interface LocalAgent {
-    id: string;
-    name: string;
-    description: string;
-    icon: string;
-    gradient: string;
-    command: string;
-    installCommand: string;
-    website: string;
-    docsUrl: string;
-    requiresApiKey: boolean;
-    apiKeyEnvVar?: string;
-    isInstalled: boolean;
-    isChecking: boolean;
-    version?: string;
-}
+import { useSettingsStore, type LocalAgent } from '../../renderer/stores/settingsStore';
 
-// Reactive state
-const agents = reactive<LocalAgent[]>([
-    {
-        id: 'claude-code',
-        name: 'Claude Code',
-        description:
-            'Anthropic의 공식 AI 코딩 에이전트. 터미널에서 자연어로 코딩 작업을 수행합니다.',
-        icon: '🤖',
-        gradient: 'bg-gradient-to-br from-orange-400 to-amber-500',
-        command: 'claude',
-        installCommand: 'npm install -g @anthropic-ai/claude-code',
-        website: 'https://docs.anthropic.com/en/docs/claude-code',
-        docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
-        requiresApiKey: true,
-        apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-        isInstalled: false,
-        isChecking: true,
-    },
-    {
-        id: 'codex',
-        name: 'OpenAI Codex CLI',
-        description: 'OpenAI의 AI 코딩 에이전트. GPT-4 기반으로 코드 생성 및 수정을 수행합니다.',
-        icon: '💚',
-        gradient: 'bg-gradient-to-br from-green-400 to-teal-500',
-        command: 'codex',
-        installCommand: 'npm install -g @openai/codex',
-        website: 'https://github.com/openai/codex',
-        docsUrl: 'https://github.com/openai/codex#readme',
-        requiresApiKey: true,
-        apiKeyEnvVar: 'OPENAI_API_KEY',
-        isInstalled: false,
-        isChecking: true,
-    },
-]);
+const settingsStore = useSettingsStore();
 
 const selectedAgent = ref<LocalAgent | null>(null);
 const showDetailModal = ref(false);
@@ -69,23 +20,12 @@ const launchError = ref<string | null>(null);
 
 // Check if agent is installed
 async function checkAgentInstalled(agent: LocalAgent): Promise<void> {
-    agent.isChecking = true;
-    try {
-        const api = getAPI();
-        const result = await api.localAgents.checkInstalled(agent.command);
-        agent.isInstalled = result.installed;
-        agent.version = result.version;
-    } catch (error) {
-        console.error(`Failed to check ${agent.name} installation:`, error);
-        agent.isInstalled = false;
-    } finally {
-        agent.isChecking = false;
-    }
+    await settingsStore.checkLocalAgent(agent.id);
 }
 
 // Check all agents on mount
 async function checkAllAgents(): Promise<void> {
-    await Promise.all(agents.map((agent) => checkAgentInstalled(agent)));
+    await Promise.all(settingsStore.localAgents.map((agent) => checkAgentInstalled(agent)));
 }
 
 // Launch agent in terminal
@@ -155,18 +95,23 @@ onMounted(() => {
         <!-- Stats -->
         <div class="grid grid-cols-3 gap-4 mb-6">
             <div class="bg-gray-800 rounded-lg p-4">
-                <div class="text-2xl font-bold text-white">{{ agents.length }}</div>
+                <div class="text-2xl font-bold text-white">
+                    {{ settingsStore.localAgents.length }}
+                </div>
                 <div class="text-gray-400 text-sm">지원 에이전트</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-green-400">
-                    {{ agents.filter((a) => a.isInstalled).length }}
+                    {{ settingsStore.localAgents.filter((a) => a.isInstalled).length }}
                 </div>
                 <div class="text-gray-400 text-sm">설치됨</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-yellow-400">
-                    {{ agents.filter((a) => !a.isInstalled && !a.isChecking).length }}
+                    {{
+                        settingsStore.localAgents.filter((a) => !a.isInstalled && !a.isChecking)
+                            .length
+                    }}
                 </div>
                 <div class="text-gray-400 text-sm">미설치</div>
             </div>
@@ -177,11 +122,11 @@ onMounted(() => {
             <button
                 @click="checkAllAgents"
                 class="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm transition-colors"
-                :disabled="agents.some((a) => a.isChecking)"
+                :disabled="settingsStore.localAgents.some((a) => a.isChecking)"
             >
                 <svg
                     class="w-4 h-4"
-                    :class="{ 'animate-spin': agents.some((a) => a.isChecking) }"
+                    :class="{ 'animate-spin': settingsStore.localAgents.some((a) => a.isChecking) }"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -200,7 +145,7 @@ onMounted(() => {
         <!-- Agent Cards -->
         <div class="space-y-4">
             <div
-                v-for="agent in agents"
+                v-for="agent in settingsStore.localAgents"
                 :key="agent.id"
                 :class="[
                     'rounded-xl p-5 border-2 transition-all',

@@ -38,11 +38,12 @@ function handleTypeSelect(typeId: string) {
             class="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-y-auto"
         >
             <div class="p-6">
-                <h2
-                    class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2"
+                <router-link
+                    to="/marketplace"
+                    class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2 hover:opacity-80 transition-opacity"
                 >
                     <span class="text-blue-600">Market</span>place
-                </h2>
+                </router-link>
 
                 <!-- Type Filter -->
                 <div class="mb-8">

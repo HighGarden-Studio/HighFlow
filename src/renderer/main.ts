@@ -24,5 +24,10 @@ app.use(router);
 import i18n from '../i18n';
 app.use(i18n);
 
+// Use Toast
+import Toast from 'vue-toastification';
+import 'vue-toastification/dist/index.css';
+app.use(Toast);
+
 // Mount app
 app.mount('#app');

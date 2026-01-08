@@ -467,6 +467,10 @@ export class ProjectRepository {
             tags: task.tags,
             triggerConfig: task.triggerConfig,
             dependsOn: task.dependencies || [],
+            autoReview: task.autoReview ?? false,
+            autoApprove: task.autoApprove ?? false,
+            reviewAiProvider: task.reviewAiProvider,
+            reviewAiModel: task.reviewAiModel,
             status: 'todo', // Always export as TODO
         }));
 

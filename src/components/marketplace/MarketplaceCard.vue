@@ -1,35 +1,46 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { MarketplaceItem } from '../../renderer/stores/marketplaceStore';
+import type { MarketplaceItem } from '../../core/types/marketplace';
+import { useSettingsStore } from '../../renderer/stores/settingsStore';
 
 const props = defineProps<{
     item: MarketplaceItem;
+    showDelete?: boolean;
 }>();
 
 const emit = defineEmits<{
-    (e: 'click', id: string): void;
+    (e: 'click', item: MarketplaceItem): void;
     (e: 'action', id: string): void; // For the button action
+    (e: 'delete', id: string): void; // For delete action
 }>();
+
+const settingsStore = useSettingsStore();
+
+const missingRequirements = computed(() => {
+    if (!props.item.requirements?.length) return [];
+    return props.item.requirements.filter((req) => !settingsStore.checkRequirement(req));
+});
 
 const typeColors = {
     project: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     operator: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    script_template: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    'script-template': 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
 const typeLabels = {
     project: 'PROJECT',
     operator: 'OPERATOR',
-    script_template: 'SCRIPT',
+    'script-template': 'SCRIPT',
 };
 
 const actionLabel = computed(() => {
-    if (props.item.isOwned) return 'Install';
+    // Check if item has isOwned (it might be extended type in runtime)
+    if ((props.item as any).isOwned) return 'Install';
     if (props.item.price === 0) return 'Get';
     return 'Purchase';
 });
 
-const isOwnedOrFree = computed(() => props.item.isOwned || props.item.price === 0);
+const isOwnedOrFree = computed(() => (props.item as any).isOwned || props.item.price === 0);
 
 function handleAction(e: Event) {
     e.stopPropagation(); // Prevent card click
@@ -40,17 +51,40 @@ function handleAction(e: Event) {
 <template>
     <div
         class="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-200 cursor-pointer overflow-hidden flex flex-col h-full pt-10"
-        @click="emit('click', item.id)"
+        @click="emit('click', item)"
     >
+        <!-- Requirement Badge -->
+        <div v-if="missingRequirements.length > 0" class="absolute top-4 right-4 z-10">
+            <div
+                class="px-2 py-1 bg-red-500/90 text-white text-[10px] font-bold rounded shadow-sm backdrop-blur-sm"
+            >
+                연동 필요
+            </div>
+        </div>
+
         <!-- Type Badge (Top Left Absolute) -->
         <div class="absolute top-4 left-4">
             <span
                 :class="[
                     'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
-                    typeColors[item.type],
+                    typeColors[item.itemType],
                 ]"
             >
-                {{ typeLabels[item.type] }}
+                {{ typeLabels[item.itemType] }}
+            </span>
+            <!-- Status Badge (For Published Items) -->
+            <span
+                v-if="item.status"
+                :class="[
+                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ml-2',
+                    item.status === 'approved'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                        : item.status === 'rejected'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+                ]"
+            >
+                {{ item.status }}
             </span>
         </div>
 
@@ -72,26 +106,16 @@ function handleAction(e: Event) {
                     <div
                         class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5"
                     >
-                        <span class="font-medium truncate">{{ item.author.name }}</span>
-                        <svg
-                            v-if="item.author.isVerified"
-                            class="w-3.5 h-3.5 text-blue-500 flex-shrink-0"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                        >
-                            <path
-                                fill-rule="evenodd"
-                                d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                clip-rule="evenodd"
-                            />
-                        </svg>
+                        <span class="font-medium truncate">{{
+                            item.author?.name || item.authorName || 'Unknown Author'
+                        }}</span>
                     </div>
                 </div>
             </div>
 
             <!-- Description -->
             <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 flex-1">
-                {{ item.summary }}
+                {{ item.description }}
             </p>
 
             <div class="w-full h-px bg-gray-100 dark:bg-gray-700 mb-4"></div>
@@ -106,9 +130,9 @@ function handleAction(e: Event) {
                         />
                     </svg>
                     <span class="text-gray-700 dark:text-gray-300">{{
-                        item.stats.rating.toFixed(1)
+                        (item.averageRating || 0).toFixed(1)
                     }}</span>
-                    <span class="text-gray-400">({{ item.stats.reviewCount }})</span>
+                    <span class="text-gray-400">({{ item.reviewCount || 0 }})</span>
                 </div>
 
                 <!-- Downloads -->
@@ -121,7 +145,7 @@ function handleAction(e: Event) {
                             d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
                         />
                     </svg>
-                    <span>{{ item.stats.installCount }}</span>
+                    <span>{{ item.downloadCount || 0 }}</span>
                 </div>
             </div>
 
@@ -133,24 +157,43 @@ function handleAction(e: Event) {
                         >Price</span
                     >
                     <div class="text-lg font-bold text-gray-900 dark:text-white leading-none">
-                        {{ item.price === 0 ? 'Free' : item.price }}
-                        <span v-if="item.price > 0" class="text-xs font-normal text-gray-500"
+                        {{ Number(item.price) === 0 ? 'Free' : Number(item.price) }}
+                        <span
+                            v-if="Number(item.price) > 0"
+                            class="text-xs font-normal text-gray-500"
                             >Credits</span
                         >
                     </div>
                 </div>
 
-                <button
-                    @click="handleAction"
-                    :class="[
-                        'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm',
-                        isOwnedOrFree
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                            : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600',
-                    ]"
-                >
-                    {{ actionLabel }}
-                </button>
+                <div class="flex items-center gap-2">
+                    <button
+                        v-if="showDelete"
+                        @click.stop="emit('delete', item.id)"
+                        class="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        title="Delete Item"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        @click="handleAction"
+                        :class="[
+                            'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm',
+                            isOwnedOrFree
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600',
+                        ]"
+                    >
+                        {{ actionLabel }}
+                    </button>
+                </div>
             </div>
         </div>
     </div>

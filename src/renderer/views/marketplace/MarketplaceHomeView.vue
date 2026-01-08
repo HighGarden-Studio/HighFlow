@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMarketplaceStore } from '../../stores/marketplaceStore';
 import MarketplaceCard from '../../../components/marketplace/MarketplaceCard.vue';
+import MarketplaceNavigation from '../../../components/marketplace/MarketplaceNavigation.vue';
 
 const store = useMarketplaceStore();
 const router = useRouter();
@@ -37,13 +38,16 @@ const filteredItems = computed(() => {
     return result;
 });
 
-function handleCardClick(id: string) {
-    router.push({ name: 'marketplace-item-detail', params: { id } });
+function handleCardClick(item: any) {
+    router.push({ name: 'marketplace-item-detail', params: { id: item.id } });
 }
 </script>
 
 <template>
     <div class="p-8">
+        <!-- Navigation Tabs -->
+        <MarketplaceNavigation active-tab="all" />
+
         <!-- Header & Search -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div>

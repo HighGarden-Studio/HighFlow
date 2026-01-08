@@ -520,10 +520,63 @@ function withPermissionDefaults<T extends Partial<MCPServerConfig>>(server: T): 
     } as MCPServerConfig;
 }
 
+// Local Agent Definition
+export interface LocalAgent {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    gradient: string;
+    command: string;
+    installCommand: string;
+    website: string;
+    docsUrl: string;
+    requiresApiKey: boolean;
+    apiKeyEnvVar?: string;
+    isInstalled: boolean;
+    isChecking: boolean;
+    version?: string;
+}
+
 export const useSettingsStore = defineStore('settings', () => {
     // ========================================
     // State
     // ========================================
+
+    const localAgents = ref<LocalAgent[]>([
+        {
+            id: 'claude-code',
+            name: 'Claude Code',
+            description:
+                'Anthropic의 공식 AI 코딩 에이전트. 터미널에서 자연어로 코딩 작업을 수행합니다.',
+            icon: '🤖',
+            gradient: 'bg-gradient-to-br from-orange-400 to-amber-500',
+            command: 'claude',
+            installCommand: 'npm install -g @anthropic-ai/claude-code',
+            website: 'https://docs.anthropic.com/en/docs/claude-code',
+            docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+            requiresApiKey: true,
+            apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+            isInstalled: false,
+            isChecking: true,
+        },
+        {
+            id: 'codex',
+            name: 'OpenAI Codex CLI',
+            description:
+                'OpenAI의 AI 코딩 에이전트. GPT-4 기반으로 코드 생성 및 수정을 수행합니다.',
+            icon: '💚',
+            gradient: 'bg-gradient-to-br from-green-400 to-teal-500',
+            command: 'codex',
+            installCommand: 'npm install -g @openai/codex',
+            website: 'https://github.com/openai/codex',
+            docsUrl: 'https://github.com/openai/codex#readme',
+            requiresApiKey: true,
+            apiKeyEnvVar: 'OPENAI_API_KEY',
+            isInstalled: false,
+            isChecking: true,
+        },
+    ]);
 
     const aiProviders = ref<AIProviderConfig[]>([
         // === Major AI Providers ===
@@ -3409,6 +3462,23 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         }
     }
 
+    async function checkLocalAgent(agentId: string): Promise<void> {
+        const agent = localAgents.value.find((a) => a.id === agentId);
+        if (!agent) return;
+
+        agent.isChecking = true;
+        try {
+            const result = await window.electron.localAgents.checkInstalled(agent.command);
+            agent.isInstalled = result.installed;
+            agent.version = result.version;
+        } catch (err) {
+            console.error(`Failed to check local agent ${agentId}:`, err);
+            agent.isInstalled = false;
+        } finally {
+            agent.isChecking = false;
+        }
+    }
+
     /**
      * Clear the current error state
      */
@@ -3416,9 +3486,32 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         error.value = null;
     }
 
+    function checkRequirement(req: { provider: string; model: string }): boolean {
+        // 1. Check AI Providers
+        const provider = aiProviders.value.find((p) => p.id === req.provider);
+        if (provider) {
+            // Check if enabled and has credentials
+            return !!(
+                provider.enabled &&
+                (provider.apiKey || provider.isConnected || provider.authMethods.includes('oauth'))
+            );
+        }
+
+        // 2. Check Local Agents
+        const agent = localAgents.value.find(
+            (a) => a.id === req.provider || a.command === req.provider
+        );
+        if (agent) {
+            return agent.isInstalled;
+        }
+
+        return false;
+    }
+
     return {
         // State
         aiProviders,
+        localAgents,
         userProfile,
         generalSettings,
         keyboardShortcuts,
@@ -3486,6 +3579,8 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         skipSetupWizard,
         resetSetupWizard,
         clearError,
+        checkLocalAgent,
+        checkRequirement,
 
         // Model management
         getProviderModels,

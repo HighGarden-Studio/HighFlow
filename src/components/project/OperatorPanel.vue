@@ -62,6 +62,9 @@
                         "
                     >
                         Scripts
+                        <span v-if="scripts.length > 0" class="ml-1 text-xs opacity-70"
+                            >({{ scripts.length }})</span
+                        >
                     </button>
                 </div>
 
@@ -157,7 +160,11 @@
 
                 <!-- Tab Content: Script Templates -->
                 <div v-if="activeTab === 'scripts'" class="flex-1 min-h-0 bg-gray-900/30">
-                    <ScriptTemplateList />
+                    <ScriptTemplateList
+                        :templates="scripts"
+                        :loading="scriptsLoading"
+                        @refresh="loadScripts"
+                    />
                 </div>
             </div>
         </Transition>
@@ -166,7 +173,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
-import type { Operator } from '@core/types/database';
+import type { Operator, ScriptTemplate } from '@core/types/database';
 import ScriptTemplateList from './ScriptTemplateList.vue';
 
 const props = defineProps<{
@@ -174,7 +181,9 @@ const props = defineProps<{
 }>();
 
 const operators = ref<Operator[]>([]);
+const scripts = ref<ScriptTemplate[]>([]);
 const loading = ref(true);
+const scriptsLoading = ref(false);
 const isCollapsed = ref(true);
 const activeTab = ref<'operators' | 'scripts'>('operators');
 
@@ -203,7 +212,7 @@ onMounted(async () => {
         isCollapsed.value = JSON.parse(savedState);
     }
 
-    await loadOperators();
+    await Promise.all([loadOperators(), loadScripts()]);
 });
 
 // Watch for project changes
@@ -211,6 +220,8 @@ watch(
     () => props.projectId,
     () => {
         loadOperators();
+        // script templates are global, no need to reload on project change
+        // loadScripts();
         selectedTag.value = null;
     }
 );
@@ -225,6 +236,19 @@ async function loadOperators() {
         console.error('Failed to load operators:', error);
     } finally {
         loading.value = false;
+    }
+}
+
+async function loadScripts() {
+    scriptsLoading.value = true;
+    try {
+        if (window.electron && window.electron.scriptTemplates) {
+            scripts.value = await window.electron.scriptTemplates.list();
+        }
+    } catch (error) {
+        console.error('Failed to load scripts:', error);
+    } finally {
+        scriptsLoading.value = false;
     }
 }
 

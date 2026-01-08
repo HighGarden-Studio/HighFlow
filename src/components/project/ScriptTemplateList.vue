@@ -125,45 +125,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
+import type { ScriptTemplate } from '@core/types/database';
 import ScriptTemplateModal from './ScriptTemplateModal.vue';
-// We'll define types locally for now or import from existing types if available
-// Assuming ScriptTemplate is defined in global types or similar
 
-const templates = ref<any[]>([]);
-const loading = ref(false);
+const props = defineProps<{
+    templates?: ScriptTemplate[];
+    loading?: boolean;
+}>();
+
+const emit = defineEmits<{
+    (e: 'refresh'): void;
+}>();
+
 const searchQuery = ref('');
 const selectedTag = ref<string | null>(null);
 
 const isModalOpen = ref(false);
-const selectedTemplate = ref<any | null>(null);
-
-// Load templates
-async function loadTemplates() {
-    loading.value = true;
-    try {
-        // Safe check if API exists (it should via preload)
-        if (window.electron && window.electron.scriptTemplates) {
-            templates.value = await window.electron.scriptTemplates.list();
-        } else {
-            console.warn('Script Templates API not found');
-            templates.value = [];
-        }
-    } catch (e) {
-        console.error('Failed to load script templates:', e);
-    } finally {
-        loading.value = false;
-    }
-}
-
-onMounted(() => {
-    loadTemplates();
-});
+const selectedTemplate = ref<ScriptTemplate | null>(null);
 
 // Computed properties
 const uniqueTags = computed(() => {
     const tags = new Set<string>();
-    templates.value.forEach((t) => {
+    (props.templates || []).forEach((t) => {
         if (t.tags && Array.isArray(t.tags)) {
             t.tags.forEach((tag: string) => tags.add(tag));
         }
@@ -172,10 +156,10 @@ const uniqueTags = computed(() => {
 });
 
 const filteredTemplates = computed(() => {
-    let result = templates.value;
+    let result = props.templates || [];
 
     if (selectedTag.value) {
-        result = result.filter((t) => t.tags && t.tags.includes(selectedTag.value));
+        result = result.filter((t) => t.tags && t.tags.includes(selectedTag.value!));
     }
 
     if (searchQuery.value) {
@@ -195,7 +179,7 @@ function selectTag(tag: string | null) {
 }
 
 // Modal handling
-function openModal(template: any | null) {
+function openModal(template: ScriptTemplate | null) {
     selectedTemplate.value = template;
     isModalOpen.value = true;
 }
@@ -214,7 +198,7 @@ async function handleSave(data: any) {
             // Create
             await window.electron.scriptTemplates.create(data);
         }
-        await loadTemplates();
+        emit('refresh');
         closeModal();
     } catch (e) {
         console.error('Failed to save template:', e);
@@ -226,14 +210,14 @@ async function deleteTemplate(id: number) {
     if (!confirm('Are you sure you want to delete this template?')) return;
     try {
         await window.electron.scriptTemplates.delete(id);
-        await loadTemplates();
+        emit('refresh');
     } catch (e) {
         console.error('Failed to delete template:', e);
     }
 }
 
 // Drag functionality
-function handleDragStart(event: DragEvent, template: any) {
+function handleDragStart(event: DragEvent, template: ScriptTemplate) {
     if (!event.dataTransfer) return;
 
     event.dataTransfer.effectAllowed = 'copy';
@@ -241,9 +225,7 @@ function handleDragStart(event: DragEvent, template: any) {
         type: 'script-template',
         templateId: template.id,
         name: template.name,
-        // We might pass full code if we want instant drop without fetch,
-        // but fetch by ID on drop is safer for latest version.
-        // However, providing basic data allows optimistic UI.
+        // Provide basic data for optimistic UI
         scriptCode: template.scriptCode,
         defaultOptions: template.defaultOptions,
     });

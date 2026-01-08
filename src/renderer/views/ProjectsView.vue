@@ -640,11 +640,11 @@ onUnmounted(() => {
                             <!-- Blocked Warning -->
                             <div
                                 v-if="(taskSummaries[project.id]?.blocked ?? 0) > 0"
-                                class="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded-lg"
+                                class="flex items-center gap-2 px-3 py-1.5 bg-red-600 border border-red-500 rounded-lg shadow-[0_0_10px_rgba(220,38,38,0.5)] animate-pulse"
                                 :title="$t('project.status.blocked')"
                             >
                                 <svg
-                                    class="w-4 h-4 text-red-400"
+                                    class="w-4 h-4 text-white"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -652,12 +652,14 @@ onUnmounted(() => {
                                     <path
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
-                                        stroke-width="2"
+                                        stroke-width="2.5"
                                         d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                                     />
                                 </svg>
-                                <span class="text-red-400 text-sm font-medium">
-                                    {{ taskSummaries[project.id]?.blocked ?? 0 }}
+                                <span
+                                    class="text-white text-sm font-extrabold uppercase tracking-wide"
+                                >
+                                    {{ taskSummaries[project.id]?.blocked ?? 0 }} BLOCKED
                                 </span>
                             </div>
 

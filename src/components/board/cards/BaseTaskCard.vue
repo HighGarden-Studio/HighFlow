@@ -84,7 +84,7 @@ const taskTypeConfig = computed(() => {
         case 'input':
             return { label: 'INPUT', class: 'bg-emerald-600 text-white border-emerald-700' };
         case 'output':
-            return { label: 'OUTPUT', class: 'bg-rose-600 text-white border-rose-700' };
+            return { label: 'OUTPUT', class: 'bg-blue-600 text-white border-blue-700' };
         default:
             return {
                 label: (props.task.taskType as unknown as string)

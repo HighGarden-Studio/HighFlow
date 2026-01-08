@@ -123,6 +123,7 @@
         "vue-echarts": "^6.7.0",
         "vue-i18n": "9",
         "vue-router": "^4.3.0",
+        "vue-toastification": "2.0.0-rc.5",
         "web-streams-polyfill": "^3.2.1",
         "webidl-conversions": "^8.0.0",
         "whatwg-url": "^15.1.0",

@@ -15,6 +15,7 @@ import OperatorsTab from '../../components/settings/OperatorsTab.vue';
 import MCPServersTab from '../../components/settings/MCPServersTab.vue';
 import LocalAgentsTab from '../../components/settings/LocalAgentsTab.vue';
 import CreditsTab from '../../components/settings/CreditsTab.vue';
+import HelpTab from '../../components/settings/HelpTab.vue'; // Import HelpTab
 import IconRenderer from '../../components/common/IconRenderer.vue';
 import InitialSetupWizard from '../../components/setup/InitialSetupWizard.vue';
 import { useI18n } from 'vue-i18n';
@@ -42,6 +43,7 @@ const activeTab = ref<
     | 'profile'
     | 'credits'
     | 'data'
+    | 'help' // Add help type
 >('general');
 const appInfo = ref<{ name: string; version: string; platform: string; isDev: boolean } | null>(
     null
@@ -290,7 +292,10 @@ type TabId =
     | 'profile'
     | 'credits'
     | 'operators'
-    | 'data';
+    | 'operators'
+    | 'data'
+    | 'help'; // Add help type
+
 const tabs: { id: TabId; label: string; icon: string; description?: string }[] = [
     {
         id: 'general',
@@ -342,6 +347,11 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
         id: 'data',
         label: 'Data',
         icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4',
+    },
+    {
+        id: 'help',
+        label: 'Help',
+        icon: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     },
 ];
 </script>
@@ -602,6 +612,11 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 </div>
                             </div>
                         </section>
+                    </div>
+
+                    <!-- Help Tab -->
+                    <div v-if="activeTab === 'help'">
+                        <HelpTab />
                     </div>
 
                     <!-- AI Providers -->

@@ -10,6 +10,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
 import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
+import MarketplacePublishModal from '../../components/marketplace/MarketplacePublishModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -23,6 +24,7 @@ const projectId = computed(() => Number(route.params.id));
 const editing = ref(false);
 const editTitle = ref('');
 const editDescription = ref('');
+const showPublishModal = ref(false);
 
 // Computed
 const project = computed(() => projectStore.currentProject);
@@ -86,7 +88,7 @@ async function handleUpdateMCPConfig(config: any) {
     if (!project.value) return;
     await projectStore.updateProject(project.value.id, {
         mcpConfig: config,
-    });
+    } as any);
 }
 
 // Lifecycle
@@ -211,6 +213,26 @@ onMounted(async () => {
                             </div>
 
                             <button
+                                @click="showPublishModal = true"
+                                class="px-3 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                                    />
+                                </svg>
+                                Publish
+                            </button>
+
+                            <button
                                 @click="startEditing"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
                                 title="Edit Project"
@@ -310,7 +332,7 @@ onMounted(async () => {
                             <div v-else class="space-y-2">
                                 <div
                                     v-for="task in taskStore.tasks.slice(0, 5)"
-                                    :key="task.id"
+                                    :key="`${task.projectId}_${task.projectSequence}`"
                                     class="flex items-center gap-3 p-2 hover:bg-gray-700 rounded-lg transition-colors"
                                 >
                                     <div
@@ -405,4 +427,21 @@ onMounted(async () => {
             </main>
         </template>
     </div>
+
+    <!-- Modals -->
+    <MarketplacePublishModal
+        :show="showPublishModal"
+        :initial-data="
+            project
+                ? {
+                      workflowId: project.id.toString(),
+                      title: project.title,
+                      description: project.description || '',
+                      itemType: 'project',
+                  }
+                : undefined
+        "
+        @close="showPublishModal = false"
+        @submitted="showPublishModal = false"
+    />
 </template>

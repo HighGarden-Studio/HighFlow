@@ -2,11 +2,15 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMarketplaceStore } from '../../stores/marketplaceStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import WorkflowGraphPreview from '../../../components/marketplace/WorkflowGraphPreview.vue';
-import MarkdownRenderer from '../../../components/common/MarkdownRenderer.vue'; // Assuming this exists
+import MarkdownRenderer from '../../../components/common/MarkdownRenderer.vue';
+import { useToast } from 'vue-toastification';
 
 const store = useMarketplaceStore();
+const settingsStore = useSettingsStore();
 const router = useRouter();
+const toast = useToast();
 const props = defineProps<{ id: string }>();
 
 function goBack() {
@@ -40,27 +44,34 @@ const formattedDate = computed(() => {
     return new Date(item.value.lastUpdated).toLocaleDateString();
 });
 
-// Mock graph nodes for demo if previewGraph is empty
-const demoNodes = [
-    { id: '1', type: 'input', label: 'Start', position: { x: 250, y: 5 } },
-    { id: '2', label: 'Processing', position: { x: 100, y: 100 } },
-    { id: '3', label: 'AI Analysis', position: { x: 400, y: 100 } },
-    { id: '4', type: 'output', label: 'Result', position: { x: 250, y: 200 } },
-];
-
-const demoEdges = [
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e1-3', source: '1', target: '3' },
-    { id: 'e2-4', source: '2', target: '4' },
-    { id: 'e3-4', source: '3', target: '4' },
-];
-
 const previewGraphData = computed(() => {
     if (item.value?.previewGraph && item.value.previewGraph.nodes.length > 0) {
         return item.value.previewGraph;
     }
-    return { nodes: demoNodes, edges: demoEdges };
+    return null;
 });
+
+async function handlePurchase() {
+    if (!item.value) return;
+    if (item.value.isOwned) {
+        toast.info('You already own this item');
+        return;
+    }
+
+    try {
+        const response: any = await store.purchaseItem(item.value.id);
+        toast.success(`Purchased ${item.value.name} successfully!`);
+
+        // Redirect to the item if it's a project
+        if (response && response.itemType === 'project' && response.itemId) {
+            // Use setTimeout to allow toast to be seen? No, immediate is fine.
+            router.push({ name: 'project-detail', params: { id: response.itemId } });
+        }
+    } catch (e) {
+        // Error already handled in store but shown in UI via store.error
+        toast.error('Purchase failed');
+    }
+}
 </script>
 
 <template>
@@ -135,13 +146,20 @@ const previewGraphData = computed(() => {
 
                 <div class="flex flex-col items-end gap-3 min-w-[150px]">
                     <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                        {{ item.price === 0 ? 'Free' : `${item.price} Credits` }}
+                        {{ Number(item.price) === 0 ? 'Free' : `${Number(item.price)} Credits` }}
                     </div>
                     <button
-                        class="w-full px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow transition-colors flex items-center justify-center gap-2"
+                        @click="handlePurchase"
+                        :disabled="store.loading"
+                        class="w-full px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <span>Get It</span>
+                        <span
+                            v-if="store.loading"
+                            class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"
+                        ></span>
+                        <span>{{ item.isOwned ? 'Installed' : 'Get It' }}</span>
                     </button>
+                    <p v-if="store.error" class="text-red-500 text-xs">{{ store.error }}</p>
                 </div>
             </div>
 
@@ -170,27 +188,50 @@ const previewGraphData = computed(() => {
                     <MarkdownRenderer :content="item.description" />
                 </div>
 
-                <div v-else-if="activeTab === 'preview'" class="h-[500px]">
+                <div v-else-if="activeTab === 'preview'" class="space-y-8">
+                    <!-- Screenshots -->
+                    <div v-if="item.previewImages && item.previewImages.length > 0">
+                        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                            Screenshots
+                        </h3>
+                        <div class="flex gap-4 overflow-x-auto pb-4 snap-x">
+                            <div
+                                v-for="(img, idx) in item.previewImages"
+                                :key="idx"
+                                class="flex-shrink-0 w-[400px] aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 snap-center shadow-sm"
+                            >
+                                <img :src="img" class="w-full h-full object-cover" />
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Workflow Graph for Projects -->
                     <div
                         v-if="item.type === 'project'"
-                        class="h-full border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900"
+                        class="h-[500px] border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900"
                     >
                         <WorkflowGraphPreview
+                            v-if="previewGraphData"
                             :nodes="previewGraphData.nodes"
                             :edges="previewGraphData.edges"
                         />
+                        <div v-else class="h-full flex items-center justify-center text-gray-500">
+                            No preview graph available.
+                        </div>
                     </div>
 
                     <!-- Code Snippet for Scripts (Placeholder) -->
                     <div
                         v-else-if="item.type === 'script_template'"
-                        class="h-full p-4 bg-gray-900 rounded-lg overflow-auto font-mono text-sm text-gray-300"
+                        class="h-[500px] p-4 bg-gray-900 rounded-lg overflow-auto font-mono text-sm text-gray-300"
                     >
                         // Script Preview Placeholder console.log('Hello World');
                     </div>
 
-                    <div v-else class="h-full flex items-center justify-center text-gray-500">
+                    <div
+                        v-else-if="!item.previewImages || item.previewImages.length === 0"
+                        class="h-40 flex items-center justify-center text-gray-500"
+                    >
                         No preview available for this item type.
                     </div>
                 </div>
@@ -219,6 +260,57 @@ const previewGraphData = computed(() => {
         <div
             class="w-full lg:w-80 border-l border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-6 space-y-8"
         >
+            <div v-if="item.requirements && item.requirements.length > 0">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                    Requirements
+                </h3>
+                <div class="space-y-2">
+                    <div
+                        v-for="(req, idx) in item.requirements"
+                        :key="idx"
+                        class="flex items-center justify-between p-2 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                    >
+                        <div class="flex flex-col min-w-0">
+                            <span
+                                class="text-xs font-medium text-gray-900 dark:text-gray-200 truncate"
+                                >{{ req.provider }}</span
+                            >
+                            <span class="text-[10px] text-gray-500 truncate">{{ req.model }}</span>
+                        </div>
+                        <div class="flex-shrink-0 ml-2">
+                            <span
+                                v-if="settingsStore.checkRequirement(req)"
+                                class="text-green-500"
+                                title="Requirement met"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 13l4 4L19 7"
+                                    />
+                                </svg>
+                            </span>
+                            <span
+                                v-else
+                                class="text-red-500 flex items-center gap-1 text-[10px] font-bold"
+                                title="Requirement not met"
+                            >
+                                <span class="bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded"
+                                    >연동 필요</span
+                                >
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                     Information
