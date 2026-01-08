@@ -78,7 +78,6 @@ const ICON_MAP: Record<string, string> = {
     '⚠️': 'ph:warning',
     '🛠️': 'ph:wrench',
     '🏗️': 'ph:buildings',
-    '✨': 'ph:sparkle',
     '🔍': 'ph:magnifying-glass',
     '🌊': 'ph:waves',
     '✅': 'ph:check-circle',

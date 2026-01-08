@@ -10,7 +10,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
 import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
-import MarketplacePublishModal from '../../components/marketplace/MarketplacePublishModal.vue';
+import MarketplacePublishModal from '../components/marketplace/MarketplacePublishModal.vue';
 
 const route = useRoute();
 const router = useRouter();

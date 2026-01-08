@@ -13,8 +13,9 @@
         "dev": "vite",
         "dev:electron": "tsx scripts/dev.ts",
         "build": "vue-tsc --noEmit && vite build",
-        "build:dir": "vite build && electron-builder --dir",
-        "build:mac": "vite build && electron-builder --mac",
+        "build:dir": "vite build && tsx scripts/build.ts && electron-builder --dir",
+        "build:mac": "vite build && tsx scripts/build.ts && electron-builder --mac",
+        "build:electron": "tsx scripts/build.ts",
         "build:win": "vite build && electron-builder --win",
         "build:linux": "vite build && electron-builder --linux",
         "electron:build": "electron-builder",
@@ -98,6 +99,7 @@
         "fuse.js": "^7.0.0",
         "groq-sdk": "^0.37.0",
         "humanize-ms": "^1.2.1",
+        "is-stream": "^1.1.0",
         "jsonwebtoken": "^9.0.2",
         "mammoth": "^1.11.0",
         "marked": "^17.0.1",
@@ -107,6 +109,7 @@
         "node-cron": "^4.2.1",
         "node-fetch": "2",
         "openai": "^4.28.4",
+        "p-queue": "6.6.2",
         "pdf-parse": "1.1.1",
         "pinia": "^2.1.7",
         "pinia-plugin-persistedstate": "^3.2.1",
@@ -248,6 +251,9 @@
     "pnpm": {
         "patchedDependencies": {
             "agentkeepalive@4.6.0": "patches/agentkeepalive@4.6.0.patch"
+        },
+        "overrides": {
+            "is-stream": "1.1.0"
         }
     }
 }

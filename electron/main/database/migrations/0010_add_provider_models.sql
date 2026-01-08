@@ -21,11 +21,13 @@ CREATE TABLE IF NOT EXISTS provider_models (
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
-
+--> statement-breakpoint
 -- Create indices for fast lookups
 CREATE INDEX IF NOT EXISTS provider_model_provider_idx ON provider_models(provider);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS provider_model_provider_model_idx ON provider_models(provider, model_id);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS provider_model_fetched_at_idx ON provider_models(fetched_at);
-
+--> statement-breakpoint
 -- Create unique constraint to prevent duplicate provider/model combinations
 CREATE UNIQUE INDEX IF NOT EXISTS provider_model_unique_idx ON provider_models(provider, model_id);

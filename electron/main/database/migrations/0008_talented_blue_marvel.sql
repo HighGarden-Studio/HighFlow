@@ -53,11 +53,4 @@ ALTER TABLE tasks ADD `output_config` text;--> statement-breakpoint
 CREATE INDEX `operator_mcp_operator_idx` ON `operator_mcps` (`operator_id`);--> statement-breakpoint
 CREATE INDEX `operator_project_idx` ON `operators` (`project_id`);--> statement-breakpoint
 CREATE INDEX `operator_active_idx` ON `operators` (`is_active`);--> statement-breakpoint
-CREATE INDEX `task_project_sequence_idx` ON `tasks` (`project_id`,`project_sequence`);--> statement-breakpoint
-/*
- SQLite does not support "Creating foreign key on existing column" out of the box, we do not generate automatic migration for that, so it has to be done manually
- Please refer to: https://www.techonthenet.com/sqlite/tables/alter_table.php
-                  https://www.sqlite.org/lang_altertable.html
-
- Due to that we don't generate migration automatically and it has to be done manually
-*/
+CREATE INDEX `task_project_sequence_idx` ON `tasks` (`project_id`,`project_sequence`);

@@ -330,10 +330,8 @@ function buildGraph(shouldFit = false) {
                     if (Array.isArray(control.next)) {
                         const targetSeq = task.projectSequence;
                         // It's an active path ONLY if the target is in the next list
+                        // If empty array [], includes is false -> isActivePath = false (Explicit Stop)
                         isActivePath = control.next.includes(targetSeq);
-                    } else if (control.next === []) {
-                        // Explicit Stop (Empty Array)
-                        isActivePath = false;
                     }
                     // If next is undefined/null, it defaults to ALL (isActivePath = true)
 

@@ -6,7 +6,7 @@
  */
 import { ref, computed } from 'vue';
 import IconRenderer from './IconRenderer.vue';
-import { PromptMacroService } from '../../services/workflow/PromptMacroService';
+import { MacroParser } from '../../services/workflow/MacroParser';
 
 interface Props {
     dependentTaskIds?: number[];
@@ -29,7 +29,7 @@ const searchQuery = ref('');
 
 // 매크로 제안 목록 생성
 const suggestions = computed(() => {
-    return PromptMacroService.getSuggestions(props.dependentTaskIds, props.variables);
+    return MacroParser.getSuggestions(props.dependentTaskIds, props.variables);
 });
 
 // 카테고리별 그룹화

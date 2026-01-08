@@ -35,7 +35,7 @@ export default defineConfig({
             output: {
                 manualChunks: {
                     'monaco-editor': ['monaco-editor'],
-                    'ai-core': ['openai', '@anthropic-ai/sdk', '@google/generative-ai'],
+                    'ai-core': ['openai', '@anthropic-ai/sdk', '@google/genai'],
                     charts: ['echarts', 'vue-echarts'],
                     collaboration: ['yjs', 'y-websocket', 'y-indexeddb'],
                     // 제거된 cmdk-vue 의존성 대신 radix-vue만 분리
