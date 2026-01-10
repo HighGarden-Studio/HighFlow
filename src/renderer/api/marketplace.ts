@@ -13,6 +13,7 @@ import type {
     MarketplaceSubmission,
     SubmissionResponse,
     LibraryResponse,
+    ImportResponse,
 } from '@core/types/marketplace';
 
 // Get backend URL from environment or default
@@ -125,6 +126,43 @@ export const marketplaceAPI = {
             return response.data;
         } catch (error: any) {
             console.error('Failed to purchase item:', error);
+
+            // Handle specific error codes
+            if (error.response?.status === 401) {
+                console.warn('⚠️  Session expired, logging out...');
+                await window.electron.auth.logout();
+                window.location.reload();
+            }
+
+            throw error;
+        }
+    },
+
+    /**
+     * Import an item (get secure content)
+     */
+    async importItem(itemId: string): Promise<ImportResponse> {
+        try {
+            // Get session token from main process
+            const tokenResult = await window.electron.auth.getSessionToken();
+
+            if (!tokenResult.success || !tokenResult.data) {
+                throw new Error('Not authenticated - please log in');
+            }
+
+            const response = await axios.get<ImportResponse>(
+                `${BACKEND_URL}/v1/marketplace/items/${itemId}/import`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${tokenResult.data}`,
+                    },
+                    timeout: 30000,
+                }
+            );
+
+            return response.data;
+        } catch (error: any) {
+            console.error('Failed to import item:', error);
 
             // Handle specific error codes
             if (error.response?.status === 401) {

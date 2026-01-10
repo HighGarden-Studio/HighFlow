@@ -7,7 +7,6 @@ import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import App from './App.vue';
 import router from './router';
-import './style.css';
 
 // Create Vue app
 const app = createApp(App);
@@ -25,9 +24,15 @@ import i18n from '../i18n';
 app.use(i18n);
 
 // Use Toast
-import Toast from 'vue-toastification';
+import Toast, { PluginOptions } from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
-app.use(Toast);
+
+const options: PluginOptions = {
+    containerClassName: 'custom-toast-container',
+};
+
+app.use(Toast, options);
+import './style.css';
 
 // Mount app
 app.mount('#app');

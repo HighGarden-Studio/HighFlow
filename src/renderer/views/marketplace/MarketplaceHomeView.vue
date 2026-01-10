@@ -5,8 +5,11 @@ import { useMarketplaceStore } from '../../stores/marketplaceStore';
 import MarketplaceCard from '../../../components/marketplace/MarketplaceCard.vue';
 import MarketplaceNavigation from '../../../components/marketplace/MarketplaceNavigation.vue';
 
+import { useToast } from 'vue-toastification';
+
 const store = useMarketplaceStore();
 const router = useRouter();
+const toast = useToast();
 
 onMounted(async () => {
     if (store.items.length === 0) {
@@ -40,6 +43,37 @@ const filteredItems = computed(() => {
 
 function handleCardClick(item: any) {
     router.push({ name: 'marketplace-item-detail', params: { id: item.id } });
+}
+
+async function handlePurchase(itemId: string) {
+    const item = store.items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    if ((item as any).isOwned) {
+        try {
+            await store.importItem(itemId);
+            toast.success(`Successfully imported ${item.name}!`);
+        } catch (e: any) {
+            toast.error(e.message || 'Import failed');
+        }
+        return;
+    }
+
+    const price = Number(item.price);
+    const confirmMessage =
+        price > 0 ? `Purchase ${item.name} for ${price} credits?` : `Get ${item.name} for free?`;
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+        await store.purchaseItem(itemId);
+        toast.success(`Successfully acquired ${item.name}!`);
+
+        // Update local item state to reflect ownership immediately
+        (item as any).isOwned = true;
+    } catch (e: any) {
+        toast.error(e.message || 'Purchase failed');
+    }
 }
 </script>
 
@@ -114,6 +148,7 @@ function handleCardClick(item: any) {
                 :key="item.id"
                 :item="item"
                 @click="handleCardClick"
+                @action="handlePurchase"
             />
         </div>
     </div>

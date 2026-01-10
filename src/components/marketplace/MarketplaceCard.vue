@@ -21,62 +21,96 @@ const missingRequirements = computed(() => {
     return props.item.requirements.filter((req) => !settingsStore.checkRequirement(req));
 });
 
-const typeColors = {
+const typeColors: Record<string, string> = {
     project: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     operator: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
     'script-template': 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
-const typeLabels = {
+const typeLabels: Record<string, string> = {
     project: 'PROJECT',
     operator: 'OPERATOR',
     'script-template': 'SCRIPT',
 };
 
+const displayIcon = computed(() => props.item.iconUrl || '📦');
+
+// Safe type lookup
+const normalizedType = computed(() => {
+    const type = props.item.itemType || (props.item as any).type;
+    return type?.toLowerCase() || 'project';
+});
+
+const typeColor = computed(() => {
+    return typeColors[normalizedType.value] || typeColors['project'];
+});
+
+const typeLabel = computed(() => {
+    return typeLabels[normalizedType.value] || 'UNKNOWN';
+});
+
 const actionLabel = computed(() => {
     // Check if item has isOwned (it might be extended type in runtime)
-    if ((props.item as any).isOwned) return 'Install';
+    if ((props.item as any).isOwned) return 'Import';
     if (props.item.price === 0) return 'Get';
     return 'Purchase';
 });
 
 const isOwnedOrFree = computed(() => (props.item as any).isOwned || props.item.price === 0);
 
-function handleAction(e: Event) {
+async function handleAction(e: Event) {
     e.stopPropagation(); // Prevent card click
+
+    // If owned, we import directly from card?
+    // Or we just let the parent handle it via 'action' event?
+    // The current design emits 'action'. The parent view (MarketplaceHome) needs to handle this.
+    // However, looking at the code, it seems simpler to call store directly here OR ensure parent handles it.
+    // BUT checking the requested objective: "Wire up 'Import' button in UI".
+    // Let's look at how purchase is handled. It seems purchase is handled by parent usually or details view.
+    // Wait, the emit('action') is generic.
+    // Let's update `MarketplaceHome` or wherever this is used to handle 'import'.
+    // actually, let's just make the card smart enough or check where it is used.
+    // Since I can't easily see all usages, I will check MarketplaceHome or similar.
+    // BUT, for now, I will modify this to emit 'import' if it's an import action, or generic 'action'
+
+    // Better approach:
+    // If actionLabel is 'Import', emit 'import'.
+    // If 'Get' or 'Purchase', emit 'purchase' or keep 'action'.
+
+    // Let's check `MarketplaceItemDetailView` handles purchase directly.
+    // `MarketplaceHome` probably listens to `action`.
+
+    // Let's stick to emitting 'action' but updating the parent to handle it?
+    // No, I should probably handle it here if I want to be consistent, OR update the parent.
+    // Let's checks MarketplaceHome first to be safe.
     emit('action', props.item.id);
 }
 </script>
 
 <template>
     <div
-        class="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-200 cursor-pointer overflow-hidden flex flex-col h-full pt-10"
+        class="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-200 cursor-pointer overflow-hidden flex flex-col h-full pt-12"
         @click="emit('click', item)"
     >
-        <!-- Requirement Badge -->
-        <div v-if="missingRequirements.length > 0" class="absolute top-4 right-4 z-10">
-            <div
-                class="px-2 py-1 bg-red-500/90 text-white text-[10px] font-bold rounded shadow-sm backdrop-blur-sm"
-            >
-                연동 필요
-            </div>
-        </div>
-
-        <!-- Type Badge (Top Left Absolute) -->
-        <div class="absolute top-4 left-4">
+        <!-- Top Left: Type Badge -->
+        <div class="absolute top-4 left-4 z-10">
             <span
                 :class="[
-                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
-                    typeColors[item.itemType],
+                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm',
+                    typeColor,
                 ]"
             >
-                {{ typeLabels[item.itemType] }}
+                {{ typeLabel }}
             </span>
-            <!-- Status Badge (For Published Items) -->
+        </div>
+
+        <!-- Top Right: Status & Requirements -->
+        <div class="absolute top-4 right-4 z-10 flex flex-col gap-1 items-end pointer-events-none">
+            <!-- Status Badge -->
             <span
                 v-if="item.status"
                 :class="[
-                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ml-2',
+                    'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm',
                     item.status === 'approved'
                         ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
                         : item.status === 'rejected'
@@ -86,18 +120,26 @@ function handleAction(e: Event) {
             >
                 {{ item.status }}
             </span>
+            <!-- Requirement Badge -->
+            <div v-if="missingRequirements.length > 0">
+                <div
+                    class="px-2 py-1 bg-red-500/90 text-white text-[10px] font-bold rounded shadow-sm backdrop-blur-sm"
+                >
+                    연동 필요
+                </div>
+            </div>
         </div>
 
         <!-- Card Body -->
-        <div class="px-5 pb-5 flex flex-col flex-1">
-            <!-- Header -->
+        <div class="px-5 pb-5 flex flex-col flex-1 relative">
+            <!-- Icon -->
             <div class="flex items-start gap-3 mb-3">
                 <div
                     class="w-12 h-12 flex-shrink-0 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-2xl shadow-sm border border-gray-200 dark:border-gray-600 group-hover:scale-105 transition-transform"
                 >
-                    {{ item.iconUrl || '📦' }}
+                    {{ displayIcon }}
                 </div>
-                <div class="min-w-0">
+                <div class="min-w-0 pt-1">
                     <h3
                         class="font-bold text-gray-900 dark:text-gray-100 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"
                     >
@@ -114,11 +156,50 @@ function handleAction(e: Event) {
             </div>
 
             <!-- Description -->
-            <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 flex-1">
+            <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3 flex-1">
                 {{ item.description }}
             </p>
 
-            <div class="w-full h-px bg-gray-100 dark:bg-gray-700 mb-4"></div>
+            <!-- Tags -->
+            <div v-if="item.tags && item.tags.length > 0" class="flex flex-wrap gap-1 mb-3">
+                <span
+                    v-for="tag in item.tags.slice(0, 3)"
+                    :key="tag"
+                    class="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded border border-gray-200 dark:border-gray-600"
+                >
+                    #{{ tag }}
+                </span>
+                <span v-if="item.tags.length > 3" class="text-[10px] text-gray-400"
+                    >+{{ item.tags.length - 3 }}</span
+                >
+            </div>
+
+            <!-- Requirements List -->
+            <div
+                v-if="item.requirements && item.requirements.length > 0"
+                class="flex flex-wrap gap-2 mb-3 text-[10px] text-gray-500"
+            >
+                <span class="flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                        />
+                    </svg>
+                    Requires:
+                </span>
+                <span
+                    v-for="(req, idx) in item.requirements.slice(0, 2)"
+                    :key="idx"
+                    class="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded"
+                >
+                    {{ req.model }}
+                </span>
+            </div>
+
+            <div class="w-full h-px bg-gray-100 dark:bg-gray-700 mb-3"></div>
 
             <!-- Metadata Row -->
             <div class="flex items-center gap-4 text-xs text-gray-500 font-medium mb-4">

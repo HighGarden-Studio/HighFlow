@@ -10,6 +10,8 @@ import path from 'node:path';
 import * as schema from './schema';
 import * as relations from './relations';
 import { runMigrations } from './migrator';
+import { repairDatabaseSchema } from './repair';
+import log from 'electron-log';
 
 // Get user data directory
 const getUserDataPath = (): string => {
@@ -26,16 +28,14 @@ const getUserDataPath = (): string => {
 // Database file path
 const dbPath = path.join(getUserDataPath(), 'workflow-manager.db');
 
-console.log(`Database path: ${dbPath}`);
-
 let sqlite;
 try {
-    console.log('Attempting to open database...');
+    log.info(`[DB] Database path: ${dbPath}`);
     // Initialize SQLite
     sqlite = new Database(dbPath);
-    console.log('Database opened successfully');
+    log.info('[DB] Database opened successfully');
 } catch (error) {
-    console.error('Failed to open database:', error);
+    log.error('Failed to open database:', error);
     process.exit(1);
 }
 
@@ -51,11 +51,14 @@ sqlite.pragma('cache_size = -64000'); // 64MB cache
 
 // Run database migrations
 try {
-    console.log('Running database migrations...');
+    log.info('Running database migrations...');
     runMigrations(sqlite);
-    console.log('Migrations completed successfully');
+    log.info('Migrations completed successfully');
+
+    // Run manual repair to ensure schema is correct even if migrations were skipped
+    repairDatabaseSchema(sqlite);
 } catch (error) {
-    console.error('Migration error:', error);
+    log.error('Migration error:', error);
     throw error;
 }
 

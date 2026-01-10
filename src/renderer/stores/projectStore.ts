@@ -235,13 +235,16 @@ export const useProjectStore = defineStore('projects', () => {
     /**
      * Import a project
      */
-    async function importProject(data: unknown): Promise<Project | null> {
+    async function importProject(
+        data: unknown,
+        userData?: { email: string; name: string; googleId?: string; photoUrl?: string }
+    ): Promise<Project | null> {
         loading.value = true;
         error.value = null;
 
         try {
             const api = getAPI();
-            const project = await api.projects.import(data);
+            const project = await api.projects.import(data, userData);
             projects.value.unshift(project);
             return project;
         } catch (e) {

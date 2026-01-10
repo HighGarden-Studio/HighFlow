@@ -24,7 +24,9 @@ const emit = defineEmits<{
 const marketplaceStore = useMarketplaceStore();
 
 // Computed
+// Computed
 const isCompatible = computed(() => marketplaceStore.checkCompatibility(props.item));
+const compatibilityIssues = computed(() => marketplaceStore.getMissingRequirements(props.item));
 const isPurchased = computed(() => marketplaceStore.isPurchased(props.item.id));
 
 const itemTypeIcon = computed(() => {
@@ -138,18 +140,21 @@ function handleClick() {
             </div>
 
             <!-- Compatibility Warning -->
-            <div
-                v-if="!isCompatible"
-                class="mt-3 flex items-center gap-1.5 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded px-2 py-1"
-            >
-                <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                        fill-rule="evenodd"
-                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                        clip-rule="evenodd"
-                    />
-                </svg>
-                <span>Requires v{{ item.minClientVersion }}+</span>
+            <div v-if="!isCompatible" class="mt-3 flex flex-col gap-1.5">
+                <div
+                    v-for="(issue, index) in compatibilityIssues"
+                    :key="index"
+                    class="flex items-center gap-1.5 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded px-2 py-1"
+                >
+                    <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            fill-rule="evenodd"
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                            clip-rule="evenodd"
+                        />
+                    </svg>
+                    <span>{{ issue.detail }}</span>
+                </div>
             </div>
         </template>
 
@@ -187,6 +192,7 @@ function handleClick() {
                     <div
                         v-if="!isCompatible"
                         class="flex items-center gap-1 text-xs text-orange-400 ml-auto"
+                        :title="compatibilityIssues.map((i) => i.detail).join(', ')"
                     >
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path
@@ -195,7 +201,7 @@ function handleClick() {
                                 clip-rule="evenodd"
                             />
                         </svg>
-                        <span>v{{ item.minClientVersion }}+</span>
+                        <span>Missing Requirements</span>
                     </div>
                 </div>
                 <p class="text-sm text-gray-400 line-clamp-1">{{ item.description }}</p>

@@ -51,7 +51,12 @@
                 <i class="ph ph-pencil"></i>
                 <span>Edit</span>
             </button>
-            <button @click="$emit('delete', operator)" class="btn-action btn-delete" title="Delete">
+            <button
+                v-if="!operator.isCurator"
+                @click="$emit('delete', operator)"
+                class="btn-action btn-delete"
+                title="Delete"
+            >
                 <i class="ph ph-trash"></i>
                 <span>Delete</span>
             </button>
@@ -102,7 +107,7 @@ function getProviderLabel(provider?: string): string {
 function getProviderColorClass(provider?: string): string {
     if (!provider) return providerColors.default;
     const normalized = provider.toLowerCase();
-    return providerColors[normalized] || providerColors.default;
+    return providerColors[normalized] ?? providerColors.default;
 }
 </script>
 

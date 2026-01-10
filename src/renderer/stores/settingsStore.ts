@@ -92,6 +92,7 @@ export interface AIProviderConfig {
     supportsVision?: boolean;
     supportsTools?: boolean;
     maxTokens?: number;
+    isComingSoon?: boolean;
 }
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
@@ -724,6 +725,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'azure-openai',
+            isComingSoon: true,
             name: 'Azure OpenAI',
             description: 'Microsoft Azure hosted OpenAI models',
             icon: 'azure',
@@ -783,6 +785,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'cohere',
+            isComingSoon: true,
             name: 'Cohere',
             description: 'Command R+, Command R, and embedding models',
             icon: 'cohere',
@@ -823,6 +826,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'perplexity',
+            isComingSoon: true,
             name: 'Perplexity',
             description: 'Online LLMs with real-time web search',
             icon: 'perplexity',
@@ -847,6 +851,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'together',
+            isComingSoon: true,
             name: 'Together AI',
             description: 'Open source models at scale',
             icon: 'together',
@@ -868,6 +873,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'fireworks',
+            isComingSoon: true,
             name: 'Fireworks AI',
             description: 'Fast inference for open source models',
             icon: 'fireworks',
@@ -889,6 +895,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'deepseek',
+            isComingSoon: true,
             name: 'DeepSeek',
             description: 'DeepSeek Coder and Chat models',
             icon: 'deepseek',
@@ -908,6 +915,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === Local / Self-hosted ===
         {
             id: 'ollama',
+            isComingSoon: true,
             name: 'Ollama',
             description: 'Run LLMs locally on your machine',
             icon: 'ollama',
@@ -951,6 +959,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === Specialized Providers ===
         {
             id: 'openrouter',
+            isComingSoon: true,
             name: 'OpenRouter',
             description: 'Access multiple AI providers through one API',
             icon: 'openrouter',
@@ -985,6 +994,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'huggingface',
+            isComingSoon: true,
             name: 'Hugging Face',
             description: 'Inference API for thousands of models',
             icon: 'huggingface',
@@ -1006,6 +1016,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'replicate',
+            isComingSoon: true,
             name: 'Replicate',
             description: 'Run open-source models in the cloud',
             icon: 'replicate',
@@ -1029,6 +1040,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === UI/UX Design Providers ===
         {
             id: 'figma-ai',
+            isComingSoon: true,
             name: 'Figma AI',
             description: 'Figma Dev Mode AI와 디자인 에이전트를 통한 UI/UX 자동화',
             icon: 'figma',
@@ -1046,6 +1058,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'galileo',
+            isComingSoon: true,
             name: 'Galileo AI',
             description: '고해상도 UI 목업과 UX 카피를 자동으로 생성하는 디자인 특화 모델',
             icon: 'galileo',
@@ -1063,6 +1076,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'uizard',
+            isComingSoon: true,
             name: 'Uizard Autodesigner',
             description: '와이어프레임, 컴포넌트, UX 카피를 빠르게 생성하는 UI/UX 전용 AI',
             icon: 'uizard',
@@ -1082,6 +1096,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === Image/Video Generation Providers ===
         {
             id: 'stability',
+            isComingSoon: true,
             name: 'Stability AI',
             description: 'Stable Diffusion image generation models',
             icon: 'stability',
@@ -1105,6 +1120,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'runway',
+            isComingSoon: true,
             name: 'Runway',
             description: 'AI-powered video generation and editing',
             icon: 'runway',
@@ -1122,6 +1138,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'pika',
+            isComingSoon: true,
             name: 'Pika',
             description: 'AI video generation platform',
             icon: 'pika',
@@ -1141,6 +1158,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === Audio/TTS/Music Providers ===
         {
             id: 'google-tts',
+            isComingSoon: true,
             name: 'Google Cloud TTS',
             description: 'Google Cloud Text-to-Speech service',
             icon: 'google',
@@ -1164,6 +1182,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'elevenlabs',
+            isComingSoon: true,
             name: 'ElevenLabs',
             description: 'Advanced AI voice synthesis and cloning',
             icon: 'elevenlabs',
@@ -1181,6 +1200,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'suno',
+            isComingSoon: true,
             name: 'Suno',
             description: 'AI music generation platform',
             icon: 'suno',
@@ -1200,6 +1220,7 @@ export const useSettingsStore = defineStore('settings', () => {
         // === Chinese AI Providers ===
         {
             id: 'zhipu',
+            isComingSoon: true,
             name: 'Zhipu AI (智谱)',
             description: 'GLM-4 and ChatGLM models',
             icon: 'zhipu',
@@ -1225,6 +1246,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'moonshot',
+            isComingSoon: true,
             name: 'Moonshot AI (月之暗面)',
             description: 'Kimi chat models with long context',
             icon: 'moonshot',
@@ -1242,6 +1264,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'qwen',
+            isComingSoon: true,
             name: 'Alibaba Qwen (通义千问)',
             description: 'Qwen models for chat and coding',
             icon: 'qwen',
@@ -1259,6 +1282,7 @@ export const useSettingsStore = defineStore('settings', () => {
         },
         {
             id: 'baidu',
+            isComingSoon: true,
             name: 'Baidu ERNIE (文心一言)',
             description: 'ERNIE Bot models',
             icon: 'baidu',

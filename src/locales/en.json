@@ -451,7 +451,7 @@
             "desc": "Executed automatically when specified tasks are completed",
             "advanced_label": "Advanced Condition (Optional)",
             "advanced_desc": "Set complex logic conditions. You can use ! (Not) operator for 'not completed' condition.",
-            "advanced_placeholder": "e.g. (!2 && !3) || 6",
+            "advanced_placeholder": "e.g. (!2 && !3) {'||'} 6",
             "condition_label": "Here execution condition",
             "all": "All tasks must be completed",
             "any": "Execute if any task completes",

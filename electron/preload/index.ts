@@ -63,7 +63,10 @@ const projectsAPI = {
 
     export: (id: number) => ipcRenderer.invoke('projects:export', id),
 
-    import: (data: unknown) => ipcRenderer.invoke('projects:import', data),
+    import: (
+        data: unknown,
+        userData?: { email: string; name: string; googleId?: string; photoUrl?: string }
+    ) => ipcRenderer.invoke('projects:import', data, userData),
 
     resetResults: (id: number) => ipcRenderer.invoke('projects:resetResults', id),
 };

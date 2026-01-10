@@ -83,8 +83,8 @@ const currentItems = computed(() => {
         downloadCount: 0,
         iconUrl: item.iconUrl || undefined,
         isOwned: true, // Always true for library items
-        previewImages: [],
-        tags: [],
+        previewImages: item.previewImages || [],
+        tags: item.tags || [],
         category: 'other' as any, // Placeholder as LibraryItem doesn't have it
         clientVersion: item.version,
         minClientVersion: '0.0.0', // Placeholder

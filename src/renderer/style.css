@@ -73,9 +73,7 @@ body {
 }
 
 /* Toast Configuration */
-.Vue-Toastification__container.bottom-left,
-.Vue-Toastification__container.bottom-center,
-.Vue-Toastification__container.bottom-right {
-    bottom: 100px !important;
+.custom-toast-container {
+    bottom: 145px !important;
     z-index: 9999 !important;
 }

@@ -55,7 +55,10 @@ export interface ProjectsAPI {
     ) => Promise<Project>;
     delete: (id: number) => Promise<void>;
     export: (id: number) => Promise<unknown>;
-    import: (data: unknown) => Promise<Project>;
+    import: (
+        data: unknown,
+        userData?: { email: string; name: string; googleId?: string; photoUrl?: string }
+    ) => Promise<Project>;
     resetResults: (id: number) => Promise<void>;
 }
 

@@ -231,7 +231,9 @@ async function loadOperators() {
 
     loading.value = true;
     try {
-        operators.value = await window.electron.operators.list(props.projectId);
+        const allOperators = await window.electron.operators.list(props.projectId);
+        // Filter out System Curator (isCurator: true)
+        operators.value = allOperators.filter((op: Operator) => !op.isCurator);
     } catch (error) {
         console.error('Failed to load operators:', error);
     } finally {

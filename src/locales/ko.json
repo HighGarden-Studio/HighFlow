@@ -456,7 +456,7 @@
             "desc": "지정한 태스크들이 완료되면 자동으로 실행됩니다",
             "advanced_label": "고급 조건 설정 (선택사항)",
             "advanced_desc": "복잡한 논리 조건을 설정합니다. ! (Not) 연산자를 사용하여 '완료되지 않음' 조건을 설정할 수 있습니다.",
-            "advanced_placeholder": "예: (!2 && !3) || 6",
+            "advanced_placeholder": "예: (!2 && !3) {'||'} 6",
             "condition_label": "실행 조건",
             "all": "모든 태스크가 완료되어야 함",
             "any": "하나라도 완료되면 실행",

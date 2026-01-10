@@ -194,13 +194,6 @@ async function handleSetupSkip() {
 }
 
 // Computed for layout
-const contentPaddingBottom = computed(() => {
-    const basePadding = 40; // Approx height of toggle bar
-    if (activityLogStore.isConsoleOpen) {
-        return `${basePadding + activityLogStore.consoleHeight}px`;
-    }
-    return `${basePadding}px`;
-});
 
 // Auth actions
 async function handleLogin() {
@@ -575,10 +568,7 @@ onUnmounted(() => {
         </aside>
 
         <!-- Main Content -->
-        <main
-            class="flex-1 flex flex-col overflow-hidden transition-all duration-300"
-            :style="{ paddingBottom: contentPaddingBottom }"
-        >
+        <main class="flex-1 flex flex-col overflow-hidden transition-all duration-300">
             <!-- Custom Title Bar (for frameless window on macOS) -->
             <div
                 v-if="$route.meta.showTitleBar !== false"
@@ -745,9 +735,12 @@ onUnmounted(() => {
             </div>
 
             <!-- Router View -->
-            <div class="flex-1 overflow-hidden">
+            <div class="flex-1 overflow-hidden relative">
                 <router-view />
             </div>
+
+            <!-- Activity Console (Flow layout) -->
+            <ActivityConsole />
         </main>
 
         <!-- Toast Container -->
@@ -824,9 +817,6 @@ onUnmounted(() => {
             @skip="handleSetupSkip"
             @close="handleSetupSkip"
         />
-
-        <!-- Activity Console -->
-        <ActivityConsole />
 
         <!-- Update Modal -->
         <UpdateModal

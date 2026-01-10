@@ -45,7 +45,7 @@ const formattedDate = computed(() => {
 });
 
 const previewGraphData = computed(() => {
-    if (item.value?.previewGraph && item.value.previewGraph.nodes.length > 0) {
+    if (item.value?.previewGraph?.nodes?.length > 0) {
         return item.value.previewGraph;
     }
     return null;
@@ -53,21 +53,25 @@ const previewGraphData = computed(() => {
 
 async function handlePurchase() {
     if (!item.value) return;
+
+    // If owned, handle Import
     if (item.value.isOwned) {
-        toast.info('You already own this item');
+        try {
+            await store.importItem(item.value.id);
+            toast.success(`Imported ${item.value.name} successfully!`);
+        } catch (e: any) {
+            toast.error(e.message || 'Import failed');
+        }
         return;
     }
 
     try {
-        const response: any = await store.purchaseItem(item.value.id);
+        await store.purchaseItem(item.value.id);
         toast.success(`Purchased ${item.value.name} successfully!`);
 
-        // Redirect to the item if it's a project
-        if (response && response.itemType === 'project' && response.itemId) {
-            // Use setTimeout to allow toast to be seen? No, immediate is fine.
-            router.push({ name: 'project-detail', params: { id: response.itemId } });
-        }
-    } catch (e) {
+        // Redirect to the item if it's a project?
+        // No, keep them here so they can import it.
+    } catch (e: any) {
         // Error already handled in store but shown in UI via store.error
         toast.error('Purchase failed');
     }
@@ -157,7 +161,7 @@ async function handlePurchase() {
                             v-if="store.loading"
                             class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"
                         ></span>
-                        <span>{{ item.isOwned ? 'Installed' : 'Get It' }}</span>
+                        <span>{{ item.isOwned ? 'Import' : 'Get It' }}</span>
                     </button>
                     <p v-if="store.error" class="text-red-500 text-xs">{{ store.error }}</p>
                 </div>

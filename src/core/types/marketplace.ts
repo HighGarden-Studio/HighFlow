@@ -197,6 +197,7 @@ export interface LibraryItem {
     publishedAt?: string; // ISO Date
     status?: 'pending' | 'approved' | 'rejected'; // For published items
     previewImages?: string[]; // Added in spec
+    tags?: string[];
 }
 
 /**
@@ -205,4 +206,23 @@ export interface LibraryItem {
 export interface LibraryResponse {
     items: LibraryItem[];
     total?: number; // Optional in spec, but good to have
+}
+
+/**
+ * Import response with secured content
+ */
+export interface ImportResponse {
+    id: string;
+    type: ItemType;
+    name: string;
+    version: string;
+    description: string;
+    requirements?: {
+        provider: string;
+        model: string;
+    }[];
+    // Type-specific content
+    projectDefinition?: any;
+    operatorDefinition?: any;
+    scriptContent?: string;
 }

@@ -9,6 +9,7 @@ import path from 'node:path';
 import { release } from 'os'; // Added for Electron app setup
 import { ProjectRepository } from './database/repositories/project-repository';
 import { TaskRepository } from './database/repositories/task-repository';
+import { userRepository } from './database/repositories/user-repository';
 import { registerWorkflowHandlers } from './ipc/workflow-handlers';
 import { registerFsHandlers } from './ipc/fs-handlers';
 import { registerLocalAgentsHandlers } from './ipc/local-agents-handlers';
@@ -180,9 +181,11 @@ async function registerIpcHandlers(): Promise<void> {
         'projects:list',
         async (_event, filters?: { status?: ProjectStatus; isArchived?: boolean }) => {
             try {
-                return await projectRepo.findAll(filters);
+                const results = await projectRepo.findAll(filters);
+                console.log(`[IPC] projects:list found ${results.length} projects`);
+                return results;
             } catch (error) {
-                console.error('Error listing projects:', error);
+                console.error('[IPC] Error listing projects:', error);
                 throw error;
             }
         }
@@ -307,18 +310,72 @@ async function registerIpcHandlers(): Promise<void> {
         }
     });
 
-    ipcMain.handle('projects:import', async (_event, data: ProjectExportData) => {
-        try {
-            // Default ownerId to 1 for now
-            const ownerId = 1;
-            const project = await projectRepo.importProject(data, ownerId);
-            mainWindow?.webContents.send('project:created', project);
-            return project;
-        } catch (error) {
-            console.error('Error importing project:', error);
-            throw error;
+    ipcMain.handle(
+        'projects:import',
+        async (
+            _event,
+            data: ProjectExportData,
+            userData?: { email: string; name: string; googleId?: string; photoUrl?: string }
+        ) => {
+            console.log('[Import] Received request. userData:', userData);
+            try {
+                // Resolve ownerId using userData or default to 1 (System)
+                let ownerId = 1;
+                if (userData && userData.email) {
+                    try {
+                        // Fallback name to email username if missing
+                        const name = userData.name || userData.email.split('@')[0];
+
+                        const user = await userRepository.ensureUser({
+                            email: userData.email,
+                            name: name,
+                            googleId: userData.googleId,
+                            avatar: userData.photoUrl,
+                        });
+                        ownerId = user.id;
+                        console.log(`[Import] Resolved user: ${user.email} (ID: ${user.id})`);
+                    } catch (err) {
+                        console.error('Failed to resolve user for import:', err);
+                        // Fallback to default user (ID 1) will happen, but we should make sure ID 1 exists
+                        // Note: System Curator is an Operator, not a User.
+                        // Ideally we should have a "System" user.
+                    }
+                }
+
+                console.log('[Import] Using ownerId:', ownerId);
+
+                // Verify user exists to prevent FK error
+                const owner = await userRepository.findById(ownerId);
+                if (!owner) {
+                    console.warn(
+                        `[Import] Owner ID ${ownerId} not found using fallback. Using first available user.`
+                    );
+                    const firstUser = await userRepository.findFirst();
+                    if (firstUser) {
+                        ownerId = firstUser.id;
+                        console.log(
+                            `[Import] Fallback to first user: ${firstUser.email} (ID: ${ownerId})`
+                        );
+                    } else {
+                        // If essentially no users exist, we create a default one
+                        console.warn('[Import] No users found. Creating default local user.');
+                        const defaultUser = await userRepository.ensureUser({
+                            email: 'local@user.com',
+                            name: 'Local User',
+                        });
+                        ownerId = defaultUser.id;
+                    }
+                }
+
+                const project = await projectRepo.importProject(data, ownerId);
+                mainWindow?.webContents.send('project:created', project);
+                return project;
+            } catch (error) {
+                console.error('Error importing project:', error);
+                throw error;
+            }
         }
-    });
+    );
 
     // ========================================
     // Task IPC Handlers

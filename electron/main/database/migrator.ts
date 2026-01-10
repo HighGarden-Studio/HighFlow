@@ -9,6 +9,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
+import log from 'electron-log';
 
 /**
  * Run database migrations
@@ -36,19 +37,28 @@ export function runMigrations(sqlite: Database.Database, migrationsPath?: string
         }
     }
 
-    console.log(`Looking for migrations in: ${migrationsFolder}`);
+    log.info(`[Migrator] Looking for migrations in: ${migrationsFolder}`);
+    log.info(`[Migrator] Current __dirname: ${__dirname}`);
+    log.info(`[Migrator] Current process.cwd: ${process.cwd()}`);
 
     if (!fs.existsSync(migrationsFolder)) {
-        console.warn(`Migrations folder not found: ${migrationsFolder}`);
-        console.warn('Skipping migrations');
+        log.warn(`[Migrator] Migrations folder not found: ${migrationsFolder}`);
+        log.warn(
+            `[Migrator] Contents of parent dir (${path.dirname(migrationsFolder)}):`,
+            fs.existsSync(path.dirname(migrationsFolder))
+                ? fs.readdirSync(path.dirname(migrationsFolder))
+                : 'Parent not found'
+        );
+        log.warn('[Migrator] Skipping migrations - detailed check required');
         return;
     }
 
     try {
+        log.info(`[Migrator] Found migrations folder. Contents:`, fs.readdirSync(migrationsFolder));
         migrate(db, { migrationsFolder });
-        console.log('✅ Migrations completed successfully');
+        log.info('[Migrator] ✅ Migrations completed successfully');
     } catch (error) {
-        console.error('❌ Migration failed:', error);
+        log.error('❌ Migration failed:', error);
         throw error;
     }
 }

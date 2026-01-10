@@ -720,6 +720,12 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                     class="font-medium text-gray-900 dark:text-white"
                                                 >
                                                     {{ provider.name }}
+                                                    <span
+                                                        v-if="provider.isComingSoon"
+                                                        class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                                    >
+                                                        Coming Soon
+                                                    </span>
                                                 </h3>
                                                 <p
                                                     class="text-xs text-gray-500 dark:text-gray-400 max-w-xs truncate"
@@ -865,10 +871,15 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                 }}
                                             </button>
                                             <button
-                                                class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0"
+                                                class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 @click="openProviderModal(provider.id)"
+                                                :disabled="provider.isComingSoon"
                                             >
-                                                Configure
+                                                {{
+                                                    provider.isComingSoon
+                                                        ? 'Coming Soon'
+                                                        : 'Configure'
+                                                }}
                                             </button>
                                         </div>
                                     </div>

@@ -1,298 +1,169 @@
 # HighFlow
 
-> AI-powered project and task management desktop application with real-time collaboration
+> AI-powered project and task management desktop application with real-time collaboration.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4-brightgreen.svg)](https://vuejs.org/)
 [![Electron](https://img.shields.io/badge/Electron-29-blue.svg)](https://www.electronjs.org/)
 
-## 🌟 Features
+## 🌟 Overview
 
-### Core Functionality
+HighFlow is a next-generation workflow manager designed to orchestrate complex tasks using multiple AI agents. It combines traditional project management tools (Kanban, DAG) with an intelligent execution engine that can automate tasks, generate content, and interact with your local environment.
 
-- 🤖 **AI-Powered Project Generation**: Automatically create structured projects from natural language prompts
-- 📊 **Kanban & Timeline Views**: Visual task management with drag-and-drop
-- 🧠 **Multi-AI Agent Support**: Integrate GPT-4, Claude, Gemini simultaneously
-- 🔌 **MCP Integration**: Extensible AI capabilities via Model Context Protocol
-- 👥 **Real-time Collaboration**: Simultaneous editing with CRDT conflict resolution
-- 💬 **Comments & Mentions**: Threaded discussions with @mentions
-- ⏱️ **Time Tracking**: Built-in timers and time estimates
-- 📈 **AI Cost Analytics**: Track and analyze API usage costs
-- 🔧 **Custom Workflows**: Visual automation builder (no code required)
-- 🔗 **Integrations**: Git, Slack, Discord, webhooks
+## 🚀 Key Features
 
-### Technical Highlights
+### 1. Project Management
 
-- ⚡ **Offline-First**: Local SQLite database with background sync
-- 🔒 **Secure**: API keys stored in OS keychain
-- 🎨 **Modern UI**: Accessible, customizable interface
-- 🔍 **Powerful Search**: Full-text search with command palette
-- 🧩 **Plugin System**: Extensible architecture
-- 🌐 **Cross-Platform**: Windows, macOS, Linux
+HighFlow organizes your work into **Projects**.
 
-## 📸 Screenshots
+- **AI-Generated Projects**: Create entire project structures from a single prompt.
+- **Templates**: Use built-in or marketplace templates to kickstart standard workflows.
+- **Project Structure**:
+    - **Goal & Constraints**: Define high-level objectives that guide AI execution.
+    - **Context Memory**: Persistent project-level memory (Glossary, Decision Log) shared across tasks.
 
-_Coming soon_
+### 2. Task Architecture
 
-### Recent Updates (v0.2.0)
+Tasks are the building blocks of HighFlow. They are not just static to-do items but executable units of work.
 
-- **🎨 HighFlow Branding**: Updated application UI with official branding and custom iconography.
-- **🧠 Dynamic AI Models**: Real-time fetching of latest models from OpenAI, Anthropic, and Gemini.
-- **📊 Enhanced Kanban**: improved task management with "View Previous Result" functionality and UX fixes.
-- **⚡ Performance**: Optimized model caching and reduced API latency.
-- **🛠️ Local Agent Support**: Seamless integration with local AI agents.
+#### Task Types
 
-## 🚀 Quick Start
+| Type            | Icon | Description                                                                                             |
+| :-------------- | :--- | :------------------------------------------------------------------------------------------------------ |
+| **AI Task**     | 🤖   | Executed by an LLM (OpenAI, Anthropic, Gemini, Local). Generates text, code, or data based on a prompt. |
+| **Script Task** | 📜   | Executes code (`TypeScript`, `Python`, `JavaScript`) securely. Can control workflow flow (branching).   |
+| **Input Task**  | 📥   | Pauses execution to request user input (Text, File, Confirmation) or fetch external data (URL).         |
+| **Output Task** | 📤   | Aggregates results from previous tasks and saves them (File, Slack, Google Docs).                       |
+
+#### Task Dependencies & Control Flow
+
+HighFlow supports complex dependency graphs:
+
+- **Sequential**: Task B starts only after Task A completes.
+- **DAG (Directed Acyclic Graph)**: Visualize and manage dependencies in a node graph view.
+- **Triggers**:
+    - **Dependency-based**: Run when specific parent tasks finish (All/Any logic).
+    - **Time-based**: Scheduled execution (Cron or specific datetime).
+    - **Conditional**: Script tasks can dynamically decide which next path to take.
+
+#### Task Settings
+
+Each task can be granularly configured:
+
+- **AI Configuration**: Select specific Provider (e.g., Anthropic) and Model (e.g., Claude 3.5 Sonnet) per task.
+- **Retries**: Configure auto-retry attempts on failure.
+- **Context Handling**: Choose which previous task results included in the context.
+- **Review Policy**:
+    - **Auto-Review**: Have a second AI model review the primary AI's work before marking as Done.
+    - **Human-in-the-loop**: Force manual approval before proceeding.
+
+### 3. Intelligence & Operators
+
+Operators are specialized AI personas tailored for specific roles.
+
+- **Library**: Manage your collection of Operators (e.g., "Senior Dev", "QA Engineer", "Technical Writer").
+- **Customization**:
+    - **System Prompt**: Define the persona, tone, and strict rules.
+    - **Model Preference**: Bind an operator to a specific capable model (e.g., GPT-4 for logic, Haiku for speed).
+    - **Capabilities**: Assign specific tools (MCP servers) to operators.
+- **Assignment**: Drag-and-drop Operators onto tasks to assign them as the executor.
+
+### 4. Marketplace
+
+A built-in hub to share and expand capabilities.
+
+- **Explore**: Browse Projects, Operators, and Script Templates created by the community.
+- **Categories**: Filter by Data Processing, Automation, Content Creation, and more.
+- **Detailed Views**:
+    - **Preview Graphs**: See the workflow structure before importing.
+    - **Reviews**: Read user ratings and comments.
+    - **Version History**: Track updates and compatibility.
+- **Import/Export**: detailed flow to package your local projects as shareable templates.
+- **Monetization**: (Coming Soon) Buy and sell premium workflows using Credits.
+
+### 5. Connectivity (MCP)
+
+HighFlow fully supports the **Model Context Protocol (MCP)**.
+
+- **Server Management**: Connect to local or remote MCP servers.
+- **Tool Access**: Give AI tasks access to real-time data and tools (Filesystem, Git, Browsing, Database).
+- **Visual Config**: Managing MCP server connections and capabilities directly from Settings.
+
+---
+
+## 🛠 Project Structure
+
+The codebase is organized as a standard Electron + Vue application:
+
+```
+workflow_manager/
+├── electron/                   # Main Process (Backend)
+│   ├── main/
+│   │   ├── database/           # SQLite schema (Drizzle ORM) & migrations
+│   │   ├── services/           # Core logic (AI Execution, Local Agents)
+│   │   ├── ipc/                # IPC Handlers (Communication bridge)
+│   │   └── index.ts            # App Entry point
+│   └── preload/                # Preload scripts (Context Isolation)
+├── src/                        # Renderer Process (Frontend)
+│   ├── renderer/
+│   │   ├── api/                # IPC client mapping
+│   │   ├── components/         # Vue Components
+│   │   │   ├── marketplace/    # Marketplace UI Cards & Modals
+│   │   │   ├── project/        # Kanban, DAG, Project Settings
+│   │   │   ├── settings/       # App Settings (AI Providers, MCP)
+│   │   │   └── task/           # Task Detail, Result Views
+│   │   ├── stores/             # Pinia State Stores (Task, Project, Settings)
+│   │   ├── views/              # Main Route Views (Home, Project, Marketplace)
+│   │   └── App.vue             # Root Component
+│   ├── core/
+│   │   └── types/              # Shared TypeScript Interfaces (DB, API)
+└── scripts/                    # Build & Dev utilities
+```
+
+## 💻 Technical Stack
+
+- **Runtime**: Electron 29 (Node.js)
+- **Frontend**: Vue 3.4, TypeScript, TailwindCSS, Shadcn-vue
+- **State Management**: Pinia
+- **Database**: SQLite (local) with Drizzle ORM
+- **AI Orchestration**: Vercel AI SDK + Custom Execution Engine
+- **Graphing**: Vue Flow (DAG visualization)
+
+## 🏃 Quick Start
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm 8+ (recommended)
+- pnpm
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/workflow-manager.git
-cd workflow-manager
-
 # Install dependencies
 pnpm install
 
-# Copy environment variables
+# Setup environment
 cp .env.example .env
 
-# Add your API keys to .env
-# OPENAI_API_KEY=sk-...
-# ANTHROPIC_API_KEY=sk-ant-...
+# Run development mode
+pnpm dev:electron
 ```
 
-### Development
+### Database Management
 
 ```bash
-# Start development server
-pnpm dev:electron
-
-# In another terminal, run database migrations
+# Push schema changes to local DB
 pnpm db:migrate
 
-# Open Drizzle Studio (database GUI)
+# Open Database GUI
 pnpm db:studio
 ```
 
-### Build
-
-```bash
-# Build for current platform
-pnpm build
-
-# Build for specific platforms
-pnpm build:mac
-pnpm build:win
-pnpm build:linux
-```
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Electron App                         │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │         Vue 3 Renderer (Frontend)                │  │
-│  │  • Modular feature architecture                  │  │
-│  │  • Pinia state management                        │  │
-│  │  • Shadcn-vue + TailwindCSS                      │  │
-│  └──────────────────┬──────────────────────────────┘  │
-│                     │ IPC Bridge                       │
-│  ┌──────────────────┴──────────────────────────────┐  │
-│  │         Main Process (Backend)                   │  │
-│  │  • SQLite + Drizzle ORM                          │  │
-│  │  • AI Agent Orchestrator                         │  │
-│  │  • Sync Engine (Yjs CRDT)                        │  │
-│  └──────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
-              │                          │
-              ▼                          ▼
-    ┌─────────────────┐      ┌──────────────────┐
-    │  External APIs  │      │ Collaboration    │
-    │  • OpenAI       │      │ • Liveblocks     │
-    │  • Anthropic    │      │ • Supabase       │
-    │  • Google AI    │      │ • WebSocket      │
-    └─────────────────┘      └──────────────────┘
-```
-
-## 📚 Documentation
-
-### For Developers
-
-- [Architecture Decision Records](./ARCHITECTURE.md)
-- [Project Structure](./PROJECT_STRUCTURE.md)
-- [Development Roadmap](./DEVELOPMENT_ROADMAP.md)
-- [Technology Stack Rationale](./TECH_STACK_RATIONALE.md)
-
-### For AI Assistants
-
-- **[Complete Project Overview](./docs/PROJECT_OVERVIEW_FOR_AI.md)** - Start here!
-- [AI Quick Reference](./docs/AI_QUICK_REF.md) - Quick lookup
-- [Recent Changes](./docs/RECENT_CHANGES.md) - Latest updates
-
-### Coming Soon
-
-- [API Documentation](./docs/API.md)
-- [Plugin Development Guide](./docs/PLUGIN_GUIDE.md)
-
-## 🛠️ Technology Stack
-
-| Category           | Technology                | Purpose                    |
-| ------------------ | ------------------------- | -------------------------- |
-| Desktop Framework  | Electron 29               | Cross-platform desktop app |
-| Frontend Framework | Vue 3.4 (Composition API) | Reactive UI                |
-| Language           | TypeScript 5.3 (strict)   | Type safety                |
-| State Management   | Pinia                     | Centralized state          |
-| UI Library         | Shadcn-vue + TailwindCSS  | Component library          |
-| Local Database     | SQLite + Drizzle ORM      | Offline-first storage      |
-| Real-time Sync     | Liveblocks / Supabase     | Collaboration              |
-| CRDT               | Yjs                       | Conflict-free editing      |
-| AI Integration     | Vercel AI SDK             | Multi-model support        |
-| Build Tool         | Vite 5                    | Lightning-fast HMR         |
-| Testing            | Vitest + Playwright       | Unit & E2E tests           |
-
-See [TECH_STACK_RATIONALE.md](./TECH_STACK_RATIONALE.md) for detailed explanations.
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-pnpm test
-
-# Run unit tests with UI
-pnpm test --ui
-
-# Run E2E tests
-pnpm test:e2e
-
-# Type checking
-pnpm type-check
-```
-
-## 📦 Project Structure
-
-```
-workflow_manager/
-├── electron/               # Electron main process
-│   ├── main/              # Main process logic
-│   │   ├── index.ts       # Entry point
-│   │   ├── ipc/           # IPC handlers
-│   │   ├── services/      # Background services
-│   │   └── database/      # Drizzle schema & migrations
-│   └── preload/           # Preload scripts (bridge)
-├── src/
-│   ├── renderer/          # Vue application
-│   │   ├── modules/       # Feature modules
-│   │   │   ├── projects/
-│   │   │   ├── tasks/
-│   │   │   ├── ai-assistant/
-│   │   │   └── collaboration/
-│   │   ├── shared/        # Shared components
-│   │   └── plugins/       # Plugin system
-│   └── core/              # Shared business logic
-│       ├── ai/            # AI agents
-│       ├── sync/          # Sync engine
-│       └── types/         # TypeScript types
-├── scripts/               # Build & dev scripts
-├── tests/                 # Test suites
-└── docs/                  # Documentation
-```
-
-See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for complete details.
-
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](./docs/CONTRIBUTING.md) first.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Code Style
-
-```bash
-# Lint code
-pnpm lint
-
-# Format code
-pnpm format
-```
-
-## 📝 Roadmap
-
-See [DEVELOPMENT_ROADMAP.md](./DEVELOPMENT_ROADMAP.md) for detailed milestones.
-
-**Phase 1: Foundation & MVP** (Weeks 1-8)
-
-- [x] Project setup
-- [ ] Basic CRUD operations
-- [ ] AI project generation
-- [ ] Kanban board
-
-**Phase 2: Collaboration** (Weeks 9-14)
-
-- [ ] User authentication
-- [ ] Real-time sync
-- [ ] Comments & mentions
-
-**Phase 3: Advanced Features** (Weeks 15-20)
-
-- [ ] Timeline view
-- [ ] AI assistant chat
-- [ ] Automation workflows
-
-**Phase 4: Integrations** (Weeks 21-24)
-
-- [ ] Git integration
-- [ ] Slack/Discord bots
-- [ ] Template marketplace
-
-**Phase 5: Release** (Weeks 25-28)
-
-- [ ] Testing & polish
-- [ ] Documentation
-- [ ] v1.0 launch
-
-## 🐛 Known Issues
-
-- [ ] Drizzle migrations not yet implemented
-- [ ] Auto-updater not configured
-- [ ] Code signing certificates required for distribution
-
-See [GitHub Issues](https://github.com/your-org/workflow-manager/issues) for full list.
+We welcome contributions! Please see [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for details on our code of conduct and development process.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Electron](https://www.electronjs.org/)
-- [Vue.js](https://vuejs.org/)
-- [Vercel AI SDK](https://sdk.vercel.ai/)
-- [Drizzle ORM](https://orm.drizzle.team/)
-- [Shadcn-vue](https://www.shadcn-vue.com/)
-- [Yjs](https://yjs.dev/)
-
-## 📧 Contact
-
-- Website: [example.com](https://example.com)
-- Email: your.email@example.com
-- Twitter: [@yourhandle](https://twitter.com/yourhandle)
-- Discord: [Join our community](https://discord.gg/...)
-
----
-
-**Built with ❤️ using AI-powered development tools**
+MIT License. See [LICENSE](./LICENSE) for details.
