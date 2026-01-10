@@ -13,82 +13,94 @@ HighFlow is a next-generation workflow manager designed to orchestrate complex t
 
 ## 🚀 Key Features
 
-### 1. Project Management
+### 1. Advanced Task Capabilities
 
-HighFlow organizes your work into **Projects**.
+Tasks in HighFlow are powerful execution units with extensive automation features:
 
-- **AI-Generated Projects**: Create entire project structures from a single prompt.
-- **Templates**: Use built-in or marketplace templates to kickstart standard workflows.
-- **Project Structure**:
-    - **Goal & Constraints**: Define high-level objectives that guide AI execution.
-    - **Context Memory**: Persistent project-level memory (Glossary, Decision Log) shared across tasks.
+- **⚡️ Parallel Execution**: Run multiple independent tasks simultaneously to drastically reduce workflow completion time.
+- **👀 Auto-Review**: Automatically assign a secondary "Reviewer AI" to critique the work of the primary "Executor AI". The task only proceeds if it passes this automated quality gate.
+- **✅ Auto-Approve**: For trusted workflows, bypass manual checks and let the AI mark tasks as "Done" immediately upon successful generation.
+- **🔗 Webhooks**: Trigger external APIs automatically when a task is completed, allowing integration with CI/CD pipelines, Slack notifications, or custom backends.
+- **� Result Verification**: All task outputs are strictly validated against defined expected formats (JSON, Markdown, Code) before being accepted.
+- **�️ Result Preview**: Instantly preview generated artifacts (Code, Diagrams, Markdown, Data Tables) directly within the task card without leaving the view.
 
-### 2. Task Architecture
+### 2. Intelligent Operators
 
-Tasks are the building blocks of HighFlow. They are not just static to-do items but executable units of work.
+Operators are more than just chatbots—they are specialized, reusable AI personas designed for specific jobs.
 
-#### Task Types
+- **Role-Based Definition**: Combines a robust **Rule-based System Prompt** with specific behavioral constraints.
+- **Reusable Presets**: Save specific combinations of **AI Provider** (e.g., Anthropic) and **Model** (e.g., Claude 3.5 Sonnet) as a preset attached to an operator.
+- **Drag-and-Drop Assignment**: Simply drag an Operator from your library and drop it onto any task to instantly assign that persona and its configuration to the task.
+- **Tool Binding**: Equip operators with specific MCP tools (e.g., "Give 'Database Admin' operator access to PostgreSQL MCP").
 
-| Type            | Icon | Description                                                                                             |
-| :-------------- | :--- | :------------------------------------------------------------------------------------------------------ |
-| **AI Task**     | 🤖   | Executed by an LLM (OpenAI, Anthropic, Gemini, Local). Generates text, code, or data based on a prompt. |
-| **Script Task** | 📜   | Executes code (`TypeScript`, `Python`, `JavaScript`) securely. Can control workflow flow (branching).   |
-| **Input Task**  | 📥   | Pauses execution to request user input (Text, File, Confirmation) or fetch external data (URL).         |
-| **Output Task** | 📤   | Aggregates results from previous tasks and saves them (File, Slack, Google Docs).                       |
+### 3. Hierarchical Configuration
 
-#### Task Dependencies & Control Flow
+HighFlow applies settings in a strict priority order, allowing for both global consistency and granular control:
 
-HighFlow supports complex dependency graphs:
-
-- **Sequential**: Task B starts only after Task A completes.
-- **DAG (Directed Acyclic Graph)**: Visualize and manage dependencies in a node graph view.
-- **Triggers**:
-    - **Dependency-based**: Run when specific parent tasks finish (All/Any logic).
-    - **Time-based**: Scheduled execution (Cron or specific datetime).
-    - **Conditional**: Script tasks can dynamically decide which next path to take.
-
-#### Task Settings
-
-Each task can be granularly configured:
-
-- **AI Configuration**: Select specific Provider (e.g., Anthropic) and Model (e.g., Claude 3.5 Sonnet) per task.
-- **Retries**: Configure auto-retry attempts on failure.
-- **Context Handling**: Choose which previous task results included in the context.
-- **Review Policy**:
-    - **Auto-Review**: Have a second AI model review the primary AI's work before marking as Done.
-    - **Human-in-the-loop**: Force manual approval before proceeding.
-
-### 3. Intelligence & Operators
-
-Operators are specialized AI personas tailored for specific roles.
-
-- **Library**: Manage your collection of Operators (e.g., "Senior Dev", "QA Engineer", "Technical Writer").
-- **Customization**:
-    - **System Prompt**: Define the persona, tone, and strict rules.
-    - **Model Preference**: Bind an operator to a specific capable model (e.g., GPT-4 for logic, Haiku for speed).
-    - **Capabilities**: Assign specific tools (MCP servers) to operators.
-- **Assignment**: Drag-and-drop Operators onto tasks to assign them as the executor.
+1.  **Global Settings 🌍**:
+    - Set the default AI Provider and Model for the entire application.
+    - Define global API keys and MCP server connections.
+2.  **Project Settings 📂**:
+    - Override defaults for a specific project (e.g., "Use GPT-4o for this coding project").
+    - Define project-wide context and memory (Glossary, Constraints).
+3.  **Task Settings 📝**:
+    - The highest priority. Override everything for a single task.
+    - Example: "Use 'Claude 3 Haiku' for this specific translation task to save costs," even if the project defaults to GPT-4.
 
 ### 4. Marketplace
 
 A built-in hub to share and expand capabilities.
 
 - **Explore**: Browse Projects, Operators, and Script Templates created by the community.
-- **Categories**: Filter by Data Processing, Automation, Content Creation, and more.
-- **Detailed Views**:
-    - **Preview Graphs**: See the workflow structure before importing.
-    - **Reviews**: Read user ratings and comments.
-    - **Version History**: Track updates and compatibility.
-- **Import/Export**: detailed flow to package your local projects as shareable templates.
-- **Monetization**: (Coming Soon) Buy and sell premium workflows using Credits.
+- **Import**: One-click import of complex workflows and operators directly into your library.
+- **Compatibility Checks**: Automatically verifies if you have the required AI providers and MCP servers installed before importing.
 
-### 5. Connectivity (MCP)
+### 5. Connectivity (Model Context Protocol - MCP)
 
-HighFlow fully supports the **Model Context Protocol (MCP)**.
+HighFlow fully implements the **Model Context Protocol (MCP)**, enabling AI agents to safely interact with external systems and data.
 
-- **Server Management**: Connect to local or remote MCP servers.
-- **Tool Access**: Give AI tasks access to real-time data and tools (Filesystem, Git, Browsing, Database).
-- **Visual Config**: Managing MCP server connections and capabilities directly from Settings.
+- **Universal Connection**: Connect to any MCP-compliant server (Filesystem, Git, Postgres, Brave Search, etc.).
+- **Local & Remote**: Run MCP servers locally on your machine or connect to remote instances.
+- **Secure Access**: Granularly control which tools an AI agent can access.
+- **Visual Management**: specific settings panel to install, configure, and debug MCP servers without touching config files.
+
+---
+
+## 🤖 Supported AI Providers
+
+HighFlow integrates with a vast array of AI providers.
+
+### ✅ Supported Now
+
+- **OpenAI**: GPT-4, GPT-4o, GPT-3.5
+- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus/Haiku
+- **Google AI**: Gemini 1.5 Pro/Flash, Gemini 2.0 (Preview), PaLM
+- **Groq**: Llama 3, Mixtral (Ultra-fast inference)
+- **Mistral AI**: Mistral Large, Medium, Small
+- **LM Studio**: Local LLM server integration
+- **HighFlow Default**: Built-in cloud credit system
+
+### 🏠 Local Agents (First-Class Support)
+
+Run completely private, offline AI agents directly within HighFlow:
+
+- **Ollama**: Run Llama 3, Mistral, Gemma locally.
+- **Local AI**: Connect to any OpenAI-compatible local endpoint.
+
+### 🚧 Coming Soon
+
+- **Azure OpenAI**: Enterprise-grade Azure integration
+- **Perplexity**: Real-time web search LLMs
+- **Cohere**: Command R+, R models
+- **Together AI**: Open-source models (Llama, Mixtral)
+- **Fireworks AI**: Fast inference platform
+- **DeepSeek**: Specialized Coding models
+- **OpenRouter**: Aggregated AI access
+- **Hugging Face**: Access to thousands of open models
+- **Replicate**: Cloud inference for open-source models
+- **Design AI**: Figma AI, Galileo AI, Uizard (UI/UX generation)
+- **Media AI**: Stability AI, Runway, Pika (Image/Video), ElevenLabs, Suno (Audio)
+- **Regional**: Zhipu AI, Moonshot, Baidu ERNIE, Alibaba Qwen
 
 ---
 
