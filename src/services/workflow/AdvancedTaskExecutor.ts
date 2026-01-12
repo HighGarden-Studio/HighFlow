@@ -1333,7 +1333,7 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
         const aggregated =
             results.flatMap(
                 (result) =>
-                    result.attachments || (result.metadata.attachments as TaskAttachment[]) || []
+                    result.attachments || (result.metadata?.attachments as TaskAttachment[]) || []
             ) || [];
         if (aggregated.length === 0) return;
 

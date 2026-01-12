@@ -87,7 +87,7 @@ const userInitials = computed(() => {
     if (!name || name === 'User') return 'U';
     const parts = name.split(' ').filter((p) => p.length > 0);
     if (parts.length >= 2) {
-        return (parts[0]![0] + parts[1]![0]).toUpperCase();
+        return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
 });
@@ -141,53 +141,141 @@ function closeWindow() {
 /**
  * Global keyboard shortcuts
  */
+// Helper to match shortcut against event
+function matchShortcut(event: KeyboardEvent, shortcut: any): boolean {
+    const keys = shortcut.customKeys || shortcut.keys;
+    if (!keys || keys.length === 0) return false;
+
+    const isMac = navigator.userAgent.includes('Mac');
+    // The last key defined is usually the main key (e.g. "K" in "Cmd+K")
+    // But sometimes it might be "Escape". We filter out modifiers.
+    const modifiers = [
+        '⌘',
+        'Cmd',
+        'Command',
+        'Ctrl',
+        'Control',
+        '⇧',
+        'Shift',
+        '⌥',
+        'Alt',
+        'Option',
+    ];
+    const nonModifierKeys = keys.filter((k: string) => !modifiers.includes(k));
+
+    if (nonModifierKeys.length === 0) {
+        // If only modifiers are defined (unlikely for a valid shortcut), fail
+        return false;
+    }
+
+    const targetKey = nonModifierKeys[0].toLowerCase();
+    const pressedKey = event.key.toLowerCase();
+
+    // Special case for special keys
+    if (targetKey === 'esc' && pressedKey === 'escape') {
+        // match
+    } else if (pressedKey !== targetKey) {
+        return false;
+    }
+
+    const needsMeta = keys.some((k: string) => ['⌘', 'Cmd', 'Command'].includes(k));
+    const needsCtrl = keys.some((k: string) => ['Ctrl', 'Control'].includes(k));
+    const needsShift = keys.some((k: string) => ['⇧', 'Shift'].includes(k));
+    const needsAlt = keys.some((k: string) => ['⌥', 'Alt', 'Option'].includes(k));
+
+    // Platform specific modifier check
+    if (isMac) {
+        if (needsMeta && !event.metaKey) return false;
+        if (needsCtrl && !event.ctrlKey) return false;
+    } else {
+        // Windows/Linux: Cmd config usually maps to Ctrl
+        if (needsMeta && !event.ctrlKey) return false;
+        if (needsCtrl && !event.ctrlKey) return false;
+    }
+
+    // Exact match for Shift/Alt (to avoid firing Cmd+Shift+Z when checking Cmd+Z)
+    // However, some shortcuts might be forgiving. Sticking to strict for now.
+    if (needsShift !== event.shiftKey) return false;
+    if (needsAlt !== event.altKey) return false;
+
+    return true;
+}
+
+function executeShortcut(id: string) {
+    console.log(`⌨️ Executing shortcut: ${id}`);
+    switch (id) {
+        case 'command-palette':
+        case 'search':
+            showSearch.value = true;
+            break;
+        case 'new-project':
+            navigateTo('/projects');
+            // TODO: Open modal if possible
+            break;
+        case 'new-task':
+            // If we had a global task modal
+            navigateTo('/projects');
+            break;
+        case 'toggle-sidebar':
+            toggleSidebar();
+            break;
+        case 'settings':
+            navigateTo('/settings');
+            break;
+        case 'save':
+            // global save?
+            break;
+        case 'undo':
+            if (historyStore.canUndo) historyStore.undo();
+            break;
+        case 'redo':
+            if (historyStore.canRedo) historyStore.redo();
+            break;
+        case 'close-modal':
+            showSearch.value = false;
+            showUpdateModal.value = false;
+            showSetupWizard.value = false;
+            showAssistant.value = false;
+            break;
+    }
+}
+
+/**
+ * Global keyboard shortcuts
+ */
 function handleGlobalKeyDown(event: KeyboardEvent) {
+    // Skip if typing in input elements, UNLESS it is Escape (to blur/close)
+    const target = event.target as HTMLElement;
+    const isInput =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+    if (isInput) {
+        if (event.key === 'Escape') {
+            target.blur();
+            // Also close modals if open
+            if (showSearch.value || showUpdateModal.value) {
+                executeShortcut('close-modal');
+            }
+            return;
+        }
+        // Don't trigger other shortcuts while typing
+        return;
+    }
+
+    // 1. Check configured shortcuts from Store
+    for (const shortcut of settingsStore.keyboardShortcuts) {
+        if (matchShortcut(event, shortcut)) {
+            event.preventDefault();
+            executeShortcut(shortcut.id);
+            return;
+        }
+    }
+
+    // 2. Legacy / Special hardcoded shortcuts
+    // Activity Console: Cmd+` or Ctrl+`
     const isMac = navigator.userAgent.includes('Mac');
     const modifier = isMac ? event.metaKey : event.ctrlKey;
-    const key = event.key.toLowerCase();
-
-    // Skip if typing in input elements
-    const target = event.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-    }
-
-    // Undo: Cmd+Z (Mac) or Ctrl+Z (Windows/Linux)
-    if (modifier && key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        if (historyStore.canUndo) {
-            historyStore.undo();
-            console.log('⌨️ Undo triggered');
-        }
-        return;
-    }
-
-    // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Windows/Linux)
-    if (modifier && key === 'z' && event.shiftKey) {
-        event.preventDefault();
-        if (historyStore.canRedo) {
-            historyStore.redo();
-            console.log('⌨️ Redo triggered');
-        }
-        return;
-    }
-
-    // Assistant Panel: Cmd+J or Ctrl+J
-    if (modifier && key === 'j') {
-        event.preventDefault();
-        toggleAssistant();
-        return;
-    }
-
-    // Search: Cmd+K or Ctrl+K
-    if (modifier && key === 'k') {
-        event.preventDefault();
-        showSearch.value = !showSearch.value;
-        return;
-    }
-
-    // Cmd+` or Ctrl+` to toggle activity console
-    if (modifier && key === '`') {
+    if (modifier && event.key === '`') {
         event.preventDefault();
         activityLogStore.toggleConsole();
         return;
@@ -330,7 +418,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-    window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    // Remove IPC listeners if needed (optional for main app component)
     indexManager.shutdown();
 });
 </script>

@@ -41,6 +41,17 @@ export function detectTextSubType(value: string): DetectionResult {
         return { kind: 'document', subType: 'mermaid', mime: 'text/plain' };
     }
 
+    const fenced = trimmed.match(CODE_FENCE_HINT);
+    if (fenced) {
+        const lang = fenced.groups?.lang;
+        return {
+            kind: 'code',
+            subType: 'code',
+            mime: 'text/plain',
+            meta: lang ? { language: lang.toLowerCase() } : undefined,
+        };
+    }
+
     if (MARKDOWN_HINT.test(trimmed)) {
         return { kind: 'text', subType: 'markdown', mime: 'text/markdown' };
     }
@@ -70,10 +81,6 @@ export function detectTextSubType(value: string): DetectionResult {
         return { kind: 'code', subType: 'diff', mime: 'text/x-diff' };
     }
 
-    if (MERMAID_HINT.test(trimmed)) {
-        return { kind: 'document', subType: 'mermaid', mime: 'text/plain' };
-    }
-
     if (HTML_HINT.test(trimmed)) {
         return { kind: 'document', subType: 'html', mime: 'text/html' };
     }
@@ -84,17 +91,6 @@ export function detectTextSubType(value: string): DetectionResult {
 
     if (LOG_HINT.test(trimmed)) {
         return { kind: 'text', subType: 'log', mime: 'text/plain' };
-    }
-
-    const fenced = trimmed.match(CODE_FENCE_HINT);
-    if (fenced) {
-        const lang = fenced.groups?.lang;
-        return {
-            kind: 'code',
-            subType: 'code',
-            mime: 'text/plain',
-            meta: lang ? { language: lang.toLowerCase() } : undefined,
-        };
     }
 
     return { kind: 'text', subType: 'markdown', mime: 'text/markdown' };

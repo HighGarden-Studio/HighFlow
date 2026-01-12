@@ -207,9 +207,24 @@ export class MCPManager {
             {
                 name: 'github',
                 description: 'Interact with GitHub repositories',
-                endpoint: 'https://mcp.github.com',
+                endpoint: 'stdio://npx -y @modelcontextprotocol/server-github',
                 isOfficial: true,
-                settings: {},
+                settings: {
+                    env: {
+                        GITHUB_PERSONAL_ACCESS_TOKEN: '',
+                    },
+                },
+            },
+            {
+                name: 'github-remote',
+                description: 'GitHub MCP Server (Remote)',
+                endpoint: 'https://api.githubcopilot.com/mcp/',
+                isOfficial: true,
+                settings: {
+                    env: {
+                        GITHUB_PERSONAL_ACCESS_TOKEN: '',
+                    },
+                },
             },
             {
                 name: 'postgres',
@@ -906,8 +921,112 @@ export class MCPManager {
                 env: transportEnv,
             });
             await client.connect(transport);
-        } else if (mcp.endpoint.startsWith('http')) {
-            throw new Error('HTTP transport not yet implemented');
+        } else if (mcp.endpoint.startsWith('http') || mcp.endpoint.startsWith('https')) {
+            console.log(`[MCPManager Debug] Starting MCP #${mcpId} with SSE transport:`, {
+                endpoint: mcp.endpoint,
+                hasToken: !!transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN,
+            });
+
+            const headers: Record<string, string> = {};
+            if (transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN) {
+                headers['Authorization'] = `Bearer ${transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN}`;
+            }
+
+            // Custom SSE Transport to support headers
+            // @ts-ignore
+            const { default: EventSource } = await import('eventsource');
+
+            // @ts-ignore
+            if (!global.EventSource) global.EventSource = EventSource;
+
+            const transport = {
+                _url: new URL(mcp.endpoint),
+                _headers: headers,
+                _eventSource: undefined as any,
+                _endpoint: undefined as string | undefined,
+                _abortController: undefined as AbortController | undefined,
+                onclose: undefined as (() => void) | undefined,
+                onerror: undefined as ((error: Error) => void) | undefined,
+                onmessage: undefined as ((message: any) => void) | undefined,
+
+                async start() {
+                    if (this._eventSource) {
+                        throw new Error('SSEClientTransport already started!');
+                    }
+                    return new Promise<void>((resolve, reject) => {
+                        this._eventSource = new EventSource(this._url.href, {
+                            headers: this._headers,
+                        });
+                        this._abortController = new AbortController();
+
+                        this._eventSource.onerror = (event: any) => {
+                            const error = new Error(`SSE error: ${JSON.stringify(event)}`);
+                            if (this.onerror) this.onerror(error);
+                        };
+
+                        this._eventSource.onopen = () => {
+                            // Wait for endpoint event
+                        };
+
+                        this._eventSource.addEventListener('endpoint', (event: any) => {
+                            const messageEvent = event;
+                            try {
+                                const url = new URL(messageEvent.data, this._url);
+                                this._endpoint = url.href;
+                                resolve();
+                            } catch (error) {
+                                reject(error);
+                            }
+                        });
+
+                        this._eventSource.onmessage = (event: any) => {
+                            const messageEvent = event;
+                            let message;
+                            try {
+                                message = JSON.parse(messageEvent.data);
+                            } catch (error) {
+                                if (this.onerror) this.onerror(error as Error);
+                                return;
+                            }
+                            if (this.onmessage) this.onmessage(message);
+                        };
+                    });
+                },
+
+                async close() {
+                    this._abortController?.abort();
+                    this._eventSource?.close();
+                    if (this.onclose) this.onclose();
+                },
+
+                async send(message: any) {
+                    if (!this._endpoint) {
+                        throw new Error('Not connected');
+                    }
+                    try {
+                        const response = await fetch(this._endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...this._headers,
+                            },
+                            body: JSON.stringify(message),
+                            signal: this._abortController?.signal,
+                        });
+                        if (!response.ok) {
+                            const text = await response.text().catch(() => null);
+                            throw new Error(
+                                `Error POSTing to endpoint (HTTP ${response.status}): ${text}`
+                            );
+                        }
+                    } catch (error) {
+                        if (this.onerror) this.onerror(error as Error);
+                        throw error;
+                    }
+                },
+            };
+
+            await client.connect(transport);
         } else {
             throw new Error('Unsupported MCP endpoint. Configure a stdio endpoint or command.');
         }

@@ -43,7 +43,22 @@ describe('detectTextSubType', () => {
             const result = detectTextSubType(mermaidClass);
 
             // Class diagram syntax looks like YAML to the detector
-            expect(result.subType).toBe('yaml');
+            expect(result.subType).toBe('mermaid');
+        });
+
+        it('should detect er diagrams', () => {
+            const mermaidEr = `erDiagram
+                CUSTOMER ||--o{ ORDER : places
+                ORDER ||--|{ LINE-ITEM : contains
+                CUSTOMER {
+                    string name
+                    string email
+                }`;
+
+            const result = detectTextSubType(mermaidEr);
+
+            expect(result.subType).toBe('mermaid');
+            expect(result.kind).toBe('document');
         });
 
         it('should detect mermaid with code fence', () => {
@@ -113,9 +128,9 @@ nested:
 
             const result = detectTextSubType(text);
 
-            expect(result.subType).toBe('text');
+            expect(result.subType).toBe('markdown');
             expect(result.kind).toBe('text');
-            expect(result.mime).toBe('text/plain');
+            expect(result.mime).toBe('text/markdown');
         });
     });
 });

@@ -1312,5 +1312,38 @@
                 "found_repos": "Found Repositories"
             }
         }
+    },
+    "global_search": {
+        "placeholder": "Search projects, tasks, skills, users...",
+        "filters": {
+            "all": "All",
+            "project": "Projects",
+            "task": "Tasks",
+            "skill": "Skills",
+            "user": "Users"
+        },
+        "empty": {
+            "title": "Search projects, tasks, skills, etc.",
+            "tip_label": "Quick Tips:",
+            "nav": "Navigate",
+            "select": "Select",
+            "autocomplete": "Autocomplete",
+            "shortcuts": {
+                "nav": "Up/Down",
+                "select": "Enter",
+                "autocomplete": "Tab"
+            }
+        },
+        "no_results": "No results found for \"{query}\"",
+        "try_another": "Try using different keywords",
+        "recent": "Recent Searches",
+        "clear_recent": "Clear",
+        "autocomplete_label": "Autocomplete:",
+        "footer": {
+            "nav": "Navigate",
+            "select": "Select",
+            "close": "Close",
+            "stats": "{n} items indexed"
+        }
     }
 }

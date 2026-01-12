@@ -1778,6 +1778,26 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             },
         },
         {
+            id: 'github-remote',
+            name: 'GitHub (Remote)',
+            description: 'GitHub Remote MCP Server',
+            icon: 'github',
+            website: 'https://github.com/github/github-mcp-server',
+            repository: 'https://github.com/github/github-mcp-server',
+            tags: ['git', 'productivity', 'code'],
+            enabled: false,
+            // Remote server doesn't use command/npx typically but needs endpoint config
+            // For UI consistency we might keep empty command or specific placeholder
+            command: '',
+            args: [],
+            installCommand: '',
+            installArgs: [],
+            installed: true, // Always "installed" as it is remote
+            config: {
+                token: '',
+            },
+        },
+        {
             id: 'gitlab-mcp',
             name: 'GitLab',
             description: 'GitLab 연동 - 저장소, 이슈, MR 관리',
@@ -2056,6 +2076,13 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
     const mcpServers = ref<MCPServerConfig[]>(
         mcpServerSeeds.map((seed) => withPermissionDefaults(seed))
     );
+
+    // Sync missing seeds (e.g. newly added defaults)
+    mcpServerSeeds.forEach((seed) => {
+        if (!mcpServers.value.find((s) => s.id === seed.id)) {
+            mcpServers.value.push(withPermissionDefaults(seed));
+        }
+    });
 
     const loading = ref(false);
     const error = ref<string | null>(null);

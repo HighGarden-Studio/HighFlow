@@ -32,6 +32,7 @@ import log from 'electron-log'; // Added for logging
 import { taskScheduler } from './services/task-scheduler';
 import { taskNotificationService } from './services/task-notification-service';
 import { initializeOutputSystem } from './services/output';
+import { createMenu } from './menu';
 
 // Configure logging
 log.initialize();
@@ -58,6 +59,9 @@ if (release().startsWith('6.1')) app.disableHardwareAcceleration();
 
 // Set application name for Windows 10+ notifications
 if (process.platform === 'win32') app.setAppUserModelId(app.getName());
+
+// Explicitly set app name for macOS Dock in dev mode
+app.setName('HighFlow');
 
 // Environment configuration
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -134,6 +138,9 @@ function createWindow(): void {
         },
         backgroundColor: '#0f0f0f', // Dark background to prevent flash
     });
+
+    // Create application menu
+    createMenu(mainWindow);
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {

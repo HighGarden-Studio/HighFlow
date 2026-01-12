@@ -11,6 +11,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import IconRenderer from '../common/IconRenderer.vue';
 import {
     searchEngine,
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const { t } = useI18n();
 
 // ========================================
 // State
@@ -51,13 +53,13 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 // Filters
 // ========================================
 
-const filters: Array<{ id: EntityType | 'all'; label: string; icon: string }> = [
-    { id: 'all', label: '전체', icon: '🔍' },
-    { id: 'project', label: '프로젝트', icon: '📁' },
-    { id: 'task', label: '태스크', icon: '✅' },
-    { id: 'skill', label: '스킬', icon: '⚡' },
-    { id: 'user', label: '사용자', icon: '👤' },
-];
+const filters = computed<Array<{ id: EntityType | 'all'; label: string; icon: string }>>(() => [
+    { id: 'all', label: t('global_search.filters.all'), icon: '🔍' },
+    { id: 'project', label: t('global_search.filters.project'), icon: '📁' },
+    { id: 'task', label: t('global_search.filters.task'), icon: '✅' },
+    { id: 'skill', label: t('global_search.filters.skill'), icon: '⚡' },
+    { id: 'user', label: t('global_search.filters.user'), icon: '👤' },
+]);
 
 // ========================================
 // Computed
@@ -326,7 +328,7 @@ onUnmounted(() => {
                             ref="searchInputRef"
                             v-model="searchQuery"
                             type="text"
-                            placeholder="검색어를 입력하세요... (프로젝트, 태스크, 스킬 등)"
+                            :placeholder="t('global_search.placeholder')"
                             class="flex-1 bg-transparent text-white placeholder-gray-500 outline-none text-lg"
                             autocomplete="off"
                         />
@@ -399,22 +401,30 @@ onUnmounted(() => {
                                 </svg>
                             </div>
                             <p class="text-gray-400 text-sm">
-                                검색어를 입력하여 프로젝트, 태스크, 스킬 등을 찾아보세요
+                                {{ t('global_search.empty.title') }}
                             </p>
                             <div class="mt-4 flex flex-wrap justify-center gap-2 text-xs">
-                                <span class="text-gray-500">빠른 팁:</span>
-                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded"
-                                    >↑↓</kbd
-                                >
-                                <span class="text-gray-500">탐색</span>
-                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded"
-                                    >Enter</kbd
-                                >
-                                <span class="text-gray-500">선택</span>
-                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded"
-                                    >Tab</kbd
-                                >
-                                <span class="text-gray-500">자동완성</span>
+                                <span class="text-gray-500">{{
+                                    t('global_search.empty.tip_label')
+                                }}</span>
+                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">{{
+                                    t('global_search.empty.shortcuts.nav')
+                                }}</kbd>
+                                <span class="text-gray-500">{{
+                                    t('global_search.empty.nav')
+                                }}</span>
+                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">{{
+                                    t('global_search.empty.shortcuts.select')
+                                }}</kbd>
+                                <span class="text-gray-500">{{
+                                    t('global_search.empty.select')
+                                }}</span>
+                                <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">{{
+                                    t('global_search.empty.shortcuts.autocomplete')
+                                }}</kbd>
+                                <span class="text-gray-500">{{
+                                    t('global_search.empty.autocomplete')
+                                }}</span>
                             </div>
                         </div>
 
@@ -426,13 +436,13 @@ onUnmounted(() => {
                             <div class="flex items-center justify-between px-4 py-2">
                                 <span
                                     class="text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                    >최근 검색</span
+                                    >{{ t('global_search.recent') }}</span
                                 >
                                 <button
                                     @click="clearRecentSearches"
                                     class="text-xs text-gray-500 hover:text-gray-400 transition-colors"
                                 >
-                                    지우기
+                                    {{ t('global_search.clear_recent') }}
                                 </button>
                             </div>
                             <div
@@ -472,9 +482,11 @@ onUnmounted(() => {
                                 </svg>
                             </div>
                             <p class="text-gray-400 text-sm">
-                                "{{ searchQuery }}"에 대한 결과가 없습니다
+                                {{ t('global_search.no_results', { query: searchQuery }) }}
                             </p>
-                            <p class="text-gray-500 text-xs mt-1">다른 검색어를 시도해 보세요</p>
+                            <p class="text-gray-500 text-xs mt-1">
+                                {{ t('global_search.try_another') }}
+                            </p>
                         </div>
 
                         <!-- Search Results (Grouped) -->
@@ -484,7 +496,7 @@ onUnmounted(() => {
                                 <div class="px-4 py-2">
                                     <span
                                         class="text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >프로젝트</span
+                                        >{{ t('global_search.filters.project') }}</span
                                     >
                                 </div>
                                 <div
@@ -512,7 +524,7 @@ onUnmounted(() => {
                                 <div class="px-4 py-2 mt-2">
                                     <span
                                         class="text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >태스크</span
+                                        >{{ t('global_search.filters.task') }}</span
                                     >
                                 </div>
                                 <div
@@ -560,7 +572,7 @@ onUnmounted(() => {
                                 <div class="px-4 py-2 mt-2">
                                     <span
                                         class="text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >스킬</span
+                                        >{{ t('global_search.filters.skill') }}</span
                                     >
                                 </div>
                                 <div
@@ -588,7 +600,7 @@ onUnmounted(() => {
                                 <div class="px-4 py-2 mt-2">
                                     <span
                                         class="text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >사용자</span
+                                        >{{ t('global_search.filters.user') }}</span
                                     >
                                 </div>
                                 <div
@@ -619,7 +631,7 @@ onUnmounted(() => {
                     >
                         <div class="flex items-center gap-2 text-xs text-gray-500">
                             <kbd class="px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">Tab</kbd>
-                            <span>자동완성:</span>
+                            <span>{{ t('global_search.autocomplete_label') }}</span>
                             <span class="text-gray-400">{{ suggestions[0] }}</span>
                         </div>
                     </div>
@@ -631,19 +643,23 @@ onUnmounted(() => {
                         <div class="flex items-center gap-4 text-xs text-gray-500">
                             <span class="flex items-center gap-1">
                                 <kbd class="px-1 py-0.5 bg-gray-700 rounded">↑↓</kbd>
-                                탐색
+                                {{ t('global_search.footer.nav') }}
                             </span>
                             <span class="flex items-center gap-1">
                                 <kbd class="px-1 py-0.5 bg-gray-700 rounded">↵</kbd>
-                                선택
+                                {{ t('global_search.footer.select') }}
                             </span>
                             <span class="flex items-center gap-1">
                                 <kbd class="px-1 py-0.5 bg-gray-700 rounded">esc</kbd>
-                                닫기
+                                {{ t('global_search.footer.close') }}
                             </span>
                         </div>
                         <div class="text-xs text-gray-500">
-                            {{ searchEngine.getStats().totalDocuments }} 항목 인덱싱됨
+                            {{
+                                t('global_search.footer.stats', {
+                                    n: searchEngine.getStats().totalDocuments,
+                                })
+                            }}
                         </div>
                     </div>
                 </div>

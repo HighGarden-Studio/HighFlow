@@ -1,11 +1,11 @@
 {
-    "name": "highflow",
+    "name": "HighFlow",
     "version": "0.1.0",
     "description": "AI-powered project and task management desktop application",
     "main": "dist-electron/main/index.cjs",
     "author": {
-        "name": "Your Name",
-        "email": "your.email@example.com"
+        "name": "HighGarden",
+        "email": "highgarden0@gmail.com"
     },
     "license": "AGPL-3.0",
     "private": true,
@@ -147,6 +147,7 @@
         "@types/d3-selection": "^3.0.11",
         "@types/d3-shape": "^3.1.7",
         "@types/d3-zoom": "^3.0.8",
+        "@types/eventsource": "^3.0.0",
         "@types/express": "^4.17.21",
         "@types/node": "^20.11.24",
         "@types/node-cron": "^3.0.11",
@@ -168,6 +169,7 @@
         "electron-updater": "^6.6.2",
         "eslint": "^8.57.0",
         "eslint-plugin-vue": "^9.22.0",
+        "jsdom": "^27.4.0",
         "lucide-vue-next": "^0.344.0",
         "monaco-editor": "^0.47.0",
         "playwright": "^1.42.0",
@@ -187,7 +189,7 @@
         "vue-tsc": "^2.0.0"
     },
     "build": {
-        "appId": "com.highgarden.highaimanager",
+        "appId": "com.highgarden.highflow",
         "productName": "HighFlow",
         "directories": {
             "output": "release/${version}"
@@ -238,8 +240,8 @@
         "publish": [
             {
                 "provider": "github",
-                "owner": "your-org",
-                "repo": "workflow-manager"
+                "owner": "HighGarden-Studio",
+                "repo": "highflow"
             }
         ]
     },
@@ -252,8 +254,6 @@
         "patchedDependencies": {
             "agentkeepalive@4.6.0": "patches/agentkeepalive@4.6.0.patch"
         },
-        "overrides": {
-            "is-stream": "1.1.0"
-        }
+        "overrides": {}
     }
 }

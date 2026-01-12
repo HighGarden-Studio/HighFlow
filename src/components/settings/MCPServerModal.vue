@@ -85,11 +85,21 @@ watch(
     () => props.server,
     (newServer) => {
         if (newServer) {
+            const config = newServer.config ? { ...newServer.config } : {};
+
+            // Special handling for GitHub MCP token
+            if (
+                (newServer.id === 'github' || newServer.id === 'github-remote') &&
+                config.env?.GITHUB_PERSONAL_ACCESS_TOKEN
+            ) {
+                config.token = config.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+            }
+
             form.value = {
                 enabled: newServer.enabled,
                 command: newServer.command || '',
                 args: newServer.args ? [...newServer.args] : [],
-                config: newServer.config ? { ...newServer.config } : {},
+                config,
                 permissions: settingsStore.buildMCPPermissionsFor(newServer),
                 scopes: newServer.scopes ? [...newServer.scopes] : [],
             };
@@ -122,7 +132,8 @@ const serverInfo = computed(() => {
         memory: { color: 'from-purple-400 to-pink-500', iconBg: 'bg-purple-600' },
         puppeteer: { color: 'from-green-400 to-teal-500', iconBg: 'bg-green-600' },
         playwright: { color: 'from-green-500 to-emerald-600', iconBg: 'bg-green-600' },
-        'github-mcp': { color: 'from-gray-700 to-gray-900', iconBg: 'bg-gray-800' },
+        github: { color: 'from-gray-700 to-gray-900', iconBg: 'bg-gray-800' },
+        'github-remote': { color: 'from-gray-700 to-gray-900', iconBg: 'bg-gray-800' },
         'gitlab-mcp': { color: 'from-orange-500 to-red-600', iconBg: 'bg-orange-600' },
         'slack-mcp': { color: 'from-purple-500 to-pink-600', iconBg: 'bg-purple-600' },
         'notion-mcp': { color: 'from-gray-800 to-black', iconBg: 'bg-gray-900' },
@@ -158,7 +169,8 @@ const serverIcon = computed(() => {
         memory: '✨',
         puppeteer: '🎭',
         playwright: '🎬',
-        'github-mcp': '🐙',
+        github: '🐙',
+        'github-remote': '🐙',
         'gitlab-mcp': '🦊',
         'slack-mcp': '💬',
         'notion-mcp': '📓',
@@ -313,7 +325,16 @@ const configFields = computed(() => {
                 required: true,
             },
         ],
-        'github-mcp': [
+        github: [
+            {
+                key: 'token',
+                label: t('settings.mcp.modal.config.github_mcp.token'),
+                type: 'password',
+                placeholder: 'ghp_...',
+                required: true,
+            },
+        ],
+        'github-remote': [
             {
                 key: 'token',
                 label: t('settings.mcp.modal.config.github_mcp.token'),
@@ -392,6 +413,13 @@ const configFields = computed(() => {
     return fields[props.server.id] || [];
 });
 
+    return fields[props.server.id] || [];
+});
+
+const isRemoteServer = computed(() => {
+    return props.server?.id === 'github-remote';
+});
+
 // Check if all required fields are filled
 const isConfigValid = computed(() => {
     for (const field of configFields.value) {
@@ -415,11 +443,19 @@ function handleSave() {
         ? argsString.value.trim().split(/\s+/)
         : props.server?.args || [];
 
+    // Special handling for GitHub MCP token
+    const config = { ...form.value.config };
+    if ((props.server?.id === 'github' || props.server?.id === 'github-remote') && config.token) {
+        if (!config.env) config.env = {};
+        config.env.GITHUB_PERSONAL_ACCESS_TOKEN = config.token;
+        delete config.token;
+    }
+
     emit('save', {
         enabled: form.value.enabled,
         command: form.value.command || props.server?.command,
         args,
-        config: form.value.config,
+        config,
         permissions: { ...form.value.permissions },
         scopes: [...form.value.scopes],
     });
@@ -806,7 +842,10 @@ function getTagLabel(tag: MCPServerTag): string {
                             </div>
 
                             <!-- Command & Args (advanced) -->
-                            <div class="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div
+                                v-if="!isRemoteServer"
+                                class="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                            >
                                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
                                     {{ t('settings.mcp.modal.execution.title') }}
                                 </h4>

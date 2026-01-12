@@ -143,6 +143,19 @@ describe('Image Context Passing', () => {
                             },
                         ],
                     },
+                    metadata: {
+                        attachments: [
+                            {
+                                id: 'img-1',
+                                name: 'diagram.png',
+                                type: 'image' as const,
+                                mime: 'image/png',
+                                encoding: 'base64' as const,
+                                value: 'imageData123',
+                                data: 'imageData123',
+                            },
+                        ],
+                    },
                 },
             ];
 
@@ -168,6 +181,7 @@ describe('Image Context Passing', () => {
                     output: {
                         // No attachments field
                     },
+                    metadata: {},
                 },
             ];
 

@@ -1321,5 +1321,38 @@
                 "found_repos": "발견된 저장소"
             }
         }
+    },
+    "global_search": {
+        "placeholder": "검색어를 입력하세요... (프로젝트, 태스크, 스킬 등)",
+        "filters": {
+            "all": "전체",
+            "project": "프로젝트",
+            "task": "태스크",
+            "skill": "스킬",
+            "user": "사용자"
+        },
+        "empty": {
+            "title": "검색어를 입력하여 프로젝트, 태스크, 스킬 등을 찾아보세요",
+            "tip_label": "빠른 팁:",
+            "nav": "탐색",
+            "select": "선택",
+            "autocomplete": "자동완성",
+            "shortcuts": {
+                "nav": "↑↓",
+                "select": "Enter",
+                "autocomplete": "Tab"
+            }
+        },
+        "no_results": "\"{query}\"에 대한 결과가 없습니다",
+        "try_another": "다른 검색어를 시도해 보세요",
+        "recent": "최근 검색",
+        "clear_recent": "지우기",
+        "autocomplete_label": "자동완성:",
+        "footer": {
+            "nav": "탐색",
+            "select": "선택",
+            "close": "닫기",
+            "stats": "{n} 항목 인덱싱됨"
+        }
     }
 }
