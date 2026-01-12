@@ -743,11 +743,11 @@ Requirements:
 
 **Available Macros:**
 
+- `{{task.ID}}`: Result from specific task ID (e.g. `{{task.23}}`)
 - `{{prev}}`: Result from previous task
-- `{{prev-N}}`: Result from N tasks ago
-- `{{task-ID}}`: Result from specific task ID
-- `{{project.goal}}`: Project goal
-- `{{project.glossary}}`: Project glossary
+- `{{prev.N}}`: Result from N-th preceding task (e.g. `{{prev.1}}`)
+- `{{project.name}}`: Project name
+- `{{date}}`: Current date (YYYY-MM-DD)
 
 #### Multi-modal Support
 
