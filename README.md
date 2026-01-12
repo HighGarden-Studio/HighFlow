@@ -25,15 +25,15 @@ HighFlow is a next-generation workflow manager that orchestrates complex tasks u
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - pnpm
 
 ### Installation
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/highflow.git
-cd highflow
+git clone https://github.com/HighGarden-Studio/HighFlow.git
+cd HighFlow
 
 # Install dependencies
 pnpm install
