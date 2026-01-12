@@ -11,16 +11,14 @@
 
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import {
     aiAssistant,
     type AssistantAction,
     type ConversationMessage,
     type Suggestion,
 } from '../../services/assistant/AIAssistant';
-import {
-    aiInterviewService,
-    type EnhancedExecutionPlan,
-} from '../../services/ai/AIInterviewService';
+import { type EnhancedExecutionPlan } from '../../services/ai/AIInterviewService';
 import { useTaskStore } from '../../renderer/stores/taskStore';
 import ExecutionPlanPreview from './ExecutionPlanPreview.vue';
 
@@ -41,6 +39,7 @@ const emit = defineEmits<{
 const router = useRouter();
 const route = useRoute();
 const taskStore = useTaskStore();
+const { t } = useI18n();
 
 // ========================================
 // State
@@ -57,10 +56,9 @@ const inputRef = ref<HTMLInputElement | null>(null);
 const showSuggestions = ref(true);
 
 // Interview session tracking
-const currentInterviewSessionId = ref<string | null>(null);
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const interviewCompleted = ref(false);
-const generatingPlan = ref(false);
+// const currentInterviewSessionId = ref<string | null>(null);
+// const interviewCompleted = ref(false);
+// const generatingPlan = ref(false);
 const executionPlan = ref<EnhancedExecutionPlan | null>(null);
 const showPlanPreview = ref(false);
 const creatingTasks = ref(false);
@@ -97,12 +95,12 @@ const currentContext = computed(() => {
 });
 
 // Quick action buttons
-const quickActions = [
-    { id: 'summary', label: '이번 주 요약', icon: '📊' },
-    { id: 'recommend', label: '다음 작업 추천', icon: '🎯' },
-    { id: 'deadline', label: '마감 임박', icon: '⏰' },
-    { id: 'help', label: '도움말', icon: '❓' },
-];
+const quickActions = computed(() => [
+    { id: 'summary', label: t('assistant.quick_actions.summary'), icon: '📊' },
+    { id: 'recommend', label: t('assistant.quick_actions.recommend'), icon: '🎯' },
+    { id: 'deadline', label: t('assistant.quick_actions.deadline'), icon: '⏰' },
+    { id: 'help', label: t('assistant.quick_actions.help'), icon: '❓' },
+]);
 
 // ========================================
 // Methods
@@ -176,10 +174,10 @@ async function sendMessage() {
 
 function handleQuickAction(actionId: string) {
     const actionMessages: Record<string, string> = {
-        summary: '이번 주에 뭐 했어?',
-        recommend: '다음에 뭐 해야 해?',
-        deadline: '마감 임박한 태스크 보여줘',
-        help: '도움말',
+        summary: t('assistant.action_messages.summary'),
+        recommend: t('assistant.action_messages.recommend'),
+        deadline: t('assistant.action_messages.deadline'),
+        help: t('assistant.action_messages.help'),
     };
 
     inputMessage.value = actionMessages[actionId] || '';
@@ -276,6 +274,7 @@ onMounted(async () => {
 // ========================================
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+/*
 async function generateExecutionPlan() {
     if (!currentInterviewSessionId.value) {
         console.error('No active interview session');
@@ -304,6 +303,7 @@ async function generateExecutionPlan() {
         generatingPlan.value = false;
     }
 }
+*/
 
 async function createTasksFromPlan() {
     if (!executionPlan.value || !currentContext.value.currentProjectId) {
@@ -374,15 +374,24 @@ function cancelPlanPreview() {
                             <span class="text-lg">🤖</span>
                         </div>
                         <div>
-                            <h3 class="text-white font-semibold text-sm">AI 비서</h3>
-                            <p class="text-gray-400 text-xs">무엇이든 물어보세요</p>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-white font-semibold text-sm">
+                                    {{ t('assistant.title') }}
+                                </h3>
+                                <span
+                                    class="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] uppercase font-bold rounded border border-blue-500/30"
+                                >
+                                    {{ t('assistant.coming_soon') }}
+                                </span>
+                            </div>
+                            <p class="text-gray-400 text-xs">{{ t('assistant.subtitle') }}</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button
                             @click="clearChat"
                             class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                            title="대화 초기화"
+                            :title="t('assistant.clear_chat')"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -438,7 +447,9 @@ function cancelPlanPreview() {
                                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                             />
                         </svg>
-                        <span>현재 위치: 프로젝트 #{{ currentContext.currentProjectId }}</span>
+                        <span>{{
+                            t('assistant.current_context', { id: currentContext.currentProjectId })
+                        }}</span>
                     </div>
                 </div>
 
@@ -452,9 +463,11 @@ function cancelPlanPreview() {
                             >
                                 <span class="text-3xl">👋</span>
                             </div>
-                            <h4 class="text-white font-medium mb-1">안녕하세요!</h4>
+                            <h4 class="text-white font-medium mb-1">
+                                {{ t('assistant.welcome_title') }}
+                            </h4>
                             <p class="text-gray-400 text-sm">
-                                프로젝트 관리에 도움이 필요하시면 말씀해 주세요.
+                                {{ t('assistant.welcome_message') }}
                             </p>
                         </div>
 
@@ -493,7 +506,7 @@ function cancelPlanPreview() {
                             <span
                                 v-if="message.role === 'user'"
                                 class="text-white text-xs font-medium"
-                                >나</span
+                                >{{ t('assistant.user_me') }}</span
                             >
                             <span v-else class="text-sm">🤖</span>
                         </div>
@@ -590,7 +603,9 @@ function cancelPlanPreview() {
                     v-if="suggestions.length > 0 && messages.length > 0"
                     class="px-4 py-2 border-t border-gray-700 bg-gray-750"
                 >
-                    <div class="text-xs text-gray-500 mb-2">추천</div>
+                    <div class="text-xs text-gray-500 mb-2">
+                        {{ t('assistant.suggestions_label') }}
+                    </div>
                     <div class="flex gap-2 overflow-x-auto pb-1">
                         <button
                             v-for="suggestion in suggestions.slice(0, 3)"
@@ -610,7 +625,7 @@ function cancelPlanPreview() {
                             ref="inputRef"
                             v-model="inputMessage"
                             type="text"
-                            placeholder="메시지를 입력하세요..."
+                            :placeholder="t('assistant.input_placeholder')"
                             class="flex-1 px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                             :disabled="loading"
                         />

@@ -548,8 +548,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'claude-code',
             name: 'Claude Code',
-            description:
-                'Anthropic의 공식 AI 코딩 에이전트. 터미널에서 자연어로 코딩 작업을 수행합니다.',
+            description: 'settings.agents.claude_code.description',
             icon: '🤖',
             gradient: 'bg-gradient-to-br from-orange-400 to-amber-500',
             command: 'claude',
@@ -564,8 +563,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'codex',
             name: 'OpenAI Codex CLI',
-            description:
-                'OpenAI의 AI 코딩 에이전트. GPT-4 기반으로 코드 생성 및 수정을 수행합니다.',
+            description: 'settings.agents.codex.description',
             icon: '💚',
             gradient: 'bg-gradient-to-br from-green-400 to-teal-500',
             command: 'codex',
@@ -1357,7 +1355,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'filesystem',
             name: 'Filesystem',
-            description: '파일 시스템 접근 - 파일 읽기, 쓰기, 디렉토리 탐색',
+            description: 'settings.mcp.servers.filesystem.description',
             icon: 'folder',
             website: 'https://modelcontextprotocol.io/docs/servers/filesystem',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
@@ -1372,7 +1370,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'shell',
             name: 'Shell',
-            description: '쉘 명령 실행 - 터미널 명령어 실행 및 스크립트 실행',
+            description: 'settings.mcp.servers.shell.description',
             icon: 'terminal',
             website: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-shell',
             repository: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-shell',
@@ -1387,7 +1385,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'git',
             name: 'Git',
-            description: 'Git 버전 관리 - 커밋, 브랜치, 히스토리 조회',
+            description: 'settings.mcp.servers.git.description',
             icon: 'git-branch',
             website: 'https://modelcontextprotocol.io/docs/servers/git',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/git',
@@ -1402,7 +1400,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'fetch',
             name: 'HTTP Fetch',
-            description: 'HTTP 요청 - 웹 페이지 가져오기, REST API 호출',
+            description: 'settings.mcp.servers.fetch.description',
             icon: 'globe',
             website: 'https://modelcontextprotocol.io/docs/servers/fetch',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
@@ -1419,7 +1417,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'jira',
             name: 'Jira',
-            description: 'Atlassian Jira 연동 - 이슈 생성, 조회, 업데이트',
+            description: 'settings.mcp.servers.jira.description',
             icon: 'jira',
             website: 'https://github.com/sooperset/mcp-atlassian',
             repository: 'https://github.com/sooperset/mcp-atlassian',
@@ -1439,7 +1437,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'confluence',
             name: 'Confluence',
-            description: 'Atlassian Confluence 연동 - 문서 검색, 페이지 생성/편집',
+            description: 'settings.mcp.servers.confluence.description',
             icon: 'confluence',
             website: 'https://github.com/sooperset/mcp-atlassian',
             repository: 'https://github.com/sooperset/mcp-atlassian',
@@ -2119,19 +2117,19 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
      * MCP Server tag display names (한국어)
      */
     const mcpTagDisplayNames: Record<MCPServerTag, string> = {
-        filesystem: '파일 시스템',
-        shell: '쉘 명령',
-        git: 'Git',
-        http: 'HTTP',
-        database: '데이터베이스',
-        cloud: '클라우드',
-        devops: 'DevOps',
-        productivity: '생산성',
-        search: '검색',
-        browser: '브라우저',
-        memory: '메모리',
-        code: '코드',
-        design: '디자인',
+        filesystem: 'settings.mcp.tags.filesystem',
+        shell: 'settings.mcp.tags.shell',
+        git: 'settings.mcp.tags.git',
+        http: 'settings.mcp.tags.http',
+        database: 'settings.mcp.tags.database',
+        cloud: 'settings.mcp.tags.cloud',
+        devops: 'settings.mcp.tags.devops',
+        productivity: 'settings.mcp.tags.productivity',
+        search: 'settings.mcp.tags.search',
+        browser: 'settings.mcp.tags.browser',
+        memory: 'settings.mcp.tags.memory',
+        code: 'settings.mcp.tags.code',
+        design: 'settings.mcp.tags.design',
     };
 
     /**
@@ -2242,25 +2240,25 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
      * Tag display names (한국어)
      */
     const tagDisplayNames: Record<AIProviderTag, string> = {
-        chat: '채팅',
-        code: '코드',
-        design: '디자인',
-        reasoning: '추론',
-        image: '이미지 생성',
-        'image-analysis': '이미지 분석',
-        video: '비디오',
-        audio: '오디오',
+        chat: 'Chat',
+        code: 'Code',
+        design: 'Design',
+        reasoning: 'Reasoning',
+        image: 'Image',
+        'image-analysis': 'Vision',
+        video: 'Video',
+        audio: 'Audio',
         tts: 'TTS',
         stt: 'STT',
-        music: '음악',
-        embedding: '임베딩',
-        search: '검색',
-        'long-context': '긴 컨텍스트',
-        fast: '빠른 응답',
-        local: '로컬',
-        'multi-modal': '멀티모달',
-        agent: '에이전트',
-        'free-tier': '무료 티어',
+        music: 'Music',
+        embedding: 'Embedding',
+        search: 'Search',
+        'long-context': 'Long Context',
+        fast: 'Fast',
+        local: 'Local',
+        'multi-modal': 'Multi-modal',
+        agent: 'Agent',
+        'free-tier': 'Free Tier',
     };
 
     /**

@@ -6,8 +6,11 @@
  */
 
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useUserStore } from '../../renderer/stores/userStore';
 import { creditsAPI, type LedgerEntry, type TransactionType } from '../../renderer/api/credits';
+
+const { t, locale } = useI18n();
 
 const userStore = useUserStore();
 
@@ -24,14 +27,14 @@ const selectedDateRange = ref<'7d' | '30d' | '90d' | 'all'>('30d');
 const selectedTypes = ref<TransactionType[]>([]);
 
 // Available transaction types
-const transactionTypes: { value: TransactionType; label: string }[] = [
-    { value: 'signup_bonus', label: '가입 보너스' },
-    { value: 'admin_topup', label: '관리자 충전' },
-    { value: 'workflow_execution', label: '워크플로우 실행' },
-    { value: 'marketplace_purchase', label: '마켓플레이스 구매' },
-    { value: 'execution_refund', label: '환불' },
-    { value: 'execution_adjustment', label: '조정' },
-];
+const transactionTypes = computed<{ value: TransactionType; label: string }[]>(() => [
+    { value: 'signup_bonus', label: t('settings.credits.types.signup_bonus') },
+    { value: 'admin_topup', label: t('settings.credits.types.admin_topup') },
+    { value: 'workflow_execution', label: t('settings.credits.types.workflow_execution') },
+    { value: 'marketplace_purchase', label: t('settings.credits.types.marketplace_purchase') },
+    { value: 'execution_refund', label: t('settings.credits.types.execution_refund') },
+    { value: 'execution_adjustment', label: t('settings.credits.types.execution_adjustment') },
+]);
 
 // Computed
 const filteredEntries = computed(() => {
@@ -91,7 +94,7 @@ async function loadLedger(append = false) {
     } catch (err: any) {
         console.error('Failed to load ledger:', err);
         error.value =
-            err.response?.data?.message || err.message || '거래 내역을 불러오는 데 실패했습니다.';
+            err.response?.data?.message || err.message || t('settings.credits.error_loading');
     } finally {
         isLoading.value = false;
     }
@@ -152,20 +155,12 @@ function getTypeColor(type: TransactionType): string {
 }
 
 function getTypeLabel(type: TransactionType): string {
-    const labels: Record<TransactionType, string> = {
-        signup_bonus: '가입 보너스',
-        admin_topup: '관리자 충전',
-        workflow_execution: '워크플로우 실행',
-        marketplace_purchase: '마켓플레이스 구매',
-        execution_refund: '환불',
-        execution_adjustment: '조정',
-    };
-    return labels[type] || type;
+    return t(`settings.credits.types.${type}`);
 }
 
 function formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('ko-KR', {
+    return new Intl.DateTimeFormat(locale.value, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -189,14 +184,18 @@ onMounted(async () => {
     <div class="space-y-6">
         <!-- 크레딧 잔액 카드 -->
         <section>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">크레딧 잔액</h2>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                {{ t('settings.credits.balance_title') }}
+            </h2>
             <div class="bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg p-6 shadow-lg">
                 <div class="text-white">
-                    <p class="text-sm opacity-90 mb-2">사용 가능한 크레딧</p>
+                    <p class="text-sm opacity-90 mb-2">
+                        {{ t('settings.credits.available_credits') }}
+                    </p>
                     <p class="text-4xl font-bold mb-1">
                         {{ userStore.creditBalance.toLocaleString() }}
                     </p>
-                    <p class="text-sm opacity-75">Credits</p>
+                    <p class="text-sm opacity-75">{{ t('settings.credits.unit') }}</p>
                 </div>
             </div>
         </section>
@@ -204,7 +203,9 @@ onMounted(async () => {
         <!-- 거래 내역 -->
         <section>
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">거래 내역</h2>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    {{ t('settings.credits.transaction_history') }}
+                </h2>
                 <button
                     @click="loadLedger(false)"
                     :disabled="isLoading"
@@ -224,7 +225,7 @@ onMounted(async () => {
                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                         />
                     </svg>
-                    새로고침
+                    {{ t('settings.credits.refresh') }}
                 </button>
             </div>
 
@@ -236,17 +237,17 @@ onMounted(async () => {
                         <label
                             class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                         >
-                            기간
+                            {{ t('settings.credits.filter_period') }}
                         </label>
                         <select
                             v-model="selectedDateRange"
                             @change="handleFilterChange"
                             class="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                         >
-                            <option value="7d">최근 7일</option>
-                            <option value="30d">최근 30일</option>
-                            <option value="90d">최근 90일</option>
-                            <option value="all">전체</option>
+                            <option value="7d">{{ t('settings.credits.period_7d') }}</option>
+                            <option value="30d">{{ t('settings.credits.period_30d') }}</option>
+                            <option value="90d">{{ t('settings.credits.period_90d') }}</option>
+                            <option value="all">{{ t('settings.credits.period_all') }}</option>
                         </select>
                     </div>
 
@@ -255,7 +256,7 @@ onMounted(async () => {
                         <label
                             class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                         >
-                            거래 유형
+                            {{ t('settings.credits.filter_type') }}
                         </label>
                         <div class="flex flex-wrap gap-2">
                             <button
@@ -310,7 +311,7 @@ onMounted(async () => {
                         />
                     </svg>
                     <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                        거래 내역을 불러오는 중...
+                        {{ t('settings.credits.loading_history') }}
                     </p>
                 </div>
 
@@ -332,7 +333,9 @@ onMounted(async () => {
                             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                         />
                     </svg>
-                    <p class="mt-4 text-gray-500 dark:text-gray-400">거래 내역이 없습니다.</p>
+                    <p class="mt-4 text-gray-500 dark:text-gray-400">
+                        {{ t('settings.credits.no_history') }}
+                    </p>
                 </div>
 
                 <!-- 테이블 -->
@@ -343,27 +346,27 @@ onMounted(async () => {
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                 >
-                                    날짜
+                                    {{ t('settings.credits.th_date') }}
                                 </th>
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                 >
-                                    거래 유형
+                                    {{ t('settings.credits.th_type') }}
                                 </th>
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                 >
-                                    설명
+                                    {{ t('settings.credits.th_description') }}
                                 </th>
                                 <th
                                     class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                 >
-                                    변동
+                                    {{ t('settings.credits.th_change') }}
                                 </th>
                                 <th
                                     class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                                 >
-                                    잔액
+                                    {{ t('settings.credits.th_balance') }}
                                 </th>
                             </tr>
                         </thead>
@@ -429,8 +432,8 @@ onMounted(async () => {
                         :disabled="isLoading"
                         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <span v-if="isLoading">로딩 중...</span>
-                        <span v-else>더 보기</span>
+                        <span v-if="isLoading">{{ t('settings.credits.loading') }}</span>
+                        <span v-else>{{ t('settings.credits.load_more') }}</span>
                     </button>
                 </div>
             </div>

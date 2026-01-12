@@ -6,6 +6,7 @@
  */
 import { onMounted, computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
 import InlineEdit from '../../components/common/InlineEdit.vue';
@@ -14,6 +15,7 @@ import MarketplacePublishModal from '../components/marketplace/MarketplacePublis
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const projectStore = useProjectStore();
 const taskStore = useTaskStore();
 
@@ -123,9 +125,11 @@ onMounted(async () => {
                     d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
             </svg>
-            <h3 class="text-lg font-medium text-gray-300 mb-2">Project not found</h3>
+            <h3 class="text-lg font-medium text-gray-300 mb-2">
+                {{ t('project.not_found') }}
+            </h3>
             <button @click="router.push('/projects')" class="text-blue-500 hover:text-blue-400">
-                Go back to projects
+                {{ t('project.go_back') }}
             </button>
         </div>
 
@@ -162,7 +166,7 @@ onMounted(async () => {
                             />
                             <InlineEdit
                                 :value="project.description || ''"
-                                placeholder="Add description..."
+                                :placeholder="t('project.description_placeholder')"
                                 size="sm"
                                 class="mt-1 text-gray-400"
                                 @save="handleDescriptionUpdate"
@@ -178,40 +182,13 @@ onMounted(async () => {
                                 v-model="editDescription"
                                 rows="1"
                                 class="w-full text-sm bg-transparent border-b border-gray-700 text-gray-400 focus:outline-none focus:border-blue-500 mt-2 resize-none"
-                                placeholder="Add description..."
+                                :placeholder="t('project.description_placeholder')"
                             ></textarea>
                         </div>
                     </div>
 
                     <div class="flex items-center gap-4">
                         <template v-if="!editing">
-                            <!-- View Switcher -->
-                            <div class="flex bg-gray-800 rounded-lg p-1">
-                                <button
-                                    class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
-                                >
-                                    Overview
-                                </button>
-                                <button
-                                    @click="goToBoard"
-                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                                >
-                                    Board
-                                </button>
-                                <button
-                                    @click="router.push(`/projects/${projectId}/timeline`)"
-                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                                >
-                                    Timeline
-                                </button>
-                                <button
-                                    @click="router.push(`/projects/${projectId}/dag`)"
-                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                                >
-                                    DAG
-                                </button>
-                            </div>
-
                             <button
                                 @click="showPublishModal = true"
                                 class="px-3 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2"
@@ -229,13 +206,13 @@ onMounted(async () => {
                                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                                     />
                                 </svg>
-                                Publish
+                                {{ t('project.actions.publish') }}
                             </button>
 
                             <button
                                 @click="startEditing"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                                title="Edit Project"
+                                :title="t('common.edit')"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -251,19 +228,46 @@ onMounted(async () => {
                                     />
                                 </svg>
                             </button>
+
+                            <!-- View Switcher -->
+                            <div class="flex bg-gray-800 rounded-lg p-1">
+                                <button
+                                    class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
+                                >
+                                    {{ t('project.tabs.overview') }}
+                                </button>
+                                <button
+                                    @click="goToBoard"
+                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                >
+                                    {{ t('project.tabs.board') }}
+                                </button>
+                                <button
+                                    @click="router.push(`/projects/${projectId}/dag`)"
+                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                >
+                                    {{ t('project.tabs.dag') }}
+                                </button>
+                                <button
+                                    @click="router.push(`/projects/${projectId}/timeline`)"
+                                    class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                >
+                                    {{ t('project.tabs.timeline') }}
+                                </button>
+                            </div>
                         </template>
                         <template v-else>
                             <button
                                 @click="cancelEditing"
                                 class="px-4 py-2 text-gray-400 hover:text-white transition-colors"
                             >
-                                Cancel
+                                {{ t('common.cancel') }}
                             </button>
                             <button
                                 @click="saveEdits"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                             >
-                                Save
+                                {{ t('common.save') }}
                             </button>
                         </template>
                     </div>
@@ -280,34 +284,42 @@ onMounted(async () => {
                                 <div class="text-2xl font-bold text-white">
                                     {{ taskStore.totalTasks }}
                                 </div>
-                                <div class="text-sm text-gray-400">Total Tasks</div>
+                                <div class="text-sm text-gray-400">
+                                    {{ t('project.stats.total_tasks') }}
+                                </div>
                             </div>
                             <div class="bg-gray-800 rounded-lg p-4">
                                 <div class="text-2xl font-bold text-green-400">
                                     {{ taskStore.completedTasks }}
                                 </div>
-                                <div class="text-sm text-gray-400">Completed</div>
+                                <div class="text-sm text-gray-400">
+                                    {{ t('project.stats.completed') }}
+                                </div>
                             </div>
                             <div class="bg-gray-800 rounded-lg p-4">
                                 <div class="text-2xl font-bold text-blue-400">
                                     {{ taskStore.completionRate }}%
                                 </div>
-                                <div class="text-sm text-gray-400">Progress</div>
+                                <div class="text-sm text-gray-400">
+                                    {{ t('project.stats.progress') }}
+                                </div>
                             </div>
                             <div class="bg-gray-800 rounded-lg p-4">
                                 <div class="text-2xl font-bold text-yellow-400">
                                     {{ project.actualHours?.toFixed(1) || 0 }}
                                 </div>
-                                <div class="text-sm text-gray-400">Hours</div>
+                                <div class="text-sm text-gray-400">
+                                    {{ t('project.stats.hours') }}
+                                </div>
                             </div>
                         </div>
 
                         <!-- Progress Bar -->
                         <div class="bg-gray-800 rounded-lg p-4">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-gray-300"
-                                    >Overall Progress</span
-                                >
+                                <span class="text-sm font-medium text-gray-300">{{
+                                    t('project.stats.overall_progress')
+                                }}</span>
                                 <span class="text-sm text-gray-400"
                                     >{{ taskStore.completionRate }}%</span
                                 >
@@ -322,12 +334,14 @@ onMounted(async () => {
 
                         <!-- Recent Tasks -->
                         <div class="bg-gray-800 rounded-lg p-4">
-                            <h3 class="text-lg font-semibold text-white mb-4">Recent Tasks</h3>
+                            <h3 class="text-lg font-semibold text-white mb-4">
+                                {{ t('project.recent_tasks') }}
+                            </h3>
                             <div
                                 v-if="taskStore.tasks.length === 0"
                                 class="text-gray-500 text-center py-8"
                             >
-                                No tasks yet
+                                {{ t('project.no_tasks') }}
                             </div>
                             <div v-else class="space-y-2">
                                 <div
@@ -381,7 +395,9 @@ onMounted(async () => {
 
                         <!-- Quick Actions -->
                         <div class="bg-gray-800 rounded-lg p-4">
-                            <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+                            <h3 class="text-lg font-semibold text-white mb-4">
+                                {{ t('project.quick_actions.title') }}
+                            </h3>
                             <div class="space-y-2">
                                 <button
                                     @click="goToBoard"
@@ -400,7 +416,7 @@ onMounted(async () => {
                                             d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
                                         />
                                     </svg>
-                                    Open Kanban Board
+                                    {{ t('project.quick_actions.open_board') }}
                                 </button>
                                 <button
                                     class="w-full flex items-center gap-2 px-3 py-2 text-left text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
@@ -418,7 +434,7 @@ onMounted(async () => {
                                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                                         />
                                     </svg>
-                                    Generate with AI
+                                    {{ t('project.quick_actions.generate_ai') }}
                                 </button>
                             </div>
                         </div>

@@ -33,7 +33,7 @@ const viewLabel = computed(() => {
         case 'overview':
             return 'Overview';
         case 'board':
-            return 'Kanban Board';
+            return 'Kanban';
         case 'timeline':
             return 'Timeline';
         case 'dag':
@@ -144,8 +144,25 @@ onMounted(async () => {
                 {{ isGlobalPaused ? 'Resume All' : 'Pause All' }}
             </button>
 
+            <!-- New Task Button (Board only) -->
+            <button
+                v-if="showNewTask"
+                @click="emit('newTask')"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 4v16m8-8H4"
+                    />
+                </svg>
+                New Task
+            </button>
+
             <!-- View Switcher -->
-            <div class="flex bg-gray-800 rounded-lg p-1">
+            <div class="bg-gray-800 rounded-lg p-1">
                 <button
                     @click="router.push(`/projects/${projectId}`)"
                     :class="[
@@ -166,18 +183,7 @@ onMounted(async () => {
                             : 'text-gray-400 hover:text-white',
                     ]"
                 >
-                    Board
-                </button>
-                <button
-                    @click="router.push(`/projects/${projectId}/timeline`)"
-                    :class="[
-                        'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                        currentView === 'timeline'
-                            ? 'bg-gray-700 text-white shadow-sm'
-                            : 'text-gray-400 hover:text-white',
-                    ]"
-                >
-                    Timeline
+                    Kanban
                 </button>
                 <button
                     @click="router.push(`/projects/${projectId}/dag`)"
@@ -190,46 +196,18 @@ onMounted(async () => {
                 >
                     DAG
                 </button>
+                <button
+                    @click="router.push(`/projects/${projectId}/timeline`)"
+                    :class="[
+                        'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                        currentView === 'timeline'
+                            ? 'bg-gray-700 text-white shadow-sm'
+                            : 'text-gray-400 hover:text-white',
+                    ]"
+                >
+                    Timeline
+                </button>
             </div>
-
-            <!-- Connection Mode Toggle (Board only) -->
-            <button
-                v-if="showConnectionMode"
-                @click="emit('toggleConnection')"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                :class="
-                    isConnectionMode
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                "
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                    />
-                </svg>
-                {{ isConnectionMode ? 'Connecting...' : 'Connect Tasks' }}
-            </button>
-
-            <!-- New Task Button (Board only) -->
-            <button
-                v-if="showNewTask"
-                @click="emit('newTask')"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 4v16m8-8H4"
-                    />
-                </svg>
-                New Task
-            </button>
         </div>
     </header>
 </template>

@@ -23,8 +23,12 @@
         "prev_task": "Previous Task",
         "ai_assistant": "AI Assistant (⌘J)",
         "default": "(Default)",
-        "current_user": "Current User"
+        "current_user": "Current User",
+        "copy": "Copy",
+        "view_all": "View All",
+        "add": "Add"
     },
+
     "nav": {
         "projects": "Projects",
         "marketplace": "Marketplace",
@@ -163,7 +167,8 @@
             "approve": "Approve",
             "input": "Input",
             "save_template": "Save as Template",
-            "view_result": "View Result"
+            "view_result": "View Result",
+            "publish": "Publish"
         },
         "msg": {
             "reset_confirm": "Are you sure you want to reset project results?\n\nThis will delete:\n- Project AI Memory\n- All Task Results & History\n- Task Statuses (Reset to Todo)\n\nTask definitions and settings will be preserved.",
@@ -188,6 +193,62 @@
             "ai_provider": "AI Provider",
             "context": "AI Context",
             "memory": "Project Memory"
+        },
+        "not_found": "Project not found",
+        "go_back": "Go back to projects",
+        "tabs": {
+            "overview": "Overview",
+            "board": "Kanban",
+            "timeline": "Timeline",
+            "dag": "DAG"
+        },
+        "stats": {
+            "total_tasks": "Total Tasks",
+            "completed": "Completed",
+            "progress": "Progress",
+            "hours": "Hours",
+            "overall_progress": "Overall Progress"
+        },
+        "recent_tasks": "Recent Tasks",
+        "no_tasks": "No tasks yet",
+        "quick_actions": {
+            "title": "Quick Actions",
+            "open_board": "Open Kanban Board",
+            "generate_ai": "Generate with AI"
+        },
+        "description_placeholder": "Add description...",
+        "output_type": {
+            "web": {
+                "name": "Web Project",
+                "desc": "HTML/CSS/JS Web Application"
+            },
+            "document": {
+                "name": "Document",
+                "desc": "Markdown, PDF, etc."
+            },
+            "image": {
+                "name": "Image",
+                "desc": "Image Generation/Editing"
+            },
+            "video": {
+                "name": "Video",
+                "desc": "Video Content"
+            },
+            "code": {
+                "name": "Code",
+                "desc": "Source Code & Scripts"
+            },
+            "data": {
+                "name": "Data",
+                "desc": "JSON, CSV, etc."
+            },
+            "other": {
+                "name": "Other",
+                "desc": "Other formats"
+            },
+            "not_set": "Not Set",
+            "not_set_desc": "Output type not specified",
+            "local": "Local"
         }
     },
     "task": {
@@ -207,7 +268,11 @@
             "review_starting": "Start Review...",
             "executing": "Executing...",
             "no_script": "No Script",
-            "waiting_input": "Waiting for User Input"
+            "waiting_input": "Waiting for User Input",
+            "active": "In Progress",
+            "completed": "Completed",
+            "archived": "Archived",
+            "on_hold": "On Hold"
         },
         "type": {
             "ai": "AI Task",
@@ -592,5 +657,660 @@
         "weeks_ago": "{n} weeks ago",
         "months_ago": "{n} months ago",
         "years_ago": "{n} years ago"
+    },
+    "assistant": {
+        "title": "AI Assistant",
+        "subtitle": "Ask me anything",
+        "coming_soon": "Coming Soon",
+        "welcome_title": "Hello!",
+        "welcome_message": "Let me know if you need help with your project.",
+        "input_placeholder": "Type a message...",
+        "suggestions_label": "Suggestions",
+        "user_me": "Me",
+        "clear_chat": "Clear chat",
+        "current_context": "Current location: Project #{id}",
+        "quick_actions": {
+            "summary": "Weekly Summary",
+            "recommend": "Next Steps",
+            "deadline": "Deadlines",
+            "help": "Help"
+        },
+        "action_messages": {
+            "summary": "What did I do this week?",
+            "recommend": "What should I do next?",
+            "deadline": "Show me upcoming deadlines",
+            "help": "Help"
+        }
+    },
+    "settings": {
+        "header": {
+            "title": "Settings",
+            "subtitle": "Configure your preferences and manage your account"
+        },
+        "tabs": {
+            "general": "General",
+            "ai": "AI Providers",
+            "mcp": "MCP Servers",
+            "agents": "Local Agents",
+            "integrations": "Integrations",
+            "shortcuts": "Shortcuts",
+            "profile": "Profile",
+            "credits": "Credits",
+            "operators": "AI Operators",
+            "data": "Data",
+            "help": "Help"
+        },
+        "shortcuts": {
+            "title": "Keyboard Shortcuts",
+            "description": "Customize keyboard shortcuts for common actions"
+        },
+        "profile": {
+            "title": "User Profile"
+        },
+        "general": {
+            "title": "General Settings",
+            "appearance": {
+                "title": "Appearance",
+                "theme": {
+                    "title": "Theme",
+                    "description": "Choose your preferred color theme",
+                    "light": "Light",
+                    "dark": "Dark",
+                    "system": "System"
+                },
+                "language": {
+                    "title": "Interface Language",
+                    "description": "Select your preferred language",
+                    "en": "English",
+                    "ko": "Korean"
+                }
+            },
+            "behavior": {
+                "title": "Behavior",
+                "auto_save": {
+                    "title": "Auto-save",
+                    "description": "Automatically save changes"
+                },
+                "show_task_ids": {
+                    "title": "Show Task IDs",
+                    "description": "Display task IDs in the interface"
+                },
+                "enable_animations": {
+                    "title": "Enable Animations",
+                    "description": "Use animations and transitions"
+                },
+                "compact_mode": {
+                    "title": "Compact Mode",
+                    "description": "Reduce spacing for more content"
+                }
+            },
+            "about": {
+                "title": "About",
+                "application": "Application",
+                "version": "Version",
+                "platform": "Platform",
+                "environment": "Environment",
+                "created_by": "Created by",
+                "description": "HighFlow is an AI Workflow management tool that helps you automate and streamline your AI-powered workflows."
+            }
+        },
+        "ai": {
+            "filter_by_feature": "Filter by Feature",
+            "clear_filter": "Clear Filter",
+            "providers_matching": "{count} providers matching filter",
+            "update_models": "Update Models",
+            "updating": "Updating...",
+            "update_models_title": "Refresh available models for {provider}",
+            "model_count": "{count} models available",
+            "last_updated": "Last updated:",
+            "enabled_summary": "{count} provider(s) enabled:",
+            "coming_soon": "Coming Soon",
+            "configure": "Configure",
+            "enabled": "Enabled",
+            "configured_disabled": "Configured (disabled)",
+            "not_configured": "Not configured"
+        },
+        "mcp": {
+            "header": "MCP Servers",
+            "description": "Configure Model Context Protocol servers to extend AI capabilities with external tools.",
+            "docs_link": "View MCP Docs",
+            "stats": {
+                "total": "Total Servers",
+                "connected": "Connected",
+                "enabled": "Enabled"
+            },
+            "search_placeholder": "Search MCP servers...",
+            "filter_reset": "Reset Filters",
+            "empty_state": {
+                "title": "No results found",
+                "message": "Try different search terms or filters"
+            },
+            "status": {
+                "connected": "Connected",
+                "disconnected": "Disconnected",
+                "active": "Active",
+                "installed": "Installed"
+            },
+            "servers": {
+                "filesystem": {
+                    "description": "Filesystem access - Read/write files, list directories"
+                },
+                "shell": {
+                    "description": "Shell execution - Run terminal commands and scripts"
+                },
+                "git": {
+                    "description": "Git version control - Commit, branch, view history"
+                },
+                "fetch": {
+                    "description": "HTTP Fetch - Retrieve web pages, call REST APIs"
+                },
+                "jira": {
+                    "description": "Atlassian Jira integration - Create, view, update issues"
+                },
+                "confluence": {
+                    "description": "Atlassian Confluence integration - Search docs, create/edit pages"
+                }
+            },
+            "tags": {
+                "filesystem": "Filesystem",
+                "shell": "Shell",
+                "git": "Git",
+                "http": "HTTP",
+                "database": "Database",
+                "cloud": "Cloud",
+                "devops": "DevOps",
+                "productivity": "Productivity",
+                "search": "Search",
+                "browser": "Browser",
+                "memory": "Memory",
+                "code": "Code",
+                "design": "Design"
+            },
+            "modal": {
+                "status": {
+                    "connected": "Connected",
+                    "connecting": "Connecting...",
+                    "connection_success": "Connected to MCP server!",
+                    "connection_failed": "Connection failed",
+                    "install_success": "Installation complete.",
+                    "install_failed": "Installation failed."
+                },
+                "install": {
+                    "local_install": "Local Installation",
+                    "description": "Automatically install and update required CLI tools.",
+                    "last_installed": "Last installed: {date}",
+                    "warning_connect": "Connection test only available after installation.",
+                    "button_installing": "Installing...",
+                    "button_reinstall": "Reinstall",
+                    "button_install": "Install"
+                },
+                "execution": {
+                    "title": "Execution Settings",
+                    "command": "Command",
+                    "args": "Arguments (space separated)"
+                },
+                "permissions": {
+                    "title": "Permissions & Features",
+                    "category": {
+                        "filesystem": "Filesystem",
+                        "system": "System",
+                        "network": "Network",
+                        "data": "Data"
+                    }
+                },
+                "config": {
+                    "title": "Configuration",
+                    "filesystem": {
+                        "allowedPaths": "Allowed Paths (comma separated)"
+                    },
+                    "git": {
+                        "repository": "Repository Path"
+                    },
+                    "jira": {
+                        "baseUrl": "Jira URL",
+                        "username": "User Email",
+                        "token": "API Token"
+                    },
+                    "confluence": {
+                        "baseUrl": "Confluence URL",
+                        "username": "User Email",
+                        "token": "API Token"
+                    },
+                    "aws": {
+                        "region": "AWS Region",
+                        "accessKeyId": "Access Key ID",
+                        "secretAccessKey": "Secret Access Key"
+                    },
+                    "kubernetes": {
+                        "kubeconfig": "Kubeconfig Path",
+                        "context": "Context (Optional)"
+                    },
+                    "sqlite": {
+                        "dbPath": "Database Path"
+                    },
+                    "postgres": {
+                        "connectionString": "Connection String"
+                    },
+                    "brave_search": {
+                        "apiKey": "Brave Search API Key"
+                    },
+                    "github_mcp": {
+                        "token": "GitHub Personal Access Token"
+                    },
+                    "gitlab_mcp": {
+                        "baseUrl": "GitLab URL",
+                        "token": "GitLab Access Token"
+                    },
+                    "slack_mcp": {
+                        "token": "Slack Bot Token"
+                    },
+                    "notion_mcp": {
+                        "token": "Notion Integration Token"
+                    },
+                    "google_drive": {
+                        "clientId": "Google Client ID",
+                        "clientSecret": "Google Client Secret"
+                    },
+                    "sentry": {
+                        "authToken": "Sentry Auth Token",
+                        "organization": "Organization Slug"
+                    }
+                },
+                "buttons": {
+                    "cancel": "Cancel",
+                    "connect": "Connect",
+                    "test_connection": "Test Connection",
+                    "disconnect": "Disconnect",
+                    "save_only": "Save Only",
+                    "save": "Save"
+                },
+                "enable_toggle": {
+                    "label": "Enable {name}",
+                    "description": "Enable this MCP server for use in tasks"
+                }
+            }
+        },
+        "agents": {
+            "header": "Local AI Agents",
+            "description": "Manage AI coding agents running in your local environment. These tools run in your terminal and don't require external API integration.",
+            "stats": {
+                "supported": "Supported Agents",
+                "installed": "Installed",
+                "not_installed": "Not Installed"
+            },
+            "refresh_status": "Refresh Status",
+            "status": {
+                "checking": "Checking...",
+                "installed": "Installed",
+                "not_installed": "Not Installed",
+                "env_var_needed": "{env} environment variable required"
+            },
+            "actions": {
+                "details": "Details",
+                "launch_terminal": "Launch in Terminal",
+                "install_guide": "Installation Guide",
+                "copy": "Copy",
+                "install_command": "Install Command",
+                "website": "Website",
+                "docs": "Docs",
+                "close": "Close"
+            },
+            "error_launch": "Failed to launch {name}: {error}",
+            "claude_code": {
+                "description": "Anthropic's official AI coding agent. Performs coding tasks via natural language in the terminal."
+            },
+            "codex": {
+                "description": "OpenAI's AI coding agent. Generates and modifies code based on GPT-4."
+            }
+        },
+        "integrations": {
+            "header": "External Integrations",
+            "description": "Connect with Slack, Discord, Git services, and more to automate workflows and receive notifications.",
+            "coming_soon": "Coming Soon",
+            "settings": {
+                "header": "Settings",
+                "notification_header": "Notification Settings",
+                "notify_task_complete": "Notify on Task Complete",
+                "notify_mention": "Notify on Mention",
+                "notify_error": "Notify on Error",
+                "notify_project_update": "Notify on Project Update"
+            },
+            "stats": {
+                "header": "Statistics",
+                "messages_sent": "Messages Sent",
+                "skills_synced": "Skills Synced",
+                "last_sync": "Last Sync"
+            },
+            "actions": {
+                "test": "Test",
+                "testing": "Testing...",
+                "connect": "Connect",
+                "connecting": "Connecting...",
+                "disconnect": "Disconnect",
+                "save": "Save",
+                "checking": "Checking...",
+                "sync_now": "Sync Now",
+                "syncing": "Syncing...",
+                "select_folder": "Select Folder",
+                "add": "Add",
+                "cancel": "Cancel",
+                "create": "Create",
+                "creating": "Creating..."
+            },
+            "status": {
+                "connected_as": "Connected as {name}",
+                "not_connected": "Not Connected"
+            },
+            "webhook_events": {
+                "project_created": "Project Created",
+                "project_updated": "Project Updated",
+                "project_completed": "Project Completed",
+                "task_created": "Task Created",
+                "task_completed": "Task Completed",
+                "task_failed": "Task Failed",
+                "comment_created": "Comment Created",
+                "user_mentioned": "User Mentioned"
+            },
+            "tabs": {
+                "slack": "Slack",
+                "discord": "Discord",
+                "git": "Git",
+                "drive": "Google Drive",
+                "webhooks": "Webhooks"
+            },
+            "slack": {
+                "connect_btn": "Connect Slack",
+                "connection_failed": "Slack connection failed",
+                "test_message_sent": "Test message sent."
+            },
+            "discord": {
+                "connect_via_webhook": "Connect via Webhook",
+                "webhook_url_label": "Webhook URL",
+                "alert_url_needed": "Please enter a Webhook URL",
+                "alert_invalid_url": "Invalid Webhook URL"
+            },
+            "git": {
+                "connection_failed": "Git provider connection failed",
+                "alert_repo_url_needed": "Please enter a repository URL",
+                "alert_invalid_repo_url": "Invalid repository URL",
+                "connected_repos": "Connected Repositories",
+                "no_repos": "No repositories connected",
+                "placeholder_repo_url": "Repository URL (e.g., https://github.com/owner/repo)",
+                "auto_link_commits": "Auto-link Commits",
+                "auto_link_prs": "Auto-link PRs",
+                "branch_prefix": "Branch Prefix"
+            },
+            "drive": {
+                "status_connected": "Connected",
+                "status_not_connected": "Not Connected",
+                "connect_btn": "Connect Google Drive",
+                "connection_failed": "Google Drive connection failed",
+                "prompt_folder_id": "Enter Folder ID",
+                "alert_sync_complete": "Sync completed",
+                "skills_folder": "Skills Folder",
+                "no_folder_selected": "No folder selected",
+                "sync_settings": "Sync Settings",
+                "auto_sync": "Auto Sync",
+                "sync_interval": "Sync Interval (min)",
+                "interval_15m": "15 minutes",
+                "interval_30m": "30 minutes",
+                "interval_1h": "1 hour",
+                "interval_2h": "2 hours"
+            },
+            "webhooks": {
+                "header": "Webhooks",
+                "active_count": "{count} active",
+                "add_btn": "Add Webhook",
+                "alert_fields_needed": "Please fill in all required fields",
+                "confirm_delete": "Are you sure you want to delete this webhook?",
+                "alert_test_sent": "Test webhook sent",
+                "failure_count": "{count} failures",
+                "no_webhooks": "No webhooks configured",
+                "modal": {
+                    "title": "Add New Webhook",
+                    "name_label": "Name",
+                    "placeholder_name": "Webhook Name",
+                    "events_label": "Events",
+                    "secret_label": "Secret (Optional)",
+                    "placeholder_secret": "Signing Secret"
+                }
+            }
+        },
+        "credits": {
+            "balance_title": "Credit Balance",
+            "available_credits": "Available Credits",
+            "unit": "Credits",
+            "transaction_history": "Transaction History",
+            "refresh": "Refresh",
+            "loading": "Loading...",
+            "loading_history": "Loading history...",
+            "load_more": "Load More",
+            "no_history": "No transaction history.",
+            "error_loading": "Failed to load credits history.",
+            "filter_period": "Period",
+            "period_7d": "Last 7 days",
+            "period_30d": "Last 30 days",
+            "period_90d": "Last 90 days",
+            "period_all": "All Time",
+            "filter_type": "Transaction Type",
+            "types": {
+                "signup_bonus": "Signup Bonus",
+                "admin_topup": "Admin Top-up",
+                "workflow_execution": "Workflow Execution",
+                "marketplace_purchase": "Marketplace Purchase",
+                "execution_refund": "Refund",
+                "execution_adjustment": "Adjustment"
+            },
+            "th_date": "Date",
+            "th_type": "Type",
+            "th_description": "Description",
+            "th_change": "Change",
+            "th_balance": "Balance"
+        },
+
+        "data": {
+            "title": "Data Management",
+            "export": {
+                "title": "Export Settings",
+                "description": "Download your settings as a JSON file",
+                "button": "Export"
+            },
+            "import": {
+                "title": "Import Settings",
+                "description": "Load settings from a JSON file",
+                "button": "Import",
+                "modal_title": "Import Settings",
+                "placeholder": "Paste your settings JSON here..."
+            },
+            "reset": {
+                "title": "Reset to Defaults",
+                "description": "Reset all settings to their default values",
+                "button": "Reset",
+                "confirm": "Are you sure you want to reset all settings? This cannot be undone."
+            },
+            "wizard": {
+                "title": "Setup Wizard",
+                "run_again": "Run Setup Wizard Again",
+                "completed_msg": "Initial setup wizard is completed",
+                "incomplete_msg": "Initial setup wizard is not completed",
+                "button": "Run Wizard",
+                "completed_on": "Setup completed on {date}",
+                "skipped_on": "Setup skipped on {date}"
+            }
+        }
+    },
+    "marketplace": {
+        "publish": {
+            "title": "Publish to Marketplace",
+            "category": "Category",
+            "price": "Price (Credits)",
+            "price_hint": "Set 0 for free items",
+            "version": "Version",
+            "tags": "Tags",
+            "tags_placeholder": "ai, automation (comma separated)",
+            "notes": "Submission Notes (Optional)",
+            "notes_placeholder": "Notes for the reviewer...",
+            "images": "Preview Images",
+            "drop_zone": "Click to upload or drag and drop",
+            "drop_hint": "PNG, JPG, WEBP up to 5MB (Max 5)",
+            "cancel": "Cancel",
+            "submit": "Publish",
+            "submitting": "Publishing...",
+            "success": "Successfully submitted to marketplace!",
+            "access_control": {
+                "title": "Access Control",
+                "type": "Visibility",
+                "public": "Public (Visible to everyone)",
+                "restricted": "Restricted (Specific users only)",
+                "emails": "Allowed Emails",
+                "emails_placeholder": "user@example.com, alice@partner.com",
+                "domains": "Allowed Organizations",
+                "domains_placeholder": "company.com, university.edu",
+                "domains_hint": "Users with these email domains will have access"
+            }
+        }
+    },
+    "setup": {
+        "wizard": {
+            "common": {
+                "prev": "Previous",
+                "next": "Next",
+                "skip": "Skip",
+                "complete": "Complete",
+                "start": "Start Rocket 🚀",
+                "step": "Step {current} / {total}",
+                "percent_complete": "{percent}% Complete",
+                "or": "OR",
+                "coming_soon": "Coming Soon"
+            },
+            "steps": {
+                "welcome": {
+                    "title": "Welcome",
+                    "description": "Start HighFlow"
+                },
+                "profile": {
+                    "title": "Profile",
+                    "description": "Set basic user info"
+                },
+                "ai_provider": {
+                    "title": "AI Connect",
+                    "description": "Connect AI services"
+                },
+                "preferences": {
+                    "title": "Preferences",
+                    "description": "Customize work environment"
+                },
+                "projects": {
+                    "title": "Scan Projects",
+                    "description": "Search local repositories"
+                },
+                "complete": {
+                    "title": "Complete",
+                    "description": "Setup finished"
+                }
+            },
+
+            "welcome": {
+                "title": "Welcome to HighFlow!",
+                "subtitle": "Efficiently manage projects, automate tasks, and maximize productivity with AI.",
+                "features": {
+                    "project_management": "Project Management",
+                    "project_management_desc": "Kanban, Timeline views",
+                    "ai_automation": "AI Automation",
+                    "ai_automation_desc": "Automate task execution",
+                    "multi_ai": "Multi-AI Connect",
+                    "multi_ai_desc": "Claude, GPT, Gemini"
+                },
+                "note": "You can start using it right away after completing a few simple settings."
+            },
+            "profile": {
+                "intro": "Please set your basic user information",
+                "display_name": "Display Name",
+                "display_name_placeholder": "Enter your name",
+                "min_length": "At least 2 characters",
+                "language": "Language",
+                "timezone": "Timezone"
+            },
+            "ai_provider": {
+                "intro": "Connect multi-modal AI or local LM Studio/Ollama for image analysis and automation. Local servers are automatically detected if running.",
+                "no_providers": "No AI providers available. Please add a new provider in Settings.",
+                "open_website": "Open Official Page",
+                "local_guide": {
+                    "title": "LM Studio Setup Guide",
+                    "step1": "Download and install latest version from lmstudio.ai",
+                    "step2": "Start Server > OpenAI Compatible Server in LM Studio",
+                    "step3": "Load a model and click Start Server",
+                    "step4": "Verify Base URL matches the one shown in LM Studio"
+                },
+                "download_lm_studio": "Download LM Studio",
+                "check_status": "Check Status",
+                "checking": "Checking...",
+                "local_status": "Local Status",
+                "base_url": "Base URL",
+                "base_url_desc": "Must match the address displayed in LM Studio server.",
+                "oauth": {
+                    "connect": "Connect with OAuth",
+                    "connected": "Connected",
+                    "hint_connect": "Connect easily with OAuth",
+                    "hint_connected": "Account connected successfully"
+                },
+                "api_key": {
+                    "label": "Connect with API Key",
+                    "placeholder": "Enter API Key",
+                    "verified": "API Key Verified",
+                    "failed": "Connection Failed",
+                    "note": "API keys are stored locally and never sent externally."
+                },
+                "status": {
+                    "connected": "Connected",
+                    "local_detected": "Local Detected",
+                    "checking": "Checking",
+                    "not_running": "Not Running",
+                    "running": "Running",
+                    "unknown": "Unknown",
+                    "local_response": "LM Studio server is responding {source}",
+                    "connection_failed": "Connection failed: {details}",
+                    "check_running": "Please check if LM Studio is running",
+                    "checking_status": "Checking local server status...",
+                    "not_checked": "Status not checked yet"
+                }
+            },
+            "preferences": {
+                "intro": "Customize your environment to suit your work style",
+                "default_view": "Default Project View",
+                "animations": {
+                    "label": "Animations",
+                    "desc": "Enable smooth transitions"
+                },
+                "compact_mode": {
+                    "label": "Compact Mode",
+                    "desc": "Show more information on screen"
+                },
+                "auto_save": {
+                    "label": "Auto Save",
+                    "desc": "Automatically save changes"
+                }
+            },
+            "projects": {
+                "intro": "Automatically explore local development repositories",
+                "scan_btn": "Scan Local Repositories",
+                "scanning": "Scanning local repositories...",
+                "scanning_desc": "Checking Development, Projects, GitHub folders",
+                "found_title": "Found Repositories ({count})",
+                "found_desc": "You can select these repositories immediately when creating a project.",
+                "no_repos": "No repositories found",
+                "no_repos_desc": "You can select manually later when creating a project",
+                "optional_note": "This step is optional. You can skip and set it up later."
+            },
+            "complete": {
+                "title": "Setup Completed!",
+                "subtitle": "You are now ready to use AI Workflow Manager. Create a new project or import an existing repository to start.",
+                "summary": "Setup Summary",
+                "dont_show_again": "Don't show this wizard again",
+                "user": "User",
+                "provider": "AI Provider",
+                "found_repos": "Found Repositories"
+            }
+        }
     }
 }

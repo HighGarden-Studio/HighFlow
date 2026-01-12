@@ -11,6 +11,7 @@
  */
 
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { marked } from 'marked';
 
 import type { MCPConfig, Project } from '@core/types/database';
@@ -24,6 +25,7 @@ import { useConfigurationInheritance } from '../../composables/useConfigurationI
 import { FolderOpen } from 'lucide-vue-next';
 
 const { resolveAIProvider, resolveAutoReviewProvider } = useConfigurationInheritance();
+const { t } = useI18n();
 
 // Helper to check if a provider is a local agent
 function isLocalAgentProvider(provider: string | null): {
@@ -123,11 +125,14 @@ const effectiveAI = computed(() => {
 });
 
 const aiProviderDisplay = computed(() => {
-    const providers: Record<string, { name: string; color: string; icon: string }> = {
+    const providers: Record<
+        string,
+        { name: string; color: string; icon?: string; svgPath?: string }
+    > = {
         openai: { name: 'OpenAI', color: 'text-green-400', icon: '🤖' },
         anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '✨' },
         google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
-        local: { name: 'Local', color: 'text-gray-400', icon: '💻' },
+        local: { name: t('project.info.local'), color: 'text-gray-400', icon: '💻' },
     };
 
     // Use edited value if editing, else effective resolved value
@@ -144,7 +149,7 @@ const aiProviderDisplay = computed(() => {
 
     return (
         providers[providerId || ''] || {
-            name: '미설정',
+            name: t('project.info.not_set'),
             color: 'text-gray-500',
             icon: '❓',
         }
@@ -167,71 +172,71 @@ const aiModelDisplay = computed(() => {
         : effectiveAI.value.model || props.project.aiModel;
 
     // Simple display fallback
-    return modelId || '미설정';
+    return modelId || t('project.info.not_set');
 });
 
-const outputTypes = {
+const outputTypes = computed(() => ({
     web: {
-        name: '웹 프로젝트',
+        name: t('project.output_type.web.name'),
         svgPath:
             'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM96.22,176h63.56a145.91,145.91,0,0,1-31.78,43.82A145.91,145.91,0,0,1,96.22,176Zm-3.06-16a140.07,140.07,0,0,1,0-64h69.68a140.07,140.07,0,0,1,0,64Zm66.62-80H96.22a145.91,145.91,0,0,1,31.78-43.82A145.91,145.91,0,0,1,159.78,80ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128Zm114.51,27.36a161.79,161.79,0,0,0,0-54.72,88.32,88.32,0,0,1,46.6,54.72Zm46.6-79.08a88.32,88.32,0,0,1-46.6,54.72,161.79,161.79,0,0,0,0-54.72ZM55,100.64a88.32,88.32,0,0,1,46.6-54.72,161.79,161.79,0,0,0,0,54.72Zm0,54.72a161.79,161.79,0,0,0,0,54.72,88.32,88.32,0,0,1-46.6-54.72Z',
-        description: 'HTML/CSS/JS 웹 애플리케이션',
+        description: t('project.output_type.web.desc'),
     },
     document: {
-        name: '문서',
+        name: t('project.output_type.document.name'),
         svgPath:
             'M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-40-64a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,152Zm0-32a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,120Z',
-        description: 'Markdown, PDF 등 문서 파일',
+        description: t('project.output_type.document.desc'),
     },
     image: {
-        name: '이미지',
+        name: t('project.output_type.image.name'),
         svgPath:
             'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216v77.38l-24.69-24.7a16,16,0,0,0-22.62,0L144,133.37,100.69,90.07a16,16,0,0,0-22.62,0L40,128.69Zm0,144V154.35L89.66,104.69l53.65,53.65a8,8,0,0,0,11.32,0l34.05-34L216,151.63V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z',
-        description: '이미지 생성/편집 결과물',
+        description: t('project.output_type.image.desc'),
     },
     video: {
-        name: '비디오',
+        name: t('project.output_type.video.name'),
         svgPath:
             'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,72H80V96H40ZM40,112H80v32H40Zm0,88V160H80v40Zm176,0H96V72H216V200ZM96,56h64V40H96Zm80,0h40V40H176Z',
-        description: '비디오 컨텐츠',
+        description: t('project.output_type.video.desc'),
     },
     code: {
-        name: '코드',
+        name: t('project.output_type.code.name'),
         svgPath:
             'M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z',
-        description: '소스 코드 및 스크립트',
+        description: t('project.output_type.code.desc'),
     },
     data: {
-        name: '데이터',
+        name: t('project.output_type.data.name'),
         svgPath:
             'M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM40,112H80v32H40Zm56,0H216v32H96ZM216,64V96H40V64ZM40,160H80v32H40Zm176,32H96V160H216v32Z',
-        description: 'JSON, CSV 등 데이터 파일',
+        description: t('project.output_type.data.desc'),
     },
     other: {
-        name: '기타',
+        name: t('project.output_type.other.name'),
         svgPath:
             'M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z',
-        description: '기타 형식의 결과물',
+        description: t('project.output_type.other.desc'),
     },
-};
+}));
 
 const outputTypeDisplay = computed(() => {
     return (
-        outputTypes[props.project.outputType as keyof typeof outputTypes] || {
-            name: '미지정',
+        outputTypes.value[props.project.outputType as keyof typeof outputTypes.value] || {
+            name: t('project.output_type.not_set'),
             svgPath:
                 'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z', // Question mark icon path if needed, or keeping it empty if handled by IconRenderer differently
-            description: '결과물 타입이 지정되지 않음',
+            description: t('project.output_type.not_set_desc'),
         }
     );
 });
 
 const statusDisplay = computed(() => {
     const statuses: Record<string, { name: string; color: string }> = {
-        active: { name: '진행중', color: 'bg-green-500' },
-        completed: { name: '완료', color: 'bg-blue-500' },
-        archived: { name: '보관됨', color: 'bg-gray-500' },
-        on_hold: { name: '보류', color: 'bg-yellow-500' },
+        active: { name: t('task.status.active'), color: 'bg-green-500' },
+        completed: { name: t('task.status.completed'), color: 'bg-blue-500' },
+        archived: { name: t('task.status.archived'), color: 'bg-gray-500' },
+        on_hold: { name: t('task.status.on_hold'), color: 'bg-yellow-500' },
     };
     return statuses[props.project.status] || { name: props.project.status, color: 'bg-gray-500' };
 });
@@ -333,13 +338,13 @@ const autoReviewProviderDisplay = computed(() => {
         return {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
-            icon: getAssistantIcon(providerId),
+            svgPath: getAssistantIcon(providerId),
             isInherited: !isExplicit && !isEditingAutoReview.value,
         };
     }
 
     const display = providers[providerId || ''] || {
-        name: '미설정',
+        name: t('project.info.not_set'),
         color: 'text-gray-500',
         icon: '❓',
     };
@@ -362,11 +367,11 @@ const autoReviewModelDisplay = computed(() => {
 
     // If editing, show edited value
     if (isEditingAutoReview.value) {
-        return editedAutoReviewModel.value || '미설정';
+        return editedAutoReviewModel.value || t('project.info.not_set');
     }
 
     // Normal display: use effective model
-    return effectiveAutoReview.value.model || '미설정';
+    return effectiveAutoReview.value.model || t('project.info.not_set');
 });
 
 // Init base folder display
@@ -381,10 +386,6 @@ watch(
 // ========================================
 // Methods
 // ========================================
-
-function handleEdit(): void {
-    emit('edit');
-}
 
 function startEditMetadata(): void {
     editedTitle.value = props.project.title;
@@ -509,7 +510,7 @@ async function saveAISettings(): Promise<void> {
             claude: 'claude-code',
             codex: 'codex',
         };
-        providerToSave = agentMap[editedLocalAgent.value] || editedLocalAgent.value;
+        providerToSave = (agentMap[editedLocalAgent.value] || editedLocalAgent.value) as AIProvider;
         // For local agents, the model might be redundant or same as provider ID, but let's keep it clean
         modelToSave = null;
     }
@@ -641,7 +642,7 @@ function getAssistantIcon(type: string): string {
             'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11.89-8.42l-22.26-3a16.09,16.09,0,0,0-13.38,4.93L40,132.19A88,88,0,0,1,128,40a87.53,87.53,0,0,1,15.87,1.46L159.3,56a16,16,0,0,0,12.26,5.61h19.41A88.22,88.22,0,0,1,216,128Z',
         codex: 'M229.66,90.34l-64-64a8,8,0,0,0-11.32,0l-64,64a8,8,0,0,0,11.32,11.32L152,51.31V96a8,8,0,0,0,16,0V51.31l50.34,50.35a8,8,0,0,0,11.32-11.32ZM208,144a40,40,0,1,0-40,40A40,40,0,0,0,208,144Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,144,144ZM88,104A40,40,0,1,0,48,144,40,40,0,0,0,88,104ZM64,144a24,24,0,1,1,24-24A24,24,0,0,1,64,144Zm176,72a40,40,0,1,0-40,40A40,40,0,0,0,240,216Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,176,216Z',
     };
-    return icons[type] || icons.git;
+    return (icons[type] || icons.git) as string;
 }
 
 function getAssistantLabel(type: string): string {
@@ -677,7 +678,7 @@ function getAssistantLabel(type: string): string {
                     <input
                         v-model="editedTitle"
                         class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500"
-                        placeholder="프로젝트 이름"
+                        :placeholder="t('project.modal.name_label')"
                         @keyup.enter="saveMetadata"
                     />
                 </div>
@@ -701,20 +702,20 @@ function getAssistantLabel(type: string): string {
                         @click="cancelEditMetadata"
                         class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200 text-xs"
                     >
-                        취소
+                        {{ t('common.cancel') }}
                     </button>
                     <button
                         @click="saveMetadata"
                         class="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white text-xs"
                     >
-                        저장
+                        {{ t('common.save') }}
                     </button>
                 </template>
                 <button
                     v-else
                     @click="startEditMetadata"
                     class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200"
-                    title="편집"
+                    :title="t('common.edit')"
                 >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
@@ -732,11 +733,13 @@ function getAssistantLabel(type: string): string {
             <!-- Main Prompt Section -->
             <div v-if="project.mainPrompt" class="space-y-2">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">초기 프롬프트</label>
+                    <label class="text-sm font-medium text-gray-400">{{
+                        t('project.info.initial_prompt')
+                    }}</label>
                     <button
                         @click="copyPrompt"
                         class="text-xs text-gray-500 hover:text-gray-300 flex items-center space-x-1"
-                        title="복사"
+                        :title="t('common.copy')"
                     >
                         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path
@@ -746,7 +749,7 @@ function getAssistantLabel(type: string): string {
                                 d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                             />
                         </svg>
-                        <span>복사</span>
+                        <span>{{ t('common.copy') }}</span>
                     </button>
                 </div>
                 <div
@@ -758,18 +761,20 @@ function getAssistantLabel(type: string): string {
                     v-if="compact && project.mainPrompt && project.mainPrompt.length > 150"
                     class="text-xs text-blue-400 hover:text-blue-300"
                 >
-                    전체 보기
+                    {{ t('common.view_all') }}
                 </button>
             </div>
 
             <div v-else class="text-center py-4 text-gray-500 text-sm">
-                초기 프롬프트가 설정되지 않았습니다
+                {{ t('project.info.no_initial_prompt') }}
             </div>
 
             <!-- Project Goal Section -->
             <div class="space-y-2 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">프로젝트 목표 (Goal)</label>
+                    <label class="text-sm font-medium text-gray-400">{{
+                        t('project.info.goal')
+                    }}</label>
                     <button
                         v-if="!isEditingGoal"
                         @click="startEditGoal"
@@ -788,7 +793,7 @@ function getAssistantLabel(type: string): string {
                                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                             />
                         </svg>
-                        <span>{{ project.goal ? '편집' : '작성' }}</span>
+                        <span>{{ project.goal ? t('common.edit') : t('common.add') }}</span>
                     </button>
                 </div>
 
@@ -1329,7 +1334,20 @@ function getAssistantLabel(type: string): string {
                     <div class="space-y-1">
                         <label class="text-xs text-gray-500">AI 제공자</label>
                         <div class="flex items-center space-x-2">
-                            <IconRenderer :emoji="autoReviewProviderDisplay.icon" class="w-4 h-4" />
+                            <template v-if="autoReviewProviderDisplay.svgPath">
+                                <svg
+                                    class="w-4 h-4 text-gray-400"
+                                    viewBox="0 0 256 256"
+                                    fill="currentColor"
+                                >
+                                    <path :d="autoReviewProviderDisplay.svgPath" />
+                                </svg>
+                            </template>
+                            <IconRenderer
+                                v-else
+                                :emoji="autoReviewProviderDisplay.icon || '❓'"
+                                class="w-4 h-4"
+                            />
                             <span
                                 :class="autoReviewProviderDisplay.color"
                                 class="text-sm font-medium"

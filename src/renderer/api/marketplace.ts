@@ -288,6 +288,11 @@ export const marketplaceAPI = {
                 formData.append('previewGraph', JSON.stringify(submission.previewGraph));
             }
 
+            // Append Access Control
+            if (submission.accessControl) {
+                formData.append('accessControl', JSON.stringify(submission.accessControl));
+            }
+
             // Append Images
             if (submission.previewImages && submission.previewImages.length > 0) {
                 submission.previewImages.forEach((file) => {
@@ -427,6 +432,11 @@ export const marketplaceAPI = {
 
             if (submission.previewGraph) {
                 formData.append('previewGraph', JSON.stringify(submission.previewGraph));
+            }
+
+            // Append Access Control
+            if (submission.accessControl) {
+                formData.append('accessControl', JSON.stringify(submission.accessControl));
             }
 
             // Append Images

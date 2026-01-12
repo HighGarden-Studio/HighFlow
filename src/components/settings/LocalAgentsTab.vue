@@ -10,8 +10,10 @@ import { getAPI } from '../../utils/electron';
 import { getProviderIcon } from '../../utils/iconMapping';
 import IconRenderer from '../common/IconRenderer.vue';
 import { useSettingsStore, type LocalAgent } from '../../renderer/stores/settingsStore';
+import { useI18n } from 'vue-i18n';
 
 const settingsStore = useSettingsStore();
+const { t } = useI18n();
 
 const selectedAgent = ref<LocalAgent | null>(null);
 const showDetailModal = ref(false);
@@ -38,7 +40,7 @@ async function launchAgent(agent: LocalAgent): Promise<void> {
         await api.localAgents.launchInTerminal(agent.command);
     } catch (error) {
         console.error(`Failed to launch ${agent.name}:`, error);
-        launchError.value = `${agent.name} 실행에 실패했습니다: ${error}`;
+        launchError.value = t('settings.agents.error_launch', { name: agent.name, error: error });
     } finally {
         isLaunching.value = false;
     }
@@ -85,10 +87,9 @@ onMounted(() => {
     <div class="local-agents-tab">
         <!-- Header -->
         <div class="mb-6">
-            <h2 class="text-xl font-bold text-white mb-2">Local AI Agents</h2>
+            <h2 class="text-xl font-bold text-white mb-2">{{ t('settings.agents.header') }}</h2>
             <p class="text-gray-400 text-sm">
-                로컬 환경에서 실행되는 AI 코딩 에이전트를 관리합니다. 이 도구들은 터미널에서
-                실행되며 별도의 API 연동이 필요하지 않습니다.
+                {{ t('settings.agents.description') }}
             </p>
         </div>
 
@@ -98,13 +99,13 @@ onMounted(() => {
                 <div class="text-2xl font-bold text-white">
                     {{ settingsStore.localAgents.length }}
                 </div>
-                <div class="text-gray-400 text-sm">지원 에이전트</div>
+                <div class="text-gray-400 text-sm">{{ t('settings.agents.stats.supported') }}</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-green-400">
                     {{ settingsStore.localAgents.filter((a) => a.isInstalled).length }}
                 </div>
-                <div class="text-gray-400 text-sm">설치됨</div>
+                <div class="text-gray-400 text-sm">{{ t('settings.agents.stats.installed') }}</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-yellow-400">
@@ -113,7 +114,9 @@ onMounted(() => {
                             .length
                     }}
                 </div>
-                <div class="text-gray-400 text-sm">미설치</div>
+                <div class="text-gray-400 text-sm">
+                    {{ t('settings.agents.stats.not_installed') }}
+                </div>
             </div>
         </div>
 
@@ -131,14 +134,9 @@ onMounted(() => {
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                 >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
                 </svg>
-                설치 상태 새로고침
+                {{ t('settings.agents.refresh_status') }}
             </button>
         </div>
 
@@ -188,7 +186,7 @@ onMounted(() => {
                                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                                         />
                                     </svg>
-                                    확인 중...
+                                    {{ t('settings.agents.status.checking') }}
                                 </span>
                                 <span
                                     v-else-if="agent.isInstalled"
@@ -201,7 +199,8 @@ onMounted(() => {
                                             clip-rule="evenodd"
                                         />
                                     </svg>
-                                    설치됨 {{ agent.version ? `(v${agent.version})` : '' }}
+                                    {{ t('settings.agents.status.installed') }}
+                                    {{ agent.version ? `(v${agent.version})` : '' }}
                                 </span>
                                 <span
                                     v-else
@@ -214,11 +213,11 @@ onMounted(() => {
                                             clip-rule="evenodd"
                                         />
                                     </svg>
-                                    미설치
+                                    {{ t('settings.agents.status.not_installed') }}
                                 </span>
                             </div>
                             <p class="text-gray-400 text-sm mt-1 max-w-md">
-                                {{ agent.description }}
+                                {{ t(agent.description) }}
                             </p>
 
                             <!-- API Key Requirement -->
@@ -239,7 +238,11 @@ onMounted(() => {
                                         d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
                                     />
                                 </svg>
-                                <span>{{ agent.apiKeyEnvVar }} 환경변수 필요</span>
+                                <span>{{
+                                    t('settings.agents.status.env_var_needed', {
+                                        env: agent.apiKeyEnvVar,
+                                    })
+                                }}</span>
                             </div>
                         </div>
                     </div>
@@ -249,7 +252,7 @@ onMounted(() => {
                         <button
                             @click="openDetailModal(agent)"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                            title="상세 정보"
+                            :title="t('settings.agents.actions.details')"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -271,14 +274,14 @@ onMounted(() => {
                             :disabled="isLaunching"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                         >
-                            터미널에서 실행
+                            {{ t('settings.agents.actions.launch_terminal') }}
                         </button>
                         <button
                             v-else
                             @click="openExternal(agent.website)"
                             class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
                         >
-                            설치 방법 보기
+                            {{ t('settings.agents.actions.install_guide') }}
                         </button>
                     </div>
                 </div>
@@ -290,7 +293,9 @@ onMounted(() => {
                 >
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
-                            <p class="text-xs text-gray-500 mb-2">설치 명령어:</p>
+                            <p class="text-xs text-gray-500 mb-2">
+                                {{ t('settings.agents.actions.install_command') }}
+                            </p>
                             <code
                                 class="block px-3 py-2 bg-gray-900 rounded-lg text-sm text-green-400 font-mono"
                             >
@@ -300,7 +305,7 @@ onMounted(() => {
                         <button
                             @click="copyInstallCommand(agent.installCommand)"
                             class="ml-3 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                            title="복사"
+                            :title="t('settings.agents.actions.copy')"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -405,7 +410,9 @@ onMounted(() => {
                                     <h2 class="text-lg font-semibold text-white">
                                         {{ selectedAgent.name }}
                                     </h2>
-                                    <p class="text-sm text-gray-400">상세 정보</p>
+                                    <p class="text-sm text-gray-400">
+                                        {{ t('settings.agents.actions.details') }}
+                                    </p>
                                 </div>
                             </div>
                             <button
@@ -430,12 +437,14 @@ onMounted(() => {
 
                         <!-- Content -->
                         <div class="p-6 space-y-4">
-                            <p class="text-gray-300">{{ selectedAgent.description }}</p>
+                            <p class="text-gray-300">{{ t(selectedAgent.description) }}</p>
 
                             <!-- Status -->
                             <div class="p-4 bg-gray-800 rounded-lg space-y-3">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-gray-400 text-sm">설치 상태</span>
+                                    <span class="text-gray-400 text-sm">{{
+                                        t('settings.agents.refresh_status')
+                                    }}</span>
                                     <span
                                         :class="[
                                             'px-2 py-1 rounded text-xs font-medium',
@@ -444,20 +453,24 @@ onMounted(() => {
                                                 : 'bg-yellow-900/30 text-yellow-400',
                                         ]"
                                     >
-                                        {{ selectedAgent.isInstalled ? '설치됨' : '미설치' }}
+                                        {{
+                                            selectedAgent.isInstalled
+                                                ? t('settings.agents.status.installed')
+                                                : t('settings.agents.status.not_installed')
+                                        }}
                                     </span>
                                 </div>
                                 <div
                                     v-if="selectedAgent.version"
                                     class="flex items-center justify-between"
                                 >
-                                    <span class="text-gray-400 text-sm">버전</span>
+                                    <span class="text-gray-400 text-sm">Version</span>
                                     <span class="text-white text-sm">{{
                                         selectedAgent.version
                                     }}</span>
                                 </div>
                                 <div class="flex items-center justify-between">
-                                    <span class="text-gray-400 text-sm">실행 명령어</span>
+                                    <span class="text-gray-400 text-sm">Launcher Command</span>
                                     <code
                                         class="px-2 py-1 bg-gray-900 rounded text-sm text-green-400 font-mono"
                                     >
@@ -468,7 +481,7 @@ onMounted(() => {
                                     v-if="selectedAgent.requiresApiKey"
                                     class="flex items-center justify-between"
                                 >
-                                    <span class="text-gray-400 text-sm">필요 환경변수</span>
+                                    <span class="text-gray-400 text-sm">Environment Variable</span>
                                     <code
                                         class="px-2 py-1 bg-gray-900 rounded text-sm text-amber-400 font-mono"
                                     >
@@ -479,7 +492,9 @@ onMounted(() => {
 
                             <!-- Install Command -->
                             <div>
-                                <p class="text-sm text-gray-400 mb-2">설치 명령어</p>
+                                <p class="text-sm text-gray-400 mb-2">
+                                    {{ t('settings.agents.actions.install_command') }}
+                                </p>
                                 <div class="flex items-center gap-2">
                                     <code
                                         class="flex-1 px-3 py-2 bg-gray-800 rounded-lg text-sm text-green-400 font-mono"
@@ -489,7 +504,7 @@ onMounted(() => {
                                     <button
                                         @click="copyInstallCommand(selectedAgent.installCommand)"
                                         class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                                        title="복사"
+                                        :title="t('settings.agents.actions.copy')"
                                     >
                                         <svg
                                             class="w-5 h-5"
@@ -527,7 +542,7 @@ onMounted(() => {
                                             d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                         />
                                     </svg>
-                                    웹사이트
+                                    {{ t('settings.agents.actions.website') }}
                                 </button>
                                 <button
                                     @click="openExternal(selectedAgent.docsUrl)"
@@ -546,7 +561,7 @@ onMounted(() => {
                                             d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
                                         />
                                     </svg>
-                                    문서
+                                    {{ t('settings.agents.actions.docs') }}
                                 </button>
                             </div>
                         </div>
@@ -559,7 +574,7 @@ onMounted(() => {
                                 @click="closeDetailModal"
                                 class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
                             >
-                                닫기
+                                {{ t('settings.agents.actions.close') }}
                             </button>
                             <button
                                 v-if="selectedAgent.isInstalled"
@@ -570,7 +585,7 @@ onMounted(() => {
                                 :disabled="isLaunching"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                             >
-                                터미널에서 실행
+                                {{ t('settings.agents.actions.launch_terminal') }}
                             </button>
                         </div>
                     </div>

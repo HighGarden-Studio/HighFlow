@@ -13,6 +13,9 @@ import type {
 } from '../../../core/types/marketplace';
 import type { Project } from '../../../core/types/database';
 import { useToast } from 'vue-toastification';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     initialType?: ItemType;
@@ -42,8 +45,16 @@ const selectedFiles = ref<File[]>([]);
 const previewUrls = ref<string[]>([]);
 const searchQuery = ref('');
 
+// Access Control
+const visibility = ref<'public' | 'restricted'>('public');
+const allowedEmails = ref('');
+const allowedDomains = ref('');
+
 const loading = ref(false);
 const error = ref<string | null>(null);
+
+// Drag state
+const isDragging = ref(false);
 
 // Categories
 const categories: { label: string; value: MarketplaceCategory }[] = [
@@ -121,6 +132,19 @@ onMounted(async () => {
                         const images = (submission as any).previewImages || [];
                         if (Array.isArray(images)) {
                             previewUrls.value = images.filter((img) => typeof img === 'string');
+                        }
+
+                        // Handle Access Control
+                        if (submission.accessControl) {
+                            visibility.value = submission.accessControl.type;
+                            if (submission.accessControl.allowedEmails) {
+                                allowedEmails.value =
+                                    submission.accessControl.allowedEmails.join(', ');
+                            }
+                            if (submission.accessControl.allowedDomains) {
+                                allowedDomains.value =
+                                    submission.accessControl.allowedDomains.join(', ');
+                            }
                         }
                     }
                 } catch (e) {
@@ -209,30 +233,41 @@ function selectItem(item: any) {
     }
 }
 
+function handleDrop(event: DragEvent) {
+    isDragging.value = false;
+    const files = event.dataTransfer?.files;
+    if (files) {
+        processFiles(Array.from(files));
+    }
+}
+
+function processFiles(files: File[]) {
+    const validFiles = files.filter(
+        (f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024
+    );
+
+    if (validFiles.length + selectedFiles.value.length > 5) {
+        toast.error('Maximum 5 images allowed');
+        return;
+    }
+
+    selectedFiles.value.push(...validFiles);
+
+    validFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (e.target?.result) {
+                previewUrls.value.push(e.target.result as string);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 function handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files) {
-        const files = Array.from(input.files);
-        const validFiles = files.filter(
-            (f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024
-        );
-
-        if (validFiles.length + selectedFiles.value.length > 5) {
-            toast.error('Maximum 5 images allowed');
-            return;
-        }
-
-        selectedFiles.value.push(...validFiles);
-
-        validFiles.forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                if (e.target?.result) {
-                    previewUrls.value.push(e.target.result as string);
-                }
-            };
-            reader.readAsDataURL(file);
-        });
+        processFiles(Array.from(input.files));
     }
 }
 
@@ -308,6 +343,23 @@ async function submit() {
             previewImages: selectedFiles.value, // Only sends NEW files
             previewGraph: selectedType.value === 'project' ? definitionData : undefined,
             icon: iconFile,
+            accessControl: {
+                type: visibility.value,
+                allowedEmails:
+                    visibility.value === 'restricted'
+                        ? allowedEmails.value
+                              .split(',')
+                              .map((e) => e.trim())
+                              .filter((e) => e)
+                        : [],
+                allowedDomains:
+                    visibility.value === 'restricted'
+                        ? allowedDomains.value
+                              .split(',')
+                              .map((d) => d.trim())
+                              .filter((d) => d)
+                        : [],
+            },
         };
 
         if (props.initialSubmissionId) {
@@ -629,14 +681,18 @@ function prevStep() {
                             </select>
                         </div>
                         <div class="space-y-2">
-                            <label class="block text-sm font-medium text-gray-300"
-                                >Suggested Price (Credits)</label
-                            >
+                            <label class="block text-sm font-medium text-gray-300">
+                                Price (Credits)
+                                <span
+                                    class="bg-blue-900 text-blue-200 text-xs px-2 py-0.5 rounded ml-2"
+                                    >Coming Soon</span
+                                >
+                            </label>
                             <input
-                                v-model.number="price"
+                                :value="0"
                                 type="number"
-                                min="0"
-                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                                disabled
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-500 cursor-not-allowed focus:outline-none"
                             />
                         </div>
                     </div>
@@ -651,12 +707,92 @@ function prevStep() {
                         />
                     </div>
 
+                    <!-- Access Control Section -->
+                    <div class="space-y-3 pt-4 border-t border-gray-800">
+                        <h3 class="text-sm font-medium text-gray-300">
+                            {{ t('marketplace.publish.access_control.title') }}
+                        </h3>
+
+                        <!-- Visibility Type -->
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    v-model="visibility"
+                                    value="public"
+                                    class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
+                                />
+                                <span class="text-sm text-gray-300">{{
+                                    t('marketplace.publish.access_control.public')
+                                }}</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    v-model="visibility"
+                                    value="restricted"
+                                    class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
+                                />
+                                <span class="text-sm text-gray-300">{{
+                                    t('marketplace.publish.access_control.restricted')
+                                }}</span>
+                            </label>
+                        </div>
+
+                        <!-- Restricted Options -->
+                        <div v-if="visibility === 'restricted'" class="space-y-3 pl-1 pt-2">
+                            <!-- Allowed Emails -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-medium text-gray-400">{{
+                                    t('marketplace.publish.access_control.emails')
+                                }}</label>
+                                <input
+                                    v-model="allowedEmails"
+                                    type="text"
+                                    :placeholder="
+                                        t('marketplace.publish.access_control.emails_placeholder')
+                                    "
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <!-- Allowed Domains -->
+                            <div class="space-y-1">
+                                <label class="block text-xs font-medium text-gray-400">
+                                    {{ t('marketplace.publish.access_control.domains') }}
+                                    <span class="text-gray-500 font-normal ml-1"
+                                        >-
+                                        {{
+                                            t('marketplace.publish.access_control.domains_hint')
+                                        }}</span
+                                    >
+                                </label>
+                                <input
+                                    v-model="allowedDomains"
+                                    type="text"
+                                    :placeholder="
+                                        t('marketplace.publish.access_control.domains_placeholder')
+                                    "
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="space-y-2">
                         <label class="block text-sm font-medium text-gray-300"
                             >Images (Max 5)</label
                         >
                         <div
-                            class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center hover:bg-gray-800/50 transition-colors relative cursor-pointer"
+                            class="border-2 border-dashed rounded-lg p-6 text-center transition-colors relative cursor-pointer"
+                            :class="[
+                                isDragging
+                                    ? 'border-blue-500 bg-blue-500/10'
+                                    : 'border-gray-700 hover:bg-gray-800/50',
+                            ]"
+                            @dragover.prevent="isDragging = true"
+                            @dragleave.prevent="isDragging = false"
+                            @drop.prevent="handleDrop"
                         >
                             <input
                                 type="file"
@@ -666,7 +802,7 @@ function prevStep() {
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <div class="flex flex-col items-center gap-2 text-gray-400">
-                                <span class="text-sm">Click to upload images</span>
+                                <span class="text-sm">Click or Drag & Drop to upload images</span>
                             </div>
                         </div>
                         <!-- Previews -->

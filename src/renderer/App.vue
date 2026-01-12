@@ -37,8 +37,14 @@ const currentLocaleLabel = computed(() => {
     return locale.value === 'ko' ? '한국어' : 'English';
 });
 
-function toggleLanguage() {
-    locale.value = locale.value === 'ko' ? 'en' : 'ko';
+async function toggleLanguage() {
+    const newLocale = locale.value === 'ko' ? 'en' : 'ko';
+    locale.value = newLocale;
+
+    // Persist to userProfile
+    settingsStore.updateProfile({
+        language: newLocale,
+    });
 }
 
 // State
@@ -136,8 +142,9 @@ function closeWindow() {
  * Global keyboard shortcuts
  */
 function handleGlobalKeyDown(event: KeyboardEvent) {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const isMac = navigator.userAgent.includes('Mac');
     const modifier = isMac ? event.metaKey : event.ctrlKey;
+    const key = event.key.toLowerCase();
 
     // Skip if typing in input elements
     const target = event.target as HTMLElement;
@@ -146,7 +153,7 @@ function handleGlobalKeyDown(event: KeyboardEvent) {
     }
 
     // Undo: Cmd+Z (Mac) or Ctrl+Z (Windows/Linux)
-    if (modifier && event.key === 'z' && !event.shiftKey) {
+    if (modifier && key === 'z' && !event.shiftKey) {
         event.preventDefault();
         if (historyStore.canUndo) {
             historyStore.undo();
@@ -156,7 +163,7 @@ function handleGlobalKeyDown(event: KeyboardEvent) {
     }
 
     // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Windows/Linux)
-    if (modifier && event.key === 'z' && event.shiftKey) {
+    if (modifier && key === 'z' && event.shiftKey) {
         event.preventDefault();
         if (historyStore.canRedo) {
             historyStore.redo();
@@ -165,15 +172,25 @@ function handleGlobalKeyDown(event: KeyboardEvent) {
         return;
     }
 
-    // Assistant Panel: Cmd+K or Ctrl+K
-    if (modifier && event.key === 'k') {
+    // Assistant Panel: Cmd+J or Ctrl+J
+    if (modifier && key === 'j') {
         event.preventDefault();
         toggleAssistant();
+        return;
     }
+
+    // Search: Cmd+K or Ctrl+K
+    if (modifier && key === 'k') {
+        event.preventDefault();
+        showSearch.value = !showSearch.value;
+        return;
+    }
+
     // Cmd+` or Ctrl+` to toggle activity console
-    if ((event.metaKey || event.ctrlKey) && event.key === '`') {
+    if (modifier && key === '`') {
         event.preventDefault();
         activityLogStore.toggleConsole();
+        return;
     }
 }
 
@@ -254,6 +271,16 @@ onMounted(async () => {
 
     // Load settings (includes loading models from DB cache)
     await settingsStore.loadSettings();
+
+    // Set locale from settings
+    if (settingsStore.userProfile.language) {
+        locale.value = settingsStore.userProfile.language;
+    } else {
+        // Initialize if not set
+        settingsStore.updateProfile({
+            language: locale.value,
+        });
+    }
 
     // Auto-login attempt
     await userStore.autoLogin();

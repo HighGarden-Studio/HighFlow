@@ -162,33 +162,6 @@ onMounted(async () => {
             </div>
 
             <div class="flex items-center gap-4">
-                <!-- View Switcher -->
-                <div class="flex bg-gray-800 rounded-lg p-1">
-                    <button
-                        @click="goToOverview"
-                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                    >
-                        Overview
-                    </button>
-                    <button
-                        @click="goToBoard"
-                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                    >
-                        Board
-                    </button>
-                    <button
-                        class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
-                    >
-                        Timeline
-                    </button>
-                    <button
-                        @click="router.push(`/projects/${projectId}/dag`)"
-                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
-                    >
-                        DAG
-                    </button>
-                </div>
-
                 <!-- Controls -->
                 <div class="flex items-center gap-2 border-l border-gray-700 pl-4">
                     <select
@@ -208,6 +181,33 @@ onMounted(async () => {
                         <option value="week">Week</option>
                         <option value="month">Month</option>
                     </select>
+                </div>
+
+                <!-- View Switcher -->
+                <div class="flex bg-gray-800 rounded-lg p-1">
+                    <button
+                        @click="goToOverview"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Overview
+                    </button>
+                    <button
+                        @click="goToBoard"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        Kanban
+                    </button>
+                    <button
+                        @click="router.push(`/projects/${projectId}/dag`)"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                    >
+                        DAG
+                    </button>
+                    <button
+                        class="px-3 py-1.5 text-sm font-medium bg-gray-700 text-white rounded-md shadow-sm transition-colors"
+                    >
+                        Timeline
+                    </button>
                 </div>
             </div>
         </header>

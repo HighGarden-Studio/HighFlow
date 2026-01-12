@@ -6,6 +6,7 @@
  * Provides easy-to-use UI similar to AI Providers
  */
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
     useSettingsStore,
     type MCPServerConfig,
@@ -16,6 +17,7 @@ import IconRenderer from '../common/IconRenderer.vue';
 import MCPServerModal from './MCPServerModal.vue';
 
 const settingsStore = useSettingsStore();
+const { t } = useI18n();
 
 // State
 const selectedServer = ref<MCPServerConfig | null>(null);
@@ -113,16 +115,15 @@ function clearFilters() {
     <div class="mcp-servers-tab">
         <!-- Header -->
         <div class="mb-6">
-            <h2 class="text-xl font-bold text-white mb-2">MCP Servers</h2>
+            <h2 class="text-xl font-bold text-white mb-2">{{ t('settings.mcp.header') }}</h2>
             <p class="text-gray-400 text-sm">
-                Model Context Protocol 서버를 연동하여 AI가 다양한 도구를 사용할 수 있도록
-                설정합니다.
+                {{ t('settings.mcp.description') }}
                 <a
                     href="https://modelcontextprotocol.io"
                     target="_blank"
                     class="text-blue-400 hover:underline ml-1"
                 >
-                    MCP 문서 보기
+                    {{ t('settings.mcp.docs_link') }}
                 </a>
             </p>
         </div>
@@ -133,15 +134,15 @@ function clearFilters() {
                 <div class="text-2xl font-bold text-white">
                     {{ settingsStore.mcpServers.length }}
                 </div>
-                <div class="text-gray-400 text-sm">전체 서버</div>
+                <div class="text-gray-400 text-sm">{{ t('settings.mcp.stats.total') }}</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-green-400">{{ connectedCount }}</div>
-                <div class="text-gray-400 text-sm">연결됨</div>
+                <div class="text-gray-400 text-sm">{{ t('settings.mcp.stats.connected') }}</div>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="text-2xl font-bold text-blue-400">{{ enabledCount }}</div>
-                <div class="text-gray-400 text-sm">활성화</div>
+                <div class="text-gray-400 text-sm">{{ t('settings.mcp.stats.enabled') }}</div>
             </div>
         </div>
 
@@ -165,7 +166,7 @@ function clearFilters() {
                 <input
                     v-model="searchQuery"
                     type="text"
-                    placeholder="MCP 서버 검색..."
+                    :placeholder="t('settings.mcp.search_placeholder')"
                     class="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
             </div>
@@ -181,14 +182,14 @@ function clearFilters() {
                         selectedTags.includes(tag) ? 'bg-blue-600 text-white' : getTagColor(tag),
                     ]"
                 >
-                    {{ settingsStore.getMCPTagDisplayName(tag) }}
+                    {{ t(settingsStore.getMCPTagDisplayName(tag)) }}
                 </button>
                 <button
                     v-if="selectedTags.length > 0 || searchQuery"
                     @click="clearFilters"
                     class="px-3 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
                 >
-                    필터 초기화
+                    {{ t('settings.mcp.filter_reset') }}
                 </button>
             </div>
         </div>
@@ -221,10 +222,12 @@ function clearFilters() {
                             <span
                                 v-if="server.isConnected"
                                 class="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"
-                                title="연결됨"
+                                :title="t('settings.mcp.status.connected')"
                             />
                         </div>
-                        <p class="text-gray-400 text-xs line-clamp-2">{{ server.description }}</p>
+                        <p class="text-gray-400 text-xs line-clamp-2">
+                            {{ server.description ? t(server.description) : '' }}
+                        </p>
                     </div>
                 </div>
 
@@ -235,7 +238,7 @@ function clearFilters() {
                         :key="tag"
                         :class="['px-2 py-0.5 rounded text-xs', getTagColor(tag)]"
                     >
-                        {{ settingsStore.getMCPTagDisplayName(tag) }}
+                        {{ t(settingsStore.getMCPTagDisplayName(tag)) }}
                     </span>
                     <span
                         v-if="server.tags && server.tags.length > 3"
@@ -256,19 +259,23 @@ function clearFilters() {
                                     : 'bg-gray-700 text-gray-400',
                             ]"
                         >
-                            {{ server.isConnected ? '연결됨' : '미연결' }}
+                            {{
+                                server.isConnected
+                                    ? t('settings.mcp.status.connected')
+                                    : t('settings.mcp.status.disconnected')
+                            }}
                         </span>
                         <span
                             v-if="server.enabled && server.isConnected"
                             class="px-2 py-0.5 rounded text-xs bg-blue-900/30 text-blue-400"
                         >
-                            활성
+                            {{ t('settings.mcp.status.active') }}
                         </span>
                         <span
                             v-if="server.installed"
                             class="px-2 py-0.5 rounded text-xs bg-purple-900/30 text-purple-300"
                         >
-                            설치됨
+                            {{ t('settings.mcp.status.installed') }}
                         </span>
                     </div>
 
@@ -282,7 +289,7 @@ function clearFilters() {
                             target="_blank"
                             @click.stop
                             class="p-1 text-gray-400 hover:text-white transition-colors"
-                            title="문서"
+                            :title="t('settings.agents.actions.docs')"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -334,8 +341,8 @@ function clearFilters() {
                     d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
             </svg>
-            <p class="text-lg">검색 결과가 없습니다</p>
-            <p class="text-sm mt-1">다른 검색어나 필터를 시도해보세요</p>
+            <p class="text-lg">{{ t('settings.mcp.empty_state.title') }}</p>
+            <p class="text-sm mt-1">{{ t('settings.mcp.empty_state.message') }}</p>
         </div>
 
         <!-- Modal -->

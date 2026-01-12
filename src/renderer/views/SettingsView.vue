@@ -20,7 +20,7 @@ import IconRenderer from '../../components/common/IconRenderer.vue';
 import InitialSetupWizard from '../../components/setup/InitialSetupWizard.vue';
 import { useI18n } from 'vue-i18n';
 
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const currentLocale = computed({
     get: () => locale.value,
     set: (value) => {
@@ -54,7 +54,6 @@ const selectedProvider = computed(() => {
     return settingsStore.aiProviders.find((p) => p.id === selectedProviderId.value) || null;
 });
 const showProviderModal = ref(false);
-const _showExportModal = ref(false);
 const showImportModal = ref(false);
 const importData = ref('');
 const showSetupWizardFromSettings = ref(false);
@@ -202,7 +201,7 @@ function getModelCount(providerId: string): number {
 
 function getLastFetchTime(providerId: string): string {
     const fetchTime = settingsStore.getProviderModelsFetchTime(providerId);
-    if (!fetchTime) return '미조회';
+    if (!fetchTime) return 'Never';
 
     const now = Date.now();
     const diff = now - fetchTime.getTime();
@@ -210,10 +209,10 @@ function getLastFetchTime(providerId: string): string {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (minutes < 1) return '방금 전';
-    if (minutes < 60) return `${minutes}분 전`;
-    if (hours < 24) return `${hours}시간 전`;
-    return `${days}일 전`;
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} mins ago`;
+    if (hours < 24) return `${hours} hours ago`;
+    return `${days} days ago`;
 }
 
 async function refreshProviderModels(providerId: string) {
@@ -296,64 +295,64 @@ type TabId =
     | 'data'
     | 'help'; // Add help type
 
-const tabs: { id: TabId; label: string; icon: string; description?: string }[] = [
+const tabs = computed<{ id: TabId; label: string; icon: string; description?: string }[]>(() => [
     {
         id: 'general',
-        label: 'General',
+        label: t('settings.tabs.general'),
         icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
     },
     {
         id: 'ai',
-        label: 'AI Providers',
+        label: t('settings.tabs.ai'),
         icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
     },
     {
         id: 'mcp',
-        label: 'MCP Servers',
+        label: t('settings.tabs.mcp'),
         icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
     },
     {
         id: 'agents',
-        label: 'Local Agents',
+        label: t('settings.tabs.agents'),
         icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
     },
     {
         id: 'integrations',
-        label: 'Integrations',
+        label: t('settings.tabs.integrations'),
         icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1',
     },
     {
         id: 'shortcuts',
-        label: 'Shortcuts',
+        label: t('settings.tabs.shortcuts'),
         icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
     },
     {
         id: 'profile',
-        label: 'Profile',
+        label: t('settings.tabs.profile'),
         icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
     },
     {
         id: 'credits',
-        label: 'Credits',
+        label: t('settings.tabs.credits'),
         icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
     },
     {
         id: 'operators',
-        label: 'AI Operators',
+        label: t('settings.tabs.operators'),
         icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z',
         description: 'Manage AI agent presets',
     },
     {
         id: 'data',
-        label: 'Data',
+        label: t('settings.tabs.data'),
         icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4',
     },
     {
         id: 'help',
-        label: 'Help',
+        label: t('settings.tabs.help'),
         icon: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     },
-];
+]);
 </script>
 
 <template>
@@ -362,9 +361,11 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
         <header
             class="border-b border-gray-200 dark:border-gray-800 px-6 py-4 bg-white dark:bg-gray-900"
         >
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {{ t('settings.header.title') }}
+            </h1>
             <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                Configure your preferences and manage your account
+                {{ t('settings.header.subtitle') }}
             </p>
         </header>
 
@@ -405,9 +406,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
 
                 <!-- App Info -->
                 <div class="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                        Version {{ appInfo?.version || '0.1.0' }}
-                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Version 0.1.0</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                         {{ appInfo?.isDev ? 'Development' : 'Production' }}
                     </p>
@@ -421,16 +420,16 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                     <div v-if="activeTab === 'general'" class="space-y-6">
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Appearance
+                                {{ t('settings.general.appearance.title') }}
                             </h2>
                             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Theme
+                                            {{ t('settings.general.appearance.theme.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Choose your preferred color theme
+                                            {{ t('settings.general.appearance.theme.description') }}
                                         </p>
                                     </div>
                                     <div class="flex gap-2">
@@ -445,7 +444,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
                                             ]"
                                         >
-                                            {{ theme }}
+                                            {{ t('settings.general.appearance.theme.' + theme) }}
                                         </button>
                                     </div>
                                 </div>
@@ -454,16 +453,20 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
 
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Language
+                                {{ t('settings.general.appearance.language.title') }}
                             </h2>
                             <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Interface Language
+                                            {{ t('settings.general.appearance.language.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Select your preferred language
+                                            {{
+                                                t(
+                                                    'settings.general.appearance.language.description'
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                     <div class="flex gap-2">
@@ -490,7 +493,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
 
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Behavior
+                                {{ t('settings.general.behavior.title') }}
                             </h2>
                             <div
                                 class="bg-white dark:bg-gray-800 rounded-lg shadow-sm divide-y divide-gray-200 dark:divide-gray-700"
@@ -498,10 +501,12 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Auto-save
+                                            {{ t('settings.general.behavior.auto_save.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Automatically save changes
+                                            {{
+                                                t('settings.general.behavior.auto_save.description')
+                                            }}
                                         </p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -520,10 +525,14 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Show Task IDs
+                                            {{ t('settings.general.behavior.show_task_ids.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Display task IDs in the interface
+                                            {{
+                                                t(
+                                                    'settings.general.behavior.show_task_ids.description'
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -542,10 +551,18 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Enable Animations
+                                            {{
+                                                t(
+                                                    'settings.general.behavior.enable_animations.title'
+                                                )
+                                            }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Use animations and transitions
+                                            {{
+                                                t(
+                                                    'settings.general.behavior.enable_animations.description'
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -564,10 +581,14 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Compact Mode
+                                            {{ t('settings.general.behavior.compact_mode.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Reduce spacing for more content
+                                            {{
+                                                t(
+                                                    'settings.general.behavior.compact_mode.description'
+                                                )
+                                            }}
                                         </p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -581,34 +602,6 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                             class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
                                         ></div>
                                     </label>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Default View
-                            </h2>
-                            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
-                                <div class="grid grid-cols-4 gap-2">
-                                    <button
-                                        v-for="view in ['kanban', 'list', 'timeline', 'calendar']"
-                                        :key="view"
-                                        :class="[
-                                            'px-4 py-3 rounded-lg text-sm font-medium transition-colors capitalize',
-                                            settingsStore.generalSettings.defaultProjectView ===
-                                            view
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
-                                        ]"
-                                        @click="
-                                            settingsStore.updateGeneralSettings({
-                                                defaultProjectView: view as any,
-                                            })
-                                        "
-                                    >
-                                        {{ view }}
-                                    </button>
                                 </div>
                             </div>
                         </section>
@@ -653,14 +646,14 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                     <h3
                                         class="text-sm font-medium text-gray-700 dark:text-gray-300"
                                     >
-                                        기능별 필터
+                                        {{ t('settings.ai.filter_by_feature') }}
                                     </h3>
                                     <button
                                         v-if="selectedTags.length > 0"
                                         class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                         @click="clearTagFilter"
                                     >
-                                        필터 초기화
+                                        {{ t('settings.ai.clear_filter') }}
                                     </button>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
@@ -683,8 +676,11 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                     v-if="selectedTags.length > 0"
                                     class="mt-2 text-xs text-gray-500 dark:text-gray-400"
                                 >
-                                    {{ filteredProviders.length }}개의 Provider가 선택된 태그와
-                                    일치합니다
+                                    {{
+                                        t('settings.ai.providers_matching', {
+                                            count: filteredProviders.length,
+                                        })
+                                    }}
                                 </p>
                             </div>
 
@@ -828,7 +824,11 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                 "
                                                 :disabled="refreshingProviders.has(provider.id)"
                                                 class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                                                :title="`${provider.name} 모델 갱신`"
+                                                :title="
+                                                    t('settings.ai.update_models_title', {
+                                                        provider: provider.name,
+                                                    })
+                                                "
                                             >
                                                 <svg
                                                     v-if="!refreshingProviders.has(provider.id)"
@@ -866,8 +866,8 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                                 </svg>
                                                 {{
                                                     refreshingProviders.has(provider.id)
-                                                        ? '갱신 중'
-                                                        : '모델 갱신'
+                                                        ? t('settings.ai.updating')
+                                                        : t('settings.ai.update_models')
                                                 }}
                                             </button>
                                             <button
@@ -891,9 +891,13 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                         <div
                                             class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2"
                                         >
-                                            <span>모델: {{ getModelCount(provider.id) }}개</span>
+                                            <span>{{
+                                                t('settings.ai.model_count', {
+                                                    count: getModelCount(provider.id),
+                                                })
+                                            }}</span>
                                             <span
-                                                >마지막 갱신:
+                                                >{{ t('settings.ai.last_updated') }}
                                                 {{ getLastFetchTime(provider.id) }}</span
                                             >
                                         </div>
@@ -940,22 +944,14 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                         <OperatorsTab />
                     </div>
 
-                    <!-- Data -->
-                    <div v-if="activeTab === 'data'">
-                        <h2 class="text-2xl font-bold mb-4 text-text-primary">Data Management</h2>
-                        <div class="text-text-secondary">
-                            Data settings will be implemented here.
-                        </div>
-                    </div>
-
                     <!-- Keyboard Shortcuts -->
                     <div v-if="activeTab === 'shortcuts'" class="space-y-6">
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Keyboard Shortcuts
+                                {{ t('settings.shortcuts.title') }}
                             </h2>
                             <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                                Customize keyboard shortcuts for common actions
+                                {{ t('settings.shortcuts.description') }}
                             </p>
 
                             <div class="space-y-4">
@@ -1006,7 +1002,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                     <div v-if="activeTab === 'profile'">
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                User Profile
+                                {{ t('settings.profile.title') }}
                             </h2>
                             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
                                 <UserProfileSettings
@@ -1035,51 +1031,51 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Export Settings
+                                            {{ t('settings.data.export.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Download your settings as a JSON file
+                                            {{ t('settings.data.export.description') }}
                                         </p>
                                     </div>
                                     <button
                                         class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                                         @click="handleExportSettings"
                                     >
-                                        Export
+                                        {{ t('settings.data.export.button') }}
                                     </button>
                                 </div>
 
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Import Settings
+                                            {{ t('settings.data.import.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Load settings from a JSON file
+                                            {{ t('settings.data.import.description') }}
                                         </p>
                                     </div>
                                     <button
                                         class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                                         @click="showImportModal = true"
                                     >
-                                        Import
+                                        {{ t('settings.data.import.button') }}
                                     </button>
                                 </div>
 
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Reset to Defaults
+                                            {{ t('settings.data.reset.title') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Reset all settings to their default values
+                                            {{ t('settings.data.reset.description') }}
                                         </p>
                                     </div>
                                     <button
                                         class="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
                                         @click="handleResetSettings"
                                     >
-                                        Reset
+                                        {{ t('settings.data.reset.button') }}
                                     </button>
                                 </div>
                             </div>
@@ -1087,7 +1083,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
 
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                Setup Wizard
+                                {{ t('settings.data.wizard.title') }}
                             </h2>
                             <div
                                 class="bg-white dark:bg-gray-800 rounded-lg shadow-sm divide-y divide-gray-200 dark:divide-gray-700"
@@ -1095,13 +1091,13 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                 <div class="flex items-center justify-between p-4">
                                     <div>
                                         <h3 class="font-medium text-gray-900 dark:text-white">
-                                            Run Setup Wizard Again
+                                            {{ t('settings.data.wizard.run_again') }}
                                         </h3>
                                         <p class="text-sm text-gray-500 dark:text-gray-400">
                                             {{
                                                 settingsStore.setupWizard.completed
-                                                    ? '초기 설정 위자드를 다시 실행합니다'
-                                                    : '초기 설정 위자드가 아직 완료되지 않았습니다'
+                                                    ? t('settings.data.wizard.completed_msg')
+                                                    : t('settings.data.wizard.incomplete_msg')
                                             }}
                                         </p>
                                     </div>
@@ -1109,7 +1105,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                         class="px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                         @click="handleRunSetupWizard"
                                     >
-                                        Run Wizard
+                                        {{ t('settings.data.wizard.button') }}
                                     </button>
                                 </div>
 
@@ -1137,7 +1133,9 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                             />
                                         </svg>
                                         <span v-if="settingsStore.setupWizard.completed">
-                                            Setup completed on
+                                            {{
+                                                t('settings.data.wizard.completed_on', { date: '' })
+                                            }}
                                             {{
                                                 new Date(
                                                     settingsStore.setupWizard.completedAt || ''
@@ -1145,7 +1143,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                             }}
                                         </span>
                                         <span v-else-if="settingsStore.setupWizard.skipped">
-                                            Setup skipped on
+                                            {{ t('settings.data.wizard.skipped_on', { date: '' }) }}
                                             {{
                                                 new Date(
                                                     settingsStore.setupWizard.skippedAt || ''
@@ -1159,46 +1157,44 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
 
                         <section>
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                                About
+                                {{ t('settings.general.about.title') }}
                             </h2>
                             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
                                 <div class="space-y-3 text-sm">
                                     <div class="flex justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400"
-                                            >Application</span
-                                        >
+                                        <span class="text-gray-500 dark:text-gray-400">{{
+                                            t('settings.general.about.application')
+                                        }}</span>
                                         <span class="text-gray-900 dark:text-white font-medium"
                                             >HighFlow</span
                                         >
                                     </div>
                                     <div class="flex justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400"
-                                            >Version</span
-                                        >
-                                        <span class="text-gray-900 dark:text-white">{{
-                                            appInfo?.version || '0.1.0'
+                                        <span class="text-gray-500 dark:text-gray-400">{{
+                                            t('settings.general.about.version')
                                         }}</span>
+                                        <span class="text-gray-900 dark:text-white">0.1.0</span>
                                     </div>
                                     <div class="flex justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400"
-                                            >Platform</span
-                                        >
+                                        <span class="text-gray-500 dark:text-gray-400">{{
+                                            t('settings.general.about.platform')
+                                        }}</span>
                                         <span class="text-gray-900 dark:text-white capitalize">{{
                                             appInfo?.platform || 'unknown'
                                         }}</span>
                                     </div>
                                     <div class="flex justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400"
-                                            >Environment</span
-                                        >
+                                        <span class="text-gray-500 dark:text-gray-400">{{
+                                            t('settings.general.about.environment')
+                                        }}</span>
                                         <span class="text-gray-900 dark:text-white">{{
                                             appInfo?.isDev ? 'Development' : 'Production'
                                         }}</span>
                                     </div>
                                     <div class="flex justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400"
-                                            >Created by</span
-                                        >
+                                        <span class="text-gray-500 dark:text-gray-400">{{
+                                            t('settings.general.about.created_by')
+                                        }}</span>
                                         <span class="text-gray-900 dark:text-white font-medium"
                                             >HighGarden</span
                                         >
@@ -1208,8 +1204,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                                     class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
                                 >
                                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                                        HighFlow is an AI Workflow management tool that helps you
-                                        automate and streamline your AI-powered workflows.
+                                        {{ t('settings.general.about.description') }}
                                     </p>
                                 </div>
                             </div>
@@ -1241,7 +1236,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                 >
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                            Import Settings
+                            {{ t('settings.data.import.modal_title') }}
                         </h3>
                     </div>
                     <div class="p-6">
@@ -1249,7 +1244,7 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                             v-model="importData"
                             rows="10"
                             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
-                            placeholder="Paste your settings JSON here..."
+                            :placeholder="t('settings.data.import.placeholder')"
                         />
                     </div>
                     <div
@@ -1259,13 +1254,13 @@ const tabs: { id: TabId; label: string; icon: string; description?: string }[] =
                             class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                             @click="showImportModal = false"
                         >
-                            Cancel
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                             @click="handleImportSettings"
                         >
-                            Import
+                            {{ t('settings.data.import.button') }}
                         </button>
                     </div>
                 </div>

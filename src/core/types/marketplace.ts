@@ -134,6 +134,11 @@ export interface MarketplaceSubmission {
     previewGraph?: any;
     previewImages?: File[];
     icon?: File | null; // Main icon file
+    accessControl?: {
+        type: 'public' | 'restricted';
+        allowedEmails?: string[];
+        allowedDomains?: string[];
+    };
 }
 
 /**

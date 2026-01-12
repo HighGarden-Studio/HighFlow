@@ -1,4 +1,5 @@
-export const helpDocs = `
+export const helpDocs = {
+    ko: `
 # HighFlow 도움말 가이드
 
 HighFlow는 AI 기반의 지능형 워크플로우 관리자입니다. 복잡한 개발 작업을 구조화된 태스크로 나누고, 다양한 AI 모델과 도구를 활용하여 효율적으로 실행할 수 있습니다.
@@ -201,4 +202,209 @@ A. MCP는 AI가 여러분의 컴퓨터나 외부 서비스와 대화할 수 있�
 
 **Q. 태스크가 자동으로 실행되지 않아요.**
 A. 트리거 설정(Dependency 또는 Schedule)이 올바른지 확인하세요. 의존성 태스크가 '완료(Completed)' 상태여야 다음 태스크가 실행됩니다.
-`;
+`,
+    en: `
+# HighFlow Help Guide
+
+HighFlow is an AI-based intelligent workflow manager. It allows you to break down complex development tasks into structured units and execute them efficiently using various AI models and tools.
+
+This guide provides detailed instructions to fully utilize HighFlow's features.
+
+---
+
+## 📚 Table of Contents
+
+1. [Getting Started](#getting-started)
+2. [Core Concepts](#core-concepts)
+3. [Project Settings](#project-settings)
+4. [Task Management & Settings](#task-settings)
+5. [AI Provider Settings](#ai-provider-settings)
+6. [MCP Settings](#mcp-settings)
+7. [Local Agents](#local-agents)
+8. [FAQ](#faq)
+
+---
+
+## 🚀 1. Getting Started <a id="getting-started"></a>
+
+New to HighFlow? Start your project in a few simple steps.
+
+### Step 1: Create a Project
+1. Click the **"+ New Project"** button at the top right of the main screen.
+2. Enter the **Project Name** and **Initial Prompt**.
+3. Select the **AI Model** to use (Default: Google Gemini).
+4. Click the **"Create"** button to start.
+
+### Step 2: Add Tasks
+1. Click the **"+ Add Task"** button on the project board.
+2. Enter the **Title** and **Description** for the task.
+3. Configure the **AI Model** or **Tools** if necessary.
+
+### Step 3: Execute and Review
+1. Click the **"▶ Run"** button on the task card.
+2. Watch the AI execute the task in real-time.
+3. Review the results, make edits, or proceed to the next step.
+
+---
+
+## 💡 2. Core Concepts <a id="core-concepts"></a>
+
+Key terms to help you understand how HighFlow works.
+
+| Concept | Description |
+|---|---|
+| **Project** | A workspace to achieve a specific goal. Contains multiple tasks, settings, and files. |
+| **Task** | The smallest executable unit. Can have individual prompts, AI settings, and tools. |
+| **Workflow** | A structured sequence of tasks connected by dependencies (e.g., Plan -> Dev -> Test). |
+| **MCP** | Standard protocol for AI to interact with external data/tools (Git, DB, filesystem, etc.). |
+| **Local Agent** | AI coding tools running directly in your terminal environment (e.g., Claude Code). |
+
+\`\`\`mermaid
+graph LR
+    P[Project] --> T1[Task 1: Plan]
+    T1 --> T2[Task 2: Develop]
+    T2 --> T3[Task 3: Test]
+    T2 -.-> MCP[MCP Tools]
+    T2 -.-> AI[AI Model]
+\`\`\`
+
+---
+
+## ⚙️ 3. Project Settings <a id="project-settings"></a>
+
+Manage project-wide settings in the **"Project Info"** panel on the dashboard.
+
+### 1. Basic Info (Metadata)
+*   **Title & Emoji**: Set a name and icon to identify the project. Click the pencil icon to edit.
+*   **Main Prompt**: Enter the overall context or common instructions for the project. All tasks reference this context.
+*   **Goal**: Specify the final objective of the project. Useful for tracking progress.
+
+### 2. Guidelines
+*   **AI Guidelines**: Define rules that all AI agents in the project must follow.
+    *   *Example: "Write all code in TypeScript.", "Follow functional programming style."*
+*   **Base Folder**: Set the root directory where the project reads/writes files. **Required**.
+
+### 3. AI Settings
+*   **Default Provider**: Select the default AI model for the project. Tasks use this unless overridden.
+    *   *API Mode*: Use cloud APIs (OpenAI, Anthropic, Gemini, etc.).
+    *   *Local Mode*: Use local agents (Claude Code, etc.) as default.
+
+### 4. Auto Review
+*   **Review Provider**: Set the AI model to automatically review results after task completion.
+*   **How to Set**: Click the edit button in the "Auto Review" section.
+
+### 5. Output Configuration
+*   **Output Type**: Specify the expected output format of the project (Web, Document, Code, etc.).
+*   **Open Output**: Open the specified output folder in the file explorer.
+
+---
+
+## ✅ 4. Task Management & Settings <a id="task-settings"></a>
+
+Control everything about a specific task in the **Task Detail Panel** that appears when you click a task.
+
+### 1. Prompt & Execution
+*   **Prompt Editor**: Write instructions for the AI. Use macros (\`{}\`) to insert reusable text.
+*   **AI Provider Override**: Select a specific AI model for this task, overriding project defaults.
+    *   *Example: GPT-4o for coding, Claude 3 sonnet for creative writing.*
+*   **Execution Mode**: Choose between API Mode and Local Mode.
+
+### 2. Triggers & Dependencies
+Set conditions for automatic task execution.
+*   **Dependency**: Automatically start when other tasks complete.
+    *   *Depends On*: Enter the ID of the prerequisite task.
+    *   *Operator*: \`ALL\` (when all complete), \`ANY\` (when any completes).
+*   **Scheduled**: Execute at a specific time.
+    *   *Once*: Run once at a specific date/time.
+    *   *Recurring (Cron)*: Run periodically (e.g., \`0 9 * * *\` every day at 9 AM).
+
+### 3. Tools & Context
+*   **MCP Tools**: Select tools to use in this task (e.g., \`filesystem\`, \`git\`, \`brave-search\`).
+*   **Context Files**: Attach files for the AI to reference during execution.
+
+### 4. Details Tab
+*   **Priority**: Set task priority (Low ~ Critical).
+*   **Tags**: Add tags to categorize the task.
+*   **Output Format**: Specify the expected output format (Markdown, JSON, Code, etc.).
+
+### 5. History
+*   **Execution Log**: View execution history and conversation with the AI.
+*   **Versions**: Compare and restore previous execution results.
+
+---
+
+## 🤖 5. AI Provider Settings <a id="ai-provider-settings"></a>
+
+Connect and manage AI models in **Settings > AI**.
+
+### Supported Providers
+*   **Major**: OpenAI, Anthropic, Google Gemini (Vertex AI), Azure OpenAI
+*   **Local**: Ollama, LM Studio
+*   **Others**: Mistral, Cohere, Groq, Perplexity, OpenRouter, HuggingFace, etc.
+
+### How to Configure
+1. **API Key**:
+    *   Click the link to get the API key for the service.
+    *   Paste the key into the "API Key" field and click **"Validate"**.
+2. **OAuth** (if supported):
+    *   Click **"Connect with OAuth"** to login and connect securely.
+3. **Local AI**:
+    *   Ensure your local server is running.
+    *   Enter the Base URL (e.g., \`http://localhost:11434\`) and test the connection.
+
+---
+
+## 🔌 6. MCP (Model Context Protocol) Settings <a id="mcp-settings"></a>
+
+Configure servers that extend AI capabilities in **Settings > MCP Servers**.
+
+### Key MCP Servers and Features
+*   **Filesystem**: Read/write/create/modify local files (restricted paths only).
+*   **Git**: Check repo status, commit, manage branches.
+*   **Brave Search**: Real-time web search and information gathering.
+*   **Database**: Execute queries on SQLite, PostgreSQL databases.
+*   **External Apps**: Integration with Jira, Confluence, Slack, GitHub, Google Drive.
+
+### How to Configure
+1. Click **"Configure"** on the server card.
+2. Enter **Required Info** (e.g., API Token, file path, DB connection).
+3. Click **"Connect"** to verify status.
+4. **Local Install**: Some servers (like Brave Search) allow auto-installation via the **"Install"** button.
+
+---
+
+## 💻 7. Local Agents <a id="local-agents"></a>
+
+Manage terminal-based AI coding tools in **Settings > Local Agents**.
+
+### Features
+*   Uses your terminal environment directly, reflecting your development setup perfectly.
+*   Powerful for complex refactoring or project-wide changes.
+
+### Supported Agents
+*   **Claude Code**: Anthropic’s powerful coding agent.
+*   **Codex**: OpenAI coding agent leveraging GPT-5.x-codex.
+
+### How to Use
+1. Open **AI Settings** for a project or task.
+2. Change Provider to **"Local Mode"**.
+3. Select the local agent to use.
+4. When executed, a terminal opens and the agent performs the task.
+
+---
+
+## ❓ 8. FAQ <a id="faq"></a>
+
+**Q. Where do I get an API Key?**
+A. You can go to the official site via the "Get your API key" link in each AI Provider settings screen.
+
+**Q. How do I use local models?**
+A. Install and run Ollama or LM Studio, then enable Local Provider in the settings menu. Then select Local Mode in your project settings.
+
+**Q. What is MCP?**
+A. MCP is an interpreter that allows AI to talk to your computer or external services. For example, for AI to search the internet or modify files, the corresponding MCP server must be running.
+
+**Q. Task does not start automatically.**
+A. Check your trigger settings (Dependency or Schedule). The prerequisite task must be 'Completed' for the next task to start.
+`,
+};

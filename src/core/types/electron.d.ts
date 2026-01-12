@@ -89,6 +89,9 @@ export interface AppAPI {
     getInfo: () => Promise<AppInfo>;
     getPaths: () => Promise<AppPaths>;
     getVersion: () => Promise<string>;
+    onNotification: (
+        callback: (data: { type: string; message: string; duration?: number }) => void
+    ) => () => void;
 }
 
 export interface WindowAPI {

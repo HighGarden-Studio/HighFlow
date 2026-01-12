@@ -5,13 +5,15 @@
  * Modal for configuring MCP server settings
  */
 import { ref, computed, watch } from 'vue';
-import type {
-    MCPServerConfig,
-    MCPServerTag,
-    MCPPermissionId,
+import { useI18n } from 'vue-i18n';
+import {
+    useSettingsStore,
+    type MCPServerConfig,
+    type MCPServerTag,
+    type MCPPermissionId,
+    type MCPPermissionMap,
+    MCP_PERMISSION_DEFINITIONS,
 } from '../../renderer/stores/settingsStore';
-import { MCP_PERMISSION_DEFINITIONS } from '../../renderer/stores/settingsStore';
-import { useSettingsStore } from '../../renderer/stores/settingsStore';
 
 interface Props {
     server: MCPServerConfig | null;
@@ -20,6 +22,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const settingsStore = useSettingsStore();
+const { t } = useI18n();
 
 const emit = defineEmits<{
     (e: 'close'): void;
@@ -32,7 +35,14 @@ const form = ref({
     command: '',
     args: [] as string[],
     config: {} as Record<string, any>,
-    permissions: {} as Record<string, boolean>,
+    permissions: {
+        read: false,
+        write: false,
+        delete: false,
+        execute: false,
+        network: false,
+        secrets: false,
+    } as MCPPermissionMap,
     scopes: [] as string[],
 });
 
@@ -47,10 +57,10 @@ const installLog = ref('');
 const featureSelections = ref<Record<string, boolean>>({});
 const permissionDefinitions = MCP_PERMISSION_DEFINITIONS;
 const permissionCategoryLabels: Record<string, string> = {
-    filesystem: '파일 시스템',
-    system: '시스템',
-    network: '네트워크',
-    data: '데이터',
+    filesystem: 'settings.mcp.modal.permissions.category.filesystem',
+    system: 'settings.mcp.modal.permissions.category.system',
+    network: 'settings.mcp.modal.permissions.category.network',
+    data: 'settings.mcp.modal.permissions.category.data',
 };
 
 const hasFeatureScopes = computed(() => (props.server?.featureScopes?.length || 0) > 0);
@@ -179,7 +189,7 @@ const configFields = computed(() => {
         filesystem: [
             {
                 key: 'allowedPaths',
-                label: '허용된 경로 (콤마로 구분)',
+                label: t('settings.mcp.modal.config.filesystem.allowedPaths'),
                 type: 'text',
                 placeholder: '/path/to/dir1, /path/to/dir2',
             },
@@ -187,7 +197,7 @@ const configFields = computed(() => {
         git: [
             {
                 key: 'repository',
-                label: '저장소 경로',
+                label: t('settings.mcp.modal.config.git.repository'),
                 type: 'text',
                 placeholder: '/path/to/repository',
                 required: true,
@@ -196,21 +206,21 @@ const configFields = computed(() => {
         jira: [
             {
                 key: 'baseUrl',
-                label: 'Jira URL',
+                label: t('settings.mcp.modal.config.jira.baseUrl'),
                 type: 'url',
                 placeholder: 'https://your-domain.atlassian.net',
                 required: true,
             },
             {
                 key: 'username',
-                label: '사용자 이메일',
+                label: t('settings.mcp.modal.config.jira.username'),
                 type: 'text',
                 placeholder: 'your@email.com',
                 required: true,
             },
             {
                 key: 'token',
-                label: 'API Token',
+                label: t('settings.mcp.modal.config.jira.token'),
                 type: 'password',
                 placeholder: 'Your Jira API token',
                 required: true,
@@ -219,21 +229,21 @@ const configFields = computed(() => {
         confluence: [
             {
                 key: 'baseUrl',
-                label: 'Confluence URL',
+                label: t('settings.mcp.modal.config.confluence.baseUrl'),
                 type: 'url',
                 placeholder: 'https://your-domain.atlassian.net',
                 required: true,
             },
             {
                 key: 'username',
-                label: '사용자 이메일',
+                label: t('settings.mcp.modal.config.confluence.username'),
                 type: 'text',
                 placeholder: 'your@email.com',
                 required: true,
             },
             {
                 key: 'token',
-                label: 'API Token',
+                label: t('settings.mcp.modal.config.confluence.token'),
                 type: 'password',
                 placeholder: 'Your Confluence API token',
                 required: true,
@@ -242,21 +252,21 @@ const configFields = computed(() => {
         aws: [
             {
                 key: 'region',
-                label: 'AWS Region',
+                label: t('settings.mcp.modal.config.aws.region'),
                 type: 'text',
                 placeholder: 'us-east-1',
                 required: true,
             },
             {
                 key: 'accessKeyId',
-                label: 'Access Key ID',
+                label: t('settings.mcp.modal.config.aws.accessKeyId'),
                 type: 'text',
                 placeholder: 'AKIA...',
                 required: true,
             },
             {
                 key: 'secretAccessKey',
-                label: 'Secret Access Key',
+                label: t('settings.mcp.modal.config.aws.secretAccessKey'),
                 type: 'password',
                 placeholder: 'Your secret key',
                 required: true,
@@ -265,16 +275,21 @@ const configFields = computed(() => {
         kubernetes: [
             {
                 key: 'kubeconfig',
-                label: 'Kubeconfig 경로',
+                label: t('settings.mcp.modal.config.kubernetes.kubeconfig'),
                 type: 'text',
                 placeholder: '~/.kube/config',
             },
-            { key: 'context', label: 'Context (선택)', type: 'text', placeholder: 'default' },
+            {
+                key: 'context',
+                label: t('settings.mcp.modal.config.kubernetes.context'),
+                type: 'text',
+                placeholder: 'default',
+            },
         ],
         sqlite: [
             {
                 key: 'dbPath',
-                label: '데이터베이스 경로',
+                label: t('settings.mcp.modal.config.sqlite.dbPath'),
                 type: 'text',
                 placeholder: '/path/to/database.db',
                 required: true,
@@ -283,7 +298,7 @@ const configFields = computed(() => {
         postgres: [
             {
                 key: 'connectionString',
-                label: 'Connection String',
+                label: t('settings.mcp.modal.config.postgres.connectionString'),
                 type: 'password',
                 placeholder: 'postgresql://user:pass@host:5432/db',
                 required: true,
@@ -292,7 +307,7 @@ const configFields = computed(() => {
         'brave-search': [
             {
                 key: 'apiKey',
-                label: 'Brave Search API Key',
+                label: t('settings.mcp.modal.config.brave_search.apiKey'),
                 type: 'password',
                 placeholder: 'Your Brave Search API key',
                 required: true,
@@ -301,17 +316,22 @@ const configFields = computed(() => {
         'github-mcp': [
             {
                 key: 'token',
-                label: 'GitHub Personal Access Token',
+                label: t('settings.mcp.modal.config.github_mcp.token'),
                 type: 'password',
                 placeholder: 'ghp_...',
                 required: true,
             },
         ],
         'gitlab-mcp': [
-            { key: 'baseUrl', label: 'GitLab URL', type: 'url', placeholder: 'https://gitlab.com' },
+            {
+                key: 'baseUrl',
+                label: t('settings.mcp.modal.config.gitlab_mcp.baseUrl'),
+                type: 'url',
+                placeholder: 'https://gitlab.com',
+            },
             {
                 key: 'token',
-                label: 'GitLab Access Token',
+                label: t('settings.mcp.modal.config.gitlab_mcp.token'),
                 type: 'password',
                 placeholder: 'glpat-...',
                 required: true,
@@ -320,7 +340,7 @@ const configFields = computed(() => {
         'slack-mcp': [
             {
                 key: 'token',
-                label: 'Slack Bot Token',
+                label: t('settings.mcp.modal.config.slack_mcp.token'),
                 type: 'password',
                 placeholder: 'xoxb-...',
                 required: true,
@@ -329,7 +349,7 @@ const configFields = computed(() => {
         'notion-mcp': [
             {
                 key: 'token',
-                label: 'Notion Integration Token',
+                label: t('settings.mcp.modal.config.notion_mcp.token'),
                 type: 'password',
                 placeholder: 'secret_...',
                 required: true,
@@ -338,14 +358,14 @@ const configFields = computed(() => {
         'google-drive': [
             {
                 key: 'clientId',
-                label: 'Google Client ID',
+                label: t('settings.mcp.modal.config.google_drive.clientId'),
                 type: 'text',
                 placeholder: 'Your Google OAuth Client ID',
                 required: true,
             },
             {
                 key: 'clientSecret',
-                label: 'Google Client Secret',
+                label: t('settings.mcp.modal.config.google_drive.clientSecret'),
                 type: 'password',
                 placeholder: 'Your Google OAuth Client Secret',
                 required: true,
@@ -354,14 +374,14 @@ const configFields = computed(() => {
         sentry: [
             {
                 key: 'authToken',
-                label: 'Sentry Auth Token',
+                label: t('settings.mcp.modal.config.sentry.authToken'),
                 type: 'password',
                 placeholder: 'Your Sentry auth token',
                 required: true,
             },
             {
                 key: 'organization',
-                label: 'Organization Slug',
+                label: t('settings.mcp.modal.config.sentry.organization'),
                 type: 'text',
                 placeholder: 'your-org',
                 required: true,
@@ -429,11 +449,14 @@ async function handleConnect() {
         // Try to connect
         await settingsStore.connectMCPServer(props.server.id);
         connectionResult.value = 'success';
-        connectionMessage.value = 'MCP 서버에 연결되었습니다!';
+        connectionMessage.value = t('settings.mcp.modal.status.connection_success');
         form.value.enabled = true;
     } catch (error) {
         connectionResult.value = 'error';
-        connectionMessage.value = error instanceof Error ? error.message : '연결 실패';
+        connectionMessage.value =
+            error instanceof Error
+                ? error.message
+                : t('settings.mcp.modal.status.connection_failed');
     } finally {
         isConnecting.value = false;
     }
@@ -459,11 +482,12 @@ async function handleInstall() {
     try {
         const result = await settingsStore.installMCPServer(props.server.id);
         installResult.value = 'success';
-        installMessage.value = '설치가 완료되었습니다.';
+        installMessage.value = t('settings.mcp.modal.status.install_success');
         installLog.value = result.stdout || result.stderr || '';
     } catch (error) {
         installResult.value = 'error';
-        installMessage.value = error instanceof Error ? error.message : '설치에 실패했습니다.';
+        installMessage.value =
+            error instanceof Error ? error.message : t('settings.mcp.modal.status.install_failed');
         installLog.value = '';
     } finally {
         isInstalling.value = false;
@@ -556,7 +580,7 @@ function resetFeatureScopes() {
 
 // Helper to get tag display
 function getTagLabel(tag: MCPServerTag): string {
-    return settingsStore.getMCPTagDisplayName(tag);
+    return t(settingsStore.getMCPTagDisplayName(tag));
 }
 </script>
 
@@ -601,7 +625,7 @@ function getTagLabel(tag: MCPServerTag): string {
                                         {{ server.name }}
                                     </h2>
                                     <p class="text-sm text-gray-500 dark:text-gray-400">
-                                        {{ server.description }}
+                                        {{ server.description ? t(server.description) : '' }}
                                     </p>
                                 </div>
                                 <!-- Server Links -->
@@ -611,7 +635,7 @@ function getTagLabel(tag: MCPServerTag): string {
                                         :href="server.website"
                                         target="_blank"
                                         class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                        title="문서 보기"
+                                        :title="t('settings.agents.actions.docs')"
                                     >
                                         <svg
                                             class="w-5 h-5"
@@ -632,7 +656,7 @@ function getTagLabel(tag: MCPServerTag): string {
                                         :href="server.repository"
                                         target="_blank"
                                         class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                        title="소스 코드"
+                                        title="GitHub"
                                     >
                                         <svg
                                             class="w-5 h-5"
@@ -704,7 +728,9 @@ function getTagLabel(tag: MCPServerTag): string {
                                             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                                         />
                                     </svg>
-                                    <span class="font-medium">연결됨</span>
+                                    <span class="font-medium">{{
+                                        t('settings.mcp.modal.status.connected')
+                                    }}</span>
                                     <span
                                         v-if="server.lastValidated"
                                         class="text-sm text-green-600 dark:text-green-400 ml-auto"
@@ -724,23 +750,26 @@ function getTagLabel(tag: MCPServerTag): string {
                                         <p
                                             class="text-sm font-medium text-gray-900 dark:text-white"
                                         >
-                                            로컬 설치
+                                            {{ t('settings.mcp.modal.install.local_install') }}
                                         </p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            필요한 CLI 도구를 자동으로 설치하고 버전을 최신으로
-                                            유지합니다.
+                                            {{ t('settings.mcp.modal.install.description') }}
                                         </p>
                                         <p
                                             v-if="lastInstalledAt"
                                             class="text-xs text-gray-500 dark:text-gray-400 mt-1"
                                         >
-                                            마지막 설치: {{ lastInstalledAt }}
+                                            {{
+                                                t('settings.mcp.modal.install.last_installed', {
+                                                    date: lastInstalledAt,
+                                                })
+                                            }}
                                         </p>
                                         <p
                                             v-else
                                             class="text-xs text-amber-600 dark:text-amber-400 mt-1"
                                         >
-                                            설치 완료 후에만 연결 테스트가 가능합니다.
+                                            {{ t('settings.mcp.modal.install.warning_connect') }}
                                         </p>
                                     </div>
                                     <button
@@ -751,10 +780,10 @@ function getTagLabel(tag: MCPServerTag): string {
                                     >
                                         {{
                                             isInstalling
-                                                ? '설치 중...'
+                                                ? t('settings.mcp.modal.install.button_installing')
                                                 : server.installed
-                                                  ? '재설치'
-                                                  : '설치'
+                                                  ? t('settings.mcp.modal.install.button_reinstall')
+                                                  : t('settings.mcp.modal.install.button_install')
                                         }}
                                     </button>
                                 </div>
@@ -779,13 +808,13 @@ function getTagLabel(tag: MCPServerTag): string {
                             <!-- Command & Args (advanced) -->
                             <div class="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    실행 설정
+                                    {{ t('settings.mcp.modal.execution.title') }}
                                 </h4>
 
                                 <div>
                                     <label
                                         class="block text-sm text-gray-600 dark:text-gray-400 mb-1"
-                                        >Command</label
+                                        >{{ t('settings.mcp.modal.execution.command') }}</label
                                     >
                                     <input
                                         v-model="form.command"
@@ -798,7 +827,7 @@ function getTagLabel(tag: MCPServerTag): string {
                                 <div>
                                     <label
                                         class="block text-sm text-gray-600 dark:text-gray-400 mb-1"
-                                        >Arguments</label
+                                        >{{ t('settings.mcp.modal.execution.args') }}</label
                                     >
                                     <input
                                         v-model="argsString"
@@ -806,16 +835,13 @@ function getTagLabel(tag: MCPServerTag): string {
                                         :placeholder="server.args?.join(' ') || '-y @mcp/server'"
                                         class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     />
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        공백으로 구분하여 입력
-                                    </p>
                                 </div>
                             </div>
 
                             <!-- Configuration Fields -->
                             <div v-if="configFields.length > 0" class="space-y-4">
                                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    설정
+                                    {{ t('settings.mcp.modal.config.title') }}
                                 </h4>
 
                                 <div
@@ -848,14 +874,14 @@ function getTagLabel(tag: MCPServerTag): string {
                                     <h4
                                         class="text-sm font-medium text-gray-700 dark:text-gray-300"
                                     >
-                                        권한 설정
+                                        {{ t('settings.mcp.modal.permissions.title') }}
                                     </h4>
                                     <button
                                         type="button"
                                         class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                         @click="resetPermissions"
                                     >
-                                        기본값 복원
+                                        {{ t('settings.mcp.filter_reset') }}
                                     </button>
                                 </div>
                                 <div class="space-y-3">
@@ -868,8 +894,10 @@ function getTagLabel(tag: MCPServerTag): string {
                                             class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide"
                                         >
                                             {{
-                                                permissionCategoryLabels[group.category] ||
-                                                group.category
+                                                t(
+                                                    permissionCategoryLabels[group.category] ||
+                                                        group.category
+                                                )
                                             }}
                                         </p>
                                         <div class="grid grid-cols-1 gap-2">
@@ -1040,10 +1068,14 @@ function getTagLabel(tag: MCPServerTag): string {
                             >
                                 <div>
                                     <p class="text-sm font-medium text-gray-900 dark:text-white">
-                                        {{ server.name }} 활성화
+                                        {{
+                                            t('settings.mcp.modal.enable_toggle.label', {
+                                                name: server.name,
+                                            })
+                                        }}
                                     </p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                                        이 MCP 서버를 태스크에서 사용할 수 있도록 활성화
+                                        {{ t('settings.mcp.modal.enable_toggle.description') }}
                                     </p>
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
@@ -1071,7 +1103,7 @@ function getTagLabel(tag: MCPServerTag): string {
                                     class="px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors text-sm"
                                     @click="handleDisconnect"
                                 >
-                                    연결 해제
+                                    {{ t('settings.mcp.modal.buttons.disconnect') }}
                                 </button>
                                 <button
                                     v-else
@@ -1084,7 +1116,11 @@ function getTagLabel(tag: MCPServerTag): string {
                                     "
                                     @click="handleConnect"
                                 >
-                                    {{ isConnecting ? '연결 중...' : '연결 테스트' }}
+                                    {{
+                                        isConnecting
+                                            ? t('settings.mcp.modal.status.connecting')
+                                            : t('settings.mcp.modal.buttons.test_connection')
+                                    }}
                                 </button>
                             </div>
                             <div class="flex gap-2">
@@ -1093,14 +1129,14 @@ function getTagLabel(tag: MCPServerTag): string {
                                     class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                     @click="handleClose"
                                 >
-                                    취소
+                                    {{ t('settings.mcp.modal.buttons.cancel') }}
                                 </button>
                                 <button
                                     type="button"
                                     class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                                     @click="handleSave"
                                 >
-                                    저장
+                                    {{ t('settings.mcp.modal.buttons.save') }}
                                 </button>
                             </div>
                         </div>

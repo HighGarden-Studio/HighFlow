@@ -7,6 +7,9 @@ import { ref, computed } from 'vue';
 import { marketplaceAPI } from '../../api/marketplace';
 import type { MarketplaceCategory, ItemType } from '../../../core/types/marketplace';
 import { useToast } from 'vue-toastification';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
     show: boolean;
@@ -32,6 +35,10 @@ const notes = ref('');
 const selectedFiles = ref<File[]>([]);
 const previewUrls = ref<string[]>([]);
 const tagsInput = ref('');
+// Access Control
+const visibility = ref<'public' | 'restricted'>('public');
+const allowedEmails = ref('');
+const allowedDomains = ref('');
 
 // Computed
 const isValid = computed(() => {
@@ -110,14 +117,33 @@ async function submit() {
             .map((t) => t.trim())
             .filter((t) => t);
 
+        // Process Access Control
+        const emailList = allowedEmails.value
+            .split(',')
+            .map((e) => e.trim())
+            .filter((e) => e);
+        const domainList = allowedDomains.value
+            .split(',')
+            .map((d) => d.trim())
+            .filter((d) => d);
+
+        const accessControl = {
+            type: visibility.value,
+            allowedEmails: visibility.value === 'restricted' ? emailList : [],
+            allowedDomains: visibility.value === 'restricted' ? domainList : [],
+        };
+
         await marketplaceAPI.submitToMarketplace({
-            workflowId: props.initialData.workflowId,
+            itemId: props.initialData.workflowId,
+            name: props.initialData.title,
+            description: props.initialData.description,
             itemType: props.initialData.itemType,
             category: category.value,
             suggestedPrice: price.value,
             clientVersion: version.value,
             submissionNote: notes.value,
             tags: tags,
+            accessControl: accessControl,
             previewImages: selectedFiles.value,
             // previewGraph: TODO: capture graph state if possible, currently optional
         });
@@ -146,7 +172,7 @@ async function submit() {
         >
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b border-gray-800">
-                <h2 class="text-xl font-bold text-white">Publish to Marketplace</h2>
+                <h2 class="text-xl font-bold text-white">{{ t('marketplace.publish.title') }}</h2>
                 <button @click="close" class="text-gray-400 hover:text-white transition-colors">
                     <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
@@ -228,6 +254,76 @@ async function submit() {
                             placeholder="ai, automation, helper (comma separated)"
                             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                         />
+                    </div>
+                </div>
+
+                <!-- Access Control Section -->
+                <div class="space-y-3 pt-4 border-t border-gray-800">
+                    <h3 class="text-sm font-medium text-gray-300">
+                        {{ t('marketplace.publish.access_control.title') }}
+                    </h3>
+
+                    <!-- Visibility Type -->
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="radio"
+                                v-model="visibility"
+                                value="public"
+                                class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
+                            />
+                            <span class="text-sm text-gray-300">{{
+                                t('marketplace.publish.access_control.public')
+                            }}</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="radio"
+                                v-model="visibility"
+                                value="restricted"
+                                class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
+                            />
+                            <span class="text-sm text-gray-300">{{
+                                t('marketplace.publish.access_control.restricted')
+                            }}</span>
+                        </label>
+                    </div>
+
+                    <!-- Restricted Options -->
+                    <div v-if="visibility === 'restricted'" class="space-y-3 pl-1 pt-2">
+                        <!-- Allowed Emails -->
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-gray-400">{{
+                                t('marketplace.publish.access_control.emails')
+                            }}</label>
+                            <input
+                                v-model="allowedEmails"
+                                type="text"
+                                :placeholder="
+                                    t('marketplace.publish.access_control.emails_placeholder')
+                                "
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                            />
+                        </div>
+
+                        <!-- Allowed Domains -->
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-gray-400">
+                                {{ t('marketplace.publish.access_control.domains') }}
+                                <span class="text-gray-500 font-normal ml-1"
+                                    >-
+                                    {{ t('marketplace.publish.access_control.domains_hint') }}</span
+                                >
+                            </label>
+                            <input
+                                v-model="allowedDomains"
+                                type="text"
+                                :placeholder="
+                                    t('marketplace.publish.access_control.domains_placeholder')
+                                "
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                            />
+                        </div>
                     </div>
                 </div>
 

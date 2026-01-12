@@ -12,8 +12,7 @@
  */
 
 import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { getAPI } from '../../utils/electron';
+import { useI18n } from 'vue-i18n';
 import IconRenderer from '../common/IconRenderer.vue';
 import {
     useSettingsStore,
@@ -37,47 +36,50 @@ const emit = defineEmits<{
 // Store
 const settingsStore = useSettingsStore();
 
+// I18n
+const { t } = useI18n();
+
 // ========================================
 // Wizard Steps
 // ========================================
 
 type WizardStep = 'welcome' | 'profile' | 'ai-provider' | 'preferences' | 'projects' | 'complete';
 
-const STEPS: { id: WizardStep; title: string; description: string; required: boolean }[] = [
-    {
-        id: 'welcome',
-        title: '환영합니다',
-        description: 'HighFlow 시작하기',
-        required: true,
-    },
-    {
-        id: 'profile',
-        title: '프로필 설정',
-        description: '기본 사용자 정보를 설정합니다',
-        required: true,
-    },
-    { id: 'ai-provider', title: 'AI 연동', description: 'AI 서비스를 연결합니다', required: true },
-    {
-        id: 'preferences',
-        title: '환경 설정',
-        description: '작업 환경을 맞춤 설정합니다',
-        required: false,
-    },
-    {
-        id: 'projects',
-        title: '프로젝트 탐색',
-        description: '로컬 저장소를 검색합니다',
-        required: false,
-    },
-    { id: 'complete', title: '완료', description: '설정이 완료되었습니다', required: true },
-];
+const STEPS = computed<{ id: WizardStep; title: string; description: string; required: boolean }[]>(
+    () => [
+        {
+            id: 'welcome',
+            title: t('setup.wizard.steps.welcome.title'),
+            description: t('setup.wizard.steps.welcome.description'),
+            required: true,
+        },
+        {
+            id: 'profile',
+            title: t('setup.wizard.steps.profile.title'),
+            description: t('setup.wizard.steps.profile.description'),
+            required: true,
+        },
+        {
+            id: 'ai-provider',
+            title: t('setup.wizard.steps.ai_provider.title'),
+            description: t('setup.wizard.steps.ai_provider.description'),
+            required: true,
+        },
+        {
+            id: 'complete',
+            title: t('setup.wizard.steps.complete.title'),
+            description: t('setup.wizard.steps.complete.description'),
+            required: true,
+        },
+    ]
+);
 
 // ========================================
 // State
 // ========================================
 
 const currentStep = ref<WizardStep>('welcome');
-const currentStepIndex = computed(() => STEPS.findIndex((s) => s.id === currentStep.value));
+const currentStepIndex = computed(() => STEPS.value.findIndex((s) => s.id === currentStep.value));
 
 // Step 2: Profile
 const displayName = ref('');
@@ -88,21 +90,9 @@ const timezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
 const languages = [
     { value: 'ko', label: '한국어' },
     { value: 'en', label: 'English' },
-    { value: 'ja', label: '日本語' },
-    { value: 'zh', label: '中文' },
 ];
 
 // Available timezones (simplified list)
-const timezones = [
-    { value: 'Asia/Seoul', label: '서울 (GMT+9)' },
-    { value: 'Asia/Tokyo', label: '도쿄 (GMT+9)' },
-    { value: 'Asia/Shanghai', label: '상하이 (GMT+8)' },
-    { value: 'America/New_York', label: '뉴욕 (GMT-5)' },
-    { value: 'America/Los_Angeles', label: '로스앤젤레스 (GMT-8)' },
-    { value: 'Europe/London', label: '런던 (GMT+0)' },
-    { value: 'Europe/Paris', label: '파리 (GMT+1)' },
-    { value: 'UTC', label: 'UTC' },
-];
 
 // Step 3: AI Provider
 const selectedProviderId = ref<string | null>(null);
@@ -146,30 +136,6 @@ const providerMeta: Record<string, { icon: string; gradient: string; placeholder
 };
 
 // Step 4: Preferences
-const defaultView = ref<'kanban' | 'list' | 'timeline' | 'calendar'>('kanban');
-const enableAnimations = ref(true);
-const compactMode = ref(false);
-const autoSave = ref(true);
-
-const viewOptions = [
-    {
-        value: 'kanban',
-        label: '칸반 보드',
-        icon: '📋',
-        description: '드래그 앤 드롭으로 태스크 관리',
-    },
-    { value: 'list', label: '리스트', icon: '📝', description: '간결한 목록 형태' },
-    { value: 'timeline', label: '타임라인', icon: '📅', description: '일정 기반 뷰' },
-    { value: 'calendar', label: '캘린더', icon: '🗓️', description: '월간 캘린더 뷰' },
-];
-
-// Step 5: Projects
-const isScanning = ref(false);
-const discoveredRepos = ref<{ path: string; name: string; type: string }[]>([]);
-const scanCompleted = ref(false);
-
-// Don't show again option
-const dontShowAgain = ref(false);
 
 // ========================================
 // Computed
@@ -197,25 +163,21 @@ const canProceed = computed(() => {
 // 단계별 가중치 (총합 100). 소개 단계는 0%로 시작.
 const STEP_WEIGHTS: Record<WizardStep, number> = {
     welcome: 0,
-    profile: 25,
-    'ai-provider': 35,
-    preferences: 20,
-    projects: 10,
-    complete: 10,
+    profile: 30,
+    'ai-provider': 50,
+    preferences: 0, // Removed
+    projects: 0, // Removed
+    complete: 20,
 };
 
 function isStepCompleted(step: WizardStep): boolean {
     switch (step) {
         case 'welcome':
-            return currentStepIndex.value > STEPS.findIndex((s) => s.id === 'welcome');
+            return currentStepIndex.value > STEPS.value.findIndex((s) => s.id === 'welcome');
         case 'profile':
             return displayName.value.trim().length >= 2;
         case 'ai-provider':
             return isAIProviderCompleted();
-        case 'preferences':
-            return currentStepIndex.value > STEPS.findIndex((s) => s.id === 'preferences');
-        case 'projects':
-            return currentStepIndex.value > STEPS.findIndex((s) => s.id === 'projects');
         case 'complete':
             return currentStep.value === 'complete';
         default:
@@ -238,7 +200,8 @@ function isAIProviderCompleted(): boolean {
 
 const progressPercent = computed(() => {
     const total = Object.values(STEP_WEIGHTS).reduce((acc, v) => acc + v, 0);
-    const earned = STEPS.filter((_, idx) => idx <= currentStepIndex.value)
+    const earned = STEPS.value
+        .filter((_, idx) => idx <= currentStepIndex.value)
         .map((s) => s.id)
         .filter((step) => isStepCompleted(step))
         .reduce((acc, step) => acc + STEP_WEIGHTS[step], 0);
@@ -254,8 +217,6 @@ const selectedProviderStatus = computed<LocalProviderStatus>(() => {
         ? settingsStore.getLocalProviderStatus(selectedProviderId.value)
         : { status: 'unknown' };
 });
-
-const selectedProviderReady = computed(() => providerIsReady(selectedProvider.value));
 
 const isSelectedProviderLocal = computed(() => isProviderLocal(selectedProvider.value));
 
@@ -327,17 +288,17 @@ function computeProviderStatusBadge(
     provider: AIProviderConfig
 ): { label: string; tone: 'success' | 'warning' | 'muted' } | null {
     if (provider.isConnected || (provider.apiKey && provider.apiKey.length >= 10)) {
-        return { label: '연결됨', tone: 'success' };
+        return { label: t('setup.wizard.ai_provider.status.connected'), tone: 'success' };
     }
     const status = settingsStore.getLocalProviderStatus(provider.id);
     if (status.status === 'available') {
-        return { label: '로컬 감지', tone: 'success' };
+        return { label: t('setup.wizard.ai_provider.status.local_detected'), tone: 'success' };
     }
     if (status.status === 'checking') {
-        return { label: '확인 중', tone: 'warning' };
+        return { label: t('setup.wizard.ai_provider.status.checking'), tone: 'warning' };
     }
     if (status.status === 'unavailable' && isProviderLocal(provider)) {
-        return { label: '미실행', tone: 'muted' };
+        return { label: t('setup.wizard.ai_provider.status.not_running'), tone: 'muted' };
     }
     return null;
 }
@@ -356,13 +317,13 @@ function getStatusBadgeClass(tone: 'success' | 'warning' | 'muted'): string {
 function getLocalStatusLabel(status: LocalProviderStatus): string {
     switch (status.status) {
         case 'available':
-            return '실행 중';
+            return t('setup.wizard.ai_provider.status.running');
         case 'checking':
-            return '확인 중';
+            return t('setup.wizard.ai_provider.status.checking');
         case 'unavailable':
-            return '미실행';
+            return t('setup.wizard.ai_provider.status.not_running');
         default:
-            return '미확인';
+            return t('setup.wizard.ai_provider.status.unknown');
     }
 }
 
@@ -380,17 +341,17 @@ function getLocalStatusTone(status: LocalProviderStatus): 'success' | 'warning' 
 function getLocalStatusDescription(status: LocalProviderStatus): string {
     if (status.status === 'available') {
         const source = status.baseUrl ? `(${status.baseUrl})` : '';
-        return `LM Studio 서버가 응답 중입니다 ${source}`.trim();
+        return t('setup.wizard.ai_provider.status.local_response', { source }).trim();
     }
     if (status.status === 'unavailable') {
         return status.details
-            ? `연결 실패: ${status.details}`
-            : 'LM Studio가 실행 중인지 확인해주세요';
+            ? t('setup.wizard.ai_provider.status.connection_failed', { details: status.details })
+            : t('setup.wizard.ai_provider.status.check_running');
     }
     if (status.status === 'checking') {
-        return '로컬 서버 상태를 확인 중입니다...';
+        return t('setup.wizard.ai_provider.status.checking_status');
     }
-    return '아직 상태를 확인하지 않았습니다';
+    return t('setup.wizard.ai_provider.status.not_checked');
 }
 
 function selectProvider(provider: AIProviderConfig): void {
@@ -457,7 +418,7 @@ watch(
             return;
         }
         const readyProvider = providers.find((p) => providerIsReady(p));
-        selectedProviderId.value = (readyProvider || providers[0]).id;
+        selectedProviderId.value = (readyProvider || providers[0]!).id;
     },
     { immediate: true }
 );
@@ -494,31 +455,28 @@ watch(
 
 function nextStep() {
     const idx = currentStepIndex.value;
-    if (idx < STEPS.length - 1) {
+    if (idx < STEPS.value.length - 1) {
         // Save step data
         saveStepData();
-        currentStep.value = STEPS[idx + 1].id;
+        currentStep.value = STEPS.value[idx + 1]!.id;
     }
 }
 
 function prevStep() {
     const idx = currentStepIndex.value;
     if (idx > 0) {
-        currentStep.value = STEPS[idx - 1].id;
+        currentStep.value = STEPS.value[idx - 1]!.id;
     }
 }
 
 function goToStep(step: WizardStep) {
-    const targetIdx = STEPS.findIndex((s) => s.id === step);
+    const targetIdx = STEPS.value.findIndex((s) => s.id === step);
     if (targetIdx <= currentStepIndex.value) {
         currentStep.value = step;
     }
 }
 
 function skipWizard() {
-    if (dontShowAgain.value) {
-        saveSetupCompleted();
-    }
     emit('skip');
 }
 
@@ -550,14 +508,6 @@ async function saveStepData() {
                 });
             }
             break;
-        case 'preferences':
-            await settingsStore.updateGeneralSettings({
-                defaultProjectView: defaultView.value,
-                enableAnimations: enableAnimations.value,
-                compactMode: compactMode.value,
-                autoSave: autoSave.value,
-            });
-            break;
     }
 }
 
@@ -581,31 +531,6 @@ async function validateApiKey() {
         validationResult.value = 'error';
     } finally {
         isValidating.value = false;
-    }
-}
-
-async function scanLocalRepositories() {
-    isScanning.value = true;
-    discoveredRepos.value = [];
-
-    try {
-        const repos = await (window as any).electron?.fs?.scanRepositories?.({
-            includeGit: true,
-            includeClaudeCode: true,
-            includeCodex: true,
-            includeAntigravity: true,
-            maxDepth: 3,
-        });
-
-        if (repos) {
-            discoveredRepos.value = repos.slice(0, 10); // Limit to 10 repos for display
-        }
-        scanCompleted.value = true;
-    } catch (error) {
-        console.error('Failed to scan repositories:', error);
-        scanCompleted.value = true;
-    } finally {
-        isScanning.value = false;
     }
 }
 
@@ -636,13 +561,6 @@ onMounted(() => {
         timezone.value =
             settingsStore.userProfile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     }
-
-    if (settingsStore.generalSettings) {
-        defaultView.value = settingsStore.generalSettings.defaultProjectView || 'kanban';
-        enableAnimations.value = settingsStore.generalSettings.enableAnimations ?? true;
-        compactMode.value = settingsStore.generalSettings.compactMode ?? false;
-        autoSave.value = settingsStore.generalSettings.autoSave ?? true;
-    }
 });
 
 watch(
@@ -654,8 +572,6 @@ watch(
             selectedProviderId.value = null;
             apiKey.value = '';
             validationResult.value = null;
-            discoveredRepos.value = [];
-            scanCompleted.value = false;
         }
     }
 );
@@ -676,16 +592,16 @@ watch(
                         <div>
                             <h2 class="text-2xl font-bold text-white flex items-center gap-3">
                                 <IconRenderer emoji="🚀" class="w-8 h-8" />
-                                {{ STEPS[currentStepIndex].title }}
+                                {{ STEPS[currentStepIndex]?.title }}
                             </h2>
                             <p class="text-sm text-gray-400 mt-1">
-                                {{ STEPS[currentStepIndex].description }}
+                                {{ STEPS[currentStepIndex]?.description }}
                             </p>
                         </div>
                         <button
                             @click="skipWizard"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
-                            title="건너뛰기"
+                            :title="t('setup.wizard.common.skip')"
                         >
                             <svg
                                 class="w-6 h-6"
@@ -706,8 +622,17 @@ watch(
                     <!-- Progress Bar -->
                     <div class="mt-6">
                         <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
-                            <span>단계 {{ currentStepIndex + 1 }} / {{ STEPS.length }}</span>
-                            <span>{{ progressPercent }}% 완료</span>
+                            <span>{{
+                                t('setup.wizard.common.step', {
+                                    current: currentStepIndex + 1,
+                                    total: STEPS.length,
+                                })
+                            }}</span>
+                            <span>{{
+                                t('setup.wizard.common.percent_complete', {
+                                    percent: progressPercent,
+                                })
+                            }}</span>
                         </div>
                         <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
                             <div
@@ -769,34 +694,45 @@ watch(
 
                         <div>
                             <h3 class="text-3xl font-bold text-white mb-3">
-                                HighFlow에 오신 것을 환영합니다!
+                                {{ t('setup.wizard.welcome.title') }}
                             </h3>
                             <p class="text-gray-400 max-w-lg mx-auto">
-                                AI를 활용하여 프로젝트를 효율적으로 관리하고, 태스크를 자동화하며,
-                                생산성을 극대화하세요.
+                                {{ t('setup.wizard.welcome.subtitle') }}
                             </p>
                         </div>
 
                         <div class="grid grid-cols-3 gap-4 max-w-xl mx-auto">
                             <div class="bg-gray-800/50 rounded-xl p-4 text-center">
                                 <IconRenderer emoji="🎯" class="w-8 h-8 mx-auto mb-2" />
-                                <div class="text-sm font-medium text-white">프로젝트 관리</div>
-                                <div class="text-xs text-gray-500 mt-1">칸반, 타임라인 뷰</div>
+                                <div class="text-sm font-medium text-white">
+                                    {{ t('setup.wizard.welcome.features.project_management') }}
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    {{ t('setup.wizard.welcome.features.project_management_desc') }}
+                                </div>
                             </div>
                             <div class="bg-gray-800/50 rounded-xl p-4 text-center">
                                 <IconRenderer emoji="🤖" class="w-8 h-8 mx-auto mb-2" />
-                                <div class="text-sm font-medium text-white">AI 자동화</div>
-                                <div class="text-xs text-gray-500 mt-1">태스크 자동 실행</div>
+                                <div class="text-sm font-medium text-white">
+                                    {{ t('setup.wizard.welcome.features.ai_automation') }}
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    {{ t('setup.wizard.welcome.features.ai_automation_desc') }}
+                                </div>
                             </div>
                             <div class="bg-gray-800/50 rounded-xl p-4 text-center">
                                 <IconRenderer emoji="🔗" class="w-8 h-8 mx-auto mb-2" />
-                                <div class="text-sm font-medium text-white">다중 AI 연동</div>
-                                <div class="text-xs text-gray-500 mt-1">Claude, GPT, Gemini</div>
+                                <div class="text-sm font-medium text-white">
+                                    {{ t('setup.wizard.welcome.features.multi_ai') }}
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    {{ t('setup.wizard.welcome.features.multi_ai_desc') }}
+                                </div>
                             </div>
                         </div>
 
                         <p class="text-sm text-gray-500">
-                            몇 가지 간단한 설정을 완료하면 바로 사용할 수 있습니다.
+                            {{ t('setup.wizard.welcome.note') }}
                         </p>
                     </div>
 
@@ -808,25 +744,28 @@ watch(
                             >
                                 <IconRenderer emoji="👤" class="w-10 h-10" />
                             </div>
-                            <p class="text-gray-400">기본 사용자 정보를 설정해주세요</p>
+                            <p class="text-gray-400">{{ t('setup.wizard.profile.intro') }}</p>
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-2">
-                                표시 이름 <span class="text-red-400">*</span>
+                                {{ t('setup.wizard.profile.display_name') }}
+                                <span class="text-red-400">*</span>
                             </label>
                             <input
                                 v-model="displayName"
                                 type="text"
                                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="이름을 입력하세요"
+                                :placeholder="t('setup.wizard.profile.display_name_placeholder')"
                             />
-                            <p class="text-xs text-gray-500 mt-1">최소 2자 이상</p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                {{ t('setup.wizard.profile.min_length') }}
+                            </p>
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-2">
-                                언어
+                                {{ t('setup.wizard.profile.language') }}
                             </label>
                             <select
                                 v-model="language"
@@ -841,28 +780,13 @@ watch(
                                 </option>
                             </select>
                         </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-2">
-                                시간대
-                            </label>
-                            <select
-                                v-model="timezone"
-                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option v-for="tz in timezones" :key="tz.value" :value="tz.value">
-                                    {{ tz.label }}
-                                </option>
-                            </select>
-                        </div>
                     </div>
 
                     <!-- Step 3: AI Provider -->
                     <div v-if="currentStep === 'ai-provider'" class="space-y-6">
                         <div class="text-center mb-6">
                             <p class="text-gray-400">
-                                멀티모달 AI 또는 로컬 LM Studio/Ollama를 연결하여 이미지 분석과
-                                자동화를 사용하세요. 로컬 서버가 실행 중이면 자동으로 감지됩니다.
+                                {{ t('setup.wizard.ai_provider.intro') }}
                             </p>
                         </div>
 
@@ -870,8 +794,7 @@ watch(
                             v-if="aiProviderOptions.length === 0"
                             class="p-4 bg-gray-900/40 border border-gray-700 rounded-xl text-center text-sm text-gray-400"
                         >
-                            사용할 수 있는 AI 프로바이더가 없습니다. Settings에서 새 프로바이더를
-                            추가하세요.
+                            {{ t('setup.wizard.ai_provider.no_providers') }}
                         </div>
                         <div v-else class="grid grid-cols-2 gap-3">
                             <button
@@ -895,11 +818,11 @@ watch(
                                         :class="[
                                             'px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide',
                                             getStatusBadgeClass(
-                                                providerStatusMap[provider.id].tone
+                                                providerStatusMap[provider.id]?.tone || 'muted'
                                             ),
                                         ]"
                                     >
-                                        {{ providerStatusMap[provider.id].label }}
+                                        {{ providerStatusMap[provider.id]?.label }}
                                     </span>
                                 </div>
                                 <div class="flex items-center gap-2 mb-1">
@@ -909,6 +832,12 @@ watch(
                                             class="w-5 h-5"
                                         />
                                         <span>{{ provider.name }}</span>
+                                        <span
+                                            v-if="provider.isComingSoon"
+                                            class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700/50 text-gray-400 border border-gray-600/50"
+                                        >
+                                            {{ t('setup.wizard.common.coming_soon') }}
+                                        </span>
                                     </div>
                                 </div>
                                 <p class="text-xs text-gray-500 line-clamp-2">
@@ -960,7 +889,7 @@ watch(
                                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
                                             />
                                         </svg>
-                                        공식 페이지 열기
+                                        {{ t('setup.wizard.ai_provider.open_website') }}
                                     </button>
                                 </div>
                             </div>
@@ -970,30 +899,22 @@ watch(
                                     class="p-4 border border-emerald-700/40 bg-emerald-900/10 rounded-xl"
                                 >
                                     <h4 class="text-sm font-semibold text-emerald-300 mb-2">
-                                        LM Studio 설치 &amp; 연동 가이드
+                                        {{ t('setup.wizard.ai_provider.local_guide.title') }}
                                     </h4>
                                     <ol
                                         class="text-xs text-emerald-100 list-decimal list-inside space-y-1"
                                     >
                                         <li>
-                                            lmstudio.ai에서 최신 버전을 다운로드하고 설치합니다.
+                                            {{ t('setup.wizard.ai_provider.local_guide.step1') }}
                                         </li>
                                         <li>
-                                            LM Studio를 실행해
-                                            <span class="font-semibold"
-                                                >Server &gt; OpenAI Compatible Server</span
-                                            >를 시작합니다.
+                                            {{ t('setup.wizard.ai_provider.local_guide.step2') }}
                                         </li>
                                         <li>
-                                            사용할 모델을 로드하고
-                                            <span class="font-semibold">Start Server</span>로 API
-                                            서버를 실행합니다.
+                                            {{ t('setup.wizard.ai_provider.local_guide.step3') }}
                                         </li>
                                         <li>
-                                            아래 Base URL이 LM Studio에서 표시되는 주소(기본
-                                            <code class="font-mono text-emerald-200"
-                                                >http://localhost:1234/v1</code
-                                            >)인지 확인하세요.
+                                            {{ t('setup.wizard.ai_provider.local_guide.step4') }}
                                         </li>
                                     </ol>
                                     <div class="mt-3 flex flex-wrap gap-2">
@@ -1001,7 +922,7 @@ watch(
                                             class="px-4 py-2 text-xs font-medium rounded-lg bg-emerald-700/70 hover:bg-emerald-600 text-white transition-colors"
                                             @click="openExternal('https://lmstudio.ai')"
                                         >
-                                            LM Studio 다운로드
+                                            {{ t('setup.wizard.ai_provider.download_lm_studio') }}
                                         </button>
                                         <button
                                             class="px-4 py-2 text-xs font-medium rounded-lg border border-emerald-500/60 text-emerald-200 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
@@ -1030,8 +951,8 @@ watch(
                                             </svg>
                                             {{
                                                 isCheckingLocalProvider
-                                                    ? '상태 확인 중...'
-                                                    : '상태 재확인'
+                                                    ? t('setup.wizard.ai_provider.checking')
+                                                    : t('setup.wizard.ai_provider.check_status')
                                             }}
                                         </button>
                                     </div>
@@ -1044,7 +965,7 @@ watch(
                                         <div class="flex items-center justify-between">
                                             <div>
                                                 <p class="text-sm font-medium text-white">
-                                                    로컬 상태
+                                                    {{ t('setup.wizard.ai_provider.local_status') }}
                                                 </p>
                                                 <p class="text-xs text-gray-500">
                                                     {{
@@ -1068,8 +989,17 @@ watch(
                                         <p class="text-xs text-gray-500">
                                             {{
                                                 selectedProviderStatus.lastChecked
-                                                    ? `최근 확인: ${new Date(selectedProviderStatus.lastChecked).toLocaleTimeString()}`
-                                                    : '최근 확인 기록 없음'
+                                                    ? t(
+                                                          'setup.wizard.ai_provider.status.last_checked',
+                                                          {
+                                                              time: new Date(
+                                                                  selectedProviderStatus.lastChecked
+                                                              ).toLocaleTimeString(),
+                                                          }
+                                                      )
+                                                    : t(
+                                                          'setup.wizard.ai_provider.status.never_checked'
+                                                      )
                                             }}
                                         </p>
                                     </div>
@@ -1077,7 +1007,7 @@ watch(
                                         class="p-4 bg-gray-900/40 border border-gray-700 rounded-xl space-y-2"
                                     >
                                         <label class="block text-sm font-medium text-gray-300">
-                                            Base URL
+                                            {{ t('setup.wizard.ai_provider.base_url') }}
                                         </label>
                                         <input
                                             v-model="providerBaseUrl"
@@ -1086,7 +1016,7 @@ watch(
                                             placeholder="http://localhost:1234/v1"
                                         />
                                         <p class="text-xs text-gray-500">
-                                            LM Studio 서버에서 표시되는 주소와 동일해야 합니다.
+                                            {{ t('setup.wizard.ai_provider.base_url_desc') }}
                                         </p>
                                     </div>
                                 </div>
@@ -1135,13 +1065,19 @@ watch(
                                             </div>
                                             <div>
                                                 <div class="text-sm font-medium text-white">
-                                                    OAuth 연결
+                                                    {{
+                                                        t('setup.wizard.ai_provider.oauth.connect')
+                                                    }}
                                                 </div>
                                                 <div class="text-xs text-gray-500">
                                                     {{
                                                         isOAuthConnected
-                                                            ? '계정이 연결되었습니다'
-                                                            : 'OAuth로 간편하게 연결하세요'
+                                                            ? t(
+                                                                  'setup.wizard.ai_provider.oauth.hint_connected'
+                                                              )
+                                                            : t(
+                                                                  'setup.wizard.ai_provider.oauth.hint_connect'
+                                                              )
                                                     }}
                                                 </div>
                                             </div>
@@ -1172,18 +1108,26 @@ watch(
                                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                                 />
                                             </svg>
-                                            {{ isConnectingOAuth ? '연결 중...' : 'OAuth 연결' }}
+                                            {{
+                                                isConnectingOAuth
+                                                    ? t('setup.wizard.ai_provider.oauth.connecting')
+                                                    : t('setup.wizard.ai_provider.oauth.connect')
+                                            }}
                                         </button>
-                                        <span v-else class="text-green-400 text-sm font-medium"
-                                            >연결됨</span
-                                        >
+                                        <span v-else class="text-green-400 text-sm font-medium">{{
+                                            t('setup.wizard.ai_provider.status.connected')
+                                        }}</span>
                                     </div>
 
-                                    <div class="text-center text-gray-500 text-xs">또는</div>
+                                    <div class="text-center text-gray-500 text-xs">
+                                        {{ t('setup.wizard.common.or') }}
+                                    </div>
                                 </div>
 
                                 <div v-if="requiresApiKey" class="space-y-3">
-                                    <label class="text-sm text-gray-400">API 키로 연결</label>
+                                    <label class="text-sm text-gray-400">{{
+                                        t('setup.wizard.ai_provider.api_key.label')
+                                    }}</label>
                                     <div class="relative">
                                         <input
                                             v-model="apiKey"
@@ -1237,7 +1181,13 @@ watch(
                                             :disabled="!apiKey || isValidating"
                                             class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
                                         >
-                                            {{ isValidating ? '확인중...' : '확인' }}
+                                            {{
+                                                isValidating
+                                                    ? t(
+                                                          'setup.wizard.ai_provider.api_key.verifying'
+                                                      )
+                                                    : t('setup.wizard.ai_provider.api_key.verify')
+                                            }}
                                         </button>
                                     </div>
 
@@ -1258,8 +1208,8 @@ watch(
                                         </svg>
                                         <span>{{
                                             isOAuthConnected
-                                                ? 'OAuth 연결이 완료되었습니다'
-                                                : 'API 키가 확인되었습니다'
+                                                ? t('setup.wizard.ai_provider.oauth.hint_connected')
+                                                : t('setup.wizard.ai_provider.api_key.verified')
                                         }}</span>
                                     </div>
                                     <div
@@ -1277,191 +1227,16 @@ watch(
                                                 clip-rule="evenodd"
                                             />
                                         </svg>
-                                        <span>연결에 실패했습니다. 다시 시도해주세요.</span>
+                                        <span>{{
+                                            t('setup.wizard.ai_provider.api_key.failed')
+                                        }}</span>
                                     </div>
 
                                     <p class="text-xs text-gray-500">
-                                        API 키는 안전하게 로컬에 저장되며 외부로 전송되지 않습니다.
+                                        {{ t('setup.wizard.ai_provider.api_key.note') }}
                                     </p>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    <!-- Step 4: Preferences -->
-                    <div v-if="currentStep === 'preferences'" class="space-y-6 max-w-md mx-auto">
-                        <div class="text-center mb-6">
-                            <p class="text-gray-400">작업 스타일에 맞게 환경을 설정하세요</p>
-                        </div>
-
-                        <!-- Default View -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-3">
-                                기본 프로젝트 뷰
-                            </label>
-                            <div class="grid grid-cols-2 gap-3">
-                                <button
-                                    v-for="view in viewOptions"
-                                    :key="view.value"
-                                    @click="defaultView = view.value as any"
-                                    :class="[
-                                        'p-4 border-2 rounded-xl text-left transition-all',
-                                        defaultView === view.value
-                                            ? 'border-blue-500 bg-blue-900/20'
-                                            : 'border-gray-700 hover:border-gray-600 bg-gray-800/30',
-                                    ]"
-                                >
-                                    <div class="flex items-center gap-2">
-                                        <IconRenderer :emoji="view.icon" class="w-5 h-5" />
-                                        <span class="font-medium text-white text-sm">{{
-                                            view.label
-                                        }}</span>
-                                    </div>
-                                    <p class="text-xs text-gray-500">{{ view.description }}</p>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Toggle Options -->
-                        <div class="space-y-4">
-                            <label
-                                class="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800/70 transition-colors"
-                            >
-                                <div>
-                                    <div class="font-medium text-white text-sm">
-                                        애니메이션 효과
-                                    </div>
-                                    <div class="text-xs text-gray-500">부드러운 전환 효과 사용</div>
-                                </div>
-                                <input
-                                    type="checkbox"
-                                    v-model="enableAnimations"
-                                    class="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-                                />
-                            </label>
-
-                            <label
-                                class="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800/70 transition-colors"
-                            >
-                                <div>
-                                    <div class="font-medium text-white text-sm">컴팩트 모드</div>
-                                    <div class="text-xs text-gray-500">
-                                        더 많은 정보를 한 화면에 표시
-                                    </div>
-                                </div>
-                                <input
-                                    type="checkbox"
-                                    v-model="compactMode"
-                                    class="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-                                />
-                            </label>
-
-                            <label
-                                class="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800/70 transition-colors"
-                            >
-                                <div>
-                                    <div class="font-medium text-white text-sm">자동 저장</div>
-                                    <div class="text-xs text-gray-500">변경사항 자동 저장</div>
-                                </div>
-                                <input
-                                    type="checkbox"
-                                    v-model="autoSave"
-                                    class="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-                                />
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Step 5: Projects -->
-                    <div v-if="currentStep === 'projects'" class="space-y-6">
-                        <div class="text-center mb-6">
-                            <p class="text-gray-400">로컬 개발 저장소를 자동으로 탐색합니다</p>
-                        </div>
-
-                        <div class="text-center">
-                            <button
-                                v-if="!scanCompleted && !isScanning"
-                                @click="scanLocalRepositories"
-                                class="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors inline-flex items-center gap-2"
-                            >
-                                <svg
-                                    class="w-5 h-5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                    />
-                                </svg>
-                                <span>로컬 저장소 검색</span>
-                            </button>
-
-                            <div v-if="isScanning" class="py-8">
-                                <div
-                                    class="animate-spin w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full mx-auto mb-4"
-                                ></div>
-                                <p class="text-gray-400">로컬 저장소를 검색하고 있습니다...</p>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    Development, Projects, GitHub 폴더 등을 확인합니다
-                                </p>
-                            </div>
-                        </div>
-
-                        <div v-if="scanCompleted && !isScanning" class="space-y-4">
-                            <div v-if="discoveredRepos.length > 0">
-                                <h4 class="text-sm font-medium text-gray-300 mb-3">
-                                    발견된 저장소 ({{ discoveredRepos.length }}개)
-                                </h4>
-                                <div class="space-y-2 max-h-[300px] overflow-y-auto">
-                                    <div
-                                        v-for="repo in discoveredRepos"
-                                        :key="repo.path"
-                                        class="p-3 bg-gray-800/50 rounded-lg flex items-center gap-3"
-                                    >
-                                        <span class="text-xl">
-                                            {{
-                                                repo.type === 'claude-code'
-                                                    ? '🤖'
-                                                    : repo.type === 'codex'
-                                                      ? '⚡'
-                                                      : '📂'
-                                            }}
-                                        </span>
-                                        <div class="flex-1 min-w-0">
-                                            <div class="font-medium text-white text-sm truncate">
-                                                {{ repo.name }}
-                                            </div>
-                                            <div class="text-xs text-gray-500 truncate">
-                                                {{ repo.path }}
-                                            </div>
-                                        </div>
-                                        <span
-                                            class="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded"
-                                            >{{ repo.type }}</span
-                                        >
-                                    </div>
-                                </div>
-                                <p class="text-xs text-gray-500 mt-3">
-                                    이 저장소들은 프로젝트 생성 시 바로 선택할 수 있습니다.
-                                </p>
-                            </div>
-
-                            <div v-else class="text-center py-8 bg-gray-800/30 rounded-xl">
-                                <IconRenderer emoji="📭" class="w-12 h-12 mx-auto mb-3" />
-                                <p class="text-gray-400">발견된 저장소가 없습니다</p>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    나중에 프로젝트 생성 시 직접 선택할 수 있습니다
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="bg-gray-800/30 rounded-lg p-4 text-center">
-                            <p class="text-sm text-gray-400">
-                                이 단계는 선택 사항입니다. 건너뛰고 나중에 설정할 수 있습니다.
-                            </p>
                         </div>
                     </div>
 
@@ -1485,11 +1260,10 @@ watch(
 
                         <div>
                             <h3 class="text-3xl font-bold text-white mb-3">
-                                설정이 완료되었습니다!
+                                {{ t('setup.wizard.complete.title') }}
                             </h3>
                             <p class="text-gray-400 max-w-lg mx-auto">
-                                이제 AI Workflow Manager를 사용할 준비가 되었습니다. 새 프로젝트를
-                                생성하거나 기존 저장소를 가져와 시작하세요.
+                                {{ t('setup.wizard.complete.subtitle') }}
                             </p>
                         </div>
 
@@ -1497,12 +1271,16 @@ watch(
                         <div
                             class="bg-gray-800/50 rounded-xl p-6 max-w-md mx-auto text-left space-y-4"
                         >
-                            <h4 class="font-medium text-white text-center mb-4">설정 요약</h4>
+                            <h4 class="font-medium text-white text-center mb-4">
+                                {{ t('setup.wizard.complete.summary') }}
+                            </h4>
 
                             <div
                                 class="flex items-center justify-between py-2 border-b border-gray-700"
                             >
-                                <span class="text-gray-400 text-sm">사용자</span>
+                                <span class="text-gray-400 text-sm">{{
+                                    t('setup.wizard.complete.user')
+                                }}</span>
                                 <span class="text-white text-sm">{{
                                     displayName || '미설정'
                                 }}</span>
@@ -1510,38 +1288,14 @@ watch(
                             <div
                                 class="flex items-center justify-between py-2 border-b border-gray-700"
                             >
-                                <span class="text-gray-400 text-sm">AI 제공자</span>
+                                <span class="text-gray-400 text-sm">{{
+                                    t('setup.wizard.complete.provider')
+                                }}</span>
                                 <span class="text-white text-sm">{{
                                     selectedProvider?.name || '미설정'
                                 }}</span>
                             </div>
-                            <div
-                                class="flex items-center justify-between py-2 border-b border-gray-700"
-                            >
-                                <span class="text-gray-400 text-sm">기본 뷰</span>
-                                <span class="text-white text-sm">{{
-                                    viewOptions.find((v) => v.value === defaultView)?.label
-                                }}</span>
-                            </div>
-                            <div class="flex items-center justify-between py-2">
-                                <span class="text-gray-400 text-sm">발견된 저장소</span>
-                                <span class="text-white text-sm"
-                                    >{{ discoveredRepos.length }}개</span
-                                >
-                            </div>
                         </div>
-
-                        <!-- Don't show again -->
-                        <label
-                            class="inline-flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-300"
-                        >
-                            <input
-                                type="checkbox"
-                                v-model="dontShowAgain"
-                                class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-                            />
-                            <span class="text-sm">다음에 이 위자드 표시 안 함</span>
-                        </label>
                     </div>
                 </div>
 
@@ -1554,7 +1308,7 @@ watch(
                         @click="prevStep"
                         class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
                     >
-                        ← 이전
+                        ← {{ t('setup.wizard.common.prev') }}
                     </button>
                     <div v-else></div>
 
@@ -1564,21 +1318,26 @@ watch(
                             @click="skipWizard"
                             class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
                         >
-                            건너뛰기
+                            {{ t('setup.wizard.common.skip') }}
                         </button>
 
                         <button
                             v-if="currentStep !== 'complete'"
                             @click="nextStep"
-                            :disabled="!canProceed && STEPS[currentStepIndex].required"
+                            :disabled="!canProceed && STEPS[currentStepIndex]?.required"
                             :class="[
                                 'px-6 py-2.5 rounded-lg font-medium transition-colors',
-                                canProceed || !STEPS[currentStepIndex].required
+                                canProceed || !STEPS[currentStepIndex]?.required
                                     ? 'bg-blue-600 text-white hover:bg-blue-500'
                                     : 'bg-gray-700 text-gray-500 cursor-not-allowed',
                             ]"
                         >
-                            {{ currentStepIndex === STEPS.length - 2 ? '완료' : '다음 →' }}
+                            >
+                            {{
+                                currentStepIndex === STEPS.length - 2
+                                    ? t('setup.wizard.common.complete')
+                                    : t('setup.wizard.common.next') + ' →'
+                            }}
                         </button>
 
                         <button
@@ -1586,7 +1345,7 @@ watch(
                             @click="completeSetup"
                             class="px-8 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white rounded-lg font-medium transition-all"
                         >
-                            시작하기 🚀
+                            {{ t('setup.wizard.common.start') }} 🚀
                         </button>
                     </div>
                 </div>

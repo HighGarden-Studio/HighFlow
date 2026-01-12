@@ -22,8 +22,12 @@
         "prev_task": "이전 태스크",
         "ai_assistant": "AI 비서 (⌘J)",
         "default": "(기본)",
-        "current_user": "현재 사용자"
+        "current_user": "현재 사용자",
+        "copy": "복사",
+        "view_all": "전체 보기",
+        "add": "추가"
     },
+
     "nav": {
         "projects": "프로젝트",
         "marketplace": "마켓플레이스",
@@ -168,7 +172,8 @@
             "approve": "승인",
             "input": "입력하기",
             "save_template": "템플릿으로 저장",
-            "view_result": "결과 보기"
+            "view_result": "결과 보기",
+            "publish": "게시"
         },
         "msg": {
             "reset_confirm": "정말로 프로젝트 결과를 초기화하시겠습니까?\n\n이 작업은 다음 항목들을 삭제하며 되돌릴 수 없습니다:\n- 프로젝트 AI 메모리\n- 모든 태스크의 실행 결과 및 히스토리\n- 모든 태스크의 상태 (Todo로 초기화)\n\n태스크 정의와 설정은 유지됩니다.",
@@ -192,7 +197,67 @@
             "path": "경로",
             "ai_provider": "AI 제공자",
             "context": "AI 컨텍스트",
-            "memory": "프로젝트 메모리"
+            "memory": "프로젝트 메모리",
+            "not_set": "미설정",
+            "initial_prompt": "초기 프롬프트",
+            "no_initial_prompt": "초기 프롬프트가 설정되지 않았습니다",
+            "goal": "프로젝트 목표 (Goal)"
+        },
+        "not_found": "프로젝트를 찾을 수 없습니다",
+        "go_back": "프로젝트 목록으로 돌아가기",
+        "tabs": {
+            "overview": "개요",
+            "board": "칸반",
+            "timeline": "타임라인",
+            "dag": "DAG"
+        },
+        "stats": {
+            "total_tasks": "전체 태스크",
+            "completed": "완료됨",
+            "progress": "진행률",
+            "hours": "시간",
+            "overall_progress": "전체 진행률"
+        },
+        "recent_tasks": "최근 태스크",
+        "no_tasks": "아직 태스크가 없습니다",
+        "quick_actions": {
+            "title": "빠른 작업",
+            "open_board": "칸반 보드 열기",
+            "generate_ai": "AI로 생성하기"
+        },
+        "description_placeholder": "설명 추가...",
+        "output_type": {
+            "web": {
+                "name": "웹 프로젝트",
+                "desc": "HTML/CSS/JS 웹 애플리케이션"
+            },
+            "document": {
+                "name": "문서",
+                "desc": "Markdown, PDF 등 문서 파일"
+            },
+            "image": {
+                "name": "이미지",
+                "desc": "이미지 생성/편집 결과물"
+            },
+            "video": {
+                "name": "비디오",
+                "desc": "비디오 컨텐츠"
+            },
+            "code": {
+                "name": "코드",
+                "desc": "소스 코드 및 스크립트"
+            },
+            "data": {
+                "name": "데이터",
+                "desc": "JSON, CSV 등 데이터 파일"
+            },
+            "other": {
+                "name": "기타",
+                "desc": "기타 형식의 결과물"
+            },
+            "not_set": "미지정",
+            "not_set_desc": "결과물 타입이 지정되지 않음",
+            "local": "로컬"
         }
     },
     "task": {
@@ -212,7 +277,11 @@
             "review_starting": "검토 시작중...",
             "executing": "실행중...",
             "no_script": "스크립트 없음",
-            "waiting_input": "사용자 입력 대기중"
+            "waiting_input": "사용자 입력 대기중",
+            "active": "진행중",
+            "completed": "완료",
+            "archived": "보관됨",
+            "on_hold": "보류"
         },
         "type": {
             "ai": "AI 태스크",
@@ -597,5 +666,660 @@
         "weeks_ago": "{n}주 전",
         "months_ago": "{n}개월 전",
         "years_ago": "{n}년 전"
+    },
+    "assistant": {
+        "title": "AI 비서",
+        "subtitle": "무엇이든 물어보세요",
+        "coming_soon": "Coming Soon",
+        "welcome_title": "안녕하세요!",
+        "welcome_message": "프로젝트 관리에 도움이 필요하시면 말씀해 주세요.",
+        "input_placeholder": "메시지를 입력하세요...",
+        "suggestions_label": "추천",
+        "user_me": "나",
+        "clear_chat": "대화 초기화",
+        "current_context": "현재 위치: 프로젝트 #{id}",
+        "quick_actions": {
+            "summary": "이번 주 요약",
+            "recommend": "다음 작업 추천",
+            "deadline": "마감 임박",
+            "help": "도움말"
+        },
+        "action_messages": {
+            "summary": "이번 주에 뭐 했어?",
+            "recommend": "다음에 뭐 해야 해?",
+            "deadline": "마감 임박한 태스크 보여줘",
+            "help": "도움말"
+        }
+    },
+    "settings": {
+        "header": {
+            "title": "설정",
+            "subtitle": "환경 설정 및 계정 관리"
+        },
+        "tabs": {
+            "general": "일반",
+            "ai": "AI 제공자",
+            "mcp": "MCP 서버",
+            "agents": "로컬 에이전트",
+            "integrations": "연동",
+            "shortcuts": "단축키",
+            "profile": "프로필",
+            "credits": "크레딧",
+            "operators": "AI 오퍼레이터",
+            "data": "데이터",
+            "help": "도움말"
+        },
+        "shortcuts": {
+            "title": "단축키",
+            "description": "자주 사용하는 동작의 단축키를 사용자 정의하세요"
+        },
+        "profile": {
+            "title": "사용자 프로필"
+        },
+        "general": {
+            "title": "일반 설정",
+            "appearance": {
+                "title": "화면 설정",
+                "theme": {
+                    "title": "테마",
+                    "description": "선호하는 색상 테마를 선택하세요",
+                    "light": "라이트",
+                    "dark": "다크",
+                    "system": "시스템"
+                },
+                "language": {
+                    "title": "언어",
+                    "description": "사용할 언어를 선택하세요",
+                    "en": "English",
+                    "ko": "한국어"
+                }
+            },
+            "behavior": {
+                "title": "동작 설정",
+                "auto_save": {
+                    "title": "자동 저장",
+                    "description": "변경 사항을 자동으로 저장합니다"
+                },
+                "show_task_ids": {
+                    "title": "태스크 ID 표시",
+                    "description": "화면에 태스크 ID를 표시합니다"
+                },
+                "enable_animations": {
+                    "title": "애니메이션 활성화",
+                    "description": "전환 효과와 애니메이션을 사용합니다"
+                },
+                "compact_mode": {
+                    "title": "컴팩트 모드",
+                    "description": "간격을 줄여 더 많은 내용을 표시합니다"
+                }
+            },
+            "about": {
+                "title": "정보",
+                "application": "애플리케이션",
+                "version": "버전",
+                "platform": "플랫폼",
+                "environment": "환경",
+                "created_by": "제작",
+                "description": "HighFlow는 AI 기반 워크플로우를 자동화하고 효율화하는 도구입니다."
+            }
+        },
+        "ai": {
+            "filter_by_feature": "기능별 필터",
+            "clear_filter": "필터 초기화",
+            "providers_matching": "{count}개의 제공자가 필터와 일치함",
+            "update_models": "모델 업데이트",
+            "updating": "업데이트 중...",
+            "update_models_title": "{provider}의 사용 가능한 모델 새로고침",
+            "model_count": "{count}개 모델 사용 가능",
+            "last_updated": "마지막 업데이트:",
+            "enabled_summary": "{count}개의 제공자 활성화됨:",
+            "coming_soon": "준비 중",
+            "configure": "설정",
+            "enabled": "사용 중",
+            "configured_disabled": "설정됨 (비활성)",
+            "not_configured": "설정 안 됨"
+        },
+        "mcp": {
+            "header": "MCP 서버",
+            "description": "Model Context Protocol 서버를 설정하여 AI의 기능을 외부 도구로 확장합니다.",
+            "docs_link": "MCP 문서 보기",
+            "stats": {
+                "total": "전체 서버",
+                "connected": "연결됨",
+                "enabled": "활성화"
+            },
+            "search_placeholder": "MCP 서버 검색...",
+            "filter_reset": "필터 초기화",
+            "empty_state": {
+                "title": "검색 결과가 없습니다",
+                "message": "다른 검색어나 필터를 시도해보세요"
+            },
+            "status": {
+                "connected": "연결됨",
+                "disconnected": "미연결",
+                "active": "활성",
+                "installed": "설치됨"
+            },
+            "servers": {
+                "filesystem": {
+                    "description": "파일 시스템 접근 - 파일 읽기, 쓰기, 디렉토리 탐색"
+                },
+                "shell": {
+                    "description": "쉘 명령 실행 - 터미널 명령어 실행 및 스크립트 실행"
+                },
+                "git": {
+                    "description": "Git 버전 관리 - 커밋, 브랜치, 히스토리 조회"
+                },
+                "fetch": {
+                    "description": "HTTP Fetch - 웹 페이지 가져오기, REST API 호출"
+                },
+                "jira": {
+                    "description": "Atlassian Jira 연동 - 이슈 생성, 조회, 업데이트"
+                },
+                "confluence": {
+                    "description": "Atlassian Confluence 연동 - 문서 검색, 페이지 생성/편집"
+                }
+            },
+            "tags": {
+                "filesystem": "파일 시스템",
+                "shell": "쉘 명령",
+                "git": "Git",
+                "http": "HTTP",
+                "database": "데이터베이스",
+                "cloud": "클라우드",
+                "devops": "DevOps",
+                "productivity": "생산성",
+                "search": "검색",
+                "browser": "브라우저",
+                "memory": "메모리",
+                "code": "코드",
+                "design": "디자인"
+            },
+            "modal": {
+                "status": {
+                    "connected": "연결됨",
+                    "connecting": "연결 중...",
+                    "connection_success": "MCP 서버에 연결되었습니다!",
+                    "connection_failed": "연결 실패",
+                    "install_success": "설치가 완료되었습니다.",
+                    "install_failed": "설치에 실패했습니다."
+                },
+                "install": {
+                    "local_install": "로컬 설치",
+                    "description": "필요한 CLI 도구를 자동으로 설치하고 버전을 최신으로 유지합니다.",
+                    "last_installed": "마지막 설치: {date}",
+                    "warning_connect": "설치 완료 후에만 연결 테스트가 가능합니다.",
+                    "button_installing": "설치 중...",
+                    "button_reinstall": "재설치",
+                    "button_install": "설치"
+                },
+                "execution": {
+                    "title": "실행 설정",
+                    "command": "Command",
+                    "args": "Arguments (space separated)"
+                },
+                "permissions": {
+                    "title": "권한 및 기능",
+                    "category": {
+                        "filesystem": "파일 시스템",
+                        "system": "시스템",
+                        "network": "네트워크",
+                        "data": "데이터"
+                    }
+                },
+                "config": {
+                    "title": "설정",
+                    "filesystem": {
+                        "allowedPaths": "허용된 경로 (콤마로 구분)"
+                    },
+                    "git": {
+                        "repository": "저장소 경로"
+                    },
+                    "jira": {
+                        "baseUrl": "Jira URL",
+                        "username": "사용자 이메일",
+                        "token": "API Token"
+                    },
+                    "confluence": {
+                        "baseUrl": "Confluence URL",
+                        "username": "사용자 이메일",
+                        "token": "API Token"
+                    },
+                    "aws": {
+                        "region": "AWS Region",
+                        "accessKeyId": "Access Key ID",
+                        "secretAccessKey": "Secret Access Key"
+                    },
+                    "kubernetes": {
+                        "kubeconfig": "Kubeconfig 경로",
+                        "context": "Context (선택)"
+                    },
+                    "sqlite": {
+                        "dbPath": "데이터베이스 경로"
+                    },
+                    "postgres": {
+                        "connectionString": "Connection String"
+                    },
+                    "brave_search": {
+                        "apiKey": "Brave Search API Key"
+                    },
+                    "github_mcp": {
+                        "token": "GitHub Personal Access Token"
+                    },
+                    "gitlab_mcp": {
+                        "baseUrl": "GitLab URL",
+                        "token": "GitLab Access Token"
+                    },
+                    "slack_mcp": {
+                        "token": "Slack Bot Token"
+                    },
+                    "notion_mcp": {
+                        "token": "Notion Integration Token"
+                    },
+                    "google_drive": {
+                        "clientId": "Google Client ID",
+                        "clientSecret": "Google Client Secret"
+                    },
+                    "sentry": {
+                        "authToken": "Sentry Auth Token",
+                        "organization": "Organization Slug"
+                    }
+                },
+                "buttons": {
+                    "cancel": "취소",
+                    "connect": "연결",
+                    "test_connection": "연결 테스트",
+                    "disconnect": "연결 해제",
+                    "save_only": "저장만 하기",
+                    "save": "저장"
+                },
+                "enable_toggle": {
+                    "label": "{name} 활성화",
+                    "description": "이 MCP 서버를 태스크에서 사용할 수 있도록 활성화"
+                }
+            }
+        },
+        "agents": {
+            "header": "로컬 AI 에이전트",
+            "description": "로컬 환경에서 실행되는 AI 코딩 에이전트를 관리합니다. 이 도구들은 터미널에서 실행되며 별도의 API 연동이 필요하지 않습니다.",
+            "stats": {
+                "supported": "지원 에이전트",
+                "installed": "설치됨",
+                "not_installed": "미설치"
+            },
+            "refresh_status": "설치 상태 새로고침",
+            "status": {
+                "checking": "확인 중...",
+                "installed": "설치됨",
+                "not_installed": "미설치",
+                "env_var_needed": "{env} 환경변수 필요"
+            },
+            "actions": {
+                "details": "상세 정보",
+                "launch_terminal": "터미널에서 실행",
+                "install_guide": "설치 방법 보기",
+                "copy": "복사",
+                "install_command": "설치 명령어",
+                "website": "웹사이트",
+                "docs": "문서",
+                "close": "닫기"
+            },
+            "error_launch": "{name} 실행에 실패했습니다: {error}",
+            "claude_code": {
+                "description": "Anthropic의 공식 AI 코딩 에이전트. 터미널에서 자연어로 코딩 작업을 수행합니다."
+            },
+            "codex": {
+                "description": "OpenAI의 AI 코딩 에이전트. GPT-4 기반으로 코드 생성 및 수정을 수행합니다."
+            }
+        },
+        "integrations": {
+            "header": "외부 통합",
+            "description": "Slack, Discord, Git 서비스 등과 연결하여 워크플로우를 자동화하고 알림을 받으세요.",
+            "coming_soon": "준비 중",
+            "settings": {
+                "header": "설정",
+                "notification_header": "알림 설정",
+                "notify_task_complete": "태스크 완료 알림",
+                "notify_mention": "멘션 알림",
+                "notify_error": "오류 알림",
+                "notify_project_update": "프로젝트 업데이트 알림"
+            },
+            "stats": {
+                "header": "통계",
+                "messages_sent": "보낸 메시지",
+                "skills_synced": "동기화된 스킬",
+                "last_sync": "마지막 동기화"
+            },
+            "actions": {
+                "test": "테스트",
+                "testing": "테스트 중...",
+                "connect": "연결",
+                "connecting": "연결 중...",
+                "disconnect": "연결 해제",
+                "save": "저장",
+                "checking": "확인 중...",
+                "sync_now": "지금 동기화",
+                "syncing": "동기화 중...",
+                "select_folder": "폴더 선택",
+                "add": "추가",
+                "cancel": "취소",
+                "create": "생성",
+                "creating": "생성 중..."
+            },
+            "status": {
+                "connected_as": "{name}(으)로 연결됨",
+                "not_connected": "연결되지 않음"
+            },
+            "webhook_events": {
+                "project_created": "프로젝트 생성됨",
+                "project_updated": "프로젝트 업데이트됨",
+                "project_completed": "프로젝트 완료됨",
+                "task_created": "태스크 생성됨",
+                "task_completed": "태스크 완료됨",
+                "task_failed": "태스크 실패함",
+                "comment_created": "댓글 작성됨",
+                "user_mentioned": "사용자 언급됨"
+            },
+            "tabs": {
+                "slack": "Slack",
+                "discord": "Discord",
+                "git": "Git",
+                "drive": "Google Drive",
+                "webhooks": "웹훅"
+            },
+            "slack": {
+                "connect_btn": "Slack 연결",
+                "connection_failed": "Slack 연결 실패",
+                "test_message_sent": "테스트 메시지가 전송되었습니다."
+            },
+            "discord": {
+                "connect_via_webhook": "웹훅으로 연결",
+                "webhook_url_label": "웹훅 URL",
+                "alert_url_needed": "웹훅 URL을 입력해주세요",
+                "alert_invalid_url": "유효하지 않은 웹훅 URL입니다"
+            },
+            "git": {
+                "connection_failed": "Git 제공자 연결 실패",
+                "alert_repo_url_needed": "저장소 URL을 입력해주세요",
+                "alert_invalid_repo_url": "유효하지 않은 저장소 URL입니다",
+                "connected_repos": "연결된 저장소",
+                "no_repos": "연결된 저장소가 없습니다",
+                "placeholder_repo_url": "저장소 URL (예: https://github.com/owner/repo)",
+                "auto_link_commits": "커밋 자동 연결",
+                "auto_link_prs": "PR 자동 연결",
+                "branch_prefix": "브랜치 접두사"
+            },
+            "drive": {
+                "status_connected": "연결됨",
+                "status_not_connected": "연결되지 않음",
+                "connect_btn": "Google Drive 연결",
+                "connection_failed": "Google Drive 연결 실패",
+                "prompt_folder_id": "폴더 ID 입력",
+                "alert_sync_complete": "동기화 완료",
+                "skills_folder": "스킬 폴더",
+                "no_folder_selected": "선택된 폴더 없음",
+                "sync_settings": "동기화 설정",
+                "auto_sync": "자동 동기화",
+                "sync_interval": "동기화 주기 (분)",
+                "interval_15m": "15분",
+                "interval_30m": "30분",
+                "interval_1h": "1시간",
+                "interval_2h": "2시간"
+            },
+            "webhooks": {
+                "header": "웹훅",
+                "active_count": "{count}개 활성",
+                "add_btn": "웹훅 추가",
+                "alert_fields_needed": "모든 필수 항목을 입력해주세요",
+                "confirm_delete": "이 웹훅을 삭제하시겠습니까?",
+                "alert_test_sent": "테스트 웹훅이 전송되었습니다",
+                "failure_count": "{count}회 실패",
+                "no_webhooks": "설정된 웹훅이 없습니다",
+                "modal": {
+                    "title": "새 웹훅 추가",
+                    "name_label": "이름",
+                    "placeholder_name": "웹훅 이름",
+                    "events_label": "이벤트",
+                    "secret_label": "시크릿 (선택사항)",
+                    "placeholder_secret": "서명 시크릿"
+                }
+            }
+        },
+        "credits": {
+            "balance_title": "크레딧 잔액",
+            "available_credits": "사용 가능한 크레딧",
+            "unit": "크레딧",
+            "transaction_history": "거래 내역",
+            "refresh": "새로고침",
+            "loading": "로딩 중...",
+            "loading_history": "내역 불러오는 중...",
+            "load_more": "더 보기",
+            "no_history": "거래 내역이 없습니다.",
+            "error_loading": "크레딧 내역을 불러오는데 실패했습니다.",
+            "filter_period": "기간",
+            "period_7d": "최근 7일",
+            "period_30d": "최근 30일",
+            "period_90d": "최근 90일",
+            "period_all": "전체",
+            "filter_type": "거래 유형",
+            "types": {
+                "signup_bonus": "가입 보너스",
+                "admin_topup": "관리자 충전",
+                "workflow_execution": "워크플로우 실행",
+                "marketplace_purchase": "마켓플레이스 구매",
+                "execution_refund": "환불",
+                "execution_adjustment": "조정"
+            },
+            "th_date": "날짜",
+            "th_type": "유형",
+            "th_description": "설명",
+            "th_change": "변동",
+            "th_balance": "잔액"
+        },
+
+        "data": {
+            "title": "데이터 관리",
+            "export": {
+                "title": "설정 내보내기",
+                "description": "설정을 JSON 파일로 다운로드합니다",
+                "button": "내보내기"
+            },
+            "import": {
+                "title": "설정 가져오기",
+                "description": "JSON 파일에서 설정을 불러옵니다",
+                "button": "가져오기",
+                "modal_title": "설정 가져오기",
+                "placeholder": "설정 JSON을 여기에 붙여넣으세요..."
+            },
+            "reset": {
+                "title": "초기화",
+                "description": "모든 설정을 기본값으로 초기화합니다",
+                "button": "초기화",
+                "confirm": "모든 설정을 초기화하시겠습니까? 이 작업은 취소할 수 없습니다."
+            },
+            "wizard": {
+                "title": "설정 마법사",
+                "run_again": "설정 마법사 다시 실행",
+                "completed_msg": "초기 설정 마법사가 완료되었습니다",
+                "incomplete_msg": "초기 설정 마법사가 아직 완료되지 않았습니다",
+                "button": "마법사 실행",
+                "completed_on": "{date}에 설정 완료됨",
+                "skipped_on": "{date}에 설정 건너뜀"
+            }
+        }
+    },
+    "marketplace": {
+        "publish": {
+            "title": "마켓플레이스에 배포",
+            "category": "카테고리",
+            "price": "가격 (크레딧)",
+            "price_hint": "무료 아이템은 0으로 설정하세요",
+            "version": "버전",
+            "tags": "태그",
+            "tags_placeholder": "ai, automation (쉼표로 구분)",
+            "notes": "제출 노트 (선택사항)",
+            "notes_placeholder": "검토자에게 남길 메모...",
+            "images": "미리보기 이미지",
+            "drop_zone": "클릭하여 업로드하거나 드래그 앤 드롭",
+            "drop_hint": "PNG, JPG, WEBP 최대 5MB (최대 5개)",
+            "cancel": "취소",
+            "submit": "배포하기",
+            "submitting": "배포 중...",
+            "success": "마켓플레이스에 성공적으로 제출되었습니다!",
+            "access_control": {
+                "title": "접근 제어",
+                "type": "공개 범위",
+                "public": "전체 공개 (모든 사용자에게 노출)",
+                "restricted": "제한된 공개 (지정된 사용자만 접근)",
+                "emails": "허용할 이메일",
+                "emails_placeholder": "user@example.com, alice@partner.com",
+                "domains": "허용할 조직 (도메인)",
+                "domains_placeholder": "company.com, university.edu",
+                "domains_hint": "해당 이메일 도메인을 가진 사용자가 접근할 수 있습니다"
+            }
+        }
+    },
+    "setup": {
+        "wizard": {
+            "common": {
+                "prev": "이전",
+                "next": "다음",
+                "skip": "건너뛰기",
+                "complete": "완료",
+                "start": "시작하기 🚀",
+                "step": "단계 {current} / {total}",
+                "percent_complete": "{percent}% 완료",
+                "or": "또는",
+                "coming_soon": "준비 중"
+            },
+            "steps": {
+                "welcome": {
+                    "title": "환영합니다",
+                    "description": "HighFlow 시작하기"
+                },
+                "profile": {
+                    "title": "프로필 설정",
+                    "description": "기본 사용자 정보를 설정합니다"
+                },
+                "ai_provider": {
+                    "title": "AI 연동",
+                    "description": "AI 서비스를 연결합니다"
+                },
+                "preferences": {
+                    "title": "환경 설정",
+                    "description": "작업 환경을 맞춤 설정합니다"
+                },
+                "projects": {
+                    "title": "프로젝트 탐색",
+                    "description": "로컬 저장소를 검색합니다"
+                },
+                "complete": {
+                    "title": "완료",
+                    "description": "설정이 완료되었습니다"
+                }
+            },
+
+            "welcome": {
+                "title": "HighFlow에 오신 것을 환영합니다!",
+                "subtitle": "AI를 활용하여 프로젝트를 효율적으로 관리하고, 태스크를 자동화하며, 생산성을 극대화하세요.",
+                "features": {
+                    "project_management": "프로젝트 관리",
+                    "project_management_desc": "칸반, 타임라인 뷰",
+                    "ai_automation": "AI 자동화",
+                    "ai_automation_desc": "태스크 자동 실행",
+                    "multi_ai": "다중 AI 연동",
+                    "multi_ai_desc": "Claude, GPT, Gemini"
+                },
+                "note": "몇 가지 간단한 설정을 완료하면 바로 사용할 수 있습니다."
+            },
+            "profile": {
+                "intro": "기본 사용자 정보를 설정해주세요",
+                "display_name": "표시 이름",
+                "display_name_placeholder": "이름을 입력하세요",
+                "min_length": "최소 2자 이상",
+                "language": "언어",
+                "timezone": "시간대"
+            },
+            "ai_provider": {
+                "intro": "멀티모달 AI 또는 로컬 LM Studio/Ollama를 연결하여 이미지 분석과 자동화를 사용하세요. 로컬 서버가 실행 중이면 자동으로 감지됩니다.",
+                "no_providers": "사용할 수 있는 AI 프로바이더가 없습니다. 설정에서 새 프로바이더를 추가하세요.",
+                "open_website": "공식 페이지 열기",
+                "local_guide": {
+                    "title": "LM Studio 설치 & 연동 가이드",
+                    "step1": "lmstudio.ai에서 최신 버전을 다운로드하고 설치합니다.",
+                    "step2": "LM Studio를 실행해 Server > OpenAI Compatible Server를 시작합니다.",
+                    "step3": "사용할 모델을 로드하고 Start Server로 API 서버를 실행합니다.",
+                    "step4": "아래 Base URL이 LM Studio에서 표시되는 주소인지 확인하세요."
+                },
+                "download_lm_studio": "LM Studio 다운로드",
+                "check_status": "상태 확인",
+                "checking": "확인 중...",
+                "local_status": "로컬 상태",
+                "base_url": "Base URL",
+                "base_url_desc": "LM Studio 서버에서 표시되는 주소와 동일해야 합니다.",
+                "oauth": {
+                    "connect": "OAuth 연결",
+                    "connected": "연결됨",
+                    "hint_connect": "OAuth로 간편하게 연결하세요",
+                    "hint_connected": "계정이 연결되었습니다"
+                },
+                "api_key": {
+                    "label": "API 키로 연결",
+                    "placeholder": "API 키 입력",
+                    "verified": "API 키가 확인되었습니다",
+                    "failed": "연결에 실패했습니다.",
+                    "note": "API 키는 안전하게 로컬에 저장되며 외부로 전송되지 않습니다."
+                },
+                "status": {
+                    "connected": "연결됨",
+                    "local_detected": "로컬 감지",
+                    "checking": "확인 중",
+                    "not_running": "미실행",
+                    "running": "실행 중",
+                    "unknown": "미확인",
+                    "local_response": "LM Studio 서버가 응답 중입니다 {source}",
+                    "connection_failed": "연결 실패: {details}",
+                    "check_running": "LM Studio가 실행 중인지 확인해주세요",
+                    "checking_status": "로컬 서버 상태를 확인 중입니다...",
+                    "not_checked": "아직 상태를 확인하지 않았습니다"
+                }
+            },
+            "preferences": {
+                "intro": "작업 스타일에 맞게 환경을 설정하세요",
+                "default_view": "기본 프로젝트 뷰",
+                "animations": {
+                    "label": "애니메이션 효과",
+                    "desc": "부드러운 전환 효과 사용"
+                },
+                "compact_mode": {
+                    "label": "컴팩트 모드",
+                    "desc": "더 많은 정보를 한 화면에 표시"
+                },
+                "auto_save": {
+                    "label": "자동 저장",
+                    "desc": "변경사항 자동 저장"
+                }
+            },
+            "projects": {
+                "intro": "로컬 개발 저장소를 자동으로 탐색합니다",
+                "scan_btn": "로컬 저장소 검색",
+                "scanning": "로컬 저장소를 검색하고 있습니다...",
+                "scanning_desc": "Development, Projects, GitHub 폴더 등을 확인합니다",
+                "found_title": "발견된 저장소 ({count}개)",
+                "found_desc": "이 저장소들은 프로젝트 생성 시 바로 선택할 수 있습니다.",
+                "no_repos": "발견된 저장소가 없습니다",
+                "no_repos_desc": "나중에 프로젝트 생성 시 직접 선택할 수 있습니다",
+                "optional_note": "이 단계는 선택 사항입니다. 건너뛰고 나중에 설정할 수 있습니다."
+            },
+            "complete": {
+                "title": "설정이 완료되었습니다!",
+                "subtitle": "이제 AI Workflow Manager를 사용할 준비가 되었습니다. 새 프로젝트를 생성하거나 기존 저장소를 가져와 시작하세요.",
+                "summary": "설정 요약",
+                "dont_show_again": "다음에 이 위자드 표시 안 함",
+                "user": "사용자",
+                "provider": "AI 제공자",
+                "found_repos": "발견된 저장소"
+            }
+        }
     }
 }

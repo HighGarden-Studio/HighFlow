@@ -7,6 +7,9 @@
  */
 import { ref, reactive, computed, onMounted } from 'vue';
 import IconRenderer from '../common/IconRenderer.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 // ========================================
 // Types
@@ -156,24 +159,39 @@ const selectedGitProvider = ref<'github' | 'gitlab' | 'bitbucket'>('github');
 const newRepoUrl = ref('');
 
 // Available webhook events
-const webhookEvents = [
-    { value: 'project.created', label: '프로젝트 생성' },
-    { value: 'project.updated', label: '프로젝트 업데이트' },
-    { value: 'project.completed', label: '프로젝트 완료' },
-    { value: 'task.created', label: '태스크 생성' },
-    { value: 'task.completed', label: '태스크 완료' },
-    { value: 'task.failed', label: '태스크 실패' },
-    { value: 'comment.created', label: '댓글 작성' },
-    { value: 'user.mentioned', label: '사용자 멘션' },
-];
+const webhookEvents = computed(() => [
+    { value: 'project.created', label: t('settings.integrations.webhook_events.project_created') },
+    { value: 'project.updated', label: t('settings.integrations.webhook_events.project_updated') },
+    {
+        value: 'project.completed',
+        label: t('settings.integrations.webhook_events.project_completed'),
+    },
+    { value: 'task.created', label: t('settings.integrations.webhook_events.task_created') },
+    { value: 'task.completed', label: t('settings.integrations.webhook_events.task_completed') },
+    { value: 'task.failed', label: t('settings.integrations.webhook_events.task_failed') },
+    { value: 'comment.created', label: t('settings.integrations.webhook_events.comment_created') },
+    { value: 'user.mentioned', label: t('settings.integrations.webhook_events.user_mentioned') },
+]);
 
 // ========================================
 // Computed
 // ========================================
 
 const tabs = computed(() => [
-    { id: 'slack', label: 'Slack', icon: '💬', connected: integrationStatus.slack.connected },
-    { id: 'discord', label: 'Discord', icon: '🎮', connected: integrationStatus.discord.connected },
+    {
+        id: 'slack',
+        label: 'Slack',
+        icon: '💬',
+        connected: integrationStatus.slack.connected,
+        comingSoon: true,
+    },
+    {
+        id: 'discord',
+        label: 'Discord',
+        icon: '🎮',
+        connected: integrationStatus.discord.connected,
+        comingSoon: true,
+    },
     {
         id: 'git',
         label: 'Git',
@@ -182,12 +200,14 @@ const tabs = computed(() => [
             integrationStatus.github.connected ||
             integrationStatus.gitlab.connected ||
             integrationStatus.bitbucket.connected,
+        comingSoon: true, // Git integration is also a simulation
     },
     {
         id: 'drive',
         label: 'Google Drive',
         icon: '☁️', // Cloud icon for Google Drive
         connected: integrationStatus.googleDrive.connected,
+        comingSoon: true,
     },
     { id: 'webhooks', label: 'Webhooks', icon: '🔔', connected: webhooks.value.length > 0 },
 ]);
@@ -236,7 +256,9 @@ async function connectSlack() {
         slackConfig.channelName = '#general';
     } catch (error) {
         integrationStatus.slack.error =
-            error instanceof Error ? error.message : 'Connection failed';
+            error instanceof Error
+                ? error.message
+                : t('settings.integrations.slack.connection_failed');
     } finally {
         loading.value = false;
     }
@@ -259,7 +281,7 @@ async function testSlack() {
     testingIntegration.value = 'slack';
     try {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        alert('테스트 메시지가 전송되었습니다.');
+        alert(t('settings.integrations.test_message_sent'));
     } finally {
         testingIntegration.value = null;
     }
@@ -268,7 +290,7 @@ async function testSlack() {
 // Discord
 async function saveDiscordWebhook() {
     if (!discordConfig.webhookUrl) {
-        alert('웹훅 URL을 입력해주세요.');
+        alert(t('settings.integrations.discord.alert_url_needed'));
         return;
     }
 
@@ -291,7 +313,7 @@ async function saveDiscordWebhook() {
     } catch (error) {
         integrationStatus.discord.error =
             error instanceof Error ? error.message : 'Invalid webhook';
-        alert('유효하지 않은 웹훅 URL입니다.');
+        alert(t('settings.integrations.discord.alert_invalid_url'));
     } finally {
         loading.value = false;
     }
@@ -307,7 +329,7 @@ async function testDiscord() {
     testingIntegration.value = 'discord';
     try {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        alert('테스트 메시지가 전송되었습니다.');
+        alert(t('settings.integrations.test_message_sent'));
     } finally {
         testingIntegration.value = null;
     }
@@ -333,7 +355,10 @@ async function connectGitProvider(provider: 'github' | 'gitlab' | 'bitbucket') {
     } catch (error) {
         const status = integrationStatus[provider];
         if (status) {
-            status.error = error instanceof Error ? error.message : 'Connection failed';
+            status.error =
+                error instanceof Error
+                    ? error.message
+                    : t('settings.integrations.git.connection_failed');
         }
     } finally {
         loading.value = false;
@@ -357,7 +382,7 @@ async function disconnectGitProvider(provider: 'github' | 'gitlab' | 'bitbucket'
 
 async function addRepository() {
     if (!newRepoUrl.value) {
-        alert('저장소 URL을 입력해주세요.');
+        alert(t('settings.integrations.git.alert_repo_url_needed'));
         return;
     }
 
@@ -388,7 +413,7 @@ async function addRepository() {
 
         newRepoUrl.value = '';
     } catch (error) {
-        alert('유효하지 않은 저장소 URL입니다.');
+        alert(t('settings.integrations.git.alert_invalid_repo_url'));
     } finally {
         loading.value = false;
     }
@@ -415,7 +440,9 @@ async function connectGoogleDrive() {
         };
     } catch (error) {
         integrationStatus.googleDrive.error =
-            error instanceof Error ? error.message : 'Connection failed';
+            error instanceof Error
+                ? error.message
+                : t('settings.integrations.drive.connection_failed');
     } finally {
         loading.value = false;
     }
@@ -435,7 +462,7 @@ async function disconnectGoogleDrive() {
 
 async function selectSkillsFolder() {
     // In real implementation, this would open Google Drive picker
-    const folderId = prompt('Skills 폴더 ID를 입력해주세요:');
+    const folderId = prompt(t('settings.integrations.drive.prompt_folder_id'));
     if (folderId) {
         googleDriveConfig.folderId = folderId;
         googleDriveConfig.folderName = 'AI Workflow Skills';
@@ -447,7 +474,7 @@ async function syncSkills() {
     try {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         integrationStatus.googleDrive.lastSync = new Date();
-        alert('Skills 동기화가 완료되었습니다.');
+        alert(t('settings.integrations.drive.alert_sync_complete'));
     } finally {
         loading.value = false;
     }
@@ -464,7 +491,7 @@ function openNewWebhookModal() {
 
 async function createWebhook() {
     if (!newWebhookForm.name || !newWebhookForm.url || newWebhookForm.events.length === 0) {
-        alert('모든 필수 필드를 입력해주세요.');
+        alert(t('settings.integrations.webhooks.alert_fields_needed'));
         return;
     }
 
@@ -494,7 +521,7 @@ function toggleWebhook(webhookId: string) {
 }
 
 function deleteWebhook(webhookId: string) {
-    if (confirm('이 웹훅을 삭제하시겠습니까?')) {
+    if (confirm(t('settings.integrations.webhooks.confirm_delete'))) {
         webhooks.value = webhooks.value.filter((w) => w.id !== webhookId);
     }
 }
@@ -503,7 +530,7 @@ async function testWebhook(webhookId: string) {
     testingIntegration.value = webhookId;
     try {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        alert('테스트 웹훅이 전송되었습니다.');
+        alert(t('settings.integrations.webhooks.alert_test_sent'));
     } finally {
         testingIntegration.value = null;
     }
@@ -530,9 +557,11 @@ onMounted(() => {
     <div class="integrations-settings">
         <!-- Header -->
         <div class="mb-6">
-            <h2 class="text-xl font-bold text-white mb-2">외부 서비스 연동</h2>
+            <h2 class="text-xl font-bold text-white mb-2">
+                {{ t('settings.integrations.header') }}
+            </h2>
             <p class="text-gray-400 text-sm">
-                Slack, Discord, Git 서비스 등과 연동하여 알림을 받고 작업을 자동화할 수 있습니다.
+                {{ t('settings.integrations.description') }}
             </p>
         </div>
 
@@ -551,6 +580,12 @@ onMounted(() => {
             >
                 <IconRenderer :emoji="tab.icon" class="w-5 h-5" />
                 <span>{{ tab.label }}</span>
+                <span
+                    v-if="tab.comingSoon"
+                    class="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-blue-900/50 text-blue-200 rounded border border-blue-700/50"
+                >
+                    {{ t('settings.integrations.coming_soon') }}
+                </span>
                 <span v-if="tab.connected" class="w-2 h-2 bg-green-500 rounded-full" />
             </button>
         </div>
@@ -571,8 +606,10 @@ onMounted(() => {
                             <p class="text-gray-400 text-sm">
                                 {{
                                     integrationStatus.slack.connected
-                                        ? `연결됨: ${slackConfig.teamName}`
-                                        : '연결되지 않음'
+                                        ? t('settings.integrations.status.connected_as', {
+                                              name: slackConfig.teamName,
+                                          })
+                                        : t('settings.integrations.status.not_connected')
                                 }}
                             </p>
                         </div>
@@ -584,7 +621,11 @@ onMounted(() => {
                                 :disabled="testingIntegration === 'slack'"
                                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
                             >
-                                {{ testingIntegration === 'slack' ? '테스트 중...' : '테스트' }}
+                                {{
+                                    testingIntegration === 'slack'
+                                        ? t('settings.integrations.actions.testing')
+                                        : t('settings.integrations.actions.test')
+                                }}
                             </button>
                             <button
                                 @click="disconnectSlack"
@@ -600,14 +641,20 @@ onMounted(() => {
                             :disabled="loading"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
                         >
-                            {{ loading ? '연결 중...' : 'Slack 연결' }}
+                            {{
+                                loading
+                                    ? t('settings.integrations.actions.connecting')
+                                    : t('settings.integrations.slack.connect_btn')
+                            }}
                         </button>
                     </div>
                 </div>
 
                 <template v-if="integrationStatus.slack.connected">
                     <div class="border-t border-gray-700 pt-6">
-                        <h4 class="text-sm font-medium text-gray-300 mb-4">알림 설정</h4>
+                        <h4 class="text-sm font-medium text-gray-300 mb-4">
+                            {{ t('settings.integrations.settings.notification_header') }}
+                        </h4>
                         <div class="space-y-3">
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
@@ -615,7 +662,9 @@ onMounted(() => {
                                     v-model="slackConfig.notifyOnTaskComplete"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span class="text-gray-300">태스크 완료 시 알림</span>
+                                <span class="text-gray-300">{{
+                                    t('settings.integrations.settings.notify_task_complete')
+                                }}</span>
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
@@ -623,7 +672,9 @@ onMounted(() => {
                                     v-model="slackConfig.notifyOnMention"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span class="text-gray-300">멘션 시 DM 전송</span>
+                                <span class="text-gray-300">{{
+                                    t('settings.integrations.settings.notify_mention')
+                                }}</span>
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
@@ -631,19 +682,25 @@ onMounted(() => {
                                     v-model="slackConfig.notifyOnError"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span class="text-gray-300">오류 발생 시 알림</span>
+                                <span class="text-gray-300">{{
+                                    t('settings.integrations.settings.notify_error')
+                                }}</span>
                             </label>
                         </div>
                     </div>
 
                     <div class="border-t border-gray-700 pt-6">
-                        <h4 class="text-sm font-medium text-gray-300 mb-4">사용 통계</h4>
+                        <h4 class="text-sm font-medium text-gray-300 mb-4">
+                            {{ t('settings.integrations.stats.header') }}
+                        </h4>
                         <div class="grid grid-cols-3 gap-4">
                             <div class="bg-gray-700/50 rounded-lg p-3">
                                 <div class="text-2xl font-bold text-white">
                                     {{ integrationStatus.slack.stats?.messagesSent || 0 }}
                                 </div>
-                                <div class="text-gray-400 text-sm">전송된 메시지</div>
+                                <div class="text-gray-400 text-sm">
+                                    {{ t('settings.integrations.stats.messages_sent') }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -664,8 +721,10 @@ onMounted(() => {
                             <p class="text-gray-400 text-sm">
                                 {{
                                     integrationStatus.discord.connected
-                                        ? `연결됨: ${discordConfig.webhookName}`
-                                        : '웹훅으로 연결'
+                                        ? t('settings.integrations.status.connected_as', {
+                                              name: discordConfig.webhookName,
+                                          })
+                                        : t('settings.integrations.discord.connect_via_webhook')
                                 }}
                             </p>
                         </div>
@@ -676,20 +735,26 @@ onMounted(() => {
                             :disabled="testingIntegration === 'discord'"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
                         >
-                            {{ testingIntegration === 'discord' ? '테스트 중...' : '테스트' }}
+                            {{
+                                testingIntegration === 'discord'
+                                    ? t('settings.integrations.actions.testing')
+                                    : t('settings.integrations.actions.test')
+                            }}
                         </button>
                         <button
                             @click="disconnectDiscord"
                             class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors"
                         >
-                            연결 해제
+                            {{ t('settings.integrations.actions.disconnect') }}
                         </button>
                     </div>
                 </div>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">웹훅 URL</label>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{{
+                            t('settings.integrations.discord.webhook_url_label')
+                        }}</label>
                         <div class="flex gap-2">
                             <input
                                 v-model="discordConfig.webhookUrl"
@@ -702,14 +767,20 @@ onMounted(() => {
                                 :disabled="loading || !discordConfig.webhookUrl"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
                             >
-                                {{ loading ? '확인 중...' : '저장' }}
+                                {{
+                                    loading
+                                        ? t('settings.integrations.actions.checking')
+                                        : t('settings.integrations.actions.save')
+                                }}
                             </button>
                         </div>
                     </div>
 
                     <template v-if="integrationStatus.discord.connected">
                         <div class="border-t border-gray-700 pt-4">
-                            <h4 class="text-sm font-medium text-gray-300 mb-4">알림 설정</h4>
+                            <h4 class="text-sm font-medium text-gray-300 mb-4">
+                                {{ t('settings.integrations.settings.notification_header') }}
+                            </h4>
                             <div class="space-y-3">
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -717,7 +788,9 @@ onMounted(() => {
                                         v-model="discordConfig.notifyOnTaskComplete"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span class="text-gray-300">태스크 완료 시 알림</span>
+                                    <span class="text-gray-300">{{
+                                        t('settings.integrations.settings.notify_task_complete')
+                                    }}</span>
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -725,7 +798,9 @@ onMounted(() => {
                                         v-model="discordConfig.notifyOnProjectUpdate"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span class="text-gray-300">프로젝트 업데이트 알림</span>
+                                    <span class="text-gray-300">{{
+                                        t('settings.integrations.settings.notify_project_update')
+                                    }}</span>
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -733,7 +808,9 @@ onMounted(() => {
                                         v-model="discordConfig.notifyOnError"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span class="text-gray-300">오류 발생 시 알림</span>
+                                    <span class="text-gray-300">{{
+                                        t('settings.integrations.settings.notify_error')
+                                    }}</span>
                                 </label>
                             </div>
                         </div>
@@ -796,7 +873,7 @@ onMounted(() => {
                                     {{
                                         selectedGitStatus.connected
                                             ? `@${selectedGitConfig.username}`
-                                            : '연결되지 않음'
+                                            : t('settings.integrations.status.not_connected')
                                     }}
                                 </p>
                             </div>
@@ -807,7 +884,7 @@ onMounted(() => {
                                 :disabled="loading"
                                 class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors disabled:opacity-50"
                             >
-                                연결 해제
+                                {{ t('settings.integrations.actions.disconnect') }}
                             </button>
                         </template>
                         <button
@@ -816,14 +893,20 @@ onMounted(() => {
                             :disabled="loading"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
                         >
-                            {{ loading ? '연결 중...' : '연결하기' }}
+                            {{
+                                loading
+                                    ? t('settings.integrations.actions.connecting')
+                                    : t('settings.integrations.actions.connect')
+                            }}
                         </button>
                     </div>
 
                     <template v-if="selectedGitStatus.connected">
                         <!-- Connected Repositories -->
                         <div class="border-t border-gray-700 pt-4">
-                            <h5 class="text-sm font-medium text-gray-300 mb-3">연결된 저장소</h5>
+                            <h5 class="text-sm font-medium text-gray-300 mb-3">
+                                {{ t('settings.integrations.git.connected_repos') }}
+                            </h5>
 
                             <div class="space-y-2 mb-4">
                                 <div
@@ -859,7 +942,7 @@ onMounted(() => {
                                     v-if="selectedGitConfig.repositories.length === 0"
                                     class="text-gray-500 text-sm text-center py-4"
                                 >
-                                    연결된 저장소가 없습니다
+                                    {{ t('settings.integrations.git.no_repos') }}
                                 </div>
                             </div>
 
@@ -868,7 +951,9 @@ onMounted(() => {
                                 <input
                                     v-model="newRepoUrl"
                                     type="url"
-                                    placeholder="저장소 URL (예: https://github.com/user/repo)"
+                                    :placeholder="
+                                        t('settings.integrations.git.placeholder_repo_url')
+                                    "
                                     class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
                                 <button
@@ -876,14 +961,16 @@ onMounted(() => {
                                     :disabled="!newRepoUrl"
                                     class="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
                                 >
-                                    추가
+                                    {{ t('settings.integrations.actions.add') }}
                                 </button>
                             </div>
                         </div>
 
                         <!-- Settings -->
                         <div class="border-t border-gray-700 pt-4 mt-4">
-                            <h5 class="text-sm font-medium text-gray-300 mb-3">설정</h5>
+                            <h5 class="text-sm font-medium text-gray-300 mb-3">
+                                {{ t('settings.integrations.settings.header') }}
+                            </h5>
                             <div class="space-y-3">
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -891,9 +978,9 @@ onMounted(() => {
                                         v-model="selectedGitConfig.autoLinkCommits"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span class="text-gray-300 text-sm"
-                                        >커밋 메시지에서 태스크 자동 연결</span
-                                    >
+                                    <span class="text-gray-300 text-sm">{{
+                                        t('settings.integrations.git.auto_link_commits')
+                                    }}</span>
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -901,10 +988,14 @@ onMounted(() => {
                                         v-model="selectedGitConfig.autoLinkPRs"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span class="text-gray-300 text-sm">PR과 태스크 자동 연결</span>
+                                    <span class="text-gray-300 text-sm">{{
+                                        t('settings.integrations.git.auto_link_prs')
+                                    }}</span>
                                 </label>
                                 <div class="flex items-center gap-3">
-                                    <span class="text-gray-300 text-sm">브랜치 접두사:</span>
+                                    <span class="text-gray-300 text-sm">{{
+                                        t('settings.integrations.git.branch_prefix')
+                                    }}</span>
                                     <input
                                         v-model="selectedGitConfig.branchPrefix"
                                         type="text"
@@ -931,8 +1022,8 @@ onMounted(() => {
                             <p class="text-gray-400 text-sm">
                                 {{
                                     integrationStatus.googleDrive.connected
-                                        ? 'Skills 폴더와 동기화'
-                                        : 'Skills를 Google Drive와 동기화'
+                                        ? t('settings.integrations.drive.status_connected')
+                                        : t('settings.integrations.drive.status_not_connected')
                                 }}
                             </p>
                         </div>
@@ -946,14 +1037,18 @@ onMounted(() => {
                             :disabled="loading"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
                         >
-                            {{ loading ? '동기화 중...' : '지금 동기화' }}
+                            {{
+                                loading
+                                    ? t('settings.integrations.actions.syncing')
+                                    : t('settings.integrations.actions.sync_now')
+                            }}
                         </button>
                         <button
                             @click="disconnectGoogleDrive"
                             :disabled="loading"
                             class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors disabled:opacity-50"
                         >
-                            연결 해제
+                            {{ t('settings.integrations.actions.disconnect') }}
                         </button>
                     </div>
                     <button
@@ -962,14 +1057,20 @@ onMounted(() => {
                         :disabled="loading"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
                     >
-                        {{ loading ? '연결 중...' : 'Google Drive 연결' }}
+                        {{
+                            loading
+                                ? t('settings.integrations.actions.connecting')
+                                : t('settings.integrations.drive.connect_btn')
+                        }}
                     </button>
                 </div>
 
                 <template v-if="integrationStatus.googleDrive.connected">
                     <!-- Folder Selection -->
                     <div class="border-t border-gray-700 pt-6">
-                        <h4 class="text-sm font-medium text-gray-300 mb-4">Skills 폴더</h4>
+                        <h4 class="text-sm font-medium text-gray-300 mb-4">
+                            {{ t('settings.integrations.drive.skills_folder') }}
+                        </h4>
                         <div class="flex items-center gap-4">
                             <div class="flex-1 bg-gray-700/50 rounded-lg px-4 py-3">
                                 <div
@@ -984,20 +1085,24 @@ onMounted(() => {
                                         >({{ googleDriveConfig.folderId }})</span
                                     >
                                 </div>
-                                <div v-else class="text-gray-400">폴더가 선택되지 않았습니다</div>
+                                <div v-else class="text-gray-400">
+                                    {{ t('settings.integrations.drive.no_folder_selected') }}
+                                </div>
                             </div>
                             <button
                                 @click="selectSkillsFolder"
                                 class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
                             >
-                                폴더 선택
+                                {{ t('settings.integrations.actions.select_folder') }}
                             </button>
                         </div>
                     </div>
 
                     <!-- Sync Settings -->
                     <div class="border-t border-gray-700 pt-6">
-                        <h4 class="text-sm font-medium text-gray-300 mb-4">동기화 설정</h4>
+                        <h4 class="text-sm font-medium text-gray-300 mb-4">
+                            {{ t('settings.integrations.drive.sync_settings') }}
+                        </h4>
                         <div class="space-y-4">
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
@@ -1005,21 +1110,33 @@ onMounted(() => {
                                     v-model="googleDriveConfig.autoSync"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span class="text-gray-300">자동 동기화</span>
+                                <span class="text-gray-300">{{
+                                    t('settings.integrations.drive.auto_sync')
+                                }}</span>
                             </label>
                             <div
                                 v-if="googleDriveConfig.autoSync"
                                 class="flex items-center gap-3 ml-7"
                             >
-                                <span class="text-gray-400 text-sm">동기화 간격:</span>
+                                <span class="text-gray-400 text-sm">{{
+                                    t('settings.integrations.drive.sync_interval')
+                                }}</span>
                                 <select
                                     v-model="googleDriveConfig.syncIntervalMinutes"
                                     class="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 >
-                                    <option :value="15">15분</option>
-                                    <option :value="30">30분</option>
-                                    <option :value="60">1시간</option>
-                                    <option :value="120">2시간</option>
+                                    <option :value="15">
+                                        {{ t('settings.integrations.drive.interval_15m') }}
+                                    </option>
+                                    <option :value="30">
+                                        {{ t('settings.integrations.drive.interval_30m') }}
+                                    </option>
+                                    <option :value="60">
+                                        {{ t('settings.integrations.drive.interval_1h') }}
+                                    </option>
+                                    <option :value="120">
+                                        {{ t('settings.integrations.drive.interval_2h') }}
+                                    </option>
                                 </select>
                             </div>
                         </div>
@@ -1027,13 +1144,17 @@ onMounted(() => {
 
                     <!-- Stats -->
                     <div class="border-t border-gray-700 pt-6">
-                        <h4 class="text-sm font-medium text-gray-300 mb-4">통계</h4>
+                        <h4 class="text-sm font-medium text-gray-300 mb-4">
+                            {{ t('settings.integrations.stats.header') }}
+                        </h4>
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-gray-700/50 rounded-lg p-3">
                                 <div class="text-2xl font-bold text-white">
                                     {{ integrationStatus.googleDrive.stats?.skillsSynced || 0 }}
                                 </div>
-                                <div class="text-gray-400 text-sm">동기화된 Skills</div>
+                                <div class="text-gray-400 text-sm">
+                                    {{ t('settings.integrations.stats.skills_synced') }}
+                                </div>
                             </div>
                             <div class="bg-gray-700/50 rounded-lg p-3">
                                 <div class="text-lg font-medium text-white">
@@ -1042,7 +1163,9 @@ onMounted(() => {
                                         '-'
                                     }}
                                 </div>
-                                <div class="text-gray-400 text-sm">마지막 동기화</div>
+                                <div class="text-gray-400 text-sm">
+                                    {{ t('settings.integrations.stats.last_sync') }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1053,14 +1176,22 @@ onMounted(() => {
             <div v-if="activeTab === 'webhooks'" class="space-y-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h3 class="text-lg font-semibold text-white">웹훅</h3>
-                        <p class="text-gray-400 text-sm">{{ activeWebhooksCount }}개의 활성 웹훅</p>
+                        <h3 class="text-lg font-semibold text-white">
+                            {{ t('settings.integrations.webhooks.header') }}
+                        </h3>
+                        <p class="text-gray-400 text-sm">
+                            {{
+                                t('settings.integrations.webhooks.active_count', {
+                                    count: activeWebhooksCount,
+                                })
+                            }}
+                        </p>
                     </div>
                     <button
                         @click="openNewWebhookModal"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
                     >
-                        + 웹훅 추가
+                        + {{ t('settings.integrations.webhooks.add_btn') }}
                     </button>
                 </div>
 
@@ -1100,7 +1231,11 @@ onMounted(() => {
                                     :disabled="testingIntegration === webhook.id"
                                     class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition-colors disabled:opacity-50"
                                 >
-                                    {{ testingIntegration === webhook.id ? '...' : '테스트' }}
+                                    {{
+                                        testingIntegration === webhook.id
+                                            ? '...'
+                                            : t('settings.integrations.actions.test')
+                                    }}
                                 </button>
                                 <button
                                     @click="deleteWebhook(webhook.id)"
@@ -1133,13 +1268,18 @@ onMounted(() => {
                         </div>
                         <div v-if="webhook.failureCount > 0" class="mt-2">
                             <span class="text-red-400 text-sm"
-                                >⚠️ {{ webhook.failureCount }}회 실패</span
+                                >⚠️
+                                {{
+                                    t('settings.integrations.webhooks.failure_count', {
+                                        count: webhook.failureCount,
+                                    })
+                                }}</span
                             >
                         </div>
                     </div>
 
                     <div v-if="webhooks.length === 0" class="text-center py-8 text-gray-500">
-                        등록된 웹훅이 없습니다
+                        {{ t('settings.integrations.webhooks.no_webhooks') }}
                     </div>
                 </div>
             </div>
@@ -1153,15 +1293,21 @@ onMounted(() => {
                 @click.self="showNewWebhookModal = false"
             >
                 <div class="bg-gray-800 rounded-xl w-full max-w-md p-6 shadow-xl">
-                    <h3 class="text-lg font-semibold text-white mb-4">새 웹훅 추가</h3>
+                    <h3 class="text-lg font-semibold text-white mb-4">
+                        {{ t('settings.integrations.webhooks.modal.title') }}
+                    </h3>
 
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1">이름</label>
+                            <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                                t('settings.integrations.webhooks.modal.name_label')
+                            }}</label>
                             <input
                                 v-model="newWebhookForm.name"
                                 type="text"
-                                placeholder="웹훅 이름"
+                                :placeholder="
+                                    t('settings.integrations.webhooks.modal.placeholder_name')
+                                "
                                 class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
                         </div>
@@ -1177,9 +1323,9 @@ onMounted(() => {
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1"
-                                >이벤트</label
-                            >
+                            <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                                t('settings.integrations.webhooks.modal.events_label')
+                            }}</label>
                             <div class="grid grid-cols-2 gap-2 mt-2">
                                 <label
                                     v-for="event in webhookEvents"
@@ -1198,13 +1344,15 @@ onMounted(() => {
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-1"
-                                >시크릿 (선택사항)</label
-                            >
+                            <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                                t('settings.integrations.webhooks.modal.secret_label')
+                            }}</label>
                             <input
                                 v-model="newWebhookForm.secret"
                                 type="password"
-                                placeholder="HMAC 서명용 시크릿"
+                                :placeholder="
+                                    t('settings.integrations.webhooks.modal.placeholder_secret')
+                                "
                                 class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
                         </div>
@@ -1215,7 +1363,7 @@ onMounted(() => {
                             @click="showNewWebhookModal = false"
                             class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('settings.integrations.actions.cancel') }}
                         </button>
                         <button
                             @click="createWebhook"
@@ -1227,7 +1375,11 @@ onMounted(() => {
                             "
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
                         >
-                            {{ loading ? '생성 중...' : '생성' }}
+                            {{
+                                loading
+                                    ? t('settings.integrations.actions.creating')
+                                    : t('settings.integrations.actions.create')
+                            }}
                         </button>
                     </div>
                 </div>
