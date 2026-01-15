@@ -216,7 +216,7 @@ async function handleExportProject() {
 
 async function handleResetResults() {
     if (!props.project) return;
-    if (!confirm(t('msg.reset_confirm'))) {
+    if (!confirm(t('project.msg.reset_confirm'))) {
         return;
     }
 

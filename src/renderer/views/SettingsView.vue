@@ -605,6 +605,128 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                 </div>
                             </div>
                         </section>
+
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                                Notifications
+                            </h2>
+                            <div
+                                class="bg-white dark:bg-gray-800 rounded-lg shadow-sm divide-y divide-gray-200 dark:divide-gray-700"
+                            >
+                                <div class="flex items-center justify-between p-4">
+                                    <div>
+                                        <h3 class="font-medium text-gray-900 dark:text-white">
+                                            Enable Desktop Notifications
+                                        </h3>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                                            Show desktop notifications for task updates
+                                        </p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            v-model="
+                                                settingsStore.generalSettings.desktopNotifications
+                                                    .enabled
+                                            "
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="settingsStore.saveSettings()"
+                                        />
+                                        <div
+                                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                        ></div>
+                                    </label>
+                                </div>
+
+                                <template
+                                    v-if="
+                                        settingsStore.generalSettings.desktopNotifications.enabled
+                                    "
+                                >
+                                    <div class="flex items-center justify-between p-4 pl-8">
+                                        <div>
+                                            <h3 class="font-medium text-gray-900 dark:text-white">
+                                                Task Start
+                                            </h3>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                                Notify when a task starts execution
+                                            </p>
+                                        </div>
+                                        <label
+                                            class="relative inline-flex items-center cursor-pointer"
+                                        >
+                                            <input
+                                                v-model="
+                                                    settingsStore.generalSettings
+                                                        .desktopNotifications.notifyOnTaskStart
+                                                "
+                                                type="checkbox"
+                                                class="sr-only peer"
+                                                @change="settingsStore.saveSettings()"
+                                            />
+                                            <div
+                                                class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                            ></div>
+                                        </label>
+                                    </div>
+
+                                    <div class="flex items-center justify-between p-4 pl-8">
+                                        <div>
+                                            <h3 class="font-medium text-gray-900 dark:text-white">
+                                                Task Completion
+                                            </h3>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                                Notify when a task finishes execution
+                                            </p>
+                                        </div>
+                                        <label
+                                            class="relative inline-flex items-center cursor-pointer"
+                                        >
+                                            <input
+                                                v-model="
+                                                    settingsStore.generalSettings
+                                                        .desktopNotifications.notifyOnTaskComplete
+                                                "
+                                                type="checkbox"
+                                                class="sr-only peer"
+                                                @change="settingsStore.saveSettings()"
+                                            />
+                                            <div
+                                                class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                            ></div>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex flex-col">
+                                            <span
+                                                class="text-sm font-medium text-gray-900 dark:text-white"
+                                            >
+                                                Task Failure
+                                            </span>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                                Get notified when a task fails
+                                            </p>
+                                        </div>
+                                        <label
+                                            class="relative inline-flex items-center cursor-pointer"
+                                        >
+                                            <input
+                                                v-model="
+                                                    settingsStore.generalSettings
+                                                        .desktopNotifications.notifyOnTaskError
+                                                "
+                                                type="checkbox"
+                                                class="sr-only peer"
+                                                @change="settingsStore.saveSettings()"
+                                            />
+                                            <div
+                                                class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500 peer-checked:bg-blue-600"
+                                            ></div>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
+                        </section>
                     </div>
 
                     <!-- Help Tab -->
@@ -706,7 +828,14 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                                     getProviderGradient(provider.id),
                                                 ]"
                                             >
+                                                <img
+                                                    v-if="provider.icon?.startsWith('/')"
+                                                    :src="provider.icon"
+                                                    class="w-7 h-7 object-contain"
+                                                    :alt="provider.name"
+                                                />
                                                 <IconRenderer
+                                                    v-else
                                                     :icon="getProviderIcon(provider.id)"
                                                     class="w-7 h-7"
                                                 />
@@ -726,7 +855,13 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                                 <p
                                                     class="text-xs text-gray-500 dark:text-gray-400 max-w-xs truncate"
                                                 >
-                                                    {{ provider.description }}
+                                                    {{
+                                                        provider.description?.startsWith(
+                                                            'settings.'
+                                                        )
+                                                            ? $t(provider.description)
+                                                            : provider.description
+                                                    }}
                                                 </p>
                                                 <!-- Tags -->
                                                 <div class="flex flex-wrap gap-1 mt-2">

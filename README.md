@@ -48,7 +48,7 @@ pnpm dev:electron
 ### First Steps
 
 1. **Configure AI Provider**: Settings → AI Providers → Add your API key
-2. **Create Project**: Home → New Project → Choose template or start blank
+2. **Create Project**: Home → New Project → Project Wizard or start blank
 3. **Add Tasks**: Kanban view → Create AI/Script/Input/Output tasks
 4. **Execute**: Click "Run" on any task to start execution
 
@@ -149,13 +149,6 @@ Local agents provide execution environments that run on your machine with deep i
 
 #### Supported Agents
 
-**Antigravity** (Recommended)
-
-- Full-featured AI coding assistant
-- Integrated terminal, file browser, code editor
-- Supports cloud AI models (OpenAI, Claude, Gemini) or local models (via LM Studio)
-- Auto-detects project context
-
 **Claude-Code**
 
 - Anthropic's official coding agent
@@ -172,7 +165,7 @@ Local agents provide execution environments that run on your machine with deep i
 #### Setup
 
 1. Settings → Local Agents
-2. Select agent (Antigravity or Claude-Code)
+2. Select agent (Claude-Code or Codex)
 3. Set base development folder
 4. Configure AI provider (local or cloud)
 5. Test connection
@@ -215,13 +208,6 @@ Local agents provide execution environments that run on your machine with deep i
 Projects are containers for related tasks. They define shared context, default AI settings, and execution environment.
 
 ### 2.1 Creating Projects
-
-#### From Template
-
-1. Home → New Project → Browse Templates
-2. Select template (Web App, Data Pipeline, Content Generation)
-3. Customize settings
-4. Import
 
 #### AI-Generated (🚧 In Progress)
 
@@ -946,14 +932,6 @@ Share and discover workflows, operators, and script templates.
 ### 5.2 Local Agents
 
 #### Setup & Configuration
-
-**Antigravity:**
-
-1. Settings → Local Agents → Antigravity
-2. Set base development folder
-3. Configure AI provider (local or cloud)
-4. Test connection
-5. Assign to tasks
 
 **Claude-Code:**
 

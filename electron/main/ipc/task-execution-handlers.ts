@@ -5,6 +5,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
+import { createHash } from 'crypto';
 import { getMainWindow } from '../index';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
@@ -187,6 +188,7 @@ function areTaskDependenciesMet(
         .filter((t) => dependencySequences.includes(t.projectSequence))
         .map((t) => ({
             id: t.projectSequence, // Use sequence as "ID" for evaluator
+            projectSequence: t.projectSequence,
             status: t.status,
             completedAt: t.completedAt,
         }));
@@ -232,7 +234,7 @@ function areTaskDependenciesMet(
         return {
             met,
             reason: met ? undefined : 'No new dependency completion',
-            details: `Operator 'any': ${completedDeps.length}/${dependencyInfo.length} done. Met=${met}`,
+            details: `Operator 'any': ${completedDeps.length}/${dependencyInfo.length} done. Met=${met}${!met && completedDeps.length > 0 ? ' (No new completion since last run)' : ''}`,
         };
     } else {
         // All dependencies must be completed (Default)
@@ -607,9 +609,28 @@ const triggerCurator = async (
     apiKeysOverrides?: Record<string, string>,
     preComputedContext?: any
 ) => {
-    // Only trigger if task is marked as done (fully completed)
-    // If it goes to in_review, we wait until review is approved
-    if (task.status === 'done' || task.autoApprove) {
+    // Trigger if task is done OR in_review (User request: Allow Curator to run before final approval to update context for batch runs)
+    if (task.status === 'done' || task.status === 'in_review' || task.autoApprove) {
+        // [New Guard] Only trigger Curator for AI Tasks
+        if (task.taskType !== 'ai') {
+            console.log(
+                `[CuratorTrigger] Skipping Curator for non-AI task type: ${task.taskType} (Task ${projectId}-${sequence})`
+            );
+            return;
+        }
+
+        // [New Guard] Check if content has changed since last Curator run
+        // This prevents duplicate execution when task moves from in_review -> done without changes
+        if (output) {
+            const contentHash = createHash('sha256').update(output).digest('hex');
+            if (task.metadata?.lastCuratedContentHash === contentHash) {
+                console.log(
+                    `[CuratorTrigger] Skipping Curator for Task ${projectId}-${sequence} - Content unchanged`
+                );
+                return;
+            }
+        }
+
         try {
             const { CuratorService } = await import('../../../src/services/ai/CuratorService');
 
@@ -665,6 +686,16 @@ const triggerCurator = async (
                 projectRepository,
                 preComputedContext
             );
+
+            // Update metadata with new hash to prevent duplicates
+            if (output) {
+                const contentHash = createHash('sha256').update(output).digest('hex');
+                const newMetadata = {
+                    ...(task.metadata || {}),
+                    lastCuratedContentHash: contentHash,
+                };
+                await taskRepository.updateByKey(projectId, sequence, { metadata: newMetadata });
+            }
         } catch (err: any) {
             console.error('[CuratorTrigger] Failed:', err);
         }
@@ -715,6 +746,7 @@ async function processInputSubmission(
         executionResult: output, // Drizzle handles JSON stringification
         completedAt: new Date(),
         inputSubStatus: null, // Clear input waiting status
+        hasUnreadResult: true,
     };
 
     await taskRepository.updateByKey(projectId, sequence, updateData);
@@ -764,6 +796,19 @@ async function processInputSubmission(
     // MUST be done BEFORE checking dependents so they have fresh context
     const project = await projectRepository.findById(task.projectId);
     if (project) {
+        await taskNotificationService.notifyCompletion(
+            projectId,
+            sequence,
+            output.text || JSON.stringify(output.json) || 'Input submitted',
+            {
+                provider: 'input',
+                model: 'user',
+                cost: 0,
+                tokenUsage: { reduced: 0, total: 0, input: 0, output: 0 },
+                duration: 0,
+            } as any // Cast to any to avoid strict type check on metadata subset
+        );
+
         await triggerCurator(
             projectId,
             sequence,
@@ -816,6 +861,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                 recursive?: boolean;
                 control?: { next: number[]; reason?: string };
                 language?: string;
+                isAutoExecution?: boolean;
             }
         ) => {
             // Get task from database using composite key
@@ -872,13 +918,37 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     // 2. Validate Dependencies
                     // For Manual Run (direct execute call), we generally want to IGNORE strict novelty checks
                     // The user is saying "Run this now!". As long as dependencies are met (status=done), we should run.
-                    const dependencyCheck = areTaskDependenciesMet(task, allProjectTasks, true); // ignoreNovelty = true
+                    // HOWEVER, if isAutoExecution is true (from queue or auto-trigger), we MUST respect novelty to prevent infinite loops.
+                    // But we should FAIL SOFTLY (skip) rather than Error.
+
+                    const ignoreNovelty = !options?.isAutoExecution && options?.force !== false;
+                    const dependencyCheck = areTaskDependenciesMet(
+                        task,
+                        allProjectTasks,
+                        ignoreNovelty
+                    );
+
                     if (!dependencyCheck.met) {
                         const errorMsg = `Cannot execute task: ${dependencyCheck.reason || 'Conditions not met'}`;
                         const details = dependencyCheck.details || 'Dependencies not satisfied';
 
                         console.error(`[TaskExecution] ${errorMsg}`);
                         console.error(details);
+
+                        // SOFT FAILURE for Auto-Execution
+                        if (options?.isAutoExecution) {
+                            console.warn(
+                                `[TaskExecution] Auto-execution skipped gracefully: ${errorMsg}`
+                            );
+                            // Do NOT throw. Return success but with a skipped status if possible, or just undefined result.
+                            // By returning "success" without doing work, we satisfy the caller.
+                            getMainWindow()?.webContents.send('taskExecution:completed', {
+                                projectId: task.projectId,
+                                projectSequence: task.projectSequence,
+                                result: { skipped: true, reason: errorMsg },
+                            });
+                            return { success: true, skipped: true, reason: errorMsg };
+                        }
 
                         // Log failure to history
                         await taskHistoryRepository.logExecutionFailed(
@@ -1138,6 +1208,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 const updateData: any = {
                                     status: finalStatus,
                                     executionResult,
+                                    hasUnreadResult: true,
                                 };
 
                                 if (task.autoApprove) {
@@ -1380,6 +1451,18 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             // Trigger dependent tasks
                             if (updatedTask && updatedTask.status === 'done') {
+                                // Send completion notification for output task
+                                await taskNotificationService.notifyCompletion(
+                                    projectId,
+                                    projectSequence,
+                                    'Output execution completed',
+                                    {
+                                        duration: Date.now() - executionState.startedAt.getTime(),
+                                        cost: 0,
+                                        tokenUsage: { total: 0, input: 0, output: 0 },
+                                    }
+                                );
+
                                 await checkAndExecuteDependentTasks(
                                     projectId,
                                     projectSequence,
@@ -1771,7 +1854,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             };
 
                             const finalStatus = task.autoApprove ? 'done' : 'in_review';
-                            const updateData: any = { status: finalStatus, executionResult };
+                            const updateData: any = {
+                                status: finalStatus,
+                                executionResult,
+                                hasUnreadResult: true,
+                            };
                             if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
                             await taskRepository.updateByKey(
@@ -1859,7 +1946,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                         ) {
                                             newDecisions.push({
                                                 date: decisionMatch[1],
-                                                summary: decisionMatch[2].trim(),
+                                                summary: decisionMatch[2]?.trim() || '',
                                             });
                                         }
 
@@ -2015,7 +2102,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     context.metadata = {
                         streaming: options?.streaming ?? true,
-                        timeout: options?.timeout ?? 300000,
+                        timeout: options?.timeout ?? 30000,
                         fallbackProviders: options?.fallbackProviders || ['openai', 'google'],
                         onToken,
                         onProgress,
@@ -2024,7 +2111,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     };
 
                     const result = await executor.executeTask(task as Task, context, {
-                        timeout: options?.timeout ?? 300000,
+                        timeout: options?.timeout ?? 30000,
                         fallbackProviders: options?.fallbackProviders,
                         onLog: (level, message, details) =>
                             sendActivityLog(level, message, details),
@@ -2089,7 +2176,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         };
 
                         const finalStatus = task.autoApprove ? 'done' : 'in_review';
-                        const updateData: any = { status: finalStatus, executionResult };
+                        const updateData: any = {
+                            status: finalStatus,
+                            executionResult,
+                            hasUnreadResult: true,
+                        };
                         if (task.autoApprove) updateData.completedAt = new Date().toISOString();
 
                         console.log(
@@ -2110,6 +2201,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             projectId: task.projectId,
                             projectSequence: task.projectSequence,
                             result: executionResult,
+                            hasUnreadResult: true,
                         });
 
                         const historyEntry = await taskHistoryRepository.logExecutionCompleted(
@@ -2162,6 +2254,13 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 projectSequence,
                                 displayContent || ''
                             );
+                            await triggerCurator(
+                                projectId,
+                                projectSequence,
+                                task,
+                                displayContent || '',
+                                project
+                            ); // Trigger Curator on Review Ready too
                         }
 
                         activeExecutions.delete(getTaskKey(projectId, projectSequence));
@@ -2342,6 +2441,14 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     console.log(
                         `[TaskExecution] Sending notification for exception (inner): ${errorMsg}`
                     );
+
+                    // Send desktop failure notification
+                    await taskNotificationService.notifyFailure(
+                        projectId,
+                        projectSequence,
+                        errorMsg
+                    );
+
                     getMainWindow()?.webContents.send('app:notification', {
                         type: 'error',
                         message: `Task Execution Error: ${errorMsg}`,
@@ -3269,9 +3376,8 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     throw new Error(`Task ${taskKey} has no execution result to review`);
                 }
 
-                const { dependencySequences, previousResults } = await buildDependencyContext(
-                    task as Task
-                );
+                const { dependencyTaskIds: dependencySequences, previousResults } =
+                    await buildDependencyContext(task as Task);
                 const promptSource = (task.generatedPrompt || task.description || '').trim();
                 const hasMacros =
                     promptSource.length > 0 &&

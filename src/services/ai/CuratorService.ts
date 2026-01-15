@@ -68,9 +68,14 @@ export class CuratorService {
         void executionService;
 
         try {
-            // Skip if output is too short to contain meaningful information
-            if (!taskOutput || taskOutput.length < 50) {
-                console.log(`[Curator] Skipping - task output too short`);
+            // Skip check if output is too short - user requested always update
+            // if (!taskOutput || taskOutput.length < 50) {
+            //     console.log(`[Curator] Skipping - task output too short`);
+            //     return;
+            // }
+
+            if (!taskOutput) {
+                console.log(`[Curator] Skipping - no task output`);
                 return;
             }
 
@@ -89,19 +94,78 @@ export class CuratorService {
             // Use a dynamic system prompt optimized for JSON output and context preservation
             // We ignore the file-loaded generic prompt because it conflicts (asks for Markdown)
             // while we strictly require JSON.
-            const today = new Date().toISOString().split('T')[0];
-            const currentYear = new Date().getFullYear().toString();
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = now.toTimeString().split(' ')[0];
+            const currentDateTime = `${dateStr} ${timeStr}`;
+            const currentYear = now.getFullYear().toString();
 
-            const systemPrompt = `You are the Project Context Curator.
-Role: Analyze the 'Task Output' and update the 'Current Project Memory' to reflect new insights.
-Current Date: ${today}
+            const systemPrompt = `You are the **Project Memory Curator**.
+
+Your role is to maintain the **authoritative Project Memory** shared across
+all tasks and AI providers.
+
+You do NOT execute tasks or generate content.
+You only curate durable, shared context.
+
+---
+
+## What to Store
+
+Store only:
+- Stable facts
+- Confirmed decisions
+- Current system state
+- Active constraints
+- Open intents that affect future tasks
+
+Do NOT store:
+- Narratives or storytelling
+- Step-by-step logs
+- Emotions or tone
+- Temporary reasoning
+- Repeated action history
+
+If it reads like a story, exclude it.
+
+---
+
+## Update Rules
+
+- Compress repeated actions into facts
+- Normalize prose into neutral statements
+- Replace outdated state instead of appending
+- Remove anything no longer relevant
+
+When uncertain, **omit rather than include**.
+
+---
+
+## Required Structure
+
+Always output the full Project Memory using this structure:
+
+\`\`\`md
+## Project Memory (Authoritative)
+
+### Project Goal
+### Current Focus
+### System State
+### Active Constraints
+### Key Decisions
+### Open Intents
+### Known Risks / Issues
+### Glossary
+\`\`\`
+
+Current Date & Time: ${currentDateTime}
 
 Principles:
 1. **Preserve Context**: Do not discard existing Summary info unless it is outdated. Merge new info into it.
-2. **Extract Decisions**: detailed decisions made in this task. Use '${today}' for the date if not explicit.
+2. **Extract Decisions**: detailed decisions made in this task. Use '${currentDateTime}' for the date if not explicit.
 3. **Update Glossary**: Add new technical terms or project-specific jargon.
 4. **JSON Output**: You MUST output valid JSON.
-5. **No Hallucinated Dates**: DO NOT generate dates in 2024 or 2025 unless explicitly stated in the text. Default to ${today}.
+5. **No Hallucinated Dates**: DO NOT generate dates in 2024 or 2025 unless explicitly stated in the text. Default to ${currentDateTime}.
 
 Input Data:
 - Current Summary: The high-level state of the project.
@@ -143,7 +207,7 @@ ${taskContext}
 IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
 {
   "summaryUpdate": "string (the NEW updated summary. If no change, return null. If changing, provide the FULL new summary text merging old + new)",
-  "newDecisions": [{"date": "YYYY-MM-DD", "summary": "decision text"}],
+  "newDecisions": [{"date": "YYYY-MM-DD HH:mm", "summary": "decision text"}],
   "glossaryUpdates": {"term": "definition"},
   "conflicts": ["string"]
 }
@@ -325,16 +389,18 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             // Let's assume parsed.newDecisions items don't have taskId, or we ignore it.
             // Wait, DecisionsLog interface has `taskId`. We should probably store projectSequence instead?
             // Or just store 0 for now if taskId is deprecated. But the DecisionLog interface in database types might need check.
+            // Variables now, dateStr, timeStr, currentDateTime, currentYear are declared at the top of the function
+
             const newDecisions: DecisionLog[] = (parsed.newDecisions || []).map((d: any) => {
-                let decisionDate = d.date || today;
+                let decisionDate = d.date || currentDateTime;
 
                 // Sanitize Date: If year is 2024 (or significantly in past/future), force it to today
                 // Logic: If date doesn't start with currentYear (e.g. "2026"), fix it.
                 if (!decisionDate.startsWith(currentYear)) {
                     console.warn(
-                        `[Curator] Detected invalid date year in decision: ${decisionDate}. Forcing to ${today}.`
+                        `[Curator] Detected invalid date year in decision: ${decisionDate}. Forcing to ${currentDateTime}.`
                     );
-                    decisionDate = today;
+                    decisionDate = currentDateTime;
                 }
 
                 return {
@@ -415,10 +481,14 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
             }
         }
 
+        const now = new Date();
+        // date + time string (YYYY-MM-DD HH:mm:ss)
+        const dateTimeStr = now.toISOString().replace('T', ' ').substring(0, 19);
+
         const result = {
             summaryUpdate: null,
             newDecisions: decisions.slice(0, 3).map((d) => ({
-                date: new Date().toISOString().split('T')[0],
+                date: dateTimeStr,
                 summary: `[From ${taskTitle}] ${d}`,
                 taskId: 0,
             })),

@@ -133,6 +133,9 @@ const aiProviderDisplay = computed(() => {
         anthropic: { name: 'Anthropic', color: 'text-purple-400', icon: '✨' },
         google: { name: 'Google AI', color: 'text-blue-400', icon: '🔷' },
         local: { name: t('project.info.local'), color: 'text-gray-400', icon: '💻' },
+        'default-highflow': { name: 'HighFlow', color: 'text-blue-500', icon: '🚀' },
+        // Legacy support for typo in ID
+        'default-highfow': { name: 'HighFlow', color: 'text-blue-500', icon: '🚀' },
     };
 
     // Use edited value if editing, else effective resolved value
@@ -291,7 +294,10 @@ const effectiveAutoReview = computed(() => {
 
 const autoReviewProviderDisplay = computed(() => {
     // SVG paths for provider icons (Phosphor style)
-    const providers: Record<string, { name: string; color: string; svgPath: string }> = {
+    const providers: Record<
+        string,
+        { name: string; color: string; svgPath?: string; icon?: string }
+    > = {
         openai: {
             name: 'OpenAI',
             color: 'text-green-400',
@@ -315,6 +321,17 @@ const autoReviewProviderDisplay = computed(() => {
             color: 'text-gray-400',
             svgPath:
                 'M240,128a16,16,0,0,1-16,16H205.43a80.09,80.09,0,0,1-79.24,64,80,80,0,0,1,0-160,80.09,80.09,0,0,1,79.24,64H224A16,16,0,0,1,240,128Z',
+        },
+        'default-highflow': {
+            name: 'HighFlow',
+            color: 'text-blue-500',
+            icon: '🚀',
+        },
+        // Legacy support for typo in ID
+        'default-highfow': {
+            name: 'HighFlow',
+            color: 'text-blue-500',
+            icon: '🚀',
         },
     };
 
@@ -811,13 +828,13 @@ function getAssistantLabel(type: string): string {
                     class="bg-gray-900/30 rounded-lg p-4 text-center"
                 >
                     <div class="text-gray-500 text-sm mb-2">
-                        프로젝트의 목표를 작성하여 AI가 더 정확한 결과를 생성하도록 도와주세요.
+                        {{ t('project.info.goal_help') }}
                     </div>
                     <button
                         @click="startEditGoal"
                         class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                     >
-                        목표 작성하기
+                        {{ t('project.info.add_goal') }}
                     </button>
                 </div>
 
@@ -826,20 +843,20 @@ function getAssistantLabel(type: string): string {
                     <textarea
                         v-model="editedGoal"
                         class="w-full h-32 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-blue-500"
-                        placeholder="이 프로젝트의 목표와 달성하고자 하는 바를 작성하세요..."
+                        :placeholder="t('project.info.goal_placeholder')"
                     ></textarea>
                     <div class="flex justify-end space-x-2">
                         <button
                             @click="cancelEditGoal"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             @click="saveGoal"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            저장
+                            {{ t('common.save') }}
                         </button>
                     </div>
                 </div>
@@ -866,25 +883,25 @@ function getAssistantLabel(type: string): string {
                                 d="M9 5l7 7-7 7"
                             />
                         </svg>
-                        <span>AI 지침서</span>
+                        <span>{{ t('project.info.ai_guidelines') }}</span>
                         <span
                             v-if="hasGuidelines"
                             class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded"
                         >
-                            설정됨
+                            {{ t('project.info.guidelines_set') }}
                         </span>
                         <span
                             v-else
                             class="px-1.5 py-0.5 text-xs bg-gray-600/50 text-gray-400 rounded"
                         >
-                            미설정
+                            {{ t('project.info.guidelines_not_set') }}
                         </span>
                     </button>
                     <div v-if="hasGuidelines" class="flex items-center space-x-1">
                         <button
                             @click="copyGuidelines"
                             class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
-                            title="복사"
+                            :title="t('common.copy')"
                         >
                             <svg
                                 class="w-3.5 h-3.5"
@@ -903,7 +920,7 @@ function getAssistantLabel(type: string): string {
                         <button
                             @click="startEditGuidelines"
                             class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
-                            title="편집"
+                            :title="t('common.edit')"
                         >
                             <svg
                                 class="w-3.5 h-3.5"
@@ -941,13 +958,13 @@ function getAssistantLabel(type: string): string {
                         class="bg-gray-900/30 rounded-lg p-6 text-center"
                     >
                         <div class="text-gray-500 text-sm mb-3">
-                            AI 지침서가 아직 생성되지 않았습니다.
+                            {{ t('project.info.guidelines_empty') }}
                         </div>
                         <button
                             @click="startEditGuidelines"
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            지침서 작성하기
+                            {{ t('project.info.add_guidelines') }}
                         </button>
                     </div>
 
@@ -956,20 +973,20 @@ function getAssistantLabel(type: string): string {
                         <textarea
                             v-model="editedGuidelines"
                             class="w-full h-64 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-purple-500"
-                            placeholder="AI 지침서를 마크다운 형식으로 작성하세요..."
+                            :placeholder="t('project.info.guidelines_placeholder')"
                         ></textarea>
                         <div class="flex justify-end space-x-2">
                             <button
                                 @click="cancelEditGuidelines"
                                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                             >
-                                취소
+                                {{ t('common.cancel') }}
                             </button>
                             <button
                                 @click="saveGuidelines"
                                 class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
                             >
-                                저장
+                                {{ t('common.save') }}
                             </button>
                         </div>
                     </div>
@@ -979,7 +996,9 @@ function getAssistantLabel(type: string): string {
             <!-- Output Type -->
             <div class="space-y-2 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">결과물 타입</label>
+                    <label class="text-sm font-medium text-gray-400">{{
+                        t('project.info.output_type')
+                    }}</label>
                     <button
                         v-if="!isEditingOutputType"
                         @click="startEditOutputType"
@@ -998,7 +1017,7 @@ function getAssistantLabel(type: string): string {
                                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                             />
                         </svg>
-                        <span>편집</span>
+                        <span>{{ t('common.edit') }}</span>
                     </button>
                 </div>
 
@@ -1021,7 +1040,7 @@ function getAssistantLabel(type: string): string {
                         v-model="editedOutputType"
                         class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                     >
-                        <option :value="null">선택 안 함</option>
+                        <option :value="null">{{ t('common.not_selected') }}</option>
                         <option v-for="(info, type) in outputTypes" :key="type" :value="type">
                             {{ info.icon }} {{ info.name }}
                         </option>
@@ -1031,13 +1050,13 @@ function getAssistantLabel(type: string): string {
                             @click="cancelEditOutputType"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             @click="saveOutputType"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            저장
+                            {{ t('common.save') }}
                         </button>
                     </div>
                 </div>
@@ -1047,9 +1066,9 @@ function getAssistantLabel(type: string): string {
             <div class="space-y-3 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <label class="text-sm font-medium text-gray-300"
-                            >프로젝트 기본 AI 설정</label
-                        >
+                        <label class="text-sm font-medium text-gray-300">{{
+                            t('project.info.project_default_ai')
+                        }}</label>
                         <!-- Claude Code Sync Status Badge -->
                         <span
                             v-if="claudeSyncStatus"
@@ -1095,7 +1114,7 @@ function getAssistantLabel(type: string): string {
                                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                             />
                         </svg>
-                        <span>편집</span>
+                        <span>{{ t('common.edit') }}</span>
                     </button>
                 </div>
 
@@ -1103,7 +1122,9 @@ function getAssistantLabel(type: string): string {
                 <div v-if="!isEditingAI" class="grid grid-cols-2 gap-4">
                     <!-- AI Provider -->
                     <div class="space-y-1">
-                        <label class="text-xs text-gray-500">AI 제공자</label>
+                        <label class="text-xs text-gray-500">{{
+                            t('project.info.ai_provider')
+                        }}</label>
                         <div class="flex items-center space-x-2">
                             <IconRenderer :emoji="aiProviderDisplay.icon" class="w-4 h-4" />
                             <span :class="aiProviderDisplay.color" class="text-sm font-medium">
@@ -1114,20 +1135,22 @@ function getAssistantLabel(type: string): string {
 
                     <!-- AI Model -->
                     <div class="space-y-1">
-                        <label class="text-xs text-gray-500">AI 모델</label>
+                        <label class="text-xs text-gray-500">{{
+                            t('project.info.ai_model')
+                        }}</label>
                         <div class="text-sm font-medium text-gray-300">
                             {{ aiModelDisplay }}
                             <span
                                 v-if="effectiveAI.source === 'global' && !props.project.aiModel"
                                 class="text-xs text-gray-500 ml-1"
                             >
-                                (설정 기본값)
+                                ({{ t('project.info.settings_default') }})
                             </span>
                             <span
                                 v-if="effectiveAI.source === 'project' && props.project.aiProvider"
                                 class="text-xs text-blue-400 ml-1"
                             >
-                                (프로젝트)
+                                ({{ t('project.info.project_value') }})
                             </span>
                         </div>
                     </div>
@@ -1142,7 +1165,7 @@ function getAssistantLabel(type: string): string {
                         v-model:model="editedAIModel"
                         v-model:localAgent="editedLocalAgent"
                         :isDevProject="true"
-                        label="프로젝트 기본 AI 설정"
+                        :label="t('project.info.project_default_ai')"
                     />
 
                     <!-- Info Banner -->
@@ -1162,8 +1185,7 @@ function getAssistantLabel(type: string): string {
                                 />
                             </svg>
                             <div class="text-xs text-blue-300">
-                                프로젝트의 기본 AI 설정입니다. 개별 태스크에서 다른 AI를 선택하지
-                                않으면 이 설정을 사용합니다.
+                                {{ t('project.info.project_default_ai_info') }}
                             </div>
                         </div>
                     </div>
@@ -1174,13 +1196,13 @@ function getAssistantLabel(type: string): string {
                             @click="cancelEditAI"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             @click="saveAISettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            저장
+                            {{ t('common.save') }}
                         </button>
                     </div>
                 </div>
@@ -1188,17 +1210,19 @@ function getAssistantLabel(type: string): string {
 
             <!-- Base Dev Folder -->
             <div class="space-y-2 border-t border-gray-700 pt-4">
-                <label class="text-sm font-medium text-gray-300">개발 베이스 폴더</label>
+                <label class="text-sm font-medium text-gray-300">{{
+                    t('project.info.base_folder')
+                }}</label>
                 <div class="flex items-center space-x-2">
                     <div
                         class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
                     >
-                        {{ project.baseDevFolder || '미설정' }}
+                        {{ project.baseDevFolder || t('project.info.base_folder_not_set') }}
                     </div>
                     <button
                         @click="pickBaseFolder"
                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
-                        title="폴더 변경"
+                        :title="t('project.info.base_folder_change')"
                     >
                         <FolderOpen class="w-4 h-4" />
                     </button>
@@ -1208,7 +1232,9 @@ function getAssistantLabel(type: string): string {
             <!-- MCP 설정 -->
             <div class="space-y-3 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-300">MCP 설정</label>
+                    <label class="text-sm font-medium text-gray-300">{{
+                        t('project.info.mcp_settings')
+                    }}</label>
                     <button
                         v-if="!isEditingMCP"
                         @click="startEditMCP"
@@ -1227,7 +1253,7 @@ function getAssistantLabel(type: string): string {
                                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                             />
                         </svg>
-                        <span>편집</span>
+                        <span>{{ t('common.edit') }}</span>
                     </button>
                 </div>
 
@@ -1244,13 +1270,21 @@ function getAssistantLabel(type: string): string {
                         >
                             <div class="text-sm font-medium text-gray-300">{{ serverId }}</div>
                             <div class="text-xs text-gray-500 mt-1">
-                                {{ Object.keys(config.env || {}).length }} 환경변수,
-                                {{ Object.keys(config.params || {}).length }} 파라미터
+                                {{
+                                    t('project.info.mcp_env_count', {
+                                        count: Object.keys(config.env || {}).length,
+                                    })
+                                }},
+                                {{
+                                    t('project.info.mcp_params_count', {
+                                        count: Object.keys(config.params || {}).length,
+                                    })
+                                }}
                             </div>
                         </div>
                     </div>
                     <div v-else class="bg-gray-900/30 rounded-lg p-3">
-                        <p class="text-xs text-gray-500">설정된 MCP 서버가 없습니다.</p>
+                        <p class="text-xs text-gray-500">{{ t('project.info.mcp_no_servers') }}</p>
                     </div>
                 </div>
 
@@ -1278,8 +1312,7 @@ function getAssistantLabel(type: string): string {
                                 />
                             </svg>
                             <div class="text-xs text-blue-300">
-                                설정된 MCP는 프로젝트의 모든 태스크에서 기본으로 사용됩니다. 개별
-                                태스크에서 다른 설정을 원하면 태스크 상세에서 변경할 수 있습니다.
+                                {{ t('project.info.mcp_default_info') }}
                             </div>
                         </div>
                     </div>
@@ -1290,13 +1323,13 @@ function getAssistantLabel(type: string): string {
                             @click="cancelEditMCP"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             @click="saveMCPSettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            저장
+                            {{ t('common.save') }}
                         </button>
                     </div>
                 </div>
@@ -1305,7 +1338,9 @@ function getAssistantLabel(type: string): string {
             <!-- Auto Review Settings -->
             <div class="space-y-3 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-300">자동 리뷰 설정</label>
+                    <label class="text-sm font-medium text-gray-300">{{
+                        t('project.info.auto_review_settings')
+                    }}</label>
                     <button
                         v-if="!isEditingAutoReview"
                         @click="startEditAutoReview"
@@ -1324,7 +1359,7 @@ function getAssistantLabel(type: string): string {
                                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                             />
                         </svg>
-                        <span>편집</span>
+                        <span>{{ t('common.edit') }}</span>
                     </button>
                 </div>
 
@@ -1332,7 +1367,9 @@ function getAssistantLabel(type: string): string {
                 <div v-if="!isEditingAutoReview" class="grid grid-cols-2 gap-4">
                     <!-- AI Provider -->
                     <div class="space-y-1">
-                        <label class="text-xs text-gray-500">AI 제공자</label>
+                        <label class="text-xs text-gray-500">{{
+                            t('project.info.ai_provider')
+                        }}</label>
                         <div class="flex items-center space-x-2">
                             <template v-if="autoReviewProviderDisplay.svgPath">
                                 <svg
@@ -1359,7 +1396,9 @@ function getAssistantLabel(type: string): string {
 
                     <!-- AI Model -->
                     <div class="space-y-1">
-                        <label class="text-xs text-gray-500">AI 모델</label>
+                        <label class="text-xs text-gray-500">{{
+                            t('project.info.ai_model')
+                        }}</label>
                         <div class="text-sm font-medium text-gray-300">
                             {{ autoReviewModelDisplay }}
                         </div>
@@ -1375,7 +1414,7 @@ function getAssistantLabel(type: string): string {
                         v-model:model="editedAutoReviewModel"
                         v-model:localAgent="editedAutoReviewLocalAgent"
                         :isDevProject="!!project.baseDevFolder"
-                        label="자동 리뷰 AI 설정"
+                        :label="t('project.info.auto_review_ai_settings')"
                     />
 
                     <!-- Action Buttons -->
@@ -1384,13 +1423,13 @@ function getAssistantLabel(type: string): string {
                             @click="cancelEditAutoReview"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
                         >
-                            취소
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             @click="saveAutoReviewSettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
                         >
-                            저장
+                            {{ t('common.save') }}
                         </button>
                     </div>
                 </div>
@@ -1398,7 +1437,9 @@ function getAssistantLabel(type: string): string {
 
             <!-- Local Repository Info -->
             <div v-if="project.metadata?.localRepo" class="space-y-2 border-t border-gray-700 pt-4">
-                <label class="text-sm font-medium text-gray-400">로컬 저장소 정보</label>
+                <label class="text-sm font-medium text-gray-400">{{
+                    t('project.info.local_repo_info')
+                }}</label>
 
                 <div class="bg-gray-900/50 rounded-lg p-3 space-y-2">
                     <div class="text-sm text-gray-300 font-mono truncate">
@@ -1407,7 +1448,9 @@ function getAssistantLabel(type: string): string {
 
                     <!-- Multiple Assistant Icons -->
                     <div v-if="project.metadata.localRepo.types" class="flex items-center gap-2">
-                        <span class="text-xs text-gray-500">사용 중인 어시스턴트:</span>
+                        <span class="text-xs text-gray-500"
+                            >{{ t('project.info.assistant_in_use') }}:</span
+                        >
                         <div class="flex items-center gap-1.5">
                             <span
                                 v-for="type in project.metadata.localRepo.types.filter(
@@ -1425,7 +1468,7 @@ function getAssistantLabel(type: string): string {
                                     project.metadata.localRepo.types[0] === 'git'
                                 "
                                 class="text-xs text-gray-500"
-                                >Git만 사용</span
+                                >{{ t('project.info.git_only') }}</span
                             >
                         </div>
                     </div>
@@ -1433,7 +1476,7 @@ function getAssistantLabel(type: string): string {
             </div>
             <!-- Output Path -->
             <div v-if="project.outputPath" class="space-y-1">
-                <label class="text-xs text-gray-500">결과물 경로</label>
+                <label class="text-xs text-gray-500">{{ t('project.info.output_path') }}</label>
                 <div class="flex items-center space-x-2">
                     <div
                         class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
@@ -1443,7 +1486,7 @@ function getAssistantLabel(type: string): string {
                     <button
                         @click="handleOpenOutput"
                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
-                        title="폴더 열기"
+                        :title="t('project.info.open_folder')"
                     >
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path
@@ -1460,11 +1503,11 @@ function getAssistantLabel(type: string): string {
             <!-- Statistics -->
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-700">
                 <div class="bg-gray-900/30 rounded-lg p-3">
-                    <div class="text-xs text-gray-500">총 비용</div>
+                    <div class="text-xs text-gray-500">{{ t('project.info.total_cost') }}</div>
                     <div class="text-lg font-semibold text-green-400">{{ formattedCost }}</div>
                 </div>
                 <div class="bg-gray-900/30 rounded-lg p-3">
-                    <div class="text-xs text-gray-500">총 토큰</div>
+                    <div class="text-xs text-gray-500">{{ t('project.info.total_tokens') }}</div>
                     <div class="text-lg font-semibold text-blue-400">{{ formattedTokens }}</div>
                 </div>
             </div>
@@ -1475,12 +1518,16 @@ function getAssistantLabel(type: string): string {
                 class="grid grid-cols-2 gap-3"
             >
                 <div v-if="project.estimatedHours" class="text-center">
-                    <div class="text-xs text-gray-500">예상 시간</div>
-                    <div class="text-sm text-gray-300">{{ project.estimatedHours }}시간</div>
+                    <div class="text-xs text-gray-500">{{ t('project.info.estimated_hours') }}</div>
+                    <div class="text-sm text-gray-300">
+                        {{ project.estimatedHours }}{{ t('project.info.hours_unit') }}
+                    </div>
                 </div>
                 <div v-if="project.actualHours" class="text-center">
-                    <div class="text-xs text-gray-500">실제 시간</div>
-                    <div class="text-sm text-gray-300">{{ project.actualHours }}시간</div>
+                    <div class="text-xs text-gray-500">{{ t('project.info.actual_hours') }}</div>
+                    <div class="text-sm text-gray-300">
+                        {{ project.actualHours }}{{ t('project.info.hours_unit') }}
+                    </div>
                 </div>
             </div>
         </div>

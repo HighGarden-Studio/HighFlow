@@ -80,7 +80,7 @@ export class AdvancedTaskExecutor {
                     'info',
                     `[AdvancedTaskExecutor] Starting execution for task #${task.projectSequence}: ${task.title}`,
                     {
-                        taskId: task.id,
+                        taskId: task.projectSequence,
                         contextKeys: Object.keys(context),
                     }
                 );
@@ -92,7 +92,7 @@ export class AdvancedTaskExecutor {
                     `Task #${task.projectSequence} is subdivided and cannot be executed directly. Skipping...`
                 );
                 return {
-                    taskId: task.id,
+                    taskId: task.projectSequence,
                     status: 'skipped',
                     output: {
                         message: 'Task is subdivided into subtasks and cannot be executed directly',
@@ -127,7 +127,7 @@ export class AdvancedTaskExecutor {
                     const timeout = options.timeout || 300000; // 기본 5분
                     if (onLog) {
                         onLog('debug', `[AdvancedTaskExecutor] Delegating to AIServiceManager`, {
-                            taskId: task.id,
+                            taskId: task.projectSequence,
                             provider: context.metadata?.provider,
                             model: context.metadata?.model,
                         });
@@ -139,6 +139,16 @@ export class AdvancedTaskExecutor {
                         timeout,
                         options
                     )) as AIExecutionResult;
+
+                    // [Fix] Check if AI execution was successful
+                    // AIServiceManager swallows errors and returns { success: false, error: ... }
+                    // We must throw here to trigger the retry/failure logic below.
+                    if (!aiResult.success) {
+                        throw (
+                            aiResult.error ||
+                            new Error('AI execution reported failure without error details')
+                        );
+                    }
 
                     const endTime = new Date();
 
@@ -156,10 +166,13 @@ export class AdvancedTaskExecutor {
                             provider: aiResult.provider,
                             model: aiResult.model,
                         });
-                    const attachments = this.buildAttachmentsFromAiResult(task.id, finalAiResult);
+                    const attachments = this.buildAttachmentsFromAiResult(
+                        task.projectSequence,
+                        finalAiResult
+                    );
 
                     return {
-                        taskId: task.id,
+                        taskId: task.projectSequence,
                         projectSequence: task.projectSequence,
                         status: 'success',
                         output: {
@@ -275,7 +288,7 @@ export class AdvancedTaskExecutor {
             // 모든 재시도 실패
             const endTime = new Date();
             return {
-                taskId: task.id,
+                taskId: task.projectSequence,
                 projectSequence: task.projectSequence,
                 status: 'failure',
                 output: null,
@@ -304,7 +317,7 @@ export class AdvancedTaskExecutor {
         return Promise.race([
             this.executeTaskLogic(task, context, options),
             new Promise((_, reject) =>
-                setTimeout(() => reject(new TimeoutError(task.id, timeout)), timeout)
+                setTimeout(() => reject(new TimeoutError(task.projectSequence, timeout)), timeout)
             ),
         ]);
     }
@@ -320,7 +333,7 @@ export class AdvancedTaskExecutor {
         const { onLog } = options;
         // 컨텍스트 변수 치환
         let processedDescription = this.substituteVariables(task.description || '', context);
-        console.log(`[AdvancedTaskExecutor] ExecuteTaskLogic ${processedDescription}`);
+        // console.log(`[AdvancedTaskExecutor] ExecuteTaskLogic ${processedDescription}`);
 
         // 의존 작업의 결과가 있으면 프롬프트에 자동으로 추가
         const dependencyResults = this.getRelevantDependencyResults(
@@ -395,7 +408,7 @@ export class AdvancedTaskExecutor {
                 // Verbose logging removed - only start/completion summaries logged
                 if (progress.phase === 'completed') {
                     onLog?.('info', `[AdvancedTaskExecutor] Task execution completed`, {
-                        taskId: task.id,
+                        taskId: task.projectSequence,
                         provider: progress.provider,
                         model: progress.model,
                         tokensGenerated: progress.tokensGenerated,
@@ -453,8 +466,8 @@ export class AdvancedTaskExecutor {
         try {
             // AI 서비스 매니저를 통해 리뷰 실행
             const context: ExecutionContext = {
-                workflowId: `review-${task.id}`,
-                taskId: task.id,
+                workflowId: `review-${task.projectId}-${task.projectSequence}`,
+                taskId: task.projectSequence,
                 projectId: task.projectId,
                 userId: 1, // 시스템 사용자
                 variables: {},
@@ -858,11 +871,11 @@ export class AdvancedTaskExecutor {
     buildExecutionContext(task: Task, previousResults: TaskResult[]): ExecutionContext {
         return {
             workflowId: `wf-${Date.now()}`,
-            taskId: task.id,
+            taskId: task.projectSequence,
             userId: task.assigneeId || 1,
             projectId: task.projectId,
             variables: {
-                task_id: task.id,
+                task_id: task.projectSequence,
                 task_title: task.title,
                 task_priority: task.priority,
             },
@@ -1238,7 +1251,8 @@ ${codeLanguage || '프로그래밍 언어'} 코드로 결과를 작성해주세�
 
         return previousResults.filter(
             (result) =>
-                dependencyIds.has(result.taskId) || dependencyIds.has(result.projectSequence)
+                dependencyIds.has(result.taskId) ||
+                (result.projectSequence !== undefined && dependencyIds.has(result.projectSequence))
         );
     }
 

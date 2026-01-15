@@ -96,6 +96,12 @@ function closeResultPreview() {
     showResultPreview.value = false;
 }
 
+async function handleProjectInfoUpdate() {
+    if (!projectId.value) return;
+    await projectStore.fetchProject(projectId.value);
+    await taskStore.fetchTasks(projectId.value);
+}
+
 // Lifecycle
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
@@ -238,6 +244,7 @@ onMounted(async () => {
             :project="project"
             :open="showInfoPanel"
             @close="showInfoPanel = false"
+            @update="handleProjectInfoUpdate"
         />
 
         <!-- Task Detail Panel -->

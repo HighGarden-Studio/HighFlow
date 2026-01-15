@@ -2,7 +2,7 @@
 /**
  * Local Agents Tab Component
  *
- * Tab for managing local AI coding agents (Claude Code, Codex, Antigravity)
+ * Tab for managing local AI coding agents (Claude Code, Codex)
  * Provides installation status check and terminal launch functionality
  */
 import { ref, onMounted } from 'vue';

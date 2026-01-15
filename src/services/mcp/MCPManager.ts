@@ -13,6 +13,7 @@ import type {
 } from '@core/types/ai';
 import { WebClient } from '@slack/web-api';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createRequire } from 'module';
 
 import axios from 'axios';
 import { eventBus } from '../events/EventBus';
@@ -807,6 +808,17 @@ export class MCPManager {
             throw new Error(`MCP ${mcpId} not found`);
         }
 
+        // [HOTFIX] Force correct endpoint for GitHub Remote
+        // We check slug/name since mcpId is a number
+        if (mcp.slug === 'github-remote' || mcp.name === 'github-remote') {
+            // User requested strict enforcement: ALWAYS use the copilot endpoint
+            // The SSE endpoint is specifically /sse based on authentication headers
+            mcp.endpoint = 'https://api.githubcopilot.com/mcp/';
+            console.log(
+                '[MCPManager] Enforced api.githubcopilot.com/mcp/ endpoint for github-remote'
+            );
+        }
+
         const runtimeEntry = this.runtimeIntegrationMap.get(mcpId);
         const runtimeConfig = runtimeEntry?.config;
 
@@ -927,104 +939,410 @@ export class MCPManager {
                 hasToken: !!transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN,
             });
 
-            const headers: Record<string, string> = {};
-            if (transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN) {
+            // [HOTFIX] Force correct endpoint for GitHub Remote (Correction applied at method start, checking here for safety)
+            // But strict correction should happen on 'mcp' object before this check.
+            // We will rely on the top-level fix we are about to add.
+
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+
+            // Support standard Authorization header from config if present
+            if (mergedRuntimeConfig?.token) {
+                headers['Authorization'] = `Bearer ${mergedRuntimeConfig.token}`;
+            }
+            // Also support env-based token (legacy or specific mappings)
+            if (transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN && !headers['Authorization']) {
                 headers['Authorization'] = `Bearer ${transportEnv.GITHUB_PERSONAL_ACCESS_TOKEN}`;
             }
 
+            // [GitHub Remote Fix] Add headers required by the Copilot MCP endpoint
+            if (mcp.slug === 'github-remote' || mcp.name === 'github-remote') {
+                headers['X-MCP-Toolsets'] = 'default';
+                headers['User-Agent'] = 'HighFlow/1.0';
+                headers['Accept'] = 'application/json, text/event-stream';
+                // Some servers might check for version in headers too
+                // headers['X-MCP-Version'] = '2.0';
+            }
+
+            console.log('[MCPManager Debug] GitHub Config Check:', {
+                hasConfigToken: !!mergedRuntimeConfig?.token,
+                tokenLength: mergedRuntimeConfig?.token?.length,
+                headers: {
+                    ...headers,
+                    Authorization: headers['Authorization'] ? 'Bearer [HIDDEN]' : 'MISSING',
+                },
+            });
+
+            // Custom SSE Transport to support headers
             // Custom SSE Transport to support headers
             // @ts-ignore
-            const { default: EventSource } = await import('eventsource');
+            const require = createRequire(import.meta.url);
+
+            let EventSourceClass: any;
+            try {
+                // @ts-ignore
+                const eventSourceModule = require('eventsource');
+                EventSourceClass = eventSourceModule.default || eventSourceModule;
+            } catch (error) {
+                console.error('[MCPManager] Failed to load eventsource polyfill:', error);
+                EventSourceClass = global.EventSource;
+            }
+            try {
+                const imported = await import('eventsource');
+                console.log('[MCPManager] eventsource imported:', Object.keys(imported));
+                EventSourceClass =
+                    imported.EventSource || imported.default?.EventSource || imported.default;
+            } catch (e2) {
+                console.error('[MCPManager] Failed to import eventsource:', e2);
+            }
+            console.log('[MCPManager] EventSource constructor found:', !!EventSourceClass);
 
             // @ts-ignore
-            if (!global.EventSource) global.EventSource = EventSource;
+            if (!global.EventSource) global.EventSource = EventSourceClass;
 
-            const transport = {
-                _url: new URL(mcp.endpoint),
-                _headers: headers,
-                _eventSource: undefined as any,
-                _endpoint: undefined as string | undefined,
-                _abortController: undefined as AbortController | undefined,
-                onclose: undefined as (() => void) | undefined,
-                onerror: undefined as ((error: Error) => void) | undefined,
-                onmessage: undefined as ((message: any) => void) | undefined,
+            // Define SSE transport implementation
+            const isGitHubRemote = mcp.slug === 'github-remote' || mcp.name === 'github-remote';
 
-                async start() {
-                    if (this._eventSource) {
-                        throw new Error('SSEClientTransport already started!');
-                    }
-                    return new Promise<void>((resolve, reject) => {
-                        this._eventSource = new EventSource(this._url.href, {
-                            headers: this._headers,
-                        });
-                        this._abortController = new AbortController();
+            // [GitHub Remote] Specialized Transport using fetch (POST) instead of EventSource (GET)
+            const transport = isGitHubRemote
+                ? {
+                      _url: new URL(mcp.endpoint),
+                      _headers: headers,
+                      _endpoint: undefined as string | undefined, // Will be discovered or inferred
+                      _abortController: undefined as AbortController | undefined,
+                      onclose: undefined as (() => void) | undefined,
+                      onerror: undefined as ((error: Error) => void) | undefined,
+                      onmessage: undefined as ((message: any) => void) | undefined,
 
-                        this._eventSource.onerror = (event: any) => {
-                            const error = new Error(`SSE error: ${JSON.stringify(event)}`);
-                            if (this.onerror) this.onerror(error);
-                        };
+                      async start() {
+                          this._abortController = new AbortController();
+                          // Resolve immediately. We connect on the first 'initialize' message from the Client
+                          // to ensure we use the correct Request ID.
+                          return Promise.resolve();
+                      },
 
-                        this._eventSource.onopen = () => {
-                            // Wait for endpoint event
-                        };
+                      async readStream(body: any) {
+                          // Manual SSE parser for Web ReadableStream (native fetch)
+                          const reader = body.getReader();
+                          const decoder = new TextDecoder('utf-8');
+                          let buffer = '';
+                          let currentEvent = 'message';
 
-                        this._eventSource.addEventListener('endpoint', (event: any) => {
-                            const messageEvent = event;
-                            try {
-                                const url = new URL(messageEvent.data, this._url);
-                                this._endpoint = url.href;
-                                resolve();
-                            } catch (error) {
-                                reject(error);
-                            }
-                        });
+                          try {
+                              while (true) {
+                                  if (this._abortController?.signal.aborted) break;
 
-                        this._eventSource.onmessage = (event: any) => {
-                            const messageEvent = event;
-                            let message;
-                            try {
-                                message = JSON.parse(messageEvent.data);
-                            } catch (error) {
-                                if (this.onerror) this.onerror(error as Error);
-                                return;
-                            }
-                            if (this.onmessage) this.onmessage(message);
-                        };
-                    });
-                },
+                                  const { done, value } = await reader.read();
+                                  if (done) break;
 
-                async close() {
-                    this._abortController?.abort();
-                    this._eventSource?.close();
-                    if (this.onclose) this.onclose();
-                },
+                                  const chunk = decoder.decode(value, { stream: true });
+                                  console.log(
+                                      `[MCPManager] SSE Chunk received (${chunk.length} bytes): ${chunk.substring(0, 100).replace(/\n/g, '\\n')}...`
+                                  );
+                                  buffer += chunk;
 
-                async send(message: any) {
-                    if (!this._endpoint) {
-                        throw new Error('Not connected');
-                    }
-                    try {
-                        const response = await fetch(this._endpoint, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...this._headers,
-                            },
-                            body: JSON.stringify(message),
-                            signal: this._abortController?.signal,
-                        });
-                        if (!response.ok) {
-                            const text = await response.text().catch(() => null);
-                            throw new Error(
-                                `Error POSTing to endpoint (HTTP ${response.status}): ${text}`
-                            );
-                        }
-                    } catch (error) {
-                        if (this.onerror) this.onerror(error as Error);
-                        throw error;
-                    }
-                },
-            };
+                                  const lines = buffer.split(/\r?\n/);
+                                  // Keep the last incomplete line in the buffer
+                                  buffer = lines.pop() || '';
+
+                                  for (const line of lines) {
+                                      const trimmed = line.trim();
+                                      if (!trimmed) {
+                                          // Empty line indicates end of event
+                                          currentEvent = 'message'; // Reset for next event
+                                          continue;
+                                      }
+
+                                      if (trimmed.startsWith('event: ')) {
+                                          currentEvent = trimmed.substring(7).trim();
+                                      } else if (trimmed.startsWith('data: ')) {
+                                          const data = trimmed.substring(6);
+                                          if (currentEvent === 'endpoint') {
+                                              // Update write endpoint
+                                              try {
+                                                  const url = new URL(data, this._url);
+                                                  this._endpoint = url.href;
+                                                  console.log(
+                                                      '[MCPManager] Received SSE endpoint event:',
+                                                      this._endpoint
+                                                  );
+                                              } catch (e) {
+                                                  console.error(
+                                                      '[MCPManager] Invalid endpoint URL:',
+                                                      data
+                                                  );
+                                              }
+                                          } else if (currentEvent === 'message') {
+                                              try {
+                                                  const message = JSON.parse(data);
+                                                  // Ensure we check for onmessage existence
+                                                  console.log(
+                                                      '[MCPManager] Dispatching message to client:',
+                                                      message.id || message.method
+                                                  );
+                                                  if (this.onmessage) {
+                                                      this.onmessage(message);
+                                                  } else {
+                                                      console.warn(
+                                                          '[MCPManager] No onmessage handler for message:',
+                                                          message
+                                                      );
+                                                  }
+                                              } catch (e) {
+                                                  console.error(
+                                                      '[MCPManager] Failed to parse message:',
+                                                      e
+                                                  );
+                                              }
+                                          }
+                                      }
+                                  }
+                              }
+                          } catch (error: any) {
+                              if (error.name === 'AbortError') return;
+                              console.error('[MCPManager] Stream reading error:', error);
+                              if (this.onerror) this.onerror(error as Error);
+                          } finally {
+                              reader.releaseLock();
+                          }
+                      },
+
+                      async close() {
+                          this._abortController?.abort();
+                          if (this.onclose) this.onclose();
+                      },
+
+                      async send(message: any) {
+                          // Handshake on 'initialize'
+                          if (message.method === 'initialize') {
+                              console.log(
+                                  '[MCPManager] Sending Client-initiated initialize via POST handshake'
+                              );
+                              try {
+                                  const response = await fetch(this._url.href, {
+                                      method: 'POST',
+                                      headers: {
+                                          ...this._headers,
+                                          'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify(message), // Use Client's message with correct ID
+                                      signal: this._abortController?.signal,
+                                  });
+
+                                  if (!response.ok) {
+                                      const text = await response.text();
+                                      throw new Error(
+                                          `GitHub Remote Handshake Failed (${response.status}): ${text}`
+                                      );
+                                  }
+
+                                  const sessionId = response.headers.get('mcp-session-id');
+                                  if (sessionId) {
+                                      console.log(
+                                          '[MCPManager] Captured GitHub Session ID:',
+                                          sessionId
+                                      );
+                                      this._endpoint = `${this._url.href}?sessionId=${sessionId}`;
+                                  }
+
+                                  console.log('[MCPManager] GitHub Remote Stream Connected');
+                                  // Start reading the stream (which contains the initialize response)
+                                  this.readStream(response.body);
+                                  return;
+                              } catch (error) {
+                                  console.error('[MCPManager] GitHub Connection Error:', error);
+                                  if (this.onerror) this.onerror(error as Error);
+                                  throw error;
+                              }
+                          }
+
+                          // Regular message sending
+                          console.log('[MCPManager] Sending message:', message.method, message.id);
+                          if (!this._endpoint) {
+                              // Fallback if we have session ID but no endpoint event yet
+                              if (this._url && this._url.href) {
+                                  // We might not have _endpoint if no session ID or event yet?
+                                  // But if we passed initialize, we should have it.
+                              }
+                              // throw new Error('Not connected / No endpoint');
+                          }
+
+                          try {
+                              const targetUrl = this._endpoint || this._url.href;
+                              console.log('[MCPManager] POSTing to:', targetUrl);
+                              const response = await fetch(targetUrl, {
+                                  method: 'POST',
+                                  headers: {
+                                      'Content-Type': 'application/json',
+                                      ...this._headers,
+                                  },
+                                  body: JSON.stringify(message),
+                                  signal: this._abortController?.signal,
+                              });
+                              console.log(
+                                  '[MCPManager] POST response status:',
+                                  response.status,
+                                  response.statusText
+                              );
+                              if (!response.ok) {
+                                  const text = await response.text().catch(() => null);
+                                  throw new Error(
+                                      `Error POSTing message (${response.status}): ${text}`
+                                  );
+                              }
+                              // Check if response has a body (GitHub might send response here or via SSE)
+                              const contentType = response.headers.get('content-type');
+                              console.log('[MCPManager] POST response content-type:', contentType);
+
+                              if (contentType?.includes('text/event-stream')) {
+                                  // GitHub Remote returns responses as SSE streams for ALL messages
+                                  console.log(
+                                      '[MCPManager] Reading SSE response stream for message:',
+                                      message.method
+                                  );
+                                  this.readStream(response.body);
+                              } else if (contentType?.includes('application/json')) {
+                                  const responseBody = await response.text();
+                                  console.log(
+                                      '[MCPManager] POST response body:',
+                                      responseBody.substring(0, 200)
+                                  );
+                                  if (responseBody && this.onmessage) {
+                                      try {
+                                          const jsonResponse = JSON.parse(responseBody);
+                                          console.log(
+                                              '[MCPManager] Dispatching POST response as message:',
+                                              jsonResponse.id || jsonResponse.method
+                                          );
+                                          this.onmessage(jsonResponse);
+                                      } catch (e) {
+                                          console.warn(
+                                              '[MCPManager] Failed to parse POST response JSON:',
+                                              e
+                                          );
+                                      }
+                                  }
+                              }
+                          } catch (error) {
+                              console.error('[MCPManager] POST request failed:', error);
+                              if (this.onerror) this.onerror(error as Error);
+                              throw error;
+                          }
+                      },
+                  }
+                : {
+                      // GENERIC EVENTSOURCE TRANSPORT (Existing Logic)
+                      _url: new URL(mcp.endpoint),
+                      _headers: headers,
+                      _eventSource: undefined as any,
+                      _endpoint: mcp.endpoint,
+                      _abortController: undefined as AbortController | undefined,
+                      onclose: undefined as (() => void) | undefined,
+                      onerror: undefined as ((error: Error) => void) | undefined,
+                      onmessage: undefined as ((message: any) => void) | undefined,
+
+                      async start() {
+                          // Check if already connected
+                          if (this._eventSource) {
+                              throw new Error('SSEClientTransport already started!');
+                          }
+
+                          return new Promise<void>((resolve, reject) => {
+                              // @ts-ignore - 'eventsource' supports headers, standard EventSource does not
+                              this._eventSource = new EventSourceClass(this._url.href, {
+                                  headers: this._headers,
+                              });
+                              this._abortController = new AbortController();
+
+                              this._eventSource.onopen = (event: any) => {
+                                  console.log(
+                                      '[MCPManager] SSE connection opened:',
+                                      this._url.href
+                                  );
+                                  resolve();
+                              };
+
+                              this._eventSource.onerror = (event: any) => {
+                                  console.error(
+                                      `[MCPManager] SSE error for ${this._url.href}:`,
+                                      event
+                                  );
+                                  if (event?.message) {
+                                      console.error(
+                                          '[MCPManager] SSE error message:',
+                                          event.message
+                                      );
+                                  }
+                                  const error = new Error(`SSE error: ${JSON.stringify(event)}`);
+                                  if (this.onerror) this.onerror(error);
+                                  // If we fail on initial connect, reject.
+                                  // But usually onerror fires after onopen too.
+                                  // We can try to reject if not resolved?
+                                  // For simplicity in this replacement, we rely on event listeners.
+                              };
+
+                              this._eventSource.addEventListener('endpoint', (event: any) => {
+                                  const messageEvent = event;
+                                  try {
+                                      const url = new URL(messageEvent.data, this._url);
+                                      this._endpoint = url.href;
+                                      console.log(
+                                          '[MCPManager] Received SSE endpoint event:',
+                                          this._endpoint
+                                      );
+                                  } catch (e) {
+                                      console.error(
+                                          '[MCPManager] Invalid endpoint URL:',
+                                          messageEvent.data
+                                      );
+                                  }
+                              });
+
+                              this._eventSource.onmessage = (event: any) => {
+                                  const messageEvent = event;
+                                  try {
+                                      const message = JSON.parse(messageEvent.data);
+                                      if (this.onmessage) this.onmessage(message);
+                                  } catch (error) {
+                                      if (this.onerror) this.onerror(error as Error);
+                                  }
+                              };
+                          });
+                      },
+
+                      async close() {
+                          this._abortController?.abort();
+                          this._eventSource?.close();
+                          if (this.onclose) this.onclose();
+                      },
+
+                      async send(message: any) {
+                          if (!this._endpoint) {
+                              throw new Error('Not connected');
+                          }
+                          try {
+                              const response = await fetch(this._endpoint, {
+                                  method: 'POST',
+                                  headers: {
+                                      'Content-Type': 'application/json',
+                                      ...this._headers,
+                                  },
+                                  body: JSON.stringify(message),
+                                  signal: this._abortController?.signal,
+                              });
+                              if (!response.ok) {
+                                  const text = await response.text().catch(() => null);
+                                  throw new Error(
+                                      `Error POSTing to endpoint (HTTP ${response.status}): ${text}`
+                                  );
+                              }
+                          } catch (error) {
+                              if (this.onerror) this.onerror(error as Error);
+                              throw error;
+                          }
+                      },
+                  };
 
             await client.connect(transport);
         } else {

@@ -308,10 +308,26 @@ export const useProjectStore = defineStore('projects', () => {
             }
         });
 
+        const unsubscribeCuratorCompleted = api.events.on('curator:completed', (payload: any) => {
+            console.log('[ProjectStore] Curator completed, refreshing project...', payload);
+            if (currentProject.value?.id === payload.projectId) {
+                fetchProject(payload.projectId).then((updatedProject) => {
+                    if (updatedProject) {
+                        currentProject.value = updatedProject;
+                        const index = projects.value.findIndex((p) => p.id === updatedProject.id);
+                        if (index >= 0) {
+                            projects.value[index] = updatedProject;
+                        }
+                    }
+                });
+            }
+        });
+
         return () => {
             unsubscribeCreated();
             unsubscribeUpdated();
             unsubscribeDeleted();
+            unsubscribeCuratorCompleted();
         };
     }
 

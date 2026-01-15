@@ -448,7 +448,14 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                         providerInfo.color,
                                     ]"
                                 >
+                                    <img
+                                        v-if="provider.icon?.startsWith('/')"
+                                        :src="provider.icon"
+                                        class="w-7 h-7 object-contain"
+                                        :alt="provider.name"
+                                    />
                                     <IconRenderer
+                                        v-else
                                         :icon="getProviderIcon(provider.id)"
                                         class="w-7 h-7"
                                     />
@@ -458,7 +465,11 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                         {{ provider.name }}
                                     </h2>
                                     <p class="text-sm text-gray-500 dark:text-gray-400">
-                                        {{ provider.description }}
+                                        {{
+                                            provider.description?.startsWith('settings.')
+                                                ? $t(provider.description)
+                                                : provider.description
+                                        }}
                                     </p>
                                 </div>
                                 <!-- Provider Website Link -->
@@ -589,7 +600,7 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                         <p
                                             class="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2"
                                         >
-                                            ✨ 기본 제공 HighFlow AI (Credit)
+                                            {{ $t('settings.ai.highflow.title') }}
                                         </p>
                                         <ul
                                             class="text-xs text-blue-700 dark:text-blue-300 space-y-1"
@@ -598,24 +609,29 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                                 <span class="text-green-600 dark:text-green-400"
                                                     >✓</span
                                                 >
-                                                <span>로그인 후 앱 계정의 크레딧을 사용합니다</span>
+                                                <span>{{
+                                                    $t('settings.ai.highflow.credit_usage')
+                                                }}</span>
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <span class="text-green-600 dark:text-green-400"
                                                     >✓</span
                                                 >
-                                                <span>별도의 API 키가 필요하지 않습니다</span>
+                                                <span>{{
+                                                    $t('settings.ai.highflow.no_api_key')
+                                                }}</span>
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <span class="text-yellow-600 dark:text-yellow-400"
                                                     >⚠</span
                                                 >
-                                                <span>스트리밍은 지원하지 않습니다</span>
+                                                <span>{{
+                                                    $t('settings.ai.highflow.no_streaming')
+                                                }}</span>
                                             </li>
                                         </ul>
                                         <p class="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                                            로그인하지 않은 경우 Task 실행 시 로그인 안내가
-                                            표시됩니다.
+                                            {{ $t('settings.ai.highflow.login_notice') }}
                                         </p>
                                     </div>
                                 </div>

@@ -64,7 +64,7 @@ export interface ProjectsAPI {
 
 export interface TasksAPI {
     list: (projectId: number, filters?: TaskFilters) => Promise<Task[]>;
-    get: (id: number) => Promise<Task | null>;
+    get: (projectId: number, sequence: number) => Promise<Task | null>;
     create: (data: Partial<NewTask> & { projectId: number; title: string }) => Promise<Task>;
     update: (
         projectId: number,

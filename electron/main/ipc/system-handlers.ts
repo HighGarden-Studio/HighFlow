@@ -128,4 +128,14 @@ export function registerSystemHandlers(): void {
             return { success: false, error: message };
         }
     });
+
+    ipcMain.on('settings:update-notifications', async (_event, config) => {
+        try {
+            const { taskNotificationService } =
+                await import('../services/task-notification-service');
+            taskNotificationService.updateDesktopConfig(config);
+        } catch (error) {
+            console.error('Failed to update notification settings:', error);
+        }
+    });
 }

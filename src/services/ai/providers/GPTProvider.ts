@@ -498,6 +498,21 @@ export class GPTProvider extends BaseAIProvider {
         if (Array.isArray(input)) {
             // Use existing buildChatMessages to correctly handle multi-modal content
             messages = this.buildChatMessages(input);
+
+            // Inject System Prompt (Date/Context)
+            const systemPrompt = this.buildSystemPrompt(config, context);
+            if (systemPrompt) {
+                const existingIndex = messages.findIndex((m) => m.role === 'system');
+                if (existingIndex !== -1) {
+                    const existing = messages[existingIndex] as any;
+                    existing.content = `${systemPrompt}\n\n${existing.content}`;
+                } else {
+                    messages.unshift({
+                        role: 'system',
+                        content: systemPrompt,
+                    });
+                }
+            }
         } else {
             // Legacy string support
             const systemPrompt = this.buildSystemPrompt(config, context);

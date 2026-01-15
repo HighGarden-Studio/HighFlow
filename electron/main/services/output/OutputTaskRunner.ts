@@ -149,6 +149,7 @@ export class OutputTaskRunner {
                     result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
+                    hasUnreadResult: true,
                 });
 
                 console.log('[OutputTaskRunner] Task updated with result:', {
@@ -327,7 +328,14 @@ export class OutputTaskRunner {
                     `[OutputTaskRunner] Dependency ${depSequence} content length: ${content?.length || 0}`
                 );
                 if (content) {
-                    inputs.push(content);
+                    // Prepend Task ID and Title if not using template (where user controls format)
+                    if (config.aggregation !== 'template') {
+                        const header = `### [Task ${depTask.projectSequence}] ${depTask.title}`;
+                        const formattedContent = `${header}\n${content}`;
+                        inputs.push(formattedContent);
+                    } else {
+                        inputs.push(content);
+                    }
                 }
             }
         }

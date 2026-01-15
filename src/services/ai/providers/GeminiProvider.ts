@@ -273,9 +273,7 @@ export class GeminiProvider extends BaseAIProvider {
             if (signal?.aborted) {
                 throw new Error('Request aborted');
             }
-            const systemPrompt = config.systemPrompt
-                ? this.buildSystemPrompt(config, context)
-                : undefined;
+            const systemPrompt = this.buildSystemPrompt(config, context);
             const result = await client.models.generateContent({
                 model: config.model,
                 contents: prompt,
@@ -347,7 +345,7 @@ export class GeminiProvider extends BaseAIProvider {
             const systemMsg = input.find((m) => m.role === 'system');
             if (systemMsg) {
                 systemInstruction = systemMsg.content;
-            } else if (config.systemPrompt) {
+            } else {
                 // Fallback if not in messages
                 systemInstruction = this.buildSystemPrompt(config, context);
             }
@@ -357,9 +355,7 @@ export class GeminiProvider extends BaseAIProvider {
         } else {
             // Legacy string input
             contents = input;
-            if (config.systemPrompt) {
-                systemInstruction = this.buildSystemPrompt(config, context);
-            }
+            systemInstruction = this.buildSystemPrompt(config, context);
         }
 
         let accumulated = '';

@@ -4,7 +4,7 @@
  * Handles sending Slack and Webhook notifications for task events
  */
 
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, Notification } from 'electron';
 import { notificationResolver } from './notification-resolver';
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
@@ -20,10 +20,34 @@ import {
 
 export class TaskNotificationService {
     private mainWindow: BrowserWindow | null = null;
+    private desktopConfig = {
+        enabled: true,
+        notifyOnTaskStart: true,
+        notifyOnTaskComplete: true,
+        notifyOnTaskError: true,
+    };
 
     initialize(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow;
         console.log('[TaskNotificationService] Initialized');
+    }
+
+    updateDesktopConfig(config: any) {
+        console.log('[TaskNotificationService] Updating desktop config:', config);
+        this.desktopConfig = { ...this.desktopConfig, ...config };
+    }
+
+    private notifyDesktop(title: string, body: string, type: 'start' | 'complete' | 'error') {
+        if (!this.desktopConfig.enabled) return;
+
+        let shouldNotify = false;
+        if (type === 'start' && this.desktopConfig.notifyOnTaskStart) shouldNotify = true;
+        if (type === 'complete' && this.desktopConfig.notifyOnTaskComplete) shouldNotify = true;
+        if (type === 'error' && this.desktopConfig.notifyOnTaskError) shouldNotify = true;
+
+        if (shouldNotify) {
+            new Notification({ title, body, silent: false }).show();
+        }
     }
 
     /**
@@ -52,6 +76,15 @@ export class TaskNotificationService {
         console.log(
             `[TaskNotificationService] Notifying status change: ${task.title} (${oldStatus} → ${newStatus})`
         );
+
+        // Desktop Notification for Task Start
+        if (newStatus === 'running') {
+            this.notifyDesktop(
+                `Starting Task: ${task.title}`,
+                `Project: ${project?.name || 'Unknown'}`,
+                'start'
+            );
+        }
 
         // Send Slack notification
         if (config.slack?.enabled && config.slack.events.includes('task.status-changed')) {
@@ -117,6 +150,13 @@ export class TaskNotificationService {
         const project = task.projectId ? await this.getProject(task.projectId) : null;
 
         console.log(`[TaskNotificationService] Notifying completion: ${task.title}`);
+
+        // Desktop Notification
+        this.notifyDesktop(
+            `Task Completed: ${task.title}`,
+            `Project: ${project?.name || 'Unknown'}`,
+            'complete'
+        );
 
         // Process result
         const processedResult = this.processResult(result, config.slack?.includeResults);
@@ -251,6 +291,9 @@ export class TaskNotificationService {
         const project = task.projectId ? await this.getProject(task.projectId) : null;
 
         console.log(`[TaskNotificationService] Notifying failure: ${task.title}`);
+
+        // Desktop Notification
+        this.notifyDesktop(`Task Failed: ${task.title}`, error, 'error');
 
         // Send Slack notification
         if (config.slack?.enabled && config.slack.events.includes('task.failed')) {

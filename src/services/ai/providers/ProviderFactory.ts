@@ -46,7 +46,8 @@ export class ProviderFactory {
         this.providers.set('lmstudio', new LmStudioProvider());
 
         // Load models from DB cache for each provider
-        console.log('[ProviderFactory] Loading models from DB cache for all providers...');
+        // Load models from DB cache for each provider
+        // console.log('[ProviderFactory] Loading models from DB cache for all providers...');
         const providerModelsRepository =
             await import('../../../../electron/main/database/repositories/provider-models-repository').then(
                 (m) => m.providerModelsRepository
@@ -57,9 +58,9 @@ export class ProviderFactory {
                 const models = await providerModelsRepository.getModels(name);
                 if (models.length > 0) {
                     provider.setDynamicModels(models);
-                    console.log(
-                        `[ProviderFactory] Loaded ${models.length} models for ${name} from DB`
-                    );
+                    // console.log(
+                    //    `[ProviderFactory] Loaded ${models.length} models for ${name} from DB`
+                    // );
                 }
             } catch (error) {
                 console.warn(`[ProviderFactory] Failed to load models for ${name}:`, error);

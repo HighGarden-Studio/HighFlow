@@ -128,7 +128,7 @@ const result = await window.electron.yourAPI.action(data);
 
 ## 🤝 Multi-Assistant Note
 
-This project uses Claude Code, Antigravity, and Codex interchangeably. Always:
+This project uses Claude Code and Codex interchangeably. Always:
 
 - Reference `CLAUDE.md` for consistency
 - Use same terminology

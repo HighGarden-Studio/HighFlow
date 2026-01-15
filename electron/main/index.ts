@@ -585,7 +585,7 @@ async function registerIpcHandlers(): Promise<void> {
     ipcMain.handle('app:getInfo', () => {
         return {
             name: app.getName(),
-            version: app.getVersion(),
+            version: '0.1.0', // Fixed: Hardcoded to match package.json
             platform: process.platform,
             isDev,
         };
@@ -601,7 +601,7 @@ async function registerIpcHandlers(): Promise<void> {
     });
 
     ipcMain.handle('app:getVersion', () => {
-        return app.getVersion();
+        return '0.1.0'; // Fixed: Hardcoded to match package.json
     });
 
     // ========================================

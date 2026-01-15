@@ -579,6 +579,7 @@ export interface Task {
     pausedAt: Date | null; // 일시정지된 시간
     isSubdivided: boolean; // 서브태스크로 세분화된 상태 (세분화시 실행 기능 비활성화)
     subtaskCount: number; // 직접 자식 태스크 수
+    hasUnreadResult: boolean; // 새로운 실행 결과가 사용자에게 아직 확인되지 않았는지 여부
 
     // AI 실행 최적화 필드 (인터뷰 기반 자동 생성)
     executionOrder: number | null; // 작업 순서 (1부터 시작)

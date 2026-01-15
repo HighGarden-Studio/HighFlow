@@ -404,7 +404,26 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                         `크레딧이 부족합니다. 필요: ${errorData.required}, 보유: ${errorData.available}`
                     );
                 } else if (response.status === 429) {
-                    throw new Error('API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+                    // Send Toast Notification (Main Process -> Renderer)
+                    try {
+                        const { BrowserWindow } = await import('electron');
+                        const wins = BrowserWindow.getAllWindows();
+                        if (wins.length > 0) {
+                            wins[0].webContents.send('app:notification', {
+                                type: 'error',
+                                message: 'API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.',
+                                duration: 5000,
+                            });
+                        }
+                    } catch (e) {
+                        console.error('[DefaultHighFlowProvider] Failed to send notification:', e);
+                    }
+
+                    const error: any = new Error(
+                        'API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.'
+                    );
+                    error.status = 429;
+                    throw error;
                 } else if (response.status === 401) {
                     // Session expired
                     console.warn('[DefaultHighFlowProvider] 401 Unauthorized - session expired');
@@ -425,6 +444,22 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             console.error('[DefaultHighFlowProvider] Backend proxy call failed:', error);
             throw error;
         }
+    }
+
+    /**
+     * Override shouldNotRetry to fail immediately on 429
+     */
+    protected shouldNotRetry(error: any): boolean {
+        // Check for 429 status or message
+        if (
+            error.status === 429 ||
+            error.statusCode === 429 ||
+            error.message?.includes('429') ||
+            error.message?.includes('API 요청 한도를 초과했습니다')
+        ) {
+            return true;
+        }
+        return super.shouldNotRetry(error);
     }
 
     /**

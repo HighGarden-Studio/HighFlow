@@ -634,6 +634,12 @@ async function handleProjectNameUpdate(newName: string) {
     await projectStore.updateProject(project.value.id, { title: newName.trim() });
 }
 
+async function handleProjectInfoUpdate() {
+    if (!project.value) return;
+    await projectStore.fetchProject(project.value.id);
+    await taskStore.fetchTasks(project.value.id);
+}
+
 async function handleDeleteTask(task: Task) {
     const dependentTasks = taskStore.tasks.filter(
         (t) =>
@@ -674,10 +680,10 @@ function getSubtasks(projectId: number, parentSequence: number): Task[] {
 const liveStreamingContent = computed(() => {
     if (!livePreviewTask.value) return '';
     // Use helper to support composite key lookup
-    const progress = taskStore.getExecutionProgress({
-        projectId: livePreviewTask.value.projectId,
-        projectSequence: livePreviewTask.value.projectSequence,
-    });
+    const progress = taskStore.getExecutionProgress(
+        livePreviewTask.value.projectId,
+        livePreviewTask.value.projectSequence
+    );
     return progress?.content || '';
 });
 
@@ -1140,6 +1146,9 @@ async function handleInputSubmit(data: any) {
 }
 
 // Lifecycle
+// Event cleanup function
+let cleanupListeners: (() => void) | undefined;
+
 onMounted(async () => {
     // Fetch current project details first to ensure header info is correct
     if (projectId.value) {
@@ -1147,16 +1156,14 @@ onMounted(async () => {
     }
     await projectStore.fetchProjects();
     await taskStore.fetchTasks(projectId.value);
-    const cleanup = taskStore.initEventListeners();
+    cleanupListeners = taskStore.initEventListeners();
+});
 
-    // Register listeners
-    // Note: taskStore.initEventListeners() already handles task:status-changed and task:updated
-    // We don't need to duplicate them here to avoid race conditions and excessive fetches.
-
-    onUnmounted(() => {
-        isMounted.value = false;
-        cleanup();
-    });
+onUnmounted(() => {
+    isMounted.value = false;
+    if (cleanupListeners) {
+        cleanupListeners();
+    }
 });
 </script>
 
@@ -1971,6 +1978,7 @@ onMounted(async () => {
             :open="showProjectInfoModal"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
+            @update="handleProjectInfoUpdate"
         />
     </div>
 </template>

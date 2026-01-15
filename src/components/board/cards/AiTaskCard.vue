@@ -86,7 +86,19 @@ function loadAssignedOperator() {
 
 onMounted(() => {
     loadAssignedOperator();
+    console.log(
+        `[AiTaskCard] Task ${props.task.projectSequence} mounted. hasUnreadResult=${props.task.hasUnreadResult}`
+    );
 });
+
+watch(
+    () => props.task.hasUnreadResult,
+    (newVal) => {
+        console.log(
+            `[AiTaskCard] Task ${props.task.projectSequence} hasUnreadResult changed to: ${newVal}`
+        );
+    }
+);
 
 watch(
     () => props.task.assignedOperatorId,
@@ -186,10 +198,12 @@ const streamedContent = computed(() => {
     // to avoid collision if ID is undefined.
     // We construct the key manually here to match store logic or pass the object if store supports it.
     // The store's getExecutionProgress now supports object.
-    const progress = taskStore.getExecutionProgress({
-        projectId: props.task.projectId,
-        projectSequence: props.task.projectSequence,
-    });
+    // The store's getExecutionProgress now supports object.
+    // The store's getExecutionProgress now supports object.
+    const progress = taskStore.getExecutionProgress(
+        props.task.projectId,
+        props.task.projectSequence
+    );
     return progress?.content || '';
 });
 
@@ -202,7 +216,10 @@ const reviewStreamedContent = computed(() => {
 });
 
 const isTaskCurrentlyReviewing = computed(() => {
-    return taskStore.isTaskReviewing(props.task.id);
+    return taskStore.isTaskReviewing({
+        projectId: props.task.projectId,
+        projectSequence: props.task.projectSequence,
+    });
 });
 
 // MCP execution summary for display
@@ -259,6 +276,12 @@ const displayModel = computed(() => {
     const model = assignedOperator.value?.aiModel || props.task.aiModel;
     if (model === 'cli-default') return '';
     return model || 'Default Model';
+});
+
+const displayProviderName = computed(() => {
+    const provider = assignedOperator.value?.aiProvider || props.task.aiProvider || 'AI Provider';
+    if (provider === 'default-highflow') return 'HighFlow';
+    return provider;
 });
 
 // Image content detection
@@ -346,12 +369,10 @@ function handleEnhancePrompt(event: Event) {
 
 function handlePreviewResult(event: Event) {
     event.stopPropagation();
+    if (props.task.hasUnreadResult) {
+        taskStore.markResultAsRead(props.task.projectId, props.task.projectSequence);
+    }
     emit('previewResult', props.task);
-}
-
-function handleViewHistory(event: Event) {
-    event.stopPropagation();
-    emit('viewHistory', props.task);
 }
 
 function handleViewProgress(event: Event) {
@@ -484,11 +505,7 @@ function hexToRgba(hex: string, alpha: number) {
                 <div class="flex items-center gap-2 px-0.5">
                     <div
                         class="flex items-center justify-center w-7 h-7 rounded bg-white dark:bg-white shadow-sm border border-gray-200 dark:border-gray-300"
-                        :title="
-                            assignedOperator
-                                ? assignedOperator.aiProvider || task.aiProvider || 'AI Provider'
-                                : task.aiProvider || 'AI Provider'
-                        "
+                        :title="displayProviderName"
                     >
                         <IconRenderer :icon="aiProviderIcon" class="w-5 h-5" />
                     </div>
@@ -496,11 +513,7 @@ function hexToRgba(hex: string, alpha: number) {
                         <span
                             class="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide"
                         >
-                            {{
-                                assignedOperator
-                                    ? assignedOperator.aiProvider || task.aiProvider || 'AI'
-                                    : task.aiProvider || 'AI'
-                            }}
+                            {{ displayProviderName }}
                         </span>
                         <span class="text-xs font-medium text-gray-700 dark:text-gray-200">
                             {{ displayModel }}
@@ -518,27 +531,41 @@ function hexToRgba(hex: string, alpha: number) {
                     <span class="text-[10px] text-gray-400 font-mono mt-0.5 whitespace-nowrap">
                         #{{ task.projectSequence }}
                     </span>
+                    <!-- Unread Badge -->
+                    <div
+                        v-if="task.hasUnreadResult"
+                        class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 border border-blue-200 dark:border-blue-700 animate-pulse ml-2"
+                        title="New result available"
+                    >
+                        <span class="text-[9px] font-bold text-blue-600 dark:text-blue-300"
+                            >NEW</span
+                        >
+                    </div>
                 </div>
 
                 <!-- Row 4: Output Type & Tags -->
                 <div class="flex items-center justify-between gap-2">
                     <!-- Output Format Badge -->
-                    <div
-                        v-if="outputFormatInfo"
-                        class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-                        :title="outputFormatInfo.label"
-                    >
-                        <span class="text-xs">{{ outputFormatInfo.icon }}</span>
-                        <span class="text-[10px] font-medium text-gray-600 dark:text-gray-300">{{
-                            outputFormatInfo.label
-                        }}</span>
-                    </div>
-                    <div
-                        v-else
-                        class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-50 dark:bg-gray-800/50 border border-transparent"
-                    >
-                        <span class="text-xs">📄</span>
-                        <span class="text-[10px] text-gray-400">Text</span>
+                    <div class="flex items-center gap-2">
+                        <!-- Unread Badge - Moved to Row 3 -->
+                        <div
+                            v-if="outputFormatInfo"
+                            class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                            :title="outputFormatInfo.label"
+                        >
+                            <span class="text-xs">{{ outputFormatInfo.icon }}</span>
+                            <span
+                                class="text-[10px] font-medium text-gray-600 dark:text-gray-300"
+                                >{{ outputFormatInfo.label }}</span
+                            >
+                        </div>
+                        <div
+                            v-else
+                            class="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-50 dark:bg-gray-800/50 border border-transparent"
+                        >
+                            <span class="text-xs">📄</span>
+                            <span class="text-[10px] text-gray-400">Text</span>
+                        </div>
                     </div>
 
                     <!-- Tags -->
@@ -957,14 +984,14 @@ function hexToRgba(hex: string, alpha: number) {
                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                             ></path>
                         </svg>
-                        {{ task.isPaused ? '재개' : '진행중' }}
+                        {{ task.isPaused ? t('common.resume') : t('common.in_progress') }}
                     </button>
 
                     <button
                         class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                         @click="handleStop"
                     >
-                        중지
+                        {{ t('common.stop') }}
                     </button>
                 </template>
 
@@ -972,7 +999,7 @@ function hexToRgba(hex: string, alpha: number) {
                 <template v-if="task.status === 'in_review'">
                     <div class="w-full flex gap-1.5">
                         <button
-                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded flex items-center justify-center gap-1 border transition-colors"
+                            class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded flex items-center justify-center gap-1 border transition-colors"
                             :class="
                                 task.reviewFailed
                                     ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -980,25 +1007,28 @@ function hexToRgba(hex: string, alpha: number) {
                             "
                             @click="(e) => handlePreviewResult(e)"
                         >
-                            {{ task.reviewFailed ? '실패 분석' : '결과 확인' }}
+                            {{ task.reviewFailed ? '실패 분석' : t('project.actions.view_result') }}
                         </button>
                         <button
-                            class="px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
+                            class="px-1.5 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
                             @click="handleRetry"
                             title="다시 실행"
                         >
-                            재시도
+                            {{ t('task.retry') }}
                         </button>
                         <button
-                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
+                            class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
                             @click.stop="
                                 () => {
-                                    console.log('🟢 [AiTaskCard] Approve button clicked', task.id);
+                                    console.log(
+                                        '🟢 [AiTaskCard] Approve button clicked',
+                                        task.projectSequence
+                                    );
                                     emit('approve', task);
                                 }
                             "
                         >
-                            승인
+                            {{ t('task.actions.approve') }}
                         </button>
                     </div>
                 </template>
@@ -1006,15 +1036,15 @@ function hexToRgba(hex: string, alpha: number) {
                 <!-- 4. DONE: HISTORY -->
                 <template v-if="task.status === 'done'">
                     <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="(e) => handlePreviewResult(e)"
                     >
-                        결과보기
+                        {{ t('project.actions.view_result') }}
                     </button>
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
-                        v-if="!task.triggerConfig?.dependsOn"
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
+                        v-if="!task.triggerConfig?.dependsOn && task.taskType !== 'output'"
+                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="(e) => handleRetry(e)"
                     >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1025,13 +1055,7 @@ function hexToRgba(hex: string, alpha: number) {
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                             />
                         </svg>
-                        재실행
-                    </button>
-                    <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
-                        @click="(e) => handleViewHistory(e)"
-                    >
-                        히스토리
+                        {{ t('common.retry') }}
                     </button>
                 </template>
 
@@ -1039,7 +1063,7 @@ function hexToRgba(hex: string, alpha: number) {
                 <template v-if="task.status === 'blocked' || task.status === 'failed'">
                     <button
                         v-if="!task.triggerConfig?.dependsOn"
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                         @click.stop="(e) => handleRetry(e)"
                     >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1050,7 +1074,7 @@ function hexToRgba(hex: string, alpha: number) {
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                             />
                         </svg>
-                        재시도
+                        {{ t('task.retry') }}
                     </button>
                     <div
                         v-else

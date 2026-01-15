@@ -106,6 +106,15 @@ const inputModeLabel = computed(() => {
     return ''; // Less relevant for other types unless specified
 });
 
+const descriptionLabel = computed(() => {
+    if (!props.task.inputConfig) return t('task.input.label.message');
+    const type = props.task.inputConfig.sourceType;
+    if (type === 'USER_INPUT') return t('task.input.label.message');
+    if (type === 'LOCAL_FILE') return t('task.input.label.file');
+    if (type === 'REMOTE_RESOURCE') return t('task.input.label.url');
+    return t('task.input.label.message');
+});
+
 function handleExecute(event: Event) {
     event.stopPropagation();
     emit('execute', props.task);
@@ -256,24 +265,23 @@ function hexToRgba(hex: string, alpha: number) {
                             {{ inputModeLabel }}
                         </span>
                     </div>
-                </div>
-
-                <!-- Row 3: Task Title & ID -->
-                <div class="flex items-start justify-between gap-2 mt-1">
-                    <h3
-                        class="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug break-words line-clamp-2"
-                    >
-                        {{ task.title }}
-                    </h3>
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-mono mt-0.5 whitespace-nowrap">
+                    <!-- Task ID (moved from Row 3) -->
+                    <div class="ml-auto flex items-center gap-1">
+                        <span class="text-[10px] text-gray-400 font-mono whitespace-nowrap">
                             #{{ task.projectSequence }}
                         </span>
                     </div>
                 </div>
 
+                <!-- Row 3: Task Title -->
+                <h3
+                    class="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug break-words line-clamp-2 mt-2"
+                >
+                    {{ task.title }}
+                </h3>
+
                 <!-- Row 4: Output Type & Tags -->
-                <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center justify-between gap-2 mt-2">
                     <!-- Output Format Badge -->
                     <div
                         v-if="outputFormatInfo"
@@ -316,11 +324,14 @@ function hexToRgba(hex: string, alpha: number) {
         <template #default>
             <!-- Row 5: Content (Description) -->
             <div class="mt-3 mb-2">
+                <div class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                    {{ descriptionLabel }}
+                </div>
                 <p
                     v-if="!hidePrompt && task.description"
                     class="text-xs text-gray-600 dark:text-gray-300 line-clamp-2"
                 >
-                    {{ task.description }}
+                    {{ task.inputConfig?.userInput?.message }}
                 </p>
                 <p v-else class="text-xs text-gray-400 dark:text-gray-500 italic">
                     {{ t('task.type.input_desc') }}
@@ -525,17 +536,6 @@ function hexToRgba(hex: string, alpha: number) {
                             />
                         </svg>
                         {{ t('common.retry') }}
-                    </button>
-                    <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
-                        @click="
-                            (e) => {
-                                e.stopPropagation();
-                                emit('viewHistory', task);
-                            }
-                        "
-                    >
-                        {{ t('task.detail.history') }}
                     </button>
                 </template>
             </div>

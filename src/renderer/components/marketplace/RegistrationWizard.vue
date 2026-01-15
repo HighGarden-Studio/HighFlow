@@ -78,6 +78,16 @@ onMounted(async () => {
     try {
         const electron = (window as any).electron;
         if (electron) {
+            // Set default version from app
+            try {
+                if (electron.app) {
+                    const appVersion = await electron.app.getVersion();
+                    version.value = appVersion;
+                }
+            } catch (e) {
+                console.warn('Failed to get app version:', e);
+            }
+
             operators.value = await electron.operators.list(null);
             scriptTemplates.value = await electron.scriptTemplates.list();
         }

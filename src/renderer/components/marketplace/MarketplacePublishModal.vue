@@ -3,7 +3,7 @@
  * Marketplace Publish Modal
  * Allows users to publish projects/templates to the marketplace with image attachments.
  */
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { marketplaceAPI } from '../../api/marketplace';
 import type { MarketplaceCategory, ItemType } from '../../../core/types/marketplace';
 import { useToast } from 'vue-toastification';
@@ -159,6 +159,17 @@ async function submit() {
         loading.value = false;
     }
 }
+
+onMounted(async () => {
+    try {
+        if (window.electron?.app) {
+            const appVersion = await window.electron.app.getVersion();
+            version.value = appVersion;
+        }
+    } catch (e) {
+        console.warn('Failed to get app version:', e);
+    }
+});
 </script>
 
 <template>

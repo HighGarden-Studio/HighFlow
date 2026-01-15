@@ -236,6 +236,7 @@ function executeShortcut(id: string) {
             showUpdateModal.value = false;
             showSetupWizard.value = false;
             showAssistant.value = false;
+            eventBus.emit('ui.close_modal', {}, 'app');
             break;
     }
 }
@@ -415,6 +416,18 @@ onMounted(async () => {
             duration: 7000,
         });
     });
+
+    // Request Notification Permission (Required for macOS)
+    if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+            try {
+                const permission = await Notification.requestPermission();
+                console.log('[App] Notification permission:', permission);
+            } catch (err) {
+                console.warn('[App] Failed to request notification permission:', err);
+            }
+        }
+    }
 });
 
 onUnmounted(() => {

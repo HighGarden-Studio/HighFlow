@@ -484,7 +484,7 @@ export class ProjectRepository {
         } = project;
 
         return {
-            version: app.getVersion(),
+            version: '0.1.0', // Fixed: Hardcoded to match package.json as app.getVersion() returns Electron version in some envs
             exportedAt: new Date().toISOString(),
             project: {
                 title: projectRest.title,

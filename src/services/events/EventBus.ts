@@ -433,6 +433,13 @@ export interface CostExceededEvent extends BaseEvent {
     };
 }
 
+// UI Events
+export interface UICloseModalEvent extends BaseEvent {
+    category: 'system';
+    type: 'ui.close_modal';
+    payload: Record<string, never>;
+}
+
 // Union type for all events
 export type AppEvent =
     | TaskCreatedEvent
@@ -461,7 +468,8 @@ export type AppEvent =
     | CommentCreatedEvent
     | SystemErrorEvent
     | WebhookReceivedEvent
-    | CostExceededEvent;
+    | CostExceededEvent
+    | UICloseModalEvent;
 
 // Event handler types
 export type EventHandler<T extends BaseEvent = BaseEvent> = (event: T) => void | Promise<void>;

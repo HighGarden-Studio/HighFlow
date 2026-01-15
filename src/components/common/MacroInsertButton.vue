@@ -5,6 +5,7 @@
  * 프롬프트에 매크로를 삽입할 수 있는 드롭다운 버튼
  */
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import IconRenderer from './IconRenderer.vue';
 import { MacroParser } from '../../services/workflow/MacroParser';
 
@@ -19,6 +20,8 @@ const props = withDefaults(defineProps<Props>(), {
     variables: () => [],
     disabled: false,
 });
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
     (e: 'insert', macro: string): void;
@@ -92,7 +95,7 @@ function closeDropdown() {
                     d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
                 />
             </svg>
-            <span>매크로 삽입</span>
+            <span>{{ t('task.macro.button_label') }}</span>
             <svg
                 class="w-4 h-4 transition-transform"
                 :class="{ 'rotate-180': isOpen }"
@@ -125,7 +128,7 @@ function closeDropdown() {
                         <input
                             v-model="searchQuery"
                             type="text"
-                            placeholder="매크로 검색..."
+                            :placeholder="t('task.macro.search_placeholder')"
                             class="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         />
                     </div>
@@ -137,7 +140,7 @@ function closeDropdown() {
                             <div
                                 class="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase"
                             >
-                                📋 의존성 태스크 결과
+                                {{ t('task.macro.dep_result_title') }}
                             </div>
                             <button
                                 v-for="suggestion in groupedSuggestions.dependency"
@@ -155,7 +158,7 @@ function closeDropdown() {
                                     <span
                                         class="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
                                     >
-                                        클릭하여 삽입
+                                        {{ t('task.macro.insert_click') }}
                                     </span>
                                 </div>
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -171,7 +174,9 @@ function closeDropdown() {
                         >
                             <div class="text-center py-8">
                                 <IconRenderer emoji="🔗" class="w-12 h-12 mx-auto mb-2" />
-                                <p class="text-sm text-gray-400">사용 가능한 매크로가 없습니다</p>
+                                <p class="text-sm text-gray-400">
+                                    {{ t('task.macro.no_available') }}
+                                </p>
                             </div>
                         </div>
 
@@ -183,7 +188,7 @@ function closeDropdown() {
                             <div
                                 class="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase"
                             >
-                                🔤 컨텍스트 변수
+                                {{ t('task.macro.context_title') }}
                             </div>
                             <button
                                 v-for="suggestion in groupedSuggestions.context"
@@ -213,7 +218,7 @@ function closeDropdown() {
                             <div
                                 class="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase"
                             >
-                                ⚙️ 시스템
+                                {{ t('task.macro.system_title') }}
                             </div>
                             <button
                                 v-for="suggestion in groupedSuggestions.system"
@@ -245,7 +250,7 @@ function closeDropdown() {
                             "
                             class="p-4 text-center text-sm text-gray-500 dark:text-gray-400"
                         >
-                            검색 결과가 없습니다
+                            {{ t('task.macro.empty_search') }}
                         </div>
                     </div>
 
@@ -254,19 +259,18 @@ function closeDropdown() {
                         class="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50"
                     >
                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                            💡 <strong>팁:</strong> 매크로는 실행 시 실제 값으로 치환됩니다.
+                            <span v-html="t('task.macro.tip')"></span>
                             <code
                                 class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 v-pre
                                 >{{task.23}}</code
                             >
-                            또는
+                            {{ t('common.or') }}
                             <code
                                 class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 v-pre
                                 >{{prev.1}}</code
                             >
-                            형식으로 직접 입력할 수도 있습니다.
                         </p>
                     </div>
                 </div>

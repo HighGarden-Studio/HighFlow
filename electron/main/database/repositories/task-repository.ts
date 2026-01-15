@@ -467,6 +467,7 @@ export class TaskRepository {
                 isPaused: false,
                 autoReviewed: false,
                 reviewFailed: false,
+                hasUnreadResult: false,
                 updatedAt: new Date(),
             })
             .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)));

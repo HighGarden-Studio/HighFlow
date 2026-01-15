@@ -72,6 +72,7 @@ const tagColors: Record<MCPServerTag, string> = {
     memory: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
     code: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
     design: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+    communication: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
 };
 
 function getTagColor(tag: MCPServerTag): string {
@@ -276,6 +277,12 @@ function clearFilters() {
                             class="px-2 py-0.5 rounded text-xs bg-purple-900/30 text-purple-300"
                         >
                             {{ t('settings.mcp.status.installed') }}
+                        </span>
+                        <span
+                            v-if="server.comingSoon"
+                            class="px-2 py-0.5 rounded text-xs bg-amber-900/30 text-amber-300"
+                        >
+                            Coming Soon
                         </span>
                     </div>
 

@@ -5,14 +5,14 @@ const YAML_HINT = /^(---|\w[\w\s-]*:)/m;
 const SQL_HINT = /\b(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|UPSERT)\b/i;
 const DIFF_HINT = /^@@|^\+{3}|^-{3}|^diff\s/m;
 const SHELL_HINT = /^\s*(#!\/|(?:bash|sh|zsh|fish)\b)/m;
-const HTML_HINT = /<\s*(html|body|div|span|section|article|main)\b/i;
+const HTML_HINT = /^\s*(<!DOCTYPE|<(html|body|div|span|section|article|main))\b/i;
 const MARKDOWN_HINT = /^\s{0,3}(#{1,6}|\*|-|\d+\.|>)\s|\[.+\]\(.+\)|\*\*.+\*\*|`{1,3}/m;
 const LOG_HINT = /\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE)\b.*\d{2}:\d{2}:\d{2}/;
 const MERMAID_HINT =
     /\b(graph\s+|flowchart\s+|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|zenuml|sankey-beta|xychart-beta|block-beta|packet-beta|quadrantChart|requirementDiagram|c4Context|c4Container|c4Component|c4Dynamic|c4Deployment)\b|```mermaid/;
 const SVG_HINT = /<svg[\s>]/i;
 const CSV_HINT = /^(?:\s*"?[\w\s\-.:\/]+"?(?:\s*,\s*"?[\w\s\-.:\/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
-const CODE_FENCE_HINT = /```(?<lang>[\w+-]+)?\s[\s\S]+```/m;
+
 const PDF_HINT = /%PDF-|JVBER/i;
 
 interface DetectionResult {
@@ -41,16 +41,9 @@ export function detectTextSubType(value: string): DetectionResult {
         return { kind: 'document', subType: 'mermaid', mime: 'text/plain' };
     }
 
-    const fenced = trimmed.match(CODE_FENCE_HINT);
-    if (fenced) {
-        const lang = fenced.groups?.lang;
-        return {
-            kind: 'code',
-            subType: 'code',
-            mime: 'text/plain',
-            meta: lang ? { language: lang.toLowerCase() } : undefined,
-        };
-    }
+    // Code fences are valid Markdown, so we let MARKDOWN_HINT catch them.
+    // If we return 'code' here for fenced content, we might break Markdown rendering
+    // or show backticks in the Code Editor.
 
     if (MARKDOWN_HINT.test(trimmed)) {
         return { kind: 'text', subType: 'markdown', mime: 'text/markdown' };

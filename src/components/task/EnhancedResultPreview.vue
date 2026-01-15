@@ -1194,6 +1194,19 @@ const updateResultFiles = async () => {
                         const parts = taskResultPath.split(/[/\\]/);
                         parts.pop(); // remove filename
                         scanDir = parts.join('/');
+                    } else if (
+                        template &&
+                        (template.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(template))
+                    ) {
+                        // Use template directory if absolute path is configured
+                        // Remove filename part (everything after last slash)
+                        const parts = template.split(/[/\\]/);
+                        parts.pop();
+                        scanDir = parts.join('/');
+                        console.log(
+                            '[EnhancedResultPreview] Derived scanDir from pathTemplate:',
+                            scanDir
+                        );
                     } else if (currentProject.value?.baseDevFolder) {
                         scanDir = currentProject.value.baseDevFolder;
                     } else {

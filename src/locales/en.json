@@ -18,6 +18,8 @@
         "yes": "Yes",
         "no": "No",
         "retry": "Retry",
+        "resume": "Resume",
+        "in_progress": "In Progress",
         "stop": "Stop",
         "settings": "Settings",
         "prev_task": "Previous Task",
@@ -152,6 +154,7 @@
             "in_review": "In Review",
             "done": "Done",
             "blocked": "Blocked",
+            "unread_results": "Unread Results",
             "total": "Total Tasks"
         },
         "actions": {
@@ -191,8 +194,74 @@
             "created_at": "Created At",
             "path": "Path",
             "ai_provider": "AI Provider",
+            "ai_model": "AI Model",
             "context": "AI Context",
-            "memory": "Project Memory"
+            "memory": "Project Memory",
+            "not_set": "Not Set",
+            "initial_prompt": "Initial Prompt",
+            "no_initial_prompt": "No initial prompt has been set",
+            "goal": "Project Goal",
+            "output_type": "Output Type",
+            "base_folder": "Base Development Folder",
+            "base_folder_not_set": "Not Set",
+            "base_folder_change": "Change Folder",
+            "mcp_settings": "MCP Settings",
+            "mcp_no_servers": "No MCP servers configured",
+            "mcp_env_count": "{count} env variable(s)",
+            "mcp_params_count": "{count} parameter(s)",
+            "auto_review_settings": "Auto Review Settings",
+            "auto_review_ai_settings": "Auto Review AI Settings",
+            "project_default_ai": "Project Default AI Settings",
+            "project_default_ai_info": "These are the project's default AI settings. Tasks will use these settings unless they specify their own AI configuration.",
+            "mcp_default_info": "Configured MCPs are used by default for all tasks in this project. You can override this in individual task settings if needed.",
+            "settings_default": "Settings Default",
+            "project_value": "Project",
+            "local_repo_info": "Local Repository Info",
+            "assistant_in_use": "Assistant in use",
+            "git_only": "Git only",
+            "output_path": "Output Path",
+            "open_folder": "Open Folder",
+            "total_cost": "Total Cost",
+            "total_tokens": "Total Tokens",
+            "estimated_hours": "Estimated Hours",
+            "actual_hours": "Actual Hours",
+            "hours_unit": "hours",
+            "local": "Local",
+            "goal_help": "Describe the project goal to help AI generate more accurate results.",
+            "add_goal": "Add Goal",
+            "goal_placeholder": "Describe the project goal and what you want to achieve...",
+            "ai_guidelines": "AI Guidelines",
+            "guidelines_set": "Set",
+            "guidelines_not_set": "Not Set",
+            "guidelines_empty": "No AI guidelines created yet.",
+            "add_guidelines": "Create Guidelines",
+            "guidelines_placeholder": "Write AI guidelines in Markdown format..."
+        },
+        "memory": {
+            "title": "Project Memory",
+            "summary": "Summary",
+            "decisions": "Recent Decisions ({count})",
+            "glossary": "Glossary ({count})",
+            "curator_settings": "Curator Settings",
+            "memory_curator": "Memory Curator",
+            "sys_curator": "System Curator",
+            "global_default": "Global Default",
+            "curator_tip": "The selected Curator automatically updates the Project Memory upon task completion.",
+            "no_context_title": "No AI Context",
+            "no_context_desc": "AI will automatically update the Project Memory when tasks are completed.\nSet project goals, constraints, and phases to help AI agents produce more consistent results.",
+            "project_overview": "Project Overview",
+            "goal": "Goal",
+            "constraints": "Constraints / Non-Goals",
+            "phase": "Current Phase",
+            "last_updated": "Last updated: {date}",
+            "reset_btn": "Reset Memory",
+            "reset_confirm_title": "Reset Project Memory?",
+            "reset_confirm_desc": "All project memory (summary, decision logs, glossary) will be deleted. This action cannot be undone.",
+            "resetting": "Resetting...",
+            "reset": "Reset",
+            "cancel": "Cancel",
+            "task_badge": "Task #{id}",
+            "info_notice": "This memory is automatically updated by the AI Curator upon task completion. All AI agents share this context to perform consistent work."
         },
         "not_found": "Project not found",
         "go_back": "Go back to projects",
@@ -381,6 +450,11 @@
             "options_placeholder": "e.g. Option A, Option B",
             "allow_custom": "Allow Custom Input",
             "required": "Required",
+            "label": {
+                "message": "Request Message",
+                "file": "Target File",
+                "url": "URL"
+            },
             "type": {
                 "user": "User Input",
                 "local": "Local File",
@@ -438,7 +512,13 @@
                 "project_name": "Current project name",
                 "project_desc": "Project description",
                 "var_ref": "User defined variable reference"
-            }
+            },
+            "button_label": "Insert Macro",
+            "search_placeholder": "Search macros...",
+            "empty_search": "No results found",
+            "no_available": "No available macros",
+            "tip": "💡 <strong>Tip:</strong> Macros are replaced with actual values at runtime.",
+            "insert_click": "Click to insert"
         },
         "control": {
             "flow": "Control Flow",
@@ -768,7 +848,28 @@
             "configure": "Configure",
             "enabled": "Enabled",
             "configured_disabled": "Configured (disabled)",
-            "not_configured": "Not configured"
+            "not_configured": "Not configured",
+            "providers": {
+                "default_highflow": {
+                    "description": "HighFlow-based AI available upon login (uses app credits)"
+                },
+                "openai": {
+                    "description": "GPT-4, GPT-4 Turbo, and GPT-3.5 models"
+                },
+                "highflow": {
+                    "title": "✨ Default HighFlow AI (Credit)",
+                    "credit_usage": "Uses app account credits after login",
+                    "no_api_key": "No API key required",
+                    "no_streaming": "Streaming is not supported",
+                    "login_notice": "Login prompt will appear when running tasks if not logged in."
+                },
+                "anthropic": {
+                    "description": "Claude 3.5, Claude 3 Opus, Sonnet, and Haiku models"
+                },
+                "google": {
+                    "description": "Gemini Pro, Gemini Flash, and PaLM models"
+                }
+            }
         },
         "mcp": {
             "header": "MCP Servers",
@@ -798,6 +899,9 @@
                 "shell": {
                     "description": "Shell execution - Run terminal commands and scripts"
                 },
+                "communication": {
+                    "description": "Communication tools - Slack, Discord, etc."
+                },
                 "git": {
                     "description": "Git version control - Commit, branch, view history"
                 },
@@ -809,6 +913,127 @@
                 },
                 "confluence": {
                     "description": "Atlassian Confluence integration - Search docs, create/edit pages"
+                },
+                "memory": {
+                    "description": "Memory Management - Graph-based context storage/retrieval"
+                },
+                "puppeteer": {
+                    "description": "Browser Automation - Web page screenshots, scraping"
+                },
+                "playwright": {
+                    "description": "Browser Automation - Cross-browser testing and automation"
+                },
+                "github_mcp": {
+                    "description": "GitHub Integration - Manage repositories, issues, PRs"
+                },
+                "github_remote": {
+                    "description": "GitHub Remote MCP Server"
+                },
+                "gitlab_mcp": {
+                    "description": "GitLab Integration - Manage repositories, issues, MRs"
+                },
+                "slack_mcp": {
+                    "description": "Slack - Read/Write workspace messages and automate collaboration"
+                },
+                "notion_mcp": {
+                    "description": "Notion Integration - Manage pages and databases"
+                },
+                "google_drive": {
+                    "description": "Google Drive Integration - Search, upload, download files"
+                },
+                "figma_mcp": {
+                    "description": "Figma - Read files/components, comments, extract assets"
+                },
+                "framer_mcp": {
+                    "description": "Framer - Query projects, automate frame/component variants and deployment"
+                },
+                "penpot_mcp": {
+                    "description": "Penpot - Read and update open source design system and assets"
+                },
+                "sequential_thinking": {
+                    "description": "Sequential Thinking - Analyze complex problems step-by-step"
+                },
+                "sentry": {
+                    "description": "Sentry Integration - Error monitoring, issue analysis"
+                },
+                "everything": {
+                    "description": "Local File Search (Everything) - Windows file system indexing search"
+                },
+                "brave_search": {
+                    "description": "Brave Search - Web, local, and news search"
+                },
+                "mysql": {
+                    "description": "MySQL Database - Query execution and schema inspection"
+                },
+                "postgres": {
+                    "description": "PostgreSQL - Query execution and table inspection"
+                },
+                "sqlite": {
+                    "description": "SQLite Database - Local DB file query/manipulation"
+                },
+                "kubernetes": {
+                    "description": "Kubernetes Cluster - Inspect pods/services and logs"
+                },
+                "aws": {
+                    "description": "AWS Cloud - Resource inspection and management (S3/EC2, etc.)"
+                },
+                "atlassian_cloud_oauth": {
+                    "description": "Atlassian Cloud (Jira & Confluence) - Secure access via OAuth 2.0"
+                },
+                "atlassian_rovo": {
+                    "description": "Atlassian Rovo MCP Server (Official) - Jira, Confluence, Compass integration (OAuth 2.1)"
+                }
+            },
+            "features": {
+                "slack": {
+                    "channels_read": {
+                        "label": "List Public Channels",
+                        "description": "Get a list of public channels in the workspace."
+                    },
+                    "channels_history": {
+                        "label": "Read Public Channel Messages",
+                        "description": "Read conversation history in public channels."
+                    },
+                    "groups_read": {
+                        "label": "View Private Channel Info",
+                        "description": "View information about private channels the bot is invited to."
+                    },
+                    "groups_history": {
+                        "label": "Read Private Channel Messages",
+                        "description": "Read conversation history in private channels the bot is invited to."
+                    },
+                    "dm_read": {
+                        "label": "View DM Info",
+                        "description": "View information about 1:1 DM channels."
+                    },
+                    "dm_history": {
+                        "label": "Read DM Messages",
+                        "description": "Read conversation history in 1:1 DMs."
+                    },
+                    "mpdm_read": {
+                        "label": "View Group DM Info",
+                        "description": "View information about multi-person Group DMs."
+                    },
+                    "mpdm_history": {
+                        "label": "Read Group DM Messages",
+                        "description": "Read conversation history in Group DMs."
+                    },
+                    "messages_write": {
+                        "label": "Send/Edit Messages",
+                        "description": "Send and edit messages in channels, DMs, threads."
+                    },
+                    "files_write": {
+                        "label": "Upload Files",
+                        "description": "Upload code snippets or files."
+                    },
+                    "users_read": {
+                        "label": "View User List",
+                        "description": "View workspace member list and profiles."
+                    },
+                    "reactions_write": {
+                        "label": "Add Emoji Reactions",
+                        "description": "Add emoji reactions to messages."
+                    }
                 }
             },
             "tags": {
@@ -859,6 +1084,7 @@
                     }
                 },
                 "config": {
+                    "endpoint": "Endpoint URL",
                     "title": "Configuration",
                     "filesystem": {
                         "allowedPaths": "Allowed Paths (comma separated)"
@@ -1099,7 +1325,8 @@
                 "workflow_execution": "Workflow Execution",
                 "marketplace_purchase": "Marketplace Purchase",
                 "execution_refund": "Refund",
-                "execution_adjustment": "Adjustment"
+                "execution_adjustment": "Adjustment",
+                "ai_generation": "AI Generation"
             },
             "th_date": "Date",
             "th_type": "Type",
@@ -1163,7 +1390,7 @@
                 "public": "Public (Visible to everyone)",
                 "restricted": "Restricted (Specific users only)",
                 "emails": "Allowed Emails",
-                "emails_placeholder": "user@example.com, alice@partner.com",
+                "emails_placeholder": "user{'@'}example.com, alice{'@'}partner.com",
                 "domains": "Allowed Organizations",
                 "domains_placeholder": "company.com, university.edu",
                 "domains_hint": "Users with these email domains will have access"

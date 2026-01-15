@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import HighFlowLogo from '../../assets/logo/highflow_logo.svg';
+import HighFlowLogo from '../../assets/logo/highflow_logo.png';
 
 /**
  * IconRenderer - Emoji to Iconify SVG Icon Mapper
@@ -33,7 +33,7 @@ const ICON_MAP: Record<string, string> = {
     '🔵': 'logos:google-icon', // Google/Gemini (blue circle → Google logo)
     '⚪': 'ph:circle', // Generic/None
     '💻': 'logos:visual-studio-code', // VS Code / Code editors
-    '🚀': 'custom:highflow-logo', // Antigravity (Rocket -> HighFlow Logo)
+    '🚀': 'custom:highflow-logo',
     '🏠': 'ph:house', // Local
 
     // File Types & Documents

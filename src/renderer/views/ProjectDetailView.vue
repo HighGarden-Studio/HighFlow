@@ -19,8 +19,11 @@ const { t } = useI18n();
 const projectStore = useProjectStore();
 const taskStore = useTaskStore();
 
-// Props
-const projectId = computed(() => Number(route.params.id));
+const props = defineProps<{
+    id: string;
+}>();
+
+const projectId = computed(() => Number(props.id));
 
 // Local state
 const editing = ref(false);

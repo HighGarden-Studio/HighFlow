@@ -251,6 +251,14 @@ export interface GeneralSettings {
     compactMode: boolean;
     showTaskIds: boolean;
     enableAnimations: boolean;
+    desktopNotifications: DesktopNotificationSettings;
+}
+
+export interface DesktopNotificationSettings {
+    enabled: boolean; // Master switch
+    notifyOnTaskStart: boolean;
+    notifyOnTaskComplete: boolean;
+    notifyOnTaskError: boolean;
 }
 
 export interface SetupWizardState {
@@ -313,7 +321,8 @@ export type MCPServerTag =
     | 'browser' // 브라우저 자동화
     | 'memory' // 메모리/컨텍스트 관리
     | 'code' // 코드 분석/실행
-    | 'design'; // UI/UX 디자인 보조
+    | 'design' // UI/UX 디자인 보조
+    | 'communication'; // Communication tools
 
 export type MCPPermissionId = 'read' | 'write' | 'delete' | 'execute' | 'network' | 'secrets';
 
@@ -394,6 +403,7 @@ export interface MCPServerConfig {
     // Configuration
     enabled: boolean;
     isConnected?: boolean;
+    comingSoon?: boolean; // Mark servers that are not yet available
     // Server settings
     command?: string; // npx, uvx, node, etc.
     args?: string[]; // Command arguments
@@ -578,11 +588,50 @@ export const useSettingsStore = defineStore('settings', () => {
     ]);
 
     const aiProviders = ref<AIProviderConfig[]>([
+        // === Default HighFlow ===
+        {
+            id: 'default-highflow',
+            name: 'HighFlow',
+            description: 'settings.ai.providers.default_highflow.description',
+            icon: '/src/assets/logo/highflow_logo.png',
+            website: 'https://highflow.ai',
+            tags: [
+                'chat',
+                'code',
+                'reasoning',
+                'image-analysis',
+                'long-context',
+                'multi-modal',
+                'agent',
+                'free-tier',
+            ],
+            authMethods: ['oauth'], // Requires cloud login
+            requiresLogin: true, // Login required to use
+            enabled: false,
+            models: [
+                'gemini-3-pro-image-preview',
+                'gemini-2.5-flash-image',
+                'veo-3.1-generate-preview',
+                'veo-2.0-generate-preview',
+                'gemini-3.0-pro-exp',
+                'gemini-3.0-flash-exp',
+                'gemini-2.0-flash-thinking-exp-1219',
+                'gemini-2.5-pro',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-8b',
+                'gemini-exp-1206',
+            ],
+            defaultModel: 'gemini-2.5-flash',
+            supportsStreaming: false, // Streaming not supported through proxy
+            supportsVision: true,
+            supportsTools: true,
+            maxTokens: 1000000,
+        },
         // === Major AI Providers ===
         {
             id: 'openai',
             name: 'OpenAI',
-            description: 'GPT-4, GPT-4 Turbo, and GPT-3.5 models',
+            description: 'settings.ai.providers.openai.description',
             icon: 'openai',
             website: 'https://platform.openai.com',
             tags: [
@@ -610,7 +659,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'anthropic',
             name: 'Anthropic',
-            description: 'Claude 3.5, Claude 3 Opus, Sonnet, and Haiku models',
+            description: 'settings.ai.providers.anthropic.description',
             icon: 'anthropic',
             website: 'https://console.anthropic.com',
             tags: [
@@ -643,7 +692,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'google',
             name: 'Google AI',
-            description: 'Gemini Pro, Gemini Flash, and PaLM models',
+            description: 'settings.ai.providers.google.description',
             icon: 'google',
             website: 'https://aistudio.google.com',
             tags: [
@@ -683,44 +732,7 @@ export const useSettingsStore = defineStore('settings', () => {
             supportsTools: true,
             maxTokens: 1000000,
         },
-        {
-            id: 'default-highflow',
-            name: 'Default HighFlow (Credit)',
-            description: '로그인하면 사용 가능한 HighFlow 기반 AI (앱 크레딧 사용)',
-            icon: 'simple-icons:hexo',
-            website: 'https://highflow.ai',
-            tags: [
-                'chat',
-                'code',
-                'reasoning',
-                'image-analysis',
-                'long-context',
-                'multi-modal',
-                'agent',
-                'free-tier',
-            ],
-            authMethods: ['oauth'], // Requires cloud login
-            requiresLogin: true, // Login required to use
-            enabled: false,
-            models: [
-                'gemini-3-pro-image-preview',
-                'gemini-2.5-flash-image',
-                'veo-3.1-generate-preview',
-                'veo-2.0-generate-preview',
-                'gemini-3.0-pro-exp',
-                'gemini-3.0-flash-exp',
-                'gemini-2.0-flash-thinking-exp-1219',
-                'gemini-2.5-pro',
-                'gemini-2.5-flash',
-                'gemini-2.5-flash-8b',
-                'gemini-exp-1206',
-            ],
-            defaultModel: 'gemini-2.5-flash',
-            supportsStreaming: false, // Streaming not supported through proxy
-            supportsVision: true,
-            supportsTools: true,
-            maxTokens: 1000000,
-        },
+
         {
             id: 'azure-openai',
             isComingSoon: true,
@@ -1318,6 +1330,12 @@ export const useSettingsStore = defineStore('settings', () => {
         compactMode: false,
         showTaskIds: false,
         enableAnimations: true,
+        desktopNotifications: {
+            enabled: true,
+            notifyOnTaskStart: true,
+            notifyOnTaskComplete: true,
+            notifyOnTaskError: true,
+        },
     });
 
     const keyboardShortcuts = ref<KeyboardShortcut[]>([
@@ -1366,6 +1384,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-filesystem'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'shell',
@@ -1381,6 +1400,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'npm',
             installArgs: ['install', '-g', 'mcp-shell'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'git',
@@ -1396,6 +1416,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'pip',
             installArgs: ['install', 'mcp-server-git'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'fetch',
@@ -1411,6 +1432,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-fetch'],
             installed: false,
+            comingSoon: true,
         },
 
         // === Atlassian ===
@@ -1428,6 +1450,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'pip',
             installArgs: ['install', 'mcp-atlassian'],
             installed: false,
+            comingSoon: true,
             config: {
                 baseUrl: '',
                 username: '',
@@ -1448,6 +1471,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'pip',
             installArgs: ['install', 'mcp-atlassian'],
             installed: false,
+            comingSoon: true,
             config: {
                 baseUrl: '',
                 username: '',
@@ -1457,7 +1481,7 @@ export const useSettingsStore = defineStore('settings', () => {
         {
             id: 'atlassian-cloud-oauth',
             name: 'Atlassian Cloud (OAuth)',
-            description: 'Atlassian Cloud (Jira & Confluence) - OAuth 2.0 인증을 통한 보안 접근',
+            description: 'settings.mcp.servers.atlassian_cloud_oauth.description',
             icon: 'atlassian',
             website: 'https://github.com/sooperset/mcp-atlassian',
             repository: 'https://github.com/sooperset/mcp-atlassian',
@@ -1489,6 +1513,7 @@ export const useSettingsStore = defineStore('settings', () => {
             installCommand: 'docker',
             installArgs: ['pull', 'ghcr.io/sooperset/mcp-atlassian:latest'],
             installed: false,
+            comingSoon: true,
             env: {
                 JIRA_URL: '',
                 CONFLUENCE_URL: '',
@@ -1550,8 +1575,7 @@ Enter all values from the wizard in the configuration form below:
         {
             id: 'atlassian-rovo',
             name: 'Atlassian Rovo MCP (Official)',
-            description:
-                'Atlassian 공식 Rovo MCP Server - Jira, Confluence, Compass 통합 (OAuth 2.1)',
+            description: 'settings.mcp.servers.atlassian_rovo.description',
             icon: 'atlassian',
             website: 'https://support.atlassian.com/atlassian-rovo-mcp-server/',
             repository: 'https://www.npmjs.com/package/mcp-remote',
@@ -1618,7 +1642,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'aws',
             name: 'AWS',
-            description: 'Amazon Web Services - S3, EC2, Lambda 등 AWS 서비스 관리',
+            description: 'settings.mcp.servers.aws.description',
             icon: 'aws',
             website: 'https://github.com/aws-samples/sample-mcp-server',
             repository: 'https://github.com/aws-samples/sample-mcp-server',
@@ -1629,6 +1653,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@anthropic-ai/mcp-server-aws'],
             installed: false,
+            comingSoon: true,
             config: {
                 region: 'us-east-1',
                 accessKeyId: '',
@@ -1638,7 +1663,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'kubernetes',
             name: 'Kubernetes',
-            description: 'Kubernetes 클러스터 관리 - Pod, Service, Deployment 조작',
+            description: 'settings.mcp.servers.kubernetes.description',
             icon: 'kubernetes',
             website: 'https://github.com/strowk/mcp-k8s-go',
             repository: 'https://github.com/strowk/mcp-k8s-go',
@@ -1649,6 +1674,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', 'mcp-k8s'],
             installed: false,
+            comingSoon: true,
             config: {
                 kubeconfig: '~/.kube/config',
                 context: '',
@@ -1659,7 +1685,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'sqlite',
             name: 'SQLite',
-            description: 'SQLite 데이터베이스 - 쿼리 실행, 스키마 조회',
+            description: 'settings.mcp.servers.sqlite.description',
             icon: 'database',
             website: 'https://modelcontextprotocol.io/docs/servers/sqlite',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite',
@@ -1670,11 +1696,12 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'pip',
             installArgs: ['install', 'mcp-server-sqlite'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'postgres',
             name: 'PostgreSQL',
-            description: 'PostgreSQL 데이터베이스 - 쿼리 실행, 스키마 관리',
+            description: 'settings.mcp.servers.postgres.description',
             icon: 'database',
             website: 'https://modelcontextprotocol.io/docs/servers/postgres',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
@@ -1685,6 +1712,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-postgres'],
             installed: false,
+            comingSoon: true,
             config: {
                 connectionString: '',
             },
@@ -1694,7 +1722,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'brave-search',
             name: 'Brave Search',
-            description: '웹 검색 - Brave Search API를 통한 웹 검색',
+            description: 'settings.mcp.servers.brave_search.description',
             icon: 'search',
             website: 'https://modelcontextprotocol.io/docs/servers/brave-search',
             repository:
@@ -1706,6 +1734,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-brave-search'],
             installed: false,
+            comingSoon: true,
             config: {
                 apiKey: '',
             },
@@ -1713,7 +1742,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'memory',
             name: 'Memory',
-            description: '메모리 관리 - 지식 그래프 기반 컨텍스트 저장/검색',
+            description: 'settings.mcp.servers.memory.description',
             icon: 'brain',
             website: 'https://modelcontextprotocol.io/docs/servers/memory',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
@@ -1724,13 +1753,14 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-memory'],
             installed: false,
+            comingSoon: true,
         },
 
         // === Browser Automation ===
         {
             id: 'puppeteer',
             name: 'Puppeteer',
-            description: '브라우저 자동화 - 웹 페이지 스크린샷, 스크래핑',
+            description: 'settings.mcp.servers.puppeteer.description',
             icon: 'browser',
             website: 'https://modelcontextprotocol.io/docs/servers/puppeteer',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer',
@@ -1741,11 +1771,12 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-puppeteer'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'playwright',
             name: 'Playwright',
-            description: '브라우저 자동화 - 크로스 브라우저 테스팅 및 자동화',
+            description: 'settings.mcp.servers.playwright.description',
             icon: 'browser',
             website: 'https://github.com/executeautomation/mcp-playwright',
             repository: 'https://github.com/executeautomation/mcp-playwright',
@@ -1756,13 +1787,14 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@anthropic-ai/mcp-server-playwright'],
             installed: false,
+            comingSoon: true,
         },
 
         // === Productivity ===
         {
             id: 'github-mcp',
             name: 'GitHub',
-            description: 'GitHub 연동 - 저장소, 이슈, PR 관리',
+            description: 'settings.mcp.servers.github_mcp.description',
             icon: 'github',
             website: 'https://modelcontextprotocol.io/docs/servers/github',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
@@ -1773,6 +1805,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-github'],
             installed: false,
+            comingSoon: true,
             config: {
                 token: '',
             },
@@ -1780,7 +1813,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'github-remote',
             name: 'GitHub (Remote)',
-            description: 'GitHub Remote MCP Server',
+            description: 'settings.mcp.servers.github_remote.description',
             icon: 'github',
             website: 'https://github.com/github/github-mcp-server',
             repository: 'https://github.com/github/github-mcp-server',
@@ -1795,12 +1828,13 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installed: true, // Always "installed" as it is remote
             config: {
                 token: '',
+                endpoint: 'https://api.githubcopilot.com/mcp/',
             },
         },
         {
             id: 'gitlab-mcp',
             name: 'GitLab',
-            description: 'GitLab 연동 - 저장소, 이슈, MR 관리',
+            description: 'settings.mcp.servers.gitlab_mcp.description',
             icon: 'gitlab',
             website: 'https://github.com/theomarchand/mcp-server-gitlab',
             repository: 'https://github.com/theomarchand/mcp-server-gitlab',
@@ -1819,7 +1853,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'slack-mcp',
             name: 'Slack',
-            description: 'Slack 워크스페이스와 메시지를 읽고 쓰며 협업을 자동화합니다.',
+            description: 'settings.mcp.servers.slack_mcp.description',
             icon: 'slack',
             website: 'https://modelcontextprotocol.io/docs/servers/slack',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
@@ -1837,96 +1871,96 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             featureScopes: [
                 {
                     id: 'slack.channels.read',
-                    label: '공개 채널 목록 조회',
-                    description: '워크스페이스의 공개 채널 리스트를 가져옵니다.',
+                    label: 'settings.mcp.features.slack.channels_read.label',
+                    description: 'settings.mcp.features.slack.channels_read.description',
                     requiredScopes: ['channels:read'],
                     toolPatterns: ['channels_list', 'list_channels', 'fetch_channels'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.channels.history',
-                    label: '공개 채널 메시지 읽기',
-                    description: '공개 채널의 대화 내용을 읽습니다.',
+                    label: 'settings.mcp.features.slack.channels_history.label',
+                    description: 'settings.mcp.features.slack.channels_history.description',
                     requiredScopes: ['channels:history'],
                     toolPatterns: ['channels_history', 'fetch_channel_history'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.groups.read',
-                    label: '비공개 채널 정보 조회',
-                    description: '봇이 초대된 비공개 채널의 정보를 확인합니다.',
+                    label: 'settings.mcp.features.slack.groups_read.label',
+                    description: 'settings.mcp.features.slack.groups_read.description',
                     requiredScopes: ['groups:read'],
                     toolPatterns: ['groups_list', 'list_groups', 'fetch_private_channels'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.groups.history',
-                    label: '비공개 채널 메시지 읽기',
-                    description: '봇이 초대된 비공개 채널의 대화 내용을 읽습니다.',
+                    label: 'settings.mcp.features.slack.groups_history.label',
+                    description: 'settings.mcp.features.slack.groups_history.description',
                     requiredScopes: ['groups:history'],
                     toolPatterns: ['groups_history', 'fetch_group_history'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.dm.read',
-                    label: 'DM 정보 조회',
-                    description: '1:1 DM 채널 정보를 확인합니다.',
+                    label: 'settings.mcp.features.slack.dm_read.label',
+                    description: 'settings.mcp.features.slack.dm_read.description',
                     requiredScopes: ['im:read'],
                     toolPatterns: ['im_list', 'dm_list'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.dm.history',
-                    label: 'DM 메시지 읽기',
-                    description: '1:1 DM의 대화 내역을 읽습니다.',
+                    label: 'settings.mcp.features.slack.dm_history.label',
+                    description: 'settings.mcp.features.slack.dm_history.description',
                     requiredScopes: ['im:history'],
                     toolPatterns: ['im_history', 'dm_history'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.mpdm.read',
-                    label: '그룹 DM 정보 조회',
-                    description: '여러 명이 있는 그룹 DM 정보를 확인합니다.',
+                    label: 'settings.mcp.features.slack.mpdm_read.label',
+                    description: 'settings.mcp.features.slack.mpdm_read.description',
                     requiredScopes: ['mpim:read'],
                     toolPatterns: ['mpim_list', 'group_dm_list'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.mpdm.history',
-                    label: '그룹 DM 메시지 읽기',
-                    description: '그룹 DM의 대화 내역을 읽습니다.',
+                    label: 'settings.mcp.features.slack.mpdm_history.label',
+                    description: 'settings.mcp.features.slack.mpdm_history.description',
                     requiredScopes: ['mpim:history'],
                     toolPatterns: ['mpim_history', 'group_dm_history'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.messages.write',
-                    label: '메시지 전송/수정',
-                    description: '채널, DM, 스레드에 메시지를 보내고 수정합니다.',
+                    label: 'settings.mcp.features.slack.messages_write.label',
+                    description: 'settings.mcp.features.slack.messages_write.description',
                     requiredScopes: ['chat:write'],
                     toolPatterns: ['chat_post', 'chat_postMessage', 'chat_update', 'send_message'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.files.write',
-                    label: '파일 업로드',
-                    description: '코드 스니펫이나 파일을 업로드합니다.',
+                    label: 'settings.mcp.features.slack.files_write.label',
+                    description: 'settings.mcp.features.slack.files_write.description',
                     requiredScopes: ['files:write'],
                     toolPatterns: ['files_upload', 'upload_file'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.users.read',
-                    label: '사용자 목록 조회',
-                    description: '워크스페이스의 멤버 목록과 프로필을 봅니다.',
+                    label: 'settings.mcp.features.slack.users_read.label',
+                    description: 'settings.mcp.features.slack.users_read.description',
                     requiredScopes: ['users:read'],
                     toolPatterns: ['users_list', 'users_info'],
                     defaultEnabled: true,
                 },
                 {
                     id: 'slack.reactions.write',
-                    label: '이모지 반응 추가',
-                    description: '메시지에 이모지 반응을 답니다.',
+                    label: 'settings.mcp.features.slack.reactions_write.label',
+                    description: 'settings.mcp.features.slack.reactions_write.description',
                     requiredScopes: ['reactions:write'],
                     toolPatterns: ['reactions_add', 'reactions_remove'],
                 },
@@ -1935,7 +1969,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'notion-mcp',
             name: 'Notion',
-            description: 'Notion 연동 - 페이지, 데이터베이스 관리',
+            description: 'settings.mcp.servers.notion_mcp.description',
             icon: 'notion',
             website: 'https://github.com/v-3/notion-server',
             repository: 'https://github.com/v-3/notion-server',
@@ -1946,6 +1980,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', 'notion-mcp-server'],
             installed: false,
+            comingSoon: true,
             config: {
                 token: '',
             },
@@ -1953,7 +1988,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'google-drive',
             name: 'Google Drive',
-            description: 'Google Drive 연동 - 파일 검색, 업로드, 다운로드',
+            description: 'settings.mcp.servers.google_drive.description',
             icon: 'google-drive',
             website: 'https://modelcontextprotocol.io/docs/servers/google-drive',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
@@ -1964,6 +1999,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-gdrive'],
             installed: false,
+            comingSoon: true,
             config: {
                 clientId: '',
                 clientSecret: '',
@@ -1974,7 +2010,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'figma-mcp',
             name: 'Figma',
-            description: 'Figma 파일과 컴포넌트를 읽고, 댓글 작성 및 디자인 자산을 추출',
+            description: 'settings.mcp.servers.figma_mcp.description',
             icon: 'figma',
             website: 'https://www.figma.com/developers/api',
             repository: 'https://github.com/design-mcp/figma-server',
@@ -1985,6 +2021,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@designmcp/server-figma'],
             installed: false,
+            comingSoon: true,
             env: {
                 FIGMA_ACCESS_TOKEN: '',
             },
@@ -1997,7 +2034,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'framer-mcp',
             name: 'Framer',
-            description: 'Framer 프로젝트를 조회하고, 프레임/컴포넌트 변형 및 배포 자동화',
+            description: 'settings.mcp.servers.framer_mcp.description',
             icon: 'framer',
             website: 'https://www.framer.com/developers',
             repository: 'https://github.com/design-mcp/framer-server',
@@ -2008,6 +2045,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@designmcp/server-framer'],
             installed: false,
+            comingSoon: true,
             config: {
                 apiKey: '',
                 projectId: '',
@@ -2016,7 +2054,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'penpot-mcp',
             name: 'Penpot',
-            description: '오픈소스 Penpot 디자인 시스템과 자산을 읽고 업데이트',
+            description: 'settings.mcp.servers.penpot_mcp.description',
             icon: 'penpot',
             website: 'https://penpot.app',
             repository: 'https://github.com/design-mcp/penpot-server',
@@ -2027,6 +2065,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@designmcp/server-penpot'],
             installed: false,
+            comingSoon: true,
             config: {
                 baseUrl: 'https://design.penpot.app',
                 token: '',
@@ -2038,7 +2077,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         {
             id: 'sequential-thinking',
             name: 'Sequential Thinking',
-            description: '순차적 사고 - 복잡한 문제를 단계별로 분석',
+            description: 'settings.mcp.servers.sequential_thinking.description',
             icon: 'brain',
             website:
                 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
@@ -2051,11 +2090,12 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'npm',
             installArgs: ['install', '-g', '@modelcontextprotocol/server-sequential-thinking'],
             installed: false,
+            comingSoon: true,
         },
         {
             id: 'sentry',
             name: 'Sentry',
-            description: 'Sentry 연동 - 에러 모니터링, 이슈 분석',
+            description: 'settings.mcp.servers.sentry.description',
             icon: 'bug',
             website: 'https://modelcontextprotocol.io/docs/servers/sentry',
             repository: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sentry',
@@ -2066,6 +2106,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             installCommand: 'pip',
             installArgs: ['install', 'mcp-server-sentry'],
             installed: false,
+            comingSoon: true,
             config: {
                 authToken: '',
                 organization: '',
@@ -2351,6 +2392,18 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
     // ========================================
 
     /**
+     * Sync desktop notification settings to main process
+     */
+    function syncDesktopNotifications() {
+        if (window.electron?.ipcRenderer) {
+            window.electron.ipcRenderer.send(
+                'settings:update-notifications',
+                JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
+            );
+        }
+    }
+
+    /**
      * Load all settings from storage
      */
     async function loadSettings(): Promise<void> {
@@ -2438,7 +2491,20 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                             ...defaultServer,
                             enabled: storedServer.enabled,
                             isConnected: storedServer.isConnected,
-                            config: storedServer.config,
+                            config: (() => {
+                                // Auto-migration: Fix incorrect GitHub Remote endpoint if it was saved as the repo URL
+                                if (defaultServer.id === 'github-remote') {
+                                    const storedEndpoint = storedServer.config?.endpoint;
+                                    const badUrl = 'https://github.com/github/github-mcp-server';
+                                    if (storedEndpoint === badUrl || !storedEndpoint) {
+                                        return {
+                                            ...storedServer.config,
+                                            endpoint: 'https://api.githubcopilot.com/mcp/',
+                                        };
+                                    }
+                                }
+                                return storedServer.config;
+                            })(),
                             args: storedServer.args,
                             lastValidated: storedServer.lastValidated,
                             installed: storedServer.installed ?? defaultServer.installed,
@@ -2504,11 +2570,25 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                         console.warn(`Failed to detect provider ${provider.id}:`, err)
                     );
                 });
+
+            /**
+             * Sync desktop notification settings to main process
+             */
+            function syncDesktopNotifications() {
+                if (window.electron?.ipcRenderer) {
+                    window.electron.ipcRenderer.send(
+                        'settings:update-notifications',
+                        JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
+                    );
+                }
+            }
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to load settings';
             console.error('Failed to load settings:', e);
         } finally {
             loading.value = false;
+            // Sync initial notification settings to main process
+            syncDesktopNotifications();
         }
     }
 
@@ -2525,6 +2605,14 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             saveToStorage('integrations', integrations.value);
             saveToStorage('mcpServers', mcpServers.value);
             saveToStorage('setupWizard', setupWizard.value);
+
+            // Sync desktop notification settings to main process whenever saved
+            if (window.electron?.ipcRenderer) {
+                window.electron.ipcRenderer.send(
+                    'settings:update-notifications',
+                    JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
+                );
+            }
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to save settings';
             console.error('Failed to save settings:', e);
@@ -3077,7 +3165,13 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                 throw new Error('MCP 서버 정보를 찾을 수 없습니다.');
             }
 
-            if (!server.command) {
+            const isRemote =
+                server.tags?.some((t) => ['http', 'cloud'].includes(t)) ||
+                server.id === 'github-remote' ||
+                server.config?.baseUrl ||
+                server.config?.endpoint;
+
+            if (!server.command && !isRemote) {
                 throw new Error('실행할 커맨드가 설정되지 않았습니다.');
             }
 
@@ -3089,6 +3183,19 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             if (configError) {
                 throw new Error(configError);
             }
+
+            // Start - Enforce GitHub Remote Endpoint
+            if (server.id === 'github-remote') {
+                // Force the correct endpoint for github-remote before connection
+                if (server.config?.endpoint !== 'https://api.githubcopilot.com/mcp/') {
+                    server.config = {
+                        ...server.config,
+                        endpoint: 'https://api.githubcopilot.com/mcp/',
+                    };
+                    await updateMCPServer(serverId, { config: server.config });
+                }
+            }
+            // End - Enforce GitHub Remote Endpoint
 
             await performMCPRemoteValidation(server);
 

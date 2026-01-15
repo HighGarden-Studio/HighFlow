@@ -8,6 +8,7 @@ import { onMounted, onUnmounted, computed, ref, reactive, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { getAPI } from '../../utils/electron';
 import type { Task } from '@core/types/database';
 import ProjectCreationWizard from '../../components/project/ProjectCreationWizard.vue';
@@ -18,6 +19,7 @@ import { getProviderIcon } from '../../utils/iconMapping';
 const router = useRouter();
 const projectStore = useProjectStore();
 const taskStore = useTaskStore();
+const settingsStore = useSettingsStore();
 
 // Local state
 const searchQuery = ref('');
@@ -44,6 +46,7 @@ interface TaskSummary {
     needsApproval: number;
     done: number;
     blocked: number;
+    unreadResults: number;
     progressPercent: number;
 }
 
@@ -59,34 +62,49 @@ const projects = computed(() => {
     );
 });
 
+// Helper to fetch summary for a single project
+async function fetchProjectSummary(project: any) {
+    if (!project?.id) return;
+    const api = getAPI();
+    try {
+        const tasks: Task[] = await api.tasks.list(project.id);
+        const summary: TaskSummary = {
+            total: tasks.length,
+            todo: tasks.filter((t) => t.status === 'todo').length,
+            inProgress: tasks.filter((t) => t.status === 'in_progress').length,
+            inConfirm: tasks.filter((t) => t.status === 'in_progress' && t.isPaused).length,
+            needsApproval: tasks.filter((t) => t.status === 'needs_approval').length,
+            inReview: tasks.filter((t) => t.status === 'in_review').length,
+            done: tasks.filter((t) => t.status === 'done').length,
+            blocked: tasks.filter((t) => t.status === 'blocked' || t.status === 'failed').length,
+            unreadResults: tasks.filter((t) => {
+                if (t.hasUnreadResult)
+                    console.log(
+                        '[ProjectsView] Unread task detected:',
+                        t.id,
+                        t.title,
+                        t.hasUnreadResult
+                    );
+                return t.hasUnreadResult;
+            }).length,
+            progressPercent:
+                tasks.length > 0
+                    ? Math.round(
+                          (tasks.filter((t) => t.status === 'done').length / tasks.length) * 100
+                      )
+                    : 0,
+        };
+        taskSummaries[project.id] = summary;
+    } catch (e) {
+        console.error(`Failed to fetch task summary for project ${project.id}:`, e);
+    }
+}
+
 // Fetch task summaries for all projects
 async function fetchTaskSummaries() {
     loadingSummaries.value = true;
-    const api = getAPI();
-
     try {
-        for (const project of projectStore.activeProjects) {
-            const tasks: Task[] = await api.tasks.list(project.id);
-
-            const summary: TaskSummary = {
-                total: tasks.length,
-                todo: tasks.filter((t) => t.status === 'todo').length,
-                inProgress: tasks.filter((t) => t.status === 'in_progress').length,
-                inConfirm: tasks.filter((t) => t.status === 'in_progress' && t.isPaused).length, // Using paused in_progress as proxy for confirm/approval
-                needsApproval: tasks.filter((t) => t.status === 'needs_approval').length,
-                inReview: tasks.filter((t) => t.status === 'in_review').length,
-                done: tasks.filter((t) => t.status === 'done').length,
-                blocked: tasks.filter((t) => t.status === 'blocked').length,
-                progressPercent:
-                    tasks.length > 0
-                        ? Math.round(
-                              (tasks.filter((t) => t.status === 'done').length / tasks.length) * 100
-                          )
-                        : 0,
-            };
-
-            taskSummaries[project.id] = summary;
-        }
+        await Promise.all(projectStore.activeProjects.map((p) => fetchProjectSummary(p)));
     } catch (e) {
         console.error('Failed to fetch task summaries:', e);
     } finally {
@@ -102,6 +120,115 @@ watch(
     },
     { deep: true }
 );
+
+// Helper to get provider display name
+function getProviderDisplayName(providerId: string | null): string {
+    if (!providerId) return '';
+    // Special handling for legacy/migration
+    if (providerId === 'default-highflow') return 'HighFlow';
+
+    const provider = settingsStore.aiProviders.find((p) => p.id === providerId);
+    return provider ? provider.name : providerId;
+}
+
+// Lifecycle
+let cleanupListeners: (() => void) | undefined;
+let cleanupTaskCompletionListener: (() => void) | undefined;
+let cleanupTaskListeners: (() => void)[] = [];
+
+onMounted(async () => {
+    await projectStore.fetchProjects();
+    cleanupListeners = projectStore.initEventListeners();
+    await fetchTaskSummaries();
+
+    // Listen for task completion to update summaries
+    const api = getAPI();
+
+    // Register task update listeners
+    if (api.events && api.events.on) {
+        // Task Updated
+        const unlistenUpdate = api.events.on('task:updated', (task: any) => {
+            if (task && task.projectId) {
+                // Find project to verify it exists in active projects
+                const project = projectStore.activeProjects.find((p) => p.id === task.projectId);
+                if (project) {
+                    fetchProjectSummary(project);
+                }
+            }
+        });
+        cleanupTaskListeners.push(unlistenUpdate);
+
+        // Task Created
+        const unlistenCreate = api.events.on('task:created', (task: any) => {
+            if (task && task.projectId) {
+                const project = projectStore.activeProjects.find((p) => p.id === task.projectId);
+                if (project) {
+                    fetchProjectSummary(project);
+                }
+            }
+        });
+        cleanupTaskListeners.push(unlistenCreate);
+
+        // Task Deleted
+        const unlistenDelete = api.events.on('task:deleted', (data: any) => {
+            const projectId = data.projectId || data.taskProjectId;
+            if (projectId) {
+                const project = projectStore.activeProjects.find((p) => p.id === projectId);
+                if (project) {
+                    fetchProjectSummary(project);
+                }
+            }
+        });
+        cleanupTaskListeners.push(unlistenDelete);
+
+        // Task Status Changed
+        const unlistenStatus = api.events.on('task:status-changed', (data: any) => {
+            if (data && data.projectId) {
+                const project = projectStore.activeProjects.find((p) => p.id === data.projectId);
+                if (project) {
+                    fetchProjectSummary(project);
+                }
+            }
+        });
+        cleanupTaskListeners.push(unlistenStatus);
+
+        // Task Execution Failed
+        const unlistenFailed = api.events.on('taskExecution:failed', (data: any) => {
+            if (data && data.projectId) {
+                const project = projectStore.activeProjects.find((p) => p.id === data.projectId);
+                if (project) {
+                    fetchProjectSummary(project);
+                }
+            }
+        });
+        cleanupTaskListeners.push(unlistenFailed);
+    }
+
+    if (api.taskExecution) {
+        cleanupTaskCompletionListener = api.taskExecution.onCompleted(
+            async (data: { projectId: number; projectSequence: number; result: any }) => {
+                console.log('[ProjectsView] Task completed, refreshing summaries:', data);
+                // Also refresh summary for this project
+                const project = projectStore.activeProjects.find((p) => p.id === data.projectId);
+                if (project) {
+                    await fetchProjectSummary(project);
+                }
+            }
+        );
+    }
+});
+
+onUnmounted(() => {
+    if (cleanupListeners) {
+        cleanupListeners();
+    }
+    if (cleanupTaskCompletionListener) {
+        cleanupTaskCompletionListener();
+    }
+    // Cleanup task listeners
+    cleanupTaskListeners.forEach((cleanup) => cleanup());
+    cleanupTaskListeners = [];
+});
 
 // Actions
 async function handleCreateProject() {
@@ -169,6 +296,13 @@ function cancelDeleteProject() {
 function closeProjectInfoModal() {
     showProjectInfoModal.value = false;
     selectedProjectForInfo.value = null;
+}
+
+async function handleProjectInfoUpdate() {
+    if (selectedProjectForInfo.value) {
+        await fetchProjectSummary(selectedProjectForInfo.value);
+        await projectStore.fetchProjects();
+    }
 }
 
 // Import Project
@@ -259,7 +393,7 @@ async function handleAIWizardCreated(projectData: any) {
                     });
 
                     if (createdTask) {
-                        titleToIdMap.set(task.title, createdTask.id);
+                        titleToIdMap.set(task.title, createdTask.projectSequence);
                         createdTasks.push(createdTask);
                     } else {
                         createdTasks.push(null); // Keep index alignment
@@ -291,9 +425,11 @@ async function handleAIWizardCreated(projectData: any) {
                     if (taskData.autoExecute) {
                         updates.triggerConfig = {
                             type: 'dependency',
-                            dependencyOperator: 'all',
-                            executionPolicy: 'repeat',
-                            dependencyTaskIds: dependencyIds,
+                            dependsOn: {
+                                operator: 'all',
+                                executionPolicy: 'repeat',
+                                taskIds: dependencyIds,
+                            },
                         };
                     } else if (dependencyIds.length > 0) {
                         // Even if not auto-execute, but has dependencies, we might want to link them?
@@ -323,20 +459,25 @@ async function handleAIWizardCreated(projectData: any) {
 }
 
 // Lifecycle
-let cleanupListeners: (() => void) | undefined;
-
-onMounted(async () => {
-    await projectStore.fetchProjects();
-    cleanupListeners = projectStore.initEventListeners();
-    await fetchTaskSummaries();
-});
-
-onUnmounted(() => {
-    if (cleanupListeners) {
-        cleanupListeners();
-    }
-});
 </script>
+
+<style scoped>
+@keyframes pulse-border {
+    0%,
+    100% {
+        border-color: rgba(234, 179, 8, 0.5);
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+    }
+    50% {
+        border-color: rgba(234, 179, 8, 1);
+        box-shadow: 0 0 16px 2px rgba(234, 179, 8, 0.4);
+    }
+}
+
+.unread-results-pulse {
+    animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+</style>
 
 <template>
     <div class="flex-1 flex flex-col h-full bg-gray-900">
@@ -472,6 +613,9 @@ onUnmounted(() => {
                     :key="project.id"
                     @click="openProject(project.id)"
                     class="bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-blue-500 cursor-pointer transition-all group"
+                    :class="{
+                        'unread-results-pulse': (taskSummaries[project.id]?.unreadResults || 0) > 0,
+                    }"
                 >
                     <div class="flex items-center gap-4">
                         <!-- Project Icon & Info -->
@@ -500,7 +644,7 @@ onUnmounted(() => {
                                             :icon="getProviderIcon(project.aiProvider)"
                                             class="w-3.5 h-3.5"
                                         />
-                                        {{ project.aiProvider }}
+                                        {{ getProviderDisplayName(project.aiProvider) }}
                                     </span>
                                     <span
                                         class="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
@@ -591,7 +735,18 @@ onUnmounted(() => {
                                     </span>
                                 </div>
 
-                                <!-- In Review -->
+                                <!-- In Review / Unread Results -->
+                                <div
+                                    v-if="(taskSummaries[project.id]?.unreadResults || 0) > 0"
+                                    class="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-lg"
+                                    :title="$t('project.status.unread_results')"
+                                >
+                                    <span class="text-indigo-400">✨</span>
+                                    <span class="text-indigo-400 font-bold text-sm">
+                                        {{ taskSummaries[project.id]?.unreadResults || 0 }}
+                                    </span>
+                                </div>
+
                                 <div
                                     class="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 rounded-lg"
                                     :title="$t('project.status.in_review')"
@@ -858,6 +1013,7 @@ onUnmounted(() => {
             :project="selectedProjectForInfo"
             :open="showProjectInfoModal"
             @close="closeProjectInfoModal"
+            @update="handleProjectInfoUpdate"
             @edit="
                 () => {
                     closeProjectInfoModal(); /* TODO: open project edit modal */

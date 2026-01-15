@@ -413,9 +413,6 @@ const configFields = computed(() => {
     return fields[props.server.id] || [];
 });
 
-    return fields[props.server.id] || [];
-});
-
 const isRemoteServer = computed(() => {
     return props.server?.id === 'github-remote';
 });
@@ -443,13 +440,7 @@ function handleSave() {
         ? argsString.value.trim().split(/\s+/)
         : props.server?.args || [];
 
-    // Special handling for GitHub MCP token
     const config = { ...form.value.config };
-    if ((props.server?.id === 'github' || props.server?.id === 'github-remote') && config.token) {
-        if (!config.env) config.env = {};
-        config.env.GITHUB_PERSONAL_ACCESS_TOKEN = config.token;
-        delete config.token;
-    }
 
     emit('save', {
         enabled: form.value.enabled,

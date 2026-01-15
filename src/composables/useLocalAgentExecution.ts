@@ -1,7 +1,7 @@
 /**
  * Local Agent Execution Composable
  *
- * Handles task execution via local AI coding agents (Claude Code, Codex, Antigravity)
+ * Handles task execution via local AI coding agents (Claude Code, Codex)
  * with session-based communication and context preservation
  */
 

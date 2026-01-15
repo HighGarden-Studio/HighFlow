@@ -62,6 +62,9 @@ export const useTaskStore = defineStore('tasks', () => {
     const filters = ref<TaskFilters>({});
     const settingsStore = useSettingsStore();
 
+    // Set to track recently failed tasks (to prevent stale fetches from reverting status)
+    const failedTaskIds = ref<Set<string>>(new Set());
+
     // Helper for composite keys
     function getTaskKey(
         pd: { projectId: number; projectSequence: number } | null | undefined
@@ -80,7 +83,30 @@ export const useTaskStore = defineStore('tasks', () => {
                 existing.projectSequence === task.projectSequence
         );
         if (index >= 0) {
-            tasks.value[index] = { ...tasks.value[index], ...task };
+            const existing = tasks.value[index];
+
+            // Protection against stale updates:
+            // If local task is DONE, and incoming update says IN_PROGRESS,
+            // it is likely a race condition where a stale 'task:updated' event
+            // arrived after 'task:status-changed' (done).
+            // We ignore the status regression unless we are sure it's a new execution.
+            // (Note: Valid retries usually set local status to in_progress via actions before this event arrives)
+            if (existing.status === 'done' && task.status === 'in_progress') {
+                console.warn(
+                    '[TaskStore] Ignoring stale task update (Done -> InProgress regression):',
+                    {
+                        id: `${task.projectId}-${task.projectSequence}`,
+                        existingStatus: existing.status,
+                        newStatus: task.status,
+                    }
+                );
+
+                // Merge everything EXCEPT status and inputSubStatus to be safe
+                const { status, inputSubStatus, ...otherUpdates } = task;
+                tasks.value[index] = { ...existing, ...otherUpdates };
+            } else {
+                tasks.value[index] = { ...existing, ...task };
+            }
         } else if (sameProject) {
             tasks.value.push(task);
         }
@@ -90,7 +116,14 @@ export const useTaskStore = defineStore('tasks', () => {
             currentTask.value?.projectSequence === task.projectSequence &&
             currentTask.value
         ) {
-            currentTask.value = { ...currentTask.value, ...task };
+            // Re-apply the same protection for currentTask
+            const existing = currentTask.value;
+            if (existing.status === 'done' && task.status === 'in_progress') {
+                const { status, inputSubStatus, ...otherUpdates } = task;
+                currentTask.value = { ...existing, ...otherUpdates };
+            } else {
+                currentTask.value = { ...existing, ...task };
+            }
         }
     }
 
@@ -193,11 +226,24 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             const data = await api.tasks.list(projectId, taskFilters);
-            console.log('[TaskStore] fetchTasks response:', {
-                count: data?.length,
-                sample: data?.[0],
+
+            // Merge local failure state if backend is stale
+            const mergedData = data.map((t) => {
+                const key = getTaskKey(t);
+                if (failedTaskIds.value.has(key)) {
+                    console.log(`[TaskStore] Preserving failed status for task ${key}`);
+                    return { ...t, status: 'failed' as TaskStatus };
+                }
+                return t;
             });
-            tasks.value = data;
+
+            console.log('[TaskStore] fetchTasks response:', {
+                count: mergedData?.length,
+                sample: mergedData?.[0],
+                hasUnreadResult: mergedData?.[0]?.hasUnreadResult,
+            });
+            console.log('[TaskStore] Full sample task:', JSON.stringify(mergedData?.[0], null, 2));
+            tasks.value = mergedData;
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to fetch tasks';
             console.error('Failed to fetch tasks:', e);
@@ -235,7 +281,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // OR I will assume the API stays as is (maybe expecting an ID?)
             // BUT wait, "task 의 전역 id 는 절대 사용하지 않고" means we CANNOT send an ID.
 
-            const task = await api.tasks.getByKey(projectId, sequence);
+            const task = await api.tasks.get(projectId, sequence);
 
             if (task) {
                 // Ensure composite key matching for currentTask
@@ -293,16 +339,28 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Apply defaults if not explicitly set
             const taskType = data.taskType || 'ai'; // 기본값은 'ai'
+
+            // Apply Project Default AI Settings for AI Tasks
+            if (taskType === 'ai') {
+                const projectStore = useProjectStore();
+                if (!taskData.aiProvider && projectStore.currentProject?.aiProvider) {
+                    taskData.aiProvider = projectStore.currentProject.aiProvider;
+                }
+                if (!taskData.aiModel && projectStore.currentProject?.aiModel) {
+                    taskData.aiModel = projectStore.currentProject.aiModel;
+                }
+            }
+
             if (taskType === 'ai' || taskType === 'script' || taskType === 'output') {
                 // triggerConfig가 없거나 비어있으면 기본값 설정
-                if (!taskData.triggerConfig) {
-                    taskData.triggerConfig = {
-                        type: 'dependency',
-                        dependencyOperator: 'all', // 모든 태스크가 완료되어야 함
-                        dependencyExecutionPolicy: 'repeat', // 매번 자동 실행 (권장)
-                        dependencyTaskIds: [],
-                    } as any;
-                }
+                taskData.triggerConfig = {
+                    type: 'dependency',
+                    dependsOn: {
+                        operator: 'all', // 모든 태스크가 완료되어야 함
+                        executionPolicy: 'repeat', // 매번 자동 실행 (권장)
+                        taskIds: [],
+                    },
+                } as any;
             }
 
             const task = await api.tasks.create(taskData);
@@ -386,6 +444,18 @@ export const useTaskStore = defineStore('tasks', () => {
                             );
 
                             if (refreshedTask) {
+                                // Guard: If local task is already DONE (e.g. user submitted quickly), ignore this specific stale update
+                                const currentLocal = tasks.value.find(
+                                    (t) =>
+                                        t.projectId === projectId && t.projectSequence === sequence
+                                );
+                                if (currentLocal && currentLocal.status === 'done') {
+                                    console.log(
+                                        '[TaskStore] Ignoring stale input status update (Task is already Done)'
+                                    );
+                                    return;
+                                }
+
                                 tasks.value = tasks.value.map((t) =>
                                     t.projectId === projectId && t.projectSequence === sequence
                                         ? refreshedTask
@@ -623,6 +693,18 @@ export const useTaskStore = defineStore('tasks', () => {
     }
 
     /**
+     * Mark task result as read
+     */
+    async function markResultAsRead(projectId: number, sequence: number): Promise<void> {
+        const task = tasks.value.find(
+            (t) => t.projectId === projectId && t.projectSequence === sequence
+        );
+        if (task && task.hasUnreadResult) {
+            await updateTask(projectId, sequence, { hasUnreadResult: false });
+        }
+    }
+
+    /**
      * Get allowed status transitions for a task
      */
     /**
@@ -753,7 +835,7 @@ export const useTaskStore = defineStore('tasks', () => {
     async function executeTask(
         projectId: number,
         sequence: number,
-        options?: { force?: boolean; triggerChain?: string[] }
+        options?: { force?: boolean; triggerChain?: string[]; isAutoExecution?: boolean }
     ): Promise<{ success: boolean; error?: string; validationError?: boolean }> {
         const task = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
@@ -763,7 +845,7 @@ export const useTaskStore = defineStore('tasks', () => {
         }
 
         // 이미 실행 중인 경우 중복 실행 방지
-        if (task.status === 'in_progress' && !task.isPaused) {
+        if (task.status === 'in_progress' && !task.isPaused && !options?.force) {
             console.warn(`Task ${projectId}_${sequence} is already in progress`);
             return { success: false, error: 'Task is already executing' };
         }
@@ -781,7 +863,11 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // 낙관적 업데이트: 즉시 UI를 '실행 중' 상태로 변경
         const originalStatus = task.status;
-        await updateTask(projectId, sequence, { status: 'in_progress', isPaused: false });
+        await updateTask(projectId, sequence, {
+            status: 'in_progress',
+            isPaused: false,
+            hasUnreadResult: false,
+        });
 
         try {
             // ... existing execution logic ...
@@ -1602,6 +1688,33 @@ export const useTaskStore = defineStore('tasks', () => {
         });
         cleanupFns.push(unsubscribeDeleted);
 
+        // Listen for task execution completion
+        const unsubscribeExecutionCompleted = api.events.on(
+            'taskExecution:completed',
+            (data: any) => {
+                const { projectId, projectSequence, result, hasUnreadResult } = data;
+                console.log('[TaskStore] Task execution completed:', {
+                    projectId,
+                    projectSequence,
+                    hasUnreadResult,
+                });
+
+                const index = tasks.value.findIndex(
+                    (t) => t.projectId === projectId && t.projectSequence === projectSequence
+                );
+
+                if (index >= 0) {
+                    const updates: Partial<Task> = {
+                        executionResult: result,
+                        hasUnreadResult,
+                        // Update status if needed, though task:status-changed usually handles it
+                    };
+                    tasks.value[index] = { ...tasks.value[index], ...updates } as Task;
+                }
+            }
+        );
+        cleanupFns.push(unsubscribeExecutionCompleted);
+
         // Listen for task status changes from main process
         const unsubscribeStatusChanged = api.events.on(
             'task:status-changed',
@@ -1807,7 +1920,13 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Execution completed
             const unsubscribeCompleted = api.taskExecution.onCompleted(
-                (data: { projectId: number; projectSequence: number; result: any }) => {
+                (data: {
+                    projectId: number;
+                    projectSequence: number;
+                    result: any;
+                    hasUnreadResult?: boolean;
+                }) => {
+                    console.log('🔍 [TaskStore] Execution completed handler CALLED:', data);
                     console.log('[TaskStore] Execution completed:', data);
                     const task = tasks.value.find(
                         (t) =>
@@ -1883,6 +2002,7 @@ export const useTaskStore = defineStore('tasks', () => {
                             status: newStatus,
                             executionResult,
                             inputSubStatus: null, // Clear input waiting status
+                            hasUnreadResult: data.hasUnreadResult ?? false,
                         } as Task;
 
                         // Dispatch custom event to notify views (especially DAGView)
@@ -1956,6 +2076,14 @@ export const useTaskStore = defineStore('tasks', () => {
                     );
                     if (index >= 0) {
                         tasks.value[index] = { ...tasks.value[index], status: 'failed' } as Task;
+
+                        // Add to failedTaskIds to prevent overwrite by stale fetch
+                        const key = getTaskKey(task);
+                        failedTaskIds.value.add(key);
+                        // Auto-clear after 10 seconds (enough time for DB consistency)
+                        setTimeout(() => {
+                            failedTaskIds.value.delete(key);
+                        }, 10000);
                     }
 
                     error.value = data.error;
@@ -2316,7 +2444,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     const result = await executeTask(
                         taskToExecute.projectId,
                         taskToExecute.projectSequence,
-                        { force: true, triggerChain }
+                        { force: true, triggerChain, isAutoExecution: true }
                     );
 
                     if (result.success) {
@@ -2717,5 +2845,6 @@ export const useTaskStore = defineStore('tasks', () => {
         createTasksFromExecutionPlan,
 
         // Actions
+        markResultAsRead,
     };
 });

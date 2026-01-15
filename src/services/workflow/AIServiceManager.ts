@@ -323,7 +323,32 @@ export class AIServiceManager {
     }
 
     setMCPServers(servers: MCPServerRuntimeConfig[]): void {
-        this.runtimeMCPServers = servers || [];
+        // [Hotfix] Enforce correct endpoint for github-remote in Main Process
+        // This ensures that even if the Renderer sends stale config, we use the correct one.
+        const sanitizedServers = (servers || []).map((server) => {
+            if (server.id === 'github-remote') {
+                const currentEndpoint = server.config?.endpoint;
+                // If endpoint is missing or is the repo URL, force the correct one
+                if (
+                    !currentEndpoint ||
+                    currentEndpoint === 'https://github.com/github/github-mcp-server'
+                ) {
+                    console.log(
+                        '[AIServiceManager] Auto-correcting github-remote endpoint to https://api.githubcopilot.com/mcp/'
+                    );
+                    return {
+                        ...server,
+                        config: {
+                            ...server.config,
+                            endpoint: 'https://api.githubcopilot.com/mcp/',
+                        },
+                    };
+                }
+            }
+            return server;
+        });
+
+        this.runtimeMCPServers = sanitizedServers;
         if (this.mcpManager) {
             this.mcpManager.setRuntimeServers(this.runtimeMCPServers);
         }
@@ -363,7 +388,7 @@ export class AIServiceManager {
         options: AIExecutionOptions = {}
     ): Promise<AIExecutionResult> {
         const startTime = Date.now();
-        const executionId = `exec-${task.id}-${startTime}`;
+        const executionId = `exec-${task.projectId}-${task.projectSequence}-${startTime}`;
         const abortController = new AbortController();
         this.activeExecutions.set(executionId, abortController);
 
@@ -695,6 +720,7 @@ export class AIServiceManager {
                 }
             }
 
+            /*
             if (mcpContext && mcpContext.length > 0) {
                 console.log('🔍 [AIServiceManager] MCP Context Data Review:');
                 console.log(
@@ -712,6 +738,7 @@ export class AIServiceManager {
                     '...' + promptTail
                 );
             }
+            */
 
             this.logPromptEvent(
                 task,
@@ -737,7 +764,7 @@ export class AIServiceManager {
                 options.onLog?.(
                     'warn',
                     '[AIServiceManager] Input images detected for an Image Output task. Switching to Vision Analysis mode (Text Generation) to ensure input is analyzed.',
-                    { taskId: task.id }
+                    { projectId: task.projectId, projectSequence: task.projectSequence }
                 );
                 isImageTask = false;
 
@@ -752,7 +779,7 @@ export class AIServiceManager {
                     options.onLog?.(
                         'info',
                         `[AIServiceManager] Switching model from ${model} to ${newModel} for Vision Analysis`,
-                        { taskId: task.id }
+                        { projectId: task.projectId, projectSequence: task.projectSequence }
                     );
                     // Update the aiConfig model to the new chat-capable model
                     aiConfig.model = newModel;
@@ -771,14 +798,10 @@ export class AIServiceManager {
             let result: AIExecutionResult;
 
             // Debug log for message content
-            console.log(
-                '[AIServiceManager] Executing with messages:',
-                baseMessages.map((m) => ({
-                    role: m.role,
-                    hasMultiModal: !!m.multiModalContent,
-                    multiModalLen: m.multiModalContent?.length,
-                }))
-            );
+            // console.log(
+            //    '[AIServiceManager] Executing with messages:',
+            //    baseMessages.map((m) => ({ role: m.role, hasMultiModal: !!m.multiModalContent }))
+            // );
 
             if (isImageTask) {
                 result = await this.executeImageGenerationTask(
@@ -1877,14 +1900,6 @@ export class AIServiceManager {
         task: Task,
         requiredMCPs: string[]
     ): Promise<MCPToolDefinition[]> {
-        // CRITICAL DEBUG: Check if task.id exists
-        console.log(
-            '[collectMCPTools] DEBUG - task.id:',
-            task.id,
-            'task.projectSequence:',
-            task.projectSequence
-        );
-
         if (!requiredMCPs || requiredMCPs.length === 0) {
             return [];
         }

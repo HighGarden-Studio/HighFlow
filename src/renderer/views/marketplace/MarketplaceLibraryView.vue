@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useMarketplaceStore } from '../../stores/marketplaceStore';
 import { useUserStore } from '../../stores/userStore'; // Import userStore
@@ -8,6 +8,7 @@ import MarketplaceCard from '../../../components/marketplace/MarketplaceCard.vue
 import RegistrationWizard from '../../components/marketplace/RegistrationWizard.vue';
 import MarketplaceNavigation from '../../../components/marketplace/MarketplaceNavigation.vue'; // Import
 import { useToast } from 'vue-toastification';
+import { eventBus } from '../../../services/events/EventBus';
 
 const store = useMarketplaceStore();
 const userStore = useUserStore(); // Initialize userStore
@@ -21,6 +22,17 @@ onMounted(() => {
     if (isLoggedIn.value) {
         store.fetchLibrary();
     }
+
+    // Listen for close modal shortcut
+    const cleanup = eventBus.on('ui.close_modal', () => {
+        if (showWizard.value) {
+            handleWizardClose();
+        }
+    });
+
+    onUnmounted(() => {
+        cleanup();
+    });
 });
 
 // Tabs

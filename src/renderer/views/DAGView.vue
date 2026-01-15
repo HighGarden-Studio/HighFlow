@@ -761,6 +761,13 @@ function getSegmentStats(
     return { isValid: true, completionTime: maxTime };
 }
 
+async function handleProjectInfoUpdate() {
+    if (!projectId.value) return;
+    await projectStore.fetchProject(projectId.value);
+    await taskStore.fetchTasks(projectId.value);
+    rebuildGraphImmediate();
+}
+
 function handleNodeClick(task: Task) {
     console.log('🖱️ [DAGView] handleNodeClick called', task.projectId, task.projectSequence);
     selectedTaskKey.value = `${task.projectId}_${task.projectSequence}`;
@@ -1418,6 +1425,8 @@ function closeContextMenu() {
     showContextMenu.value = false;
 }
 
+let cleanupListeners: (() => void) | undefined;
+
 // Initial load
 onMounted(async () => {
     if (projectId.value) {
@@ -1425,6 +1434,9 @@ onMounted(async () => {
 
         // Load projects list and tasks in parallel
         await Promise.all([projectStore.fetchProjects(), taskStore.fetchTasks(projectId.value)]);
+
+        // Initialize task store listeners (IMPORTANT: needed for receiving execution events)
+        cleanupListeners = taskStore.initEventListeners();
 
         // Debug: check if project loaded
         console.log('🔵 After loading, project:', project.value);
@@ -1528,6 +1540,9 @@ onMounted(async () => {
             unsubscribe();
             window.removeEventListener('task:input-status-changed', handleInputStatusChange);
             window.removeEventListener('click', handleWindowClick);
+            if (cleanupListeners) {
+                cleanupListeners();
+            }
         });
     }
 });
@@ -1671,6 +1686,7 @@ onMounted(async () => {
             :open="showProjectInfoModal"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
+            @update="handleProjectInfoUpdate"
         />
 
         <!-- Context Menu -->

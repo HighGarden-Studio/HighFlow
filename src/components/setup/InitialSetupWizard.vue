@@ -686,12 +686,6 @@ watch(
                 <div class="flex-1 overflow-y-auto p-8">
                     <!-- Step 1: Welcome -->
                     <div v-if="currentStep === 'welcome'" class="text-center space-y-8">
-                        <div
-                            class="w-32 h-32 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-purple-500/30"
-                        >
-                            <span class="text-5xl font-black text-white tracking-tighter">HF</span>
-                        </div>
-
                         <div>
                             <h3 class="text-3xl font-bold text-white mb-3">
                                 {{ t('setup.wizard.welcome.title') }}

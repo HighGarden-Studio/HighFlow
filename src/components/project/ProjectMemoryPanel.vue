@@ -8,8 +8,11 @@
  */
 
 import { computed, ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Project, ProjectMemory, DecisionLog, Operator } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
+
+const { t } = useI18n();
 
 interface Props {
     project: Project;
@@ -47,10 +50,10 @@ const availableOperators = computed(() => operators.value.filter((op) => op.isAc
 
 const selectedOperatorName = computed(() => {
     if (!selectedCuratorId.value) {
-        return globalCurator.value?.name || '기본 큐레이터';
+        return globalCurator.value?.name || t('project.memory.global_default');
     }
     const selected = operators.value.find((op) => op.id === selectedCuratorId.value);
-    return selected?.name || '알 수 없음';
+    return selected?.name || t('common.error');
 });
 
 // Update project curator
@@ -86,7 +89,7 @@ async function resetMemory() {
         window.location.reload();
     } catch (error) {
         console.error('Failed to reset memory:', error);
-        alert('메모리 리셋 실패: ' + error);
+        alert(t('project.msg.reset_fail') + ': ' + error);
     } finally {
         isResetting.value = false;
     }
@@ -131,7 +134,9 @@ const lastUpdatedFormatted = computed(() => {
     if (!memory.value?.lastUpdatedAt) return null;
     try {
         const date = new Date(memory.value.lastUpdatedAt);
-        return date.toLocaleString('ko-KR', {
+        // Use default locale or explicit undefined to use browser locale
+        // Include time in the output
+        return date.toLocaleString(undefined, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -150,11 +155,11 @@ const lastUpdatedFormatted = computed(() => {
         <section class="memory-section curator-section">
             <h3 class="section-title">
                 <span class="icon">🤖</span>
-                큐레이터 설정
+                {{ t('project.memory.curator_settings') }}
             </h3>
             <div class="curator-config">
                 <div class="config-row">
-                    <label class="config-label">메모리 큐레이터</label>
+                    <label class="config-label">{{ t('project.memory.memory_curator') }}</label>
                     <select
                         v-model="selectedCuratorId"
                         @change="updateCurator(selectedCuratorId)"
@@ -162,7 +167,9 @@ const lastUpdatedFormatted = computed(() => {
                         :disabled="isLoadingOperators"
                     >
                         <option :value="null">
-                            {{ globalCurator?.name || '기본 큐레이터' }} (전역 기본값)
+                            {{ globalCurator?.name || t('project.memory.sys_curator') }} ({{
+                                t('project.memory.global_default')
+                            }})
                         </option>
                         <option
                             v-for="operator in availableOperators.filter(
@@ -177,7 +184,7 @@ const lastUpdatedFormatted = computed(() => {
                 </div>
                 <p class="config-hint">
                     <span class="hint-icon">ℹ️</span>
-                    태스크 완료 시 선택된 큐레이터가 프로젝트 메모리를 자동으로 업데이트합니다.
+                    {{ t('project.memory.curator_tip') }}
                 </p>
             </div>
         </section>
@@ -185,31 +192,27 @@ const lastUpdatedFormatted = computed(() => {
         <!-- Empty State -->
         <div v-if="!hasContextInfo && !hasMemory" class="empty-state">
             <div class="empty-icon">✨</div>
-            <h3>AI 컨텍스트가 없습니다</h3>
-            <p>
-                태스크가 완료되면 AI가 자동으로 프로젝트 메모리를 업데이트합니다.<br />
-                프로젝트 목표, 제약조건, 단계를 설정하면 AI 에이전트들이 더 일관된 결과를
-                생성합니다.
-            </p>
+            <h3>{{ t('project.memory.no_context_title') }}</h3>
+            <p class="whitespace-pre-wrap">{{ t('project.memory.no_context_desc') }}</p>
         </div>
 
         <!-- Project Overview Section -->
         <section v-if="hasContextInfo" class="memory-section">
             <h3 class="section-title">
                 <span class="icon">📋</span>
-                프로젝트 개요
+                {{ t('project.memory.project_overview') }}
             </h3>
             <div class="overview-grid">
                 <div v-if="project.goal" class="overview-item">
-                    <label>목표 (Goal)</label>
+                    <label>{{ t('project.memory.goal') }}</label>
                     <pre class="overview-content">{{ project.goal }}</pre>
                 </div>
                 <div v-if="project.constraints" class="overview-item">
-                    <label>제약조건 / Non-Goals</label>
+                    <label>{{ t('project.memory.constraints') }}</label>
                     <pre class="overview-content">{{ project.constraints }}</pre>
                 </div>
                 <div v-if="project.phase" class="overview-item">
-                    <label>현재 단계 (Phase)</label>
+                    <label>{{ t('project.memory.phase') }}</label>
                     <div class="phase-badge">{{ project.phase }}</div>
                 </div>
             </div>
@@ -220,15 +223,15 @@ const lastUpdatedFormatted = computed(() => {
             <div class="flex items-center justify-between mb-4">
                 <h3 class="section-title mb-0">
                     <span class="icon">✨</span>
-                    프로젝트 메모리
+                    {{ t('project.memory.title') }}
                     <span v-if="lastUpdatedFormatted" class="last-updated">
-                        마지막 업데이트: {{ lastUpdatedFormatted }}
+                        {{ t('project.memory.last_updated', { date: lastUpdatedFormatted }) }}
                     </span>
                 </h3>
                 <button
                     @click="showResetConfirm = true"
                     class="px-3 py-1.5 text-xs font-medium rounded bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex items-center gap-1.5"
-                    title="프로젝트 메모리 초기화"
+                    :title="t('project.memory.reset_confirm_title')"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -238,19 +241,21 @@ const lastUpdatedFormatted = computed(() => {
                             d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                         />
                     </svg>
-                    메모리 리셋
+                    {{ t('project.memory.reset_btn') }}
                 </button>
             </div>
 
             <!-- Summary -->
             <div v-if="memory?.summary" class="memory-subsection">
-                <h4>요약</h4>
+                <h4>{{ t('project.memory.summary') }}</h4>
                 <pre class="memory-content summary-box">{{ memory.summary }}</pre>
             </div>
 
             <!-- Recent Decisions -->
             <div v-if="recentDecisions.length > 0" class="memory-subsection">
-                <h4>최근 결정사항 ({{ recentDecisions.length }}개)</h4>
+                <h4>
+                    {{ t('project.memory.recent_decisions', { count: recentDecisions.length }) }}
+                </h4>
                 <div class="decisions-timeline">
                     <div
                         v-for="(decision, index) in recentDecisions"
@@ -260,7 +265,7 @@ const lastUpdatedFormatted = computed(() => {
                         <div class="decision-date">{{ decision.date }}</div>
                         <div class="decision-content">
                             <span v-if="decision.taskId" class="task-badge">
-                                Task #{{ decision.taskId }}
+                                {{ t('project.memory.task_badge', { id: decision.taskId }) }}
                             </span>
                             {{ decision.summary }}
                         </div>
@@ -270,7 +275,7 @@ const lastUpdatedFormatted = computed(() => {
 
             <!-- Glossary -->
             <div v-if="glossaryEntries.length > 0" class="memory-subsection">
-                <h4>용어집 ({{ glossaryEntries.length }}개)</h4>
+                <h4>{{ t('project.memory.glossary', { count: glossaryEntries.length }) }}</h4>
                 <div class="glossary-table">
                     <div
                         v-for="[term, definition] in glossaryEntries"
@@ -287,8 +292,7 @@ const lastUpdatedFormatted = computed(() => {
         <!-- Info Notice -->
         <div v-if="hasMemory" class="info-notice">
             <span class="info-icon">ℹ️</span>
-            이 메모리는 AI Curator가 태스크 완료 시 자동으로 업데이트합니다. 모든 AI 에이전트가 이
-            컨텍스트를 공유하여 일관된 작업을 수행합니다.
+            {{ t('project.memory.info_notice') }}
         </div>
 
         <!-- Reset Confirmation Dialog -->
@@ -321,11 +325,10 @@ const lastUpdatedFormatted = computed(() => {
                     </div>
                     <div class="flex-1">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                            프로젝트 메모리를 리셋하시겠습니까?
+                            {{ t('project.memory.reset_confirm_title') }}
                         </h3>
                         <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                            모든 프로젝트 메모리(요약, 의사결정 로그, 용어집)가 삭제됩니다. 이
-                            작업은 되돌릴 수 없습니다.
+                            {{ t('project.memory.reset_confirm_desc') }}
                         </p>
                         <div class="flex gap-3 justify-end">
                             <button
@@ -333,7 +336,7 @@ const lastUpdatedFormatted = computed(() => {
                                 :disabled="isResetting"
                                 class="px-4 py-2 text-sm font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
                             >
-                                취소
+                                {{ t('project.memory.cancel') }}
                             </button>
                             <button
                                 @click="resetMemory"
@@ -360,7 +363,11 @@ const lastUpdatedFormatted = computed(() => {
                                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                     ></path>
                                 </svg>
-                                {{ isResetting ? '리셋 중...' : '리셋' }}
+                                {{
+                                    isResetting
+                                        ? t('project.memory.resetting')
+                                        : t('project.memory.reset')
+                                }}
                             </button>
                         </div>
                     </div>
@@ -553,6 +560,8 @@ const lastUpdatedFormatted = computed(() => {
     border-radius: 8px;
     padding: 1rem;
     border-left: 3px solid var(--primary-color);
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
 .decisions-timeline {

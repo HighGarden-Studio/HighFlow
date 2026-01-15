@@ -211,6 +211,10 @@ async function saveTitle() {
         await taskStore.updateTask(props.task.projectId, props.task.projectSequence, {
             title: editedTitle.value,
         });
+        // Manually update localTask to reflect changes immediately
+        if (localTask.value) {
+            localTask.value.title = editedTitle.value;
+        }
         isEditingTitle.value = false;
     } catch (error) {
         console.error('Failed to update task title:', error);
@@ -398,7 +402,49 @@ watch(
             previousTaskId.value = newTaskKey;
             isInitializing.value = true;
             try {
-                localTask.value = { ...newTask };
+                // Clone task
+                const taskCopy = { ...newTask };
+
+                // Ensure JSON fields are parsed correctly (workaround for Drizzle/SQLite issue)
+                const jsonFields = [
+                    'dependencies',
+                    'requiredMCPs',
+                    'recommendedProviders',
+                    'tags',
+                    'watcherIds',
+                ];
+
+                for (const field of jsonFields) {
+                    if (
+                        taskCopy[field as keyof Task] &&
+                        typeof taskCopy[field as keyof Task] === 'string'
+                    ) {
+                        try {
+                            (taskCopy as any)[field] = JSON.parse(
+                                taskCopy[field as keyof Task] as unknown as string
+                            );
+                        } catch (e) {
+                            console.warn(`[TaskDetailPanel] Failed to parse ${field}:`, e);
+                            (taskCopy as any)[field] = [];
+                        }
+                    }
+                }
+
+                localTask.value = taskCopy;
+
+                // Fetch recommended/required skills if needed
+                // ...
+
+                // Mark result as read if it's unread
+                if (newTask.hasUnreadResult) {
+                    console.log(
+                        '[TaskDetailPanel] Marking result as read for task:',
+                        `${newTask.projectId}-${newTask.projectSequence}`
+                    );
+                    taskStore.markResultAsRead(newTask.projectId, newTask.projectSequence);
+                    // Optimistic update
+                    localTask.value.hasUnreadResult = false;
+                }
                 promptText.value = newTask.description || '';
 
                 // Initialize script fields for script tasks
@@ -463,7 +509,7 @@ watch(
                         dependencyExpression.value =
                             newTask.triggerConfig.dependsOn.expression || '';
                         dependencyExecutionPolicy.value =
-                            newTask.triggerConfig.dependsOn.executionPolicy || 'once';
+                            newTask.triggerConfig.dependsOn.executionPolicy || 'repeat';
                     } else if (newTask.triggerConfig.scheduledAt) {
                         triggerType.value = 'time';
                         scheduleType.value = newTask.triggerConfig.scheduledAt.type;
@@ -659,8 +705,16 @@ watch(
 
 // Watch for tab changes to load history
 watch(activeTab, (newTab) => {
-    if (newTab === 'history' && localTask.value?.id) {
+    if (newTab === 'history' && localTask.value) {
         loadTaskHistory();
+        // If viewing history/result and it's unread, mark as read
+        if (
+            localTask.value.hasUnreadResult &&
+            localTask.value.projectId &&
+            localTask.value.projectSequence
+        ) {
+            taskStore.markResultAsRead(localTask.value.projectId, localTask.value.projectSequence);
+        }
     }
 });
 
@@ -785,7 +839,17 @@ const estimatedCost = computed(() => {
         google: 0.000005, // Gemini Pro
     };
 
-    return (maxTokens.value * (costPerToken[aiProvider.value] || 0)).toFixed(4);
+    return (maxTokens.value * (costPerToken[aiProvider.value || ''] || 0)).toFixed(4);
+});
+
+/**
+ * Display name for AI Provider
+ */
+const displayProviderName = computed(() => {
+    if (localTask.value?.aiProvider === 'default-highflow') {
+        return 'HighFlow';
+    }
+    return localTask.value?.aiProvider;
 });
 
 /**
@@ -1084,6 +1148,7 @@ function handleSave() {
 
     console.log('[TaskDetailPanel] Saving task manually:', updatedTask);
     emit('save', updatedTask as Task);
+    emit('close');
 }
 
 // Handle details tab update
@@ -1735,7 +1800,7 @@ async function handleOpenFile(filePath: string) {
                                         v-if="localTask?.aiProvider"
                                         class="px-2 py-1 text-xs font-medium rounded bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
                                     >
-                                        {{ localTask.aiProvider }}
+                                        {{ displayProviderName }}
                                     </span>
                                     <span
                                         v-if="localTask?.executionOrder"
@@ -1828,7 +1893,7 @@ async function handleOpenFile(filePath: string) {
                         />
                     </div>
 
-                    <!-- Local Agent Execution Log (Antigravity Style) -->
+                    <!-- Local Agent Execution Log (VS Code Style) -->
                     <div
                         v-if="
                             executionMode === 'local' &&
@@ -3715,18 +3780,6 @@ async function handleOpenFile(filePath: string) {
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <!-- Save Button -->
-                            <div
-                                class="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700"
-                            >
-                                <button
-                                    @click="handleDetailsUpdate"
-                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                                >
-                                    {{ t('task.update_details') }}
-                                </button>
                             </div>
                         </div>
 

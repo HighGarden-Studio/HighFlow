@@ -1,7 +1,7 @@
 /**
  * Local Agent Session Manager
  *
- * Manages interactive sessions with local AI coding agents (Claude Code, Codex, Antigravity)
+ * Manages interactive sessions with local AI coding agents (Claude Code, Codex)
  * Provides session-based communication with context preservation
  */
 

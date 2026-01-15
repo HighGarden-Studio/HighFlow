@@ -49,7 +49,26 @@ async function handleCreateTask() {
         const autoTags = tagService.generatePromptTags(basePrompt);
 
         // Get current project settings for inheritance
-        const currentProject = projectStore.projectById(props.projectId);
+        console.log('[TaskCreateModal] Debug Start');
+        console.log('[TaskCreateModal] projectId:', props.projectId);
+        console.log('[TaskCreateModal] projectStore.currentProject:', projectStore.currentProject);
+        console.log(
+            '[TaskCreateModal] projectStore.projects count:',
+            projectStore.projects?.length
+        );
+        // Fix: accessing projectStore.projects directly
+        // Note: In Pinia setup, state is directly accessible
+
+        const currentProject =
+            projectStore.currentProject?.id === props.projectId
+                ? projectStore.currentProject
+                : projectStore.projectById(props.projectId);
+
+        console.log('[TaskCreateModal] Resolved currentProject:', currentProject);
+        if (currentProject) {
+            console.log('[TaskCreateModal] currentProject.aiProvider:', currentProject.aiProvider);
+            console.log('[TaskCreateModal] currentProject.aiModel:', currentProject.aiModel);
+        }
 
         const taskData: any = {
             projectId: props.projectId,
@@ -62,13 +81,18 @@ async function handleCreateTask() {
 
         // Inherit AI Settings for AI tasks
         if (newTaskType.value === 'ai' && currentProject) {
+            console.log('[TaskCreateModal] Inheriting AI Settings...');
             if (currentProject.aiProvider) {
                 taskData.aiProvider = currentProject.aiProvider;
+                console.log('[TaskCreateModal] Set aiProvider:', taskData.aiProvider);
             }
             if (currentProject.aiModel) {
                 taskData.aiModel = currentProject.aiModel;
+                console.log('[TaskCreateModal] Set aiModel:', taskData.aiModel);
             }
         }
+
+        console.log('[TaskCreateModal] Final taskData:', taskData);
 
         // Add script-specific fields
         if (newTaskType.value === 'script') {
