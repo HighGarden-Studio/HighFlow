@@ -2630,8 +2630,22 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         if (index >= 0) {
             const currentProvider = aiProviders.value[index];
             if (currentProvider) {
-                aiProviders.value[index] = { ...currentProvider, ...updates };
+                const updatedProvider = { ...currentProvider, ...updates };
+                aiProviders.value[index] = updatedProvider;
+
                 await saveSettings();
+
+                // Sync with backend (for System Curator/Persistence)
+                if (
+                    window.electron &&
+                    window.electron.ai &&
+                    window.electron.ai.saveProviderConfig
+                ) {
+                    console.log(`[SettingsStore] Syncing ${providerId} config to backend`);
+                    // We only send minimal config (e.g. key, url), or the whole object?
+                    // Let's send the specific updates merged with current config
+                    await window.electron.ai.saveProviderConfig(providerId, updatedProvider);
+                }
             }
         }
     }

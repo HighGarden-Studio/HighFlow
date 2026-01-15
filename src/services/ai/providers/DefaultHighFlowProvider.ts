@@ -14,6 +14,7 @@ import type {
     StreamChunk,
     AIMessage,
     AiResult,
+    ToolCall,
 } from '@core/types/ai';
 
 import { BACKEND_URL } from '../../../config';
@@ -23,208 +24,11 @@ export class DefaultHighFlowProvider extends GeminiProvider {
     readonly name: AIProvider = 'default-highflow';
 
     /**
-     * Vertex AI supported Gemini models (per Google Cloud documentation)
-     * https://cloud.google.com/vertex-ai/generative-ai/docs/models
+     * Vertex AI supported Gemini models
+     * Now strictly dynamic - fetched from API or DB.
+     * No hardcoded defaults to prevent stale data.
      */
-    readonly defaultModels: ModelInfo[] = [
-        // GA Gemini Models
-        {
-            name: 'gemini-2.5-pro',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.5 Pro',
-            contextWindow: 1000000,
-            maxOutputTokens: 65536,
-            costPerInputToken: 5.0,
-            costPerOutputToken: 15.0,
-            averageLatency: 2000,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Complex reasoning', 'Advanced coding', 'Agentic workflows'],
-        },
-        {
-            name: 'gemini-2.5-flash',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.5 Flash',
-            contextWindow: 1000000,
-            maxOutputTokens: 65536,
-            costPerInputToken: 0.15,
-            costPerOutputToken: 0.6,
-            averageLatency: 800,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Fast responses', 'Balance of cost and performance'],
-        },
-        {
-            name: 'gemini-2.5-flash-lite',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.5 Flash Lite',
-            contextWindow: 1000000,
-            maxOutputTokens: 65536,
-            costPerInputToken: 0.075,
-            costPerOutputToken: 0.3,
-            averageLatency: 500,
-            features: ['streaming', 'function_calling', 'system_prompt'],
-            bestFor: ['High volume', 'Cost-effective', 'Simple tasks'],
-        },
-        {
-            name: 'gemini-2.0-flash',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.0 Flash',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0.1,
-            costPerOutputToken: 0.4,
-            averageLatency: 800,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['General purpose', 'Multimodal tasks'],
-        },
-        // Preview Models
-        {
-            name: 'gemini-3.0-pro',
-            provider: 'default-highflow',
-            displayName: 'Gemini 3.0 Pro (Preview)',
-            contextWindow: 1000000,
-            maxOutputTokens: 65536,
-            costPerInputToken: 7.0,
-            costPerOutputToken: 21.0,
-            averageLatency: 3000,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Complex reasoning', 'Agentic workflows', 'Autonomous coding'],
-        },
-        // Image Models
-        {
-            name: 'gemini-2.5-flash-preview-image-generation',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.5 Flash Image',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 3000,
-            features: ['vision'],
-            bestFor: ['Fast image generation', '1024px resolution'],
-        },
-        {
-            name: 'gemini-3-pro-image-preview',
-            provider: 'default-highflow',
-            displayName: 'Gemini 3 Pro Image (Preview)',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 4000,
-            features: ['vision', 'streaming'],
-            bestFor: ['High quality image generation', 'Complex prompts'],
-        },
-        {
-            name: 'imagen-3.0-generate-001',
-            provider: 'default-highflow',
-            displayName: 'Imagen 3.0',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0.04,
-            costPerOutputToken: 0.0,
-            averageLatency: 4000,
-            features: ['vision'],
-            bestFor: ['High Quality Image Generation'],
-        },
-        {
-            name: 'imagen-3.0-generate-002',
-            provider: 'default-highflow',
-            displayName: 'Imagen 3.0',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0.04,
-            costPerOutputToken: 0.0,
-            averageLatency: 4000,
-            features: ['vision'],
-            bestFor: ['High Quality Image Generation'],
-        },
-        {
-            name: 'imagen-4.0-generate-001',
-            provider: 'default-highflow',
-            displayName: 'Imagen 4',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 5000,
-            features: [],
-            bestFor: ['High-fidelity image generation', '4K resolution'],
-        },
-        {
-            name: 'imagen-3.0-generate-002',
-            provider: 'default-highflow',
-            displayName: 'Imagen 3',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 4000,
-            features: [],
-            bestFor: ['Image generation', 'Illustrations'],
-        },
-        // Video Models
-        {
-            name: 'veo-3.1-generate-001',
-            provider: 'default-highflow',
-            displayName: 'Veo 3.1',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 20000,
-            features: [],
-            bestFor: ['High-fidelity video generation', '1080p video'],
-        },
-        {
-            name: 'veo-3.0-generate-001',
-            provider: 'default-highflow',
-            displayName: 'Veo 3.0',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 15000,
-            features: [],
-            bestFor: ['Video generation'],
-        },
-        {
-            name: 'veo-2.0-generate-001',
-            provider: 'default-highflow',
-            displayName: 'Veo 2.0',
-            contextWindow: 0,
-            maxOutputTokens: 0,
-            costPerInputToken: 0,
-            costPerOutputToken: 0,
-            averageLatency: 10000,
-            features: [],
-            bestFor: ['Fast video generation', '720p video'],
-        },
-        // Legacy Models (keeping for backward compatibility)
-        {
-            name: 'gemini-2.5-pro',
-            provider: 'default-highflow',
-            displayName: 'Gemini 2.5 Pro',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 3.5,
-            costPerOutputToken: 10.5,
-            averageLatency: 2000,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Long context', 'Complex analysis'],
-        },
-        {
-            name: 'gemini-1.5-flash',
-            provider: 'default-highflow',
-            displayName: 'Gemini 1.5 Flash',
-            contextWindow: 1000000,
-            maxOutputTokens: 8192,
-            costPerInputToken: 0.075,
-            costPerOutputToken: 0.3,
-            averageLatency: 800,
-            features: ['streaming', 'function_calling', 'vision', 'system_prompt'],
-            bestFor: ['Fast responses', 'Cost-effective'],
-        },
-    ];
+    readonly defaultModels: ModelInfo[] = [];
 
     /**
      * Fetch models from HighFlow server API
@@ -280,7 +84,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 displayName: model.displayName || model.name,
                 description: model.description,
                 contextWindow: model.inputTokenLimit || 0,
-                maxOutputTokens: model.outputTokenLimit || 0,
+                maxOutputTokens: model.maxOutputTokens || 0,
                 costPerInputToken: 0, // Will be calculated by backend
                 costPerOutputToken: 0, // Will be calculated by backend
                 averageLatency: 1000,
@@ -295,20 +99,6 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 `[DefaultHighFlowProvider] Total models available from API: ${models.length}`,
                 models.map((m) => m.name)
             );
-
-            // Merge with local defaultModels to ensure critical models (like new ones) are present
-            // even if the backend API doesn't return them yet.
-            const apiModelNames = new Set(models.map((m) => m.name));
-            for (const defaultModel of this.defaultModels) {
-                if (!apiModelNames.has(defaultModel.name)) {
-                    console.log(
-                        `[DefaultHighFlowProvider] Injecting local default model: ${defaultModel.name}`
-                    );
-                    models.push(defaultModel);
-                }
-            }
-
-            console.log(`[DefaultHighFlowProvider] Total models after merge: ${models.length}`);
 
             // Save to DB cache
             try {
@@ -408,7 +198,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                     try {
                         const { BrowserWindow } = await import('electron');
                         const wins = BrowserWindow.getAllWindows();
-                        if (wins.length > 0) {
+                        if (wins.length > 0 && wins[0]) {
                             wins[0].webContents.send('app:notification', {
                                 type: 'error',
                                 message: 'API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.',
@@ -534,6 +324,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                     maxOutputTokens: config.maxTokens || 8192,
                     stopSequences: config.stopSequences,
                 },
+                model: config.model,
             };
 
             if (systemPrompt) {
@@ -731,6 +522,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                     maxOutputTokens: config.maxTokens || 8192,
                     stopSequences: config.stopSequences,
                 },
+                model: config.model,
             };
 
             if (systemInstruction) {
@@ -1079,6 +871,9 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 while ((match = toolCodeRegex.exec(part.text)) !== null) {
                     const toolName = match[1];
                     const argsString = match[2];
+
+                    if (!toolName || !argsString) continue;
+
                     const args: Record<string, any> = {};
 
                     // Parse arguments: currently supports key="value" format
@@ -1086,17 +881,23 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                     const argRegex = /([a-zA-Z0-9_]+)="([^"]*)"/g;
                     let argMatch;
                     while ((argMatch = argRegex.exec(argsString)) !== null) {
-                        args[argMatch[1]] = argMatch[2];
+                        const key = argMatch[1];
+                        const value = argMatch[2];
+                        if (key && value !== undefined) {
+                            args[key] = value;
+                        }
                     }
 
                     // Also try to match simple numbers or booleans: key=123 or key=true
                     const primitiveRegex = /([a-zA-Z0-9_]+)=([0-9]+|true|false)(?=[,\s]|$)/g;
                     while ((argMatch = primitiveRegex.exec(argsString)) !== null) {
-                        if (!args[argMatch[1]]) {
+                        const key = argMatch[1];
+                        const value = argMatch[2];
+                        if (key && value && !args[key]) {
                             // Don't overwrite if parsed as string
-                            if (argMatch[2] === 'true') args[argMatch[1]] = true;
-                            else if (argMatch[2] === 'false') args[argMatch[1]] = false;
-                            else args[argMatch[1]] = Number(argMatch[2]);
+                            if (value === 'true') args[key] = true;
+                            else if (value === 'false') args[key] = false;
+                            else args[key] = Number(value);
                         }
                     }
 

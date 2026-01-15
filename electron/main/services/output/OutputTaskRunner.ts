@@ -149,7 +149,6 @@ export class OutputTaskRunner {
                     result: isLocalFile ? result.metadata?.path : contentToOutput,
                     status: 'done',
                     completedAt: new Date(),
-                    hasUnreadResult: true,
                 });
 
                 console.log('[OutputTaskRunner] Task updated with result:', {

@@ -746,7 +746,6 @@ async function processInputSubmission(
         executionResult: output, // Drizzle handles JSON stringification
         completedAt: new Date(),
         inputSubStatus: null, // Clear input waiting status
-        hasUnreadResult: true,
     };
 
     await taskRepository.updateByKey(projectId, sequence, updateData);
@@ -1072,26 +1071,31 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                             // Check if this is a non-interactive input task (e.g. Local File with path)
                             // Handle both 'localFile' and 'LOCAL_FILE' cases
+                            const localConfig = (inputConfig as any)?.localFile;
                             if (
                                 sourceType &&
                                 (sourceType === 'localFile' || sourceType === 'LOCAL_FILE') &&
-                                (inputConfig as any)?.localFile?.filePath
+                                (localConfig?.filePath ||
+                                    (localConfig?.filePaths && localConfig.filePaths.length > 0))
                             ) {
-                                const filePath = (inputConfig as any).localFile.filePath;
+                                const filePaths =
+                                    localConfig.filePaths?.length > 0
+                                        ? localConfig.filePaths
+                                        : [localConfig.filePath];
+                                const primaryPath = filePaths[0];
+
                                 console.log(
-                                    `[TaskExecution] Auto-submitting Local File Input Task ${projectId}-${projectSequence} with path: ${filePath}`
+                                    `[TaskExecution] Auto-submitting Local File Input Task ${projectId}-${projectSequence} with paths:`,
+                                    filePaths
                                 );
                                 try {
-                                    // Verify file exists
-                                    const fs = await import('fs/promises');
-                                    await fs.access(filePath);
-
-                                    // Submit automatically
+                                    // Submit automatically - provider handles validation
                                     await processInputSubmission(
                                         projectId,
                                         projectSequence,
                                         {
-                                            filePath: filePath,
+                                            filePaths: filePaths,
+                                            filePath: primaryPath, // Legacy support
                                         },
                                         options
                                     );
@@ -1208,7 +1212,6 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                                 const updateData: any = {
                                     status: finalStatus,
                                     executionResult,
-                                    hasUnreadResult: true,
                                 };
 
                                 if (task.autoApprove) {
@@ -2288,6 +2291,33 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                             }
 
                             if (!isLoop) {
+                                // RE-VALIDATE DEPENDENCIES (Duplicate Execution Check)
+                                // Fetch fresh state (this task just finished, so it has a new completedAt)
+                                // We must ensure the queued trigger is still valid (i.e., is there a NEW dependency completion relative to THIS run?)
+                                const freshTask = await taskRepository.findByKey(
+                                    projectId,
+                                    projectSequence
+                                );
+                                const allProjectTasks =
+                                    await taskRepository.findByProject(projectId);
+
+                                if (freshTask && allProjectTasks) {
+                                    // ignoreNovelty=false because we WANT to check novelty against the FRESH completedAt
+                                    const depCheck = areTaskDependenciesMet(
+                                        freshTask,
+                                        allProjectTasks,
+                                        false
+                                    );
+
+                                    if (!depCheck.met) {
+                                        console.log(
+                                            `[TaskExecution] Skipping queued execution for ${taskKey}: Dependencies no longer met (Stale). Reason: ${depCheck.reason}`
+                                        );
+                                        // Skip execution
+                                        return { success: true, result };
+                                    }
+                                }
+
                                 console.log(
                                     `[TaskExecution] 🔄 Processing queued execution for task ${taskKey} (Triggered by ${triggerId})`
                                 );
@@ -2395,7 +2425,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         }
 
                         activeExecutions.delete(getTaskKey(projectId, projectSequence));
-                        return { success: false, error: shortError };
+                        return { success: false, error: shortError, statusHandled: true };
                     }
                 } catch (error) {
                     console.error('Error executing AI task:', error);
@@ -2508,7 +2538,11 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     duration: 7000,
                 });
 
-                throw error;
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : String(error),
+                    statusHandled: true,
+                };
             }
         }
     );

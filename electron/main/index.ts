@@ -23,6 +23,7 @@ import { registerTaskHistoryHandlers } from './ipc/task-history-handlers';
 import { registerSystemHandlers } from './ipc/system-handlers';
 import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { registerAuthHandlers } from './ipc/auth-handlers';
+import { registerAiSettingsHandlers } from './ipc/ai-settings-handlers';
 import { registerScriptTemplateHandlers } from './ipc/script-template-handlers';
 import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
@@ -651,6 +652,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register auth handlers
     registerAuthHandlers();
+
+    // Register AI settings handlers
+    registerAiSettingsHandlers();
 
     // Register operator handlers
     registerOperatorHandlers();

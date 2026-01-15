@@ -930,6 +930,10 @@ export class AdvancedTaskExecutor {
             'api key',
             'invalid key',
             'unauthorized',
+            'limit', // Generic limit
+            'quota', // Generic quota
+            '429', // HTTP 429
+            '한도', // Korean: Limit
         ];
 
         const errorMessage = error.message.toLowerCase();

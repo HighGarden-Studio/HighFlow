@@ -43,6 +43,19 @@ const formData = reactive({
     customValue: '',
 });
 
+// Initialize form data from config
+if (config.value?.sourceType === 'LOCAL_FILE') {
+    const local = config.value.localFile;
+    if (local?.filePaths && local.filePaths.length > 0) {
+        formData.filePaths = [...local.filePaths];
+    } else if (local?.filePath) {
+        formData.filePaths = [local.filePath];
+    }
+    formData.value = formData.filePaths.join(', ');
+} else if (config.value?.sourceType === 'USER_INPUT') {
+    // Determine if we should pre-fill anything? usually not for user input unless default value exists
+}
+
 const error = reactive({ message: '' });
 
 const validate = (): boolean => {
@@ -113,17 +126,9 @@ const triggerFileSelect = async () => {
                 formData.value = formData.filePaths.join(', ');
                 return;
             }
-        } else {
-            // Fallback to single select if new API missing
-            const result = await api.fs.selectFile();
-            if (result) {
-                if (!formData.filePaths.includes(result)) {
-                    formData.filePaths.push(result);
-                    formData.value = formData.filePaths.join(', ');
-                }
-                return;
-            }
         }
+        // If selectMultipleFiles is missing or returns null, fall through to HTML input
+        // Do NOT use api.fs.selectFile() as it forces single selection
     } catch (e) {
         // Fallback to HTML input
         console.warn('Native file selection failed, using fallback:', e);
@@ -236,7 +241,7 @@ const handleSubmit = () => {
                             >
                                 <input
                                     type="radio"
-                                    :name="'option-' + task.id"
+                                    :name="'option-' + task.projectSequence"
                                     :value="option"
                                     v-model="formData.value"
                                     class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
@@ -253,7 +258,7 @@ const handleSubmit = () => {
                             >
                                 <input
                                     type="radio"
-                                    :name="'option-' + task.id"
+                                    :name="'option-' + task.projectSequence"
                                     value="__custom__"
                                     v-model="formData.selectedOptionType"
                                     class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"

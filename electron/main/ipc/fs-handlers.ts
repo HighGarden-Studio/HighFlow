@@ -164,7 +164,7 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
         'fs:selectMultipleFiles',
         async (_event, filters?: { name: string; extensions: string[] }[]) => {
             const result = await dialog.showOpenDialog({
-                properties: ['openFile', 'multiSelections'],
+                properties: ['openFile', 'openDirectory', 'multiSelections'],
                 filters: filters || [{ name: 'All Files', extensions: ['*'] }],
             });
 

@@ -71,72 +71,135 @@ export class LocalFileProvider implements InputProvider {
         }
 
         const config = task.inputConfig?.localFile;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const parserType = config?.parser?.type;
         const readMode = config?.readMode || 'text';
 
-        const results: any[] = [];
         const attachments: any[] = [];
         const filesMetadata: any[] = [];
+        const failedPaths: string[] = [];
 
-        for (const filePath of filePaths) {
-            try {
-                const result = await this.processSingleFile(filePath, parserType, readMode);
-                results.push(result);
-
-                filesMetadata.push(result.file);
-
-                // Collect attachments
-                if (result.metadata?.attachments) {
-                    attachments.push(...result.metadata.attachments);
+        // Helper to recursively get files
+        const getAllFiles = async (dirPath: string): Promise<string[]> => {
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
+            const files: string[] = [];
+            for (const entry of entries) {
+                const fullPath = path.join(dirPath, entry.name);
+                if (entry.isDirectory()) {
+                    if (entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+                        files.push(...(await getAllFiles(fullPath)));
+                    }
+                } else {
+                    files.push(fullPath);
                 }
-            } catch (error: any) {
-                console.error(`Failed to process ${filePath}:`, error);
-                // Should we fail all or just report error? For now, let's fail.
-                return {
-                    kind: 'error',
-                    text: `Failed to process ${path.basename(filePath)}: ${error.message}`,
-                    metadata: { error: error.message },
-                };
+            }
+            return files;
+        };
+
+        // Expand directories to files
+        const allFilePaths: string[] = [];
+        for (const p of filePaths) {
+            try {
+                const stat = await fs.stat(p);
+                if (stat.isDirectory()) {
+                    allFilePaths.push(...(await getAllFiles(p)));
+                } else {
+                    allFilePaths.push(p);
+                }
+                // Cap total files to prevent crazy explosion
+                if (allFilePaths.length > 50) {
+                    // Warning or hard stop? For now, let's just warn in logs if it gets huge, but proceeding.
+                    // A hard limit might be safer for AI context.
+                    if (allFilePaths.length > 100)
+                        throw new Error(
+                            'Too many files selected (> 100). Please select fewer files or specific folders.'
+                        );
+                }
+            } catch (e) {
+                console.warn(`Failed to stat/read path ${p}:`, e);
+                // If distinct failure, maybe just ignore or let processSingleFile fail it later?
+                // But we need it for the loop below.
+                allFilePaths.push(p); // Fallback, let processSingleFile handle error
             }
         }
 
-        // Aggregation logic
-        // If single file, return compatible structure with 'file' property
-        // If multiple, 'files' property is primary
-        // 'text' property will be concatenated content of all text-readable files
+        // Process all files
+        for (const filePath of allFilePaths) {
+            try {
+                // Reuse existing single file processing logic (handles PDF, Tables, Images, etc.)
+                const result = await this.processSingleFile(filePath, parserType, readMode);
 
-        const concatenatedText = results
-            .filter((r) => r.kind === 'text' || (r.kind === 'file' && r.text)) // Some file results might have text
-            .map((r) => `--- File: ${r.file.name} ---\n${r.text || ''}`)
-            .join('\n\n');
+                // 1. Collect Metadata
+                if (result.file) {
+                    filesMetadata.push(result.file);
+                }
 
-        const firstResult = results[0];
-
-        // If only 1 file, return mostly compatible structure but add 'files' array too
-        if (results.length === 1) {
-            return {
-                ...firstResult,
-                files: filesMetadata, // Add files array
-                metadata: {
-                    ...firstResult.metadata,
-                    attachments, // Ensure attachments are preserved
-                },
-            };
+                // 2. Convert Result to Attachment(s)
+                // This ensures content is passed to AI via attachments (bypassing text truncation)
+                if (result.metadata?.attachments) {
+                    // Reuse existing attachments (images, etc.)
+                    attachments.push(...result.metadata.attachments);
+                } else if (result.kind === 'text' && result.text) {
+                    // Convert text content to attachment
+                    attachments.push({
+                        type: 'file',
+                        mime: result.mimeType || 'text/plain',
+                        value: result.text,
+                        encoding: 'text',
+                        name: result.file?.name || path.basename(filePath),
+                        path: filePath,
+                        size: result.file?.size,
+                    });
+                } else if (result.kind === 'table') {
+                    // Handle tables - convert to JSON JSON string attachment
+                    attachments.push({
+                        type: 'file',
+                        mime: 'application/json',
+                        value: JSON.stringify(result.table),
+                        encoding: 'text',
+                        name: result.file?.name || path.basename(filePath),
+                        path: filePath,
+                        size: result.file?.size,
+                    });
+                }
+            } catch (error: any) {
+                console.error(`Failed to process ${filePath}:`, error);
+                failedPaths.push(path.basename(filePath));
+            }
         }
 
-        // Multiple files
+        // Raise error if ALL files failed
+        if (filesMetadata.length === 0 && filePaths.length > 0) {
+            throw new Error(`Failed to process input files: ${failedPaths.join(', ')}`);
+        }
+
+        // Construct Summary Text
+        let summaryText =
+            `Selected ${filesMetadata.length} files:\n` +
+            filesMetadata.map((f) => `- ${f.name} (${this.formatSize(f.size)})`).join('\n');
+
+        if (failedPaths.length > 0) {
+            summaryText += `\n\nFailed to read: ${failedPaths.join(', ')}`;
+        }
+
         return {
-            kind: 'file', // General kind
-            text: concatenatedText,
+            kind: 'file',
+            text: summaryText,
             files: filesMetadata,
-            mimeType: 'application/octet-stream', // Mixed
+            mimeType: 'multipart/mixed',
             metadata: {
                 source: 'local_file',
                 readMode: readMode,
                 attachments: attachments,
-                fileCount: results.length,
+                fileCount: filesMetadata.length,
             },
         };
+    }
+
+    private formatSize(bytes: number): string {
+        if (bytes < 1024) return bytes + ' B';
+        else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        else return (bytes / 1048576).toFixed(1) + ' MB';
     }
 
     private async processSingleFile(

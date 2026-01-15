@@ -684,6 +684,9 @@ export interface AuthAPI {
 
 export interface AiAPI {
     fetchModels: (providerId: string, apiKey?: string) => Promise<any[]>;
+    getModelsFromCache: (providerId: string) => Promise<any[]>;
+    saveProviderConfig: (providerId: string, config: any) => Promise<{ success: boolean }>;
+    getProviderConfig: (providerId: string) => Promise<any>;
 }
 
 export interface ElectronAPI {

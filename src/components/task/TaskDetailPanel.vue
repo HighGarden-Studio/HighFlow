@@ -1107,18 +1107,44 @@ async function handleSelectLocalFile() {
                 : undefined;
 
         console.log('[TaskDetailPanel] Opening file dialog with filters:', filters);
-        const filePath = await getAPI().fs.selectFile(filters);
+        // Use selectMultipleFiles to support multiple files and folders
+        const newPaths = await getAPI().fs.selectMultipleFiles(filters);
 
-        if (filePath) {
+        if (newPaths && newPaths.length > 0) {
+            const currentPaths =
+                config.localFile?.filePaths ||
+                (config.localFile?.filePath ? [config.localFile.filePath] : []);
+            const uniquePaths = Array.from(new Set([...currentPaths, ...newPaths]));
+
             updateInputConfig('localFile', {
                 ...config.localFile,
-                filePath,
+                filePath: uniquePaths[0], // Legacy compatibility
+                filePaths: uniquePaths,
                 acceptedExtensions: config.localFile?.acceptedExtensions || [],
                 readMode: config.localFile?.readMode || 'text',
             });
         }
     } catch (error) {
         console.error('Failed to select file:', error);
+    }
+}
+
+function removeLocalFile(index: number) {
+    if (!localTask.value) return;
+    const config = getInputConfig();
+    const currentPaths =
+        config.localFile?.filePaths ||
+        (config.localFile?.filePath ? [config.localFile.filePath] : []);
+
+    if (index >= 0 && index < currentPaths.length) {
+        const newPaths = [...currentPaths];
+        newPaths.splice(index, 1);
+
+        updateInputConfig('localFile', {
+            ...config.localFile,
+            filePath: newPaths.length > 0 ? newPaths[0] : undefined,
+            filePaths: newPaths,
+        });
     }
 }
 
@@ -2411,23 +2437,94 @@ async function handleOpenFile(filePath: string) {
                                         >
                                             {{ t('task.input.local.target_file') }}
                                         </label>
-                                        <div class="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                readonly
-                                                :value="getInputConfig().localFile?.filePath || ''"
-                                                class="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                                                :placeholder="
-                                                    t('task.input.local.file_placeholder')
+                                        <div class="space-y-2">
+                                            <!-- File List -->
+                                            <div
+                                                v-if="
+                                                    (getInputConfig().localFile?.filePaths
+                                                        ?.length || 0) > 0
                                                 "
-                                            />
-                                            <button
-                                                @click="handleSelectLocalFile"
-                                                class="p-2bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors"
-                                                :title="t('task.input.local.select_file')"
+                                                class="space-y-1 mb-2"
                                             >
-                                                <FolderOpen class="w-4 h-4" />
-                                            </button>
+                                                <div
+                                                    v-for="(path, idx) in getInputConfig().localFile
+                                                        ?.filePaths || []"
+                                                    :key="path"
+                                                    class="flex items-center justify-between p-1.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded text-xs group"
+                                                >
+                                                    <span
+                                                        class="truncate text-gray-600 dark:text-gray-300 flex-1 mr-2"
+                                                        :title="path"
+                                                    >
+                                                        {{ path.split(/[/\\]/).pop() }}
+                                                    </span>
+                                                    <button
+                                                        @click="removeLocalFile(idx)"
+                                                        class="text-gray-400 hover:text-red-500 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        title="Remove"
+                                                    >
+                                                        <svg
+                                                            class="w-3 h-3"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M6 18L18 6M6 6l12 12"
+                                                            ></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Add Button & Empty State -->
+                                            <div class="flex items-center gap-2">
+                                                <div
+                                                    v-if="
+                                                        (getInputConfig().localFile?.filePaths
+                                                            ?.length || 0) === 0
+                                                    "
+                                                    class="flex-1"
+                                                >
+                                                    <input
+                                                        type="text"
+                                                        readonly
+                                                        :value="
+                                                            getInputConfig().localFile?.filePath ||
+                                                            ''
+                                                        "
+                                                        class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                                                        :placeholder="
+                                                            t('task.input.local.file_placeholder')
+                                                        "
+                                                    />
+                                                </div>
+                                                <button
+                                                    @click="handleSelectLocalFile"
+                                                    :class="[
+                                                        (getInputConfig().localFile?.filePaths
+                                                            ?.length || 0) > 0
+                                                            ? 'w-full flex justify-center py-2 border-dashed'
+                                                            : 'p-2',
+                                                        'bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-2',
+                                                    ]"
+                                                    :title="t('task.input.local.select_file')"
+                                                >
+                                                    <FolderOpen class="w-4 h-4" />
+                                                    <span
+                                                        v-if="
+                                                            (getInputConfig().localFile?.filePaths
+                                                                ?.length || 0) > 0
+                                                        "
+                                                        class="text-xs"
+                                                    >
+                                                        파일 추가...
+                                                    </span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

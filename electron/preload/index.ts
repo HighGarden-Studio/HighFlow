@@ -1226,6 +1226,10 @@ const aiAPI = {
         ipcRenderer.invoke('ai:fetchModels', providerId, apiKey),
     getModelsFromCache: (providerId: string) =>
         ipcRenderer.invoke('ai:getModelsFromCache', providerId),
+    saveProviderConfig: (providerId: string, config: any) =>
+        ipcRenderer.invoke('ai:saveProviderConfig', providerId, config),
+    getProviderConfig: (providerId: string) =>
+        ipcRenderer.invoke('ai:getProviderConfig', providerId),
 };
 
 // ========================================

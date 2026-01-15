@@ -785,6 +785,18 @@ const fetchHistory = async () => {
     }
 };
 
+// Mark as read when opening preview if unread
+watch(
+    () => props.task,
+    (newTask) => {
+        if (newTask && newTask.hasUnreadResult && newTask.projectId && newTask.projectSequence) {
+            console.log(`[EnhancedResultPreview] Marking task ${newTask.projectSequence} as read`);
+            taskStore.markResultAsRead(newTask.projectId, newTask.projectSequence);
+        }
+    },
+    { immediate: true, deep: true }
+);
+
 const handleViewVersion = (version: TaskHistoryEntry) => {
     selectedVersionId.value = version.id;
 };

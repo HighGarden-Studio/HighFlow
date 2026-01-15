@@ -1010,6 +1010,7 @@ function hexToRgba(hex: string, alpha: number) {
                             {{ task.reviewFailed ? '실패 분석' : t('project.actions.view_result') }}
                         </button>
                         <button
+                            v-if="!task.triggerConfig?.dependsOn"
                             class="px-1.5 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
                             @click="handleRetry"
                             title="다시 실행"

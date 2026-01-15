@@ -115,6 +115,30 @@ const descriptionLabel = computed(() => {
     return t('task.input.label.message');
 });
 
+const contentLabel = computed(() => {
+    if (!props.task.inputConfig) return '';
+    const config = props.task.inputConfig;
+
+    if (config.sourceType === 'LOCAL_FILE') {
+        const paths =
+            config.localFile?.filePaths ||
+            (config.localFile?.filePath ? [config.localFile.filePath] : []);
+        if (paths.length === 0) return t('task.input.local.file_placeholder') || 'No file selected';
+
+        const firstFile = paths[0].split(/[/\\]/).pop(); // basename
+        if (paths.length > 1) {
+            return `${firstFile} 외 ${paths.length - 1}개`;
+        }
+        return firstFile;
+    }
+
+    if (config.sourceType === 'REMOTE_RESOURCE') {
+        return config.remoteResource?.url || t('task.input.remote.url_placeholder');
+    }
+
+    return config.userInput?.message || '';
+});
+
 function handleExecute(event: Event) {
     event.stopPropagation();
     emit('execute', props.task);
@@ -327,14 +351,8 @@ function hexToRgba(hex: string, alpha: number) {
                 <div class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1">
                     {{ descriptionLabel }}
                 </div>
-                <p
-                    v-if="!hidePrompt && task.description"
-                    class="text-xs text-gray-600 dark:text-gray-300 line-clamp-2"
-                >
-                    {{ task.inputConfig?.userInput?.message }}
-                </p>
-                <p v-else class="text-xs text-gray-400 dark:text-gray-500 italic">
-                    {{ t('task.type.input_desc') }}
+                <p v-if="!hidePrompt" class="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
+                    {{ contentLabel }}
                 </p>
             </div>
 
@@ -506,7 +524,7 @@ function hexToRgba(hex: string, alpha: number) {
                 <!-- DONE Status Actions -->
                 <template v-if="task.status === 'done'">
                     <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
                                 e.stopPropagation();
@@ -519,7 +537,7 @@ function hexToRgba(hex: string, alpha: number) {
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
                         v-if="!task.triggerConfig?.dependsOn"
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
                                 e.stopPropagation();

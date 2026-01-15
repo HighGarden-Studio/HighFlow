@@ -445,7 +445,7 @@ function handleViewScript(event: Event) {
                 <template v-if="task.status === 'in_review'">
                     <div class="w-full flex gap-1.5">
                         <button
-                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded flex items-center justify-center gap-1 border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                            class="flex-1 px-2 py-1 text-[10px] font-medium rounded flex items-center justify-center gap-1 border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
                             @click="
                                 (e) => {
                                     e.stopPropagation();
@@ -456,7 +456,7 @@ function handleViewScript(event: Event) {
                             {{ t('task.actions.view_result') }}
                         </button>
                         <button
-                            class="px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
+                            class="px-2 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
                             @click="
                                 (e) => {
                                     e.stopPropagation();
@@ -468,12 +468,12 @@ function handleViewScript(event: Event) {
                             {{ t('common.retry') }}
                         </button>
                         <button
-                            class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
+                            class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-green-600 text-white hover:bg-green-700 flex items-center justify-center gap-1 shadow-sm"
                             @click.stop="
                                 () => {
                                     console.log(
                                         '🟢 [ScriptTaskCard] Approve button clicked',
-                                        task.id
+                                        task.projectSequence
                                     );
                                     emit('approve', task);
                                 }
@@ -488,7 +488,7 @@ function handleViewScript(event: Event) {
                 <template v-if="task.status === 'done' || task.status === 'blocked'">
                     <button
                         v-if="task.status === 'done'"
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
                                 e.stopPropagation();
@@ -501,7 +501,7 @@ function handleViewScript(event: Event) {
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
                         v-if="task.status === 'done' && !task.triggerConfig?.dependsOn"
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
                                 e.stopPropagation();
@@ -520,7 +520,7 @@ function handleViewScript(event: Event) {
                         {{ t('common.retry') }}
                     </button>
                     <button
-                        class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
                         @click="
                             (e) => {
                                 e.stopPropagation();
