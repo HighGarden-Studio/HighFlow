@@ -180,11 +180,10 @@ Local agents provide execution environments that run on your machine with deep i
 
 **Behavior:**
 
-- Auto-save: Interval (default: 30s)
 - Default view: Kanban, DAG, Timeline
 - Compact mode: Reduce UI spacing
 
-**Integrations:**
+**Integrations:** (Coming Soon)
 
 - Slack: Webhook notifications
 - Discord: Bot integration
@@ -252,7 +251,7 @@ Example: "Build a REST API for user authentication with JWT tokens"
 Set project-wide defaults:
 
 - **AI Provider**: e.g., "Anthropic" (overrides global default)
-- **AI Model**: e.g., "claude-3-5-sonnet-20241022"
+- **AI Model**: e.g., "claude-3-5-sonnet"
 - **Temperature**: 0.0 (deterministic) to 1.0 (creative)
 - **Max Tokens**: Output length limit
 
@@ -262,17 +261,6 @@ Enable a second AI to review the first AI's work:
 
 - **Review Provider**: Can differ from executor (e.g., GPT-4 reviews Claude)
 - **Review Model**: Typically a stronger model
-- **Review Criteria**: What to check (correctness, style, security)
-
-#### Output Settings
-
-Define project output type:
-
-- **Web**: HTML/CSS/JS applications
-- **Document**: Markdown, PDF
-- **Image**: Generated graphics
-- **Video**: Media content
-- **Code**: Source files
 
 ### 2.3 Project Memory & AI Context Management
 
@@ -487,12 +475,6 @@ Tasks are the fundamental execution units in HighFlow. Each task can be configur
 2. Select "Add Task"
 3. Position node
 
-**Via Command Palette:**
-
-1. Press `⌘+T`
-2. Enter task details
-3. Save
-
 #### Task Metadata
 
 - **Title**: Brief description (e.g., "Generate API documentation")
@@ -526,27 +508,7 @@ Task-level settings have the **highest priority** and override both project and 
 - `0.7`: Balanced creativity
 - `1.0`: Maximum creativity
 
-**Max Tokens:**
-
-- Limit output length
-- Prevents runaway costs
-
-**System Prompt:**
-
-- Custom instructions for this task only
-- Example: "You are a senior Python developer. Write production-ready code with type hints."
-
 #### Execution Settings
-
-**Retries:**
-
-- Auto-retry on failure (0-5 times)
-- Exponential backoff between attempts
-
-**Timeout:**
-
-- Maximum execution time (seconds)
-- Prevents infinite loops
 
 **Auto-Review:**
 
@@ -595,10 +557,10 @@ Task 3 depends on: [Task 1, Task 2] (operator: ANY)
 **Boolean Logic:**
 
 ```
-(Task1 AND Task2) OR Task3
+(Task1 && Task2) || Task3
 ```
 
-- Supports: `AND`, `OR`, `NOT`, parentheses
+- Supports: `&&`, `||`, `!`, parentheses
 - Enables complex conditional workflows
 
 #### Execution Policies
@@ -730,8 +692,8 @@ Write a function to calculate Fibonacci numbers using memoization.
 Based on the API design from {{prev}}, implement the user authentication endpoint.
 
 Requirements:
-- Use the database schema from {{prev-1}}
-- Follow the error handling pattern from {{prev-2}}
+- Use the database schema from {{prev.1}}
+- Follow the error handling pattern from {{prev.2}}
 ```
 
 **Available Macros:**
@@ -766,7 +728,7 @@ Real-time display of AI generation:
 - Cancel mid-execution if going wrong
 - Faster perceived performance
 
-#### MCP Integration
+#### MCP Integration (In Progress)
 
 Grant AI access to external tools:
 
@@ -880,29 +842,17 @@ Aggregate results and send to external destinations.
 - Formats: JSON, Markdown, plain text
 - Template-based generation
 
-**Slack:**
+**Slack:** (Coming Soon)
 
 - Send to channel or DM
 - Rich formatting support
 - Threaded conversations
 
-**Google Docs:**
+**Google Docs:** (Coming Soon)
 
 - Create new document
 - Append to existing document
 - Formatted output
-
-#### Result Aggregation
-
-Combine multiple task results:
-
-```javascript
-{
-  "template": "# Summary\n\n{{task-1}}\n\n{{task-2}}",
-  "destination": "file",
-  "path": "./output/summary.md"
-}
-```
 
 ---
 
@@ -957,13 +907,6 @@ Local agents provide **local execution environment** with two AI options:
 - No data leaves your machine
 - No API costs
 - Slower inference
-
-**Cloud Mode (Performance-First):**
-
-- Use OpenAI, Anthropic, Google APIs
-- Faster, more capable models
-- API costs apply
-- Data sent to provider
 
 #### Use Cases
 
