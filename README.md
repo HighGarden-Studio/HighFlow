@@ -62,7 +62,7 @@ Global settings apply across all projects and serve as fallback defaults when pr
 
 HighFlow integrates with major AI providers. Configure them in **Settings → AI Providers**.
 
-![AI Providers](./github/images/ai-providers.png)
+![AI Providers](.github/images/ai-providers.png)
 
 #### ✅ Currently Supported
 
