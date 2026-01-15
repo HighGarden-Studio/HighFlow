@@ -161,13 +161,6 @@ Local agents provide execution environments that run on your machine with deep i
 - Excellent for complex refactoring
 - Requires Claude API key
 
-> **Important**: Local agents run on your machine but can use either:
->
-> - **Offline models** (via LM Studio)
-> - **Cloud APIs** (OpenAI, Anthropic, Google)
->
-> Choose based on your privacy and performance needs.
-
 #### Setup
 
 1. Settings → Local Agents
