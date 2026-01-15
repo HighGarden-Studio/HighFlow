@@ -62,7 +62,7 @@ Global settings apply across all projects and serve as fallback defaults when pr
 
 HighFlow integrates with major AI providers. Configure them in **Settings → AI Providers**.
 
-![AI Providers](.github/images/ai-providers.png)
+![AI Providers](.github/images/ai_providers.png)
 
 #### ✅ Currently Supported
 
@@ -105,7 +105,7 @@ Run models on your machine using **LM Studio**:
 
 **Model Context Protocol (MCP)** enables AI agents to securely interact with external systems.
 
-![MCP Servers](./github/images/mcp_servers.png)
+![MCP Servers](.github/images/mcp_servers.png)
 
 #### What is MCP?
 
@@ -151,7 +151,7 @@ npx -y @modelcontextprotocol/server-filesystem /path/to/project
 
 Local agents provide execution environments that run on your machine with deep integration to local files and tools.
 
-![Local Agents](./github/images/local_agents.png)
+![Local Agents](.github/images/local_agents.png)
 
 #### Supported Agents
 
@@ -213,7 +213,7 @@ Local agents provide execution environments that run on your machine with deep i
 
 Projects are containers for related tasks. They define shared context, default AI settings, and execution environment.
 
-![Projects](./github/images/projects.png)
+![Projects](.github/images/projects.png)
 
 ### 2.1 Creating Projects
 
@@ -435,7 +435,7 @@ Traditional task board with columns:
 - **Done**: Completed tasks
 - **Blocked**: Dependency issues
 
-![Kanban Board](./github/images/kanban_board_view.png)
+![Kanban Board](.github/images/kanban_board_view.png)
 
 **Features:**
 
@@ -453,7 +453,7 @@ Visual workflow editor showing task dependencies:
 - **Colors**: Status indicators
 - **Drag connections**: Create dependencies visually
 
-![DAG](./github/images/dag_view.png)
+![DAG](.github/images/dag_view.png)
 
 **Use Cases:**
 
@@ -628,6 +628,8 @@ Task 3 depends on: [Task 1, Task 2] (operator: ANY)
 ### 3.4 Operators
 
 Operators are reusable AI personas with specialized skills and configurations.
+
+![Operators](.github/images/ai_operators.png)
 
 #### What are Operators?
 
