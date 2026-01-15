@@ -14,6 +14,12 @@ HighFlow is a next-generation workflow manager that orchestrates complex tasks u
 ![project_kanban](.github/images/1_kanban.png)
 ![project_overview](.github/images/2_overview.png)
 
+## Download
+
+| Platform                  | Download                                                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **macOS (Apple Silicon)** | [HighFlow-0.1.0-arm64.dmg](https://github.com/HighGarden-Studio/HighFlow/releases/download/0.1.0/HighFlow-0.1.0-arm64.dmg) |
+
 **Key Capabilities:**
 
 - 🤖 **Multi-AI Support**: Integrate OpenAI, Anthropic, Google, Groq, Mistral, and local models
