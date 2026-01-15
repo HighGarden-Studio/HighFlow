@@ -62,6 +62,8 @@ Global settings apply across all projects and serve as fallback defaults when pr
 
 HighFlow integrates with major AI providers. Configure them in **Settings → AI Providers**.
 
+![AI Providers](./github/images/ai-providers.png)
+
 #### ✅ Currently Supported
 
 | Provider             | Models                           | Features                       |
@@ -102,6 +104,8 @@ Run models on your machine using **LM Studio**:
 ### 1.2 MCP Servers
 
 **Model Context Protocol (MCP)** enables AI agents to securely interact with external systems.
+
+![MCP Servers](./github/images/mcp_servers.png)
 
 #### What is MCP?
 
@@ -146,6 +150,8 @@ npx -y @modelcontextprotocol/server-filesystem /path/to/project
 ### 1.3 Local Agents
 
 Local agents provide execution environments that run on your machine with deep integration to local files and tools.
+
+![Local Agents](./github/images/local_agents.png)
 
 #### Supported Agents
 
@@ -206,6 +212,8 @@ Local agents provide execution environments that run on your machine with deep i
 ## 2. Project Management
 
 Projects are containers for related tasks. They define shared context, default AI settings, and execution environment.
+
+![Projects](./github/images/projects.png)
 
 ### 2.1 Creating Projects
 
@@ -427,6 +435,8 @@ Traditional task board with columns:
 - **Done**: Completed tasks
 - **Blocked**: Dependency issues
 
+![Kanban Board](./github/images/kanban_board_view.png)
+
 **Features:**
 
 - Drag-and-drop task movement
@@ -442,6 +452,8 @@ Visual workflow editor showing task dependencies:
 - **Edges**: Dependencies
 - **Colors**: Status indicators
 - **Drag connections**: Create dependencies visually
+
+![DAG](./github/images/dag_view.png)
 
 **Use Cases:**
 
