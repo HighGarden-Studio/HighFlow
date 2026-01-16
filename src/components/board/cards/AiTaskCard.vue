@@ -3,13 +3,14 @@
  * AI & Script Task Card Component
  * Supports both 'ai' and 'script' task types with in_review workflow
  */
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
 import { useTaskStatus } from '../../../composables/task/useTaskStatus';
 import { useTaskStore } from '../../../renderer/stores/taskStore';
+import { useMCPStore } from '../../../renderer/stores/mcpStore';
 import { getProviderIcon } from '../../../utils/iconMapping';
 
 interface Props {
@@ -63,6 +64,7 @@ const emit = defineEmits<{
 }>();
 
 const taskStore = useTaskStore();
+const mcpStore = useMCPStore();
 const { t } = useI18n();
 const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus(props);
 
@@ -107,90 +109,12 @@ watch(
     }
 );
 
-// MCP Tool  Execution State
-interface ToolExecution {
-    id: string;
-    toolName: string;
-    status: 'running' | 'success' | 'failed';
-    duration?: number;
-    phase: number;
-}
+// MCP Tool Execution State
+const mcpExecutions = computed(() => {
+    return mcpStore.getExecutions(props.task.projectId, props.task.projectSequence);
+});
 
-const mcpExecutions = ref<ToolExecution[]>([]);
-const currentPhase = ref(0);
-let mcpEventCleanups: (() => void)[] = [];
-
-// Setup MCP event listeners
-function setupMCPListeners() {
-    if (typeof window === 'undefined' || !window.electron) return;
-
-    const api = window.electron;
-
-    // Listen for MCP requests
-    const cleanupRequest = api.events.on('ai.mcp_request', (data: any) => {
-        // Match by composite key
-        if (
-            data.projectId === props.task.projectId &&
-            data.projectSequence === props.task.projectSequence
-        ) {
-            // Increment phase if this is a new iteration
-            const lastExecution = mcpExecutions.value[mcpExecutions.value.length - 1];
-            if (lastExecution && lastExecution.status === 'success') {
-                currentPhase.value++;
-            }
-
-            mcpExecutions.value.push({
-                id: `mcp-${Date.now()}-${Math.random()}`,
-                toolName: data.toolName || 'Unknown Tool',
-                status: 'running',
-                phase: currentPhase.value,
-            });
-        }
-    });
-
-    // Listen for MCP responses
-    const cleanupResponse = api.events.on('ai.mcp_response', (data: any) => {
-        if (
-            data.projectId === props.task.projectId &&
-            data.projectSequence === props.task.projectSequence
-        ) {
-            // Find the last running tool with this name
-            const execution = mcpExecutions.value
-                .reverse()
-                .find((e) => e.toolName === data.toolName && e.status === 'running');
-
-            if (execution) {
-                execution.status = data.success ? 'success' : 'failed';
-                execution.duration = data.duration;
-            }
-
-            mcpExecutions.value.reverse(); // Restore order
-        }
-    });
-
-    mcpEventCleanups.push(cleanupRequest, cleanupResponse);
-}
-
-function clearMCPListeners() {
-    mcpEventCleanups.forEach((cleanup) => cleanup());
-    mcpEventCleanups = [];
-    mcpExecutions.value = [];
-    currentPhase.value = 0;
-}
-
-onMounted(() => setupMCPListeners());
-onUnmounted(() => clearMCPListeners());
-
-// Watch task status to reset MCP state when task starts
-watch(
-    () => props.task.status,
-    (newStatus, oldStatus) => {
-        if (newStatus === 'in_progress' && oldStatus !== 'in_progress') {
-            clearMCPListeners();
-            setupMCPListeners();
-        }
-    }
-);
+// Watcher removed: Handled in taskStore to prevent race conditions
 
 // Store-bound computed properties
 const streamedContent = computed(() => {
@@ -999,11 +923,11 @@ function hexToRgba(hex: string, alpha: number) {
                 <template v-if="task.status === 'in_review'">
                     <div class="w-full flex gap-1.5">
                         <button
-                            class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded flex items-center justify-center gap-1 border transition-colors"
+                            class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded transition-colors flex items-center justify-center gap-1 shadow-sm"
                             :class="
                                 task.reviewFailed
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-slate-600 text-white hover:bg-slate-700'
                             "
                             @click="(e) => handlePreviewResult(e)"
                         >
@@ -1011,7 +935,7 @@ function hexToRgba(hex: string, alpha: number) {
                         </button>
                         <button
                             v-if="!task.triggerConfig?.dependsOn"
-                            class="px-1.5 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
+                            class="px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                             @click="handleRetry"
                             title="다시 실행"
                         >

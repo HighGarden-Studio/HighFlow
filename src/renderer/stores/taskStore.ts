@@ -14,6 +14,8 @@ import {
     isValidStatusTransition,
     taskKeyToString,
 } from '@core/types/database';
+import { useActivityLogStore } from './activityLogStore';
+import { useMCPStore } from './mcpStore';
 import { useSettingsStore } from './settingsStore';
 import { useProjectStore } from './projectStore';
 import { buildEnabledProvidersPayload, buildRuntimeMCPServers } from '../utils/runtimeConfig';
@@ -863,6 +865,11 @@ export const useTaskStore = defineStore('tasks', () => {
 
         // 낙관적 업데이트: 즉시 UI를 '실행 중' 상태로 변경
         const originalStatus = task.status;
+
+        // [Fix] Clear MCP logs before execution starts to prevent accumulation
+        // This handles manual execution triggers
+        useMCPStore().clearTaskLogs(projectId, sequence);
+
         await updateTask(projectId, sequence, {
             status: 'in_progress',
             isPaused: false,
@@ -1777,6 +1784,16 @@ export const useTaskStore = defineStore('tasks', () => {
                         }
                     } else {
                         // Normal status update for non-INPUT tasks or INPUT tasks completing
+
+                        // [Fix] Clear MCP logs if task is starting (backend-triggered)
+                        // Only clear if local status is NOT 'in_progress' to avoid racing with optimistic update in executeTask
+                        if (status === 'in_progress' && task.status !== 'in_progress') {
+                            console.log(
+                                '[TaskStore] Backend triggered task start, clearing MCP logs'
+                            );
+                            useMCPStore().clearTaskLogs(projectId, seq);
+                        }
+
                         const updates: Partial<Task> = { status };
 
                         // For INPUT tasks completing, clear the sub-status

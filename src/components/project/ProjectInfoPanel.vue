@@ -16,12 +16,12 @@ import { marked } from 'marked';
 
 import type { MCPConfig, Project } from '@core/types/database';
 import type { AIProvider } from '../../services/ai/AIInterviewService';
-import { getAPI } from '../../utils/electron';
 import { projectClaudeSyncService } from '../../services/integration/ProjectClaudeSyncService';
 import UnifiedAISelector from '../common/UnifiedAISelector.vue';
 import MCPToolSelector from '../common/MCPToolSelector.vue';
 import IconRenderer from '../common/IconRenderer.vue';
 import { useConfigurationInheritance } from '../../composables/useConfigurationInheritance';
+import { useProjectStore } from '../../renderer/stores/projectStore';
 import { FolderOpen } from 'lucide-vue-next';
 
 const { resolveAIProvider, resolveAutoReviewProvider } = useConfigurationInheritance();
@@ -421,17 +421,12 @@ async function saveMetadata(): Promise<void> {
     if (!editedTitle.value.trim()) return;
 
     try {
-        const api = getAPI();
-        await api.projects.update(props.project.id, {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
             title: editedTitle.value,
             emoji: editedEmoji.value || null,
-        } as any); // Cast to any because we just updated d.ts but sometimes it takes time to propagate or Project type might need update
+        });
         isEditingMetadata.value = false;
-
-        // We might need to refresh the project or rely on reactivity if prop updates
-        // Usually the parent component listens to events or store updates.
-        // For now, assume optimistic update or store refresh happens elsewhere.
-        // Actually, let's look at how other updates are handled.
     } catch (error) {
         console.error('Failed to update project metadata:', error);
     }
@@ -541,9 +536,9 @@ async function saveAISettings(): Promise<void> {
     // If project was synced with Claude, mark as manually overridden
     if (wasClaudeCodeSynced) {
         try {
-            const api = getAPI();
+            const projectStore = useProjectStore();
             const overrideUpdate = projectClaudeSyncService.markAsOverridden(props.project as any);
-            await api.projects.update(props.project.id, overrideUpdate as any);
+            await projectStore.updateProject(props.project.id, overrideUpdate as any);
             console.log('[ProjectInfoPanel] Marked project settings as manually overridden');
         } catch (error) {
             console.error('[ProjectInfoPanel] Failed to mark as overridden:', error);
@@ -601,10 +596,10 @@ function cancelEditGoal(): void {
 
 async function saveGoal(): Promise<void> {
     try {
-        const api = getAPI();
-        await api.projects.update(props.project.id, {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
             goal: editedGoal.value || null,
-        } as any);
+        });
         isEditingGoal.value = false;
     } catch (error) {
         console.error('Failed to update project goal:', error);

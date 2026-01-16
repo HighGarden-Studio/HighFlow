@@ -19,6 +19,7 @@ import UpdateModal from '../components/common/UpdateModal.vue';
 import IconRenderer from '../components/common/IconRenderer.vue';
 import { indexManager } from '../services/search/IndexManager';
 import { useActivityLogStore } from './stores/activityLogStore';
+import { useMCPStore } from './stores/mcpStore';
 import { versionAPI } from './api/version';
 import type { VersionInfo } from './api/version';
 import { eventBus } from '../services/events/EventBus';
@@ -30,6 +31,7 @@ const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 const historyStore = useHistoryStore();
 const activityLogStore = useActivityLogStore();
+const mcpStore = useMCPStore();
 const userStore = useUserStore();
 const { t, locale } = useI18n();
 
@@ -394,6 +396,9 @@ onMounted(async () => {
 
     // Check for updates
     await checkForUpdates();
+
+    // Initialize MCP listeners
+    mcpStore.initialize();
 
     // Listen for global notifications from main process
     if (window.electron?.app?.onNotification) {

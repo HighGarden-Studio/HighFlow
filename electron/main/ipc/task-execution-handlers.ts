@@ -2105,7 +2105,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     context.metadata = {
                         streaming: options?.streaming ?? true,
-                        timeout: options?.timeout ?? 30000,
+                        timeout: options?.timeout ?? 180000,
                         fallbackProviders: options?.fallbackProviders || ['openai', 'google'],
                         onToken,
                         onProgress,
@@ -2114,7 +2114,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                     };
 
                     const result = await executor.executeTask(task as Task, context, {
-                        timeout: options?.timeout ?? 30000,
+                        timeout: options?.timeout ?? 180000,
                         fallbackProviders: options?.fallbackProviders,
                         onLog: (level, message, details) =>
                             sendActivityLog(level, message, details),

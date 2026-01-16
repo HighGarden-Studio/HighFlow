@@ -108,6 +108,7 @@ const DEFAULT_MODELS: Partial<Record<AIProvider, AIModel>> = {
     codex: 'codex-latest',
     local: 'gpt-3.5-turbo',
     lmstudio: 'local-model',
+    'default-highflow': 'gemini-2.0-flash',
 };
 
 // Default fallback order (used when no enabled providers are configured)
@@ -1828,7 +1829,17 @@ export class AIServiceManager {
             // But typically if we are here, Current Provider == Project Provider (via resolveProvider inheritance).
             // If Current Provider != Project Provider, then 'project.aiModel' is likely incompatible.
             // Check compatibility before using it.
-            candidateModel = context.metadata.project.aiModel as AIModel;
+
+            // [Fix] Ensure we only inherit Project AI Model if the Project AI Provider matches the current resolved Provider
+            // This prevents inheriting 'gpt-5-mini' (project default) when falling back to 'default-highflow'
+            const projectProvider = context.metadata.project.aiProvider;
+            if (projectProvider === provider) {
+                candidateModel = context.metadata.project.aiModel as AIModel;
+            } else {
+                console.warn(
+                    `[AIServiceManager] Skipping Project AI Model inheritance: Project Provider (${projectProvider}) != Current Provider (${provider})`
+                );
+            }
         }
 
         if (candidateModel) {
