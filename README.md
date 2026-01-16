@@ -11,9 +11,9 @@
 
 HighFlow is a next-generation workflow manager that orchestrates complex tasks using multiple AI agents. It combines traditional project management tools (Kanban, DAG visualization) with an intelligent execution engine capable of automating tasks, generating content, and interacting with your local development environment.
 
-<iframe width="830" height="467" src="https://www.youtube.com/embed/DfGlhDefjGU" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+[![Watch the video](https://img.youtube.com/vi/DfGlhDefjGU/hqdefault.jpg)](https://www.youtube.com/embed/DfGlhDefjGU)
 
-<iframe width="830" height="467" src="https://www.youtube.com/embed/Cf6WJG3jQQQ" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+[![Watch the video](https://img.youtube.com/vi/Cf6WJG3jQQQ/hqdefault.jpg)](https://www.youtube.com/embed/Cf6WJG3jQQQ)
 
 ![project_kanban](.github/images/1_kanban.png)
 ![project_overview](.github/images/2_overview.png)
