@@ -15,6 +15,8 @@ HighFlow is a next-generation workflow manager that orchestrates complex tasks u
 
 [![Watch the video](.github/images/screenshot_trpg.png)](https://www.youtube.com/embed/Cf6WJG3jQQQ)
 
+**The example projects shown in the videos can be imported directly via the marketplace**
+
 ![project_kanban](.github/images/1_kanban.png)
 ![project_overview](.github/images/2_overview.png)
 
