@@ -21,6 +21,7 @@ import { Diff } from 'vue-diff';
 import 'vue-diff/dist/index.css';
 import CodeEditor from '../common/CodeEditor.vue';
 import MCPToolExecutionLog, { type LogEntry as MCPLogEntry } from '../ai/MCPToolExecutionLog.vue';
+import { useI18n } from 'vue-i18n';
 
 // Output format type
 type OutputFormat =
@@ -249,6 +250,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { t } = useI18n();
 
 // MCP Tool Execution Logs
 const projectStore = useProjectStore();
@@ -1773,25 +1775,25 @@ const scriptLogs = computed(() => {
 // Format display name
 const formatDisplayName = computed(() => {
     const names: Record<OutputFormat, string> = {
-        text: 'Text',
-        markdown: 'Markdown',
-        html: 'HTML',
-        pdf: 'PDF',
-        json: 'JSON',
-        yaml: 'YAML',
-        csv: 'CSV',
-        sql: 'SQL',
-        shell: 'Shell Script',
-        mermaid: 'Mermaid Diagram',
-        svg: 'SVG Image',
-        png: 'PNG Image',
-        mp4: 'MP4 Video',
-        mp3: 'MP3 Audio',
-        diff: 'Diff',
-        log: 'Log',
+        text: t('result.preview.format_text'),
+        markdown: t('result.preview.format_markdown'),
+        html: t('result.preview.format_html'),
+        pdf: t('result.preview.format_pdf'),
+        json: t('result.preview.format_json'),
+        yaml: t('result.preview.format_yaml'),
+        csv: t('result.preview.format_csv'),
+        sql: t('result.preview.format_sql'),
+        shell: t('result.preview.format_shell'),
+        mermaid: t('result.preview.format_mermaid'),
+        svg: t('result.preview.format_svg'),
+        png: t('result.preview.format_png'),
+        mp4: t('result.preview.format_mp4'),
+        mp3: t('result.preview.format_mp3'),
+        diff: t('result.preview.format_diff'),
+        log: t('result.preview.format_log'),
         code: codeLanguage.value.charAt(0).toUpperCase() + codeLanguage.value.slice(1),
     };
-    return names[outputFormat.value] || 'Text';
+    return names[outputFormat.value] || t('result.preview.format_text');
 });
 
 // Dynamic Label for "AI Response" button
@@ -1806,13 +1808,13 @@ const resultLabel = computed(() => {
             const path = config.localFile?.pathTemplate;
             if (path) {
                 // Get filename part
-                return path.split(/[/\\]/).pop() || 'Local File';
+                return path.split(/[/\\]/).pop() || t('result.preview.local_file');
             }
-            return 'Local File';
+            return t('result.preview.local_file');
         }
-        return 'Output Result';
+        return t('result.preview.output_result');
     }
-    return 'AI Response';
+    return t('result.preview.ai_response');
 });
 
 const resultSubLabel = computed(() => {
@@ -2038,8 +2040,8 @@ async function renderMermaid() {
         const { svg } = await mermaid.default.render('mermaid-diagram', cleanContent.trim());
         renderedMermaid.value = svg;
     } catch (err) {
-        console.error('Mermaid render error:', err);
-        renderedMermaid.value = `<div class="text-red-500">Mermaid 다이어그램 렌더링 오류: ${err}</div>`;
+        // console.error('Mermaid render error:', err);
+        renderedMermaid.value = `<div class="text-red-500">${t('result.preview.mermaid_error')}: ${err}</div>`;
     }
 }
 
@@ -2062,7 +2064,7 @@ async function renderDrawerMermaid() {
     } catch (err) {
         console.error('Drawer Mermaid render error:', err);
         drawerMermaidSvg.value = `<div class="p-4 text-red-500 bg-red-50 dark:bg-red-900/20 rounded">
-            <p class="font-bold">Mermaid Error:</p>
+            <p class="font-bold">${t('result.preview.mermaid_error')}:</p>
         </div>`;
     }
 }
@@ -2122,7 +2124,7 @@ function renderMarkdown() {
     } catch (e: any) {
         console.error('[EnhancedResultPreview] renderMarkdown failed:', e);
         markdownHtml.value = `<div class="p-4 text-red-500 border border-red-200 rounded bg-red-50">
-            <h3 class="font-bold mb-2">Error rendering markdown</h3>
+            <h3 class="font-bold mb-2">${t('result.preview.error_rendering_markdown')}</h3>
             <pre class="whitespace-pre-wrap text-xs font-mono">${e.message}\n${e.stack || ''}</pre>
         </div>`;
     }
@@ -2513,7 +2515,7 @@ onMounted(() => {
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                                    결과 미리보기
+                                    {{ t('result.preview.title') }}
                                 </h2>
                                 <span class="text-sm text-gray-500 dark:text-gray-400">
                                     {{ task?.title }}
@@ -2590,7 +2592,7 @@ onMounted(() => {
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                                     @click="toggleFullscreen"
-                                    title="전체화면"
+                                    :title="t('result.preview.full_screen')"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2619,7 +2621,7 @@ onMounted(() => {
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                                     @click="showVersionHistory = !showVersionHistory"
-                                    title="버전 기록"
+                                    :title="t('result.preview.version_history')"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2640,7 +2642,7 @@ onMounted(() => {
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                                     @click="handleClose"
-                                    title="닫기"
+                                    :title="t('result.preview.close')"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2669,11 +2671,13 @@ onMounted(() => {
                             <div
                                 class="p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider flex justify-between items-center"
                             >
-                                <span>파일 목록 ({{ resultFiles.length + 1 }})</span>
+                                <span>{{
+                                    t('result.preview.file_list', { count: resultFiles.length + 1 })
+                                }}</span>
                                 <button
                                     class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
                                     @click="isTreeView = !isTreeView"
-                                    title="트리/리스트 뷰 전환"
+                                    :title="t('result.preview.toggle_view')"
                                 >
                                     <svg
                                         v-if="isTreeView"
@@ -2711,7 +2715,7 @@ onMounted(() => {
                                     <div
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1"
                                     >
-                                        Suggested Tasks
+                                        {{ t('result.preview.suggested_tasks') }}
                                     </div>
                                     <div class="space-y-1">
                                         <div
@@ -2741,7 +2745,7 @@ onMounted(() => {
                                                         d="M12 4v16m8-8H4"
                                                     />
                                                 </svg>
-                                                Create Task
+                                                {{ t('result.preview.create_task') }}
                                             </button>
                                         </div>
                                     </div>
@@ -2905,7 +2909,9 @@ onMounted(() => {
                                                 class="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
                                                 {{
-                                                    file.type === 'created' ? 'Created' : 'Modified'
+                                                    file.type === 'created'
+                                                        ? t('result.preview.created')
+                                                        : t('result.preview.modified')
                                                 }}
                                             </div>
                                         </div>
@@ -2934,7 +2940,7 @@ onMounted(() => {
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
                                         >
-                                            Result Preview
+                                            {{ t('result.preview.result_preview') }}
                                         </button>
                                         <button
                                             v-if="outputFormat === 'html'"
@@ -2946,7 +2952,7 @@ onMounted(() => {
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
                                         >
-                                            Split View
+                                            {{ t('result.preview.split_view') }}
                                         </button>
                                         <button
                                             v-if="scriptLogs.length > 0"
@@ -2957,7 +2963,7 @@ onMounted(() => {
                                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
-                                            title="View script execution logs (console.log output)"
+                                            :title="t('result.preview.view_script_logs')"
                                         >
                                             <div class="flex items-center gap-2">
                                                 <svg
@@ -2972,7 +2978,11 @@ onMounted(() => {
                                                     />
                                                     <path d="M7 10h6M7 12h3" />
                                                 </svg>
-                                                <span>Logs ({{ scriptLogs.length }})</span>
+                                                <span>{{
+                                                    t('result.preview.logs', {
+                                                        count: scriptLogs.length,
+                                                    })
+                                                }}</span>
                                             </div>
                                         </button>
                                         <!-- Diff View Button -->
@@ -2990,8 +3000,8 @@ onMounted(() => {
                                             :disabled="!hasPreviousResult"
                                             :title="
                                                 hasPreviousResult
-                                                    ? 'Compare with previous result'
-                                                    : 'No previous result to compare'
+                                                    ? t('result.preview.compare_previous_result')
+                                                    : t('result.preview.no_previous_result_compare')
                                             "
                                         >
                                             <div class="flex items-center gap-2">
@@ -3008,7 +3018,7 @@ onMounted(() => {
                                                         d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                                                     />
                                                 </svg>
-                                                <span>Diff View</span>
+                                                <span>{{ t('result.preview.diff_view') }}</span>
                                             </div>
                                         </button>
                                     </div>
@@ -3037,7 +3047,7 @@ onMounted(() => {
                                                 v-if="scriptLogs.length === 0"
                                                 class="text-gray-500 italic text-center py-8"
                                             >
-                                                No logs generated during script execution
+                                                {{ t('result.preview.no_script_logs') }}
                                             </div>
                                         </div>
                                     </div>
@@ -3077,13 +3087,12 @@ onMounted(() => {
                                                 <p
                                                     class="text-lg font-medium text-gray-700 dark:text-gray-300"
                                                 >
-                                                    No Previous Result
+                                                    {{ t('result.preview.no_previous_result') }}
                                                 </p>
                                                 <p
                                                     class="text-sm mt-2 text-gray-500 dark:text-gray-400"
                                                 >
-                                                    Execute this task at least twice to see
-                                                    differences
+                                                    {{ t('result.preview.execute_twice_for_diff') }}
                                                 </p>
                                             </div>
                                         </div>
@@ -3115,7 +3124,7 @@ onMounted(() => {
                                                         d="M13 10V3L4 14h7v7l9-11h-7z"
                                                     ></path>
                                                 </svg>
-                                                AI Response
+                                                {{ t('result.preview.ai_response') }}
                                             </div>
                                             <div
                                                 class="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed"
@@ -3144,7 +3153,8 @@ onMounted(() => {
                                                 <span
                                                     class="font-medium text-gray-900 dark:text-white"
                                                 >
-                                                    {{ formatDisplayName }} 형식
+                                                    {{ formatDisplayName }}
+                                                    {{ t('result.preview.format_type') }}
                                                 </span>
                                                 <span
                                                     v-if="outputFormat === 'code'"
@@ -3190,7 +3200,11 @@ onMounted(() => {
                                                             d="M5 13l4 4L19 7"
                                                         />
                                                     </svg>
-                                                    {{ copySuccess ? '복사됨!' : '복사' }}
+                                                    {{
+                                                        copySuccess
+                                                            ? t('result.preview.copied')
+                                                            : t('result.preview.copy')
+                                                    }}
                                                 </button>
                                                 <button
                                                     class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
@@ -3209,7 +3223,7 @@ onMounted(() => {
                                                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                                                         />
                                                     </svg>
-                                                    다운로드
+                                                    {{ t('result.preview.download') }}
                                                 </button>
                                             </div>
                                         </div>
@@ -3241,10 +3255,10 @@ onMounted(() => {
                                                         />
                                                     </svg>
                                                     <p class="text-lg font-medium">
-                                                        결과물이 없습니다
+                                                        {{ t('result.preview.no_result') }}
                                                     </p>
                                                     <p class="text-sm mt-1">
-                                                        태스크가 실행되면 결과가 여기에 표시됩니다.
+                                                        {{ t('result.preview.waiting_for_result') }}
                                                     </p>
                                                 </div>
                                             </div>
@@ -3272,12 +3286,16 @@ onMounted(() => {
                                                     >
                                                         <span
                                                             class="text-xs font-medium text-gray-500 uppercase"
-                                                            >Input / Source</span
+                                                            >{{
+                                                                t('result.preview.input_source')
+                                                            }}</span
                                                         >
                                                         <div class="flex items-center gap-2">
-                                                            <span class="text-xs text-gray-400"
-                                                                >Right-click to add feedback</span
-                                                            >
+                                                            <span class="text-xs text-gray-400">{{
+                                                                t(
+                                                                    'result.preview.right_click_feedback'
+                                                                )
+                                                            }}</span>
                                                         </div>
                                                     </div>
                                                     <div class="flex-1 relative">
@@ -3313,7 +3331,7 @@ onMounted(() => {
                                                     >
                                                         <span
                                                             class="text-xs font-medium text-gray-500 uppercase"
-                                                            >Preview</span
+                                                            >{{ t('result.preview.preview') }}</span
                                                         >
                                                     </div>
 
@@ -3372,9 +3390,9 @@ onMounted(() => {
                                                             class="text-sm font-mono"
                                                             v-html="renderJsonTree(parsedJsonData)"
                                                         />
-                                                        <pre v-else class="text-sm text-gray-500">
-Invalid JSON</pre
-                                                        >
+                                                        <pre v-else class="text-sm text-gray-500">{{
+                                                            t('result.preview.invalid_json')
+                                                        }}</pre>
                                                     </div>
 
                                                     <!-- Default/Text Preview -->
@@ -3422,8 +3440,12 @@ Invalid JSON</pre
                                                                         : 'bg-gray-400'
                                                                 "
                                                             ></span>
-                                                            Auto-scroll:
-                                                            {{ isAutoScrollActive ? 'On' : 'Off' }}
+                                                            {{ t('result.preview.auto_scroll') }}:
+                                                            {{
+                                                                isAutoScrollActive
+                                                                    ? t('result.preview.on')
+                                                                    : t('result.preview.off')
+                                                            }}
                                                         </button>
                                                     </div>
 
@@ -3442,11 +3464,20 @@ Invalid JSON</pre
                                                                     {{
                                                                         selectedCodeBlock.language ===
                                                                         'html'
-                                                                            ? 'HTML Preview'
+                                                                            ? t(
+                                                                                  'result.preview.html_preview'
+                                                                              )
                                                                             : selectedCodeBlock.language ===
                                                                                 'mermaid'
-                                                                              ? 'Mermaid Preview'
-                                                                              : `Preview: ${selectedCodeBlock.language}`
+                                                                              ? t(
+                                                                                    'result.preview.mermaid_preview'
+                                                                                )
+                                                                              : t(
+                                                                                    'result.preview.code_preview',
+                                                                                    {
+                                                                                        lang: selectedCodeBlock.language,
+                                                                                    }
+                                                                                )
                                                                     }}
                                                                 </span>
 
@@ -3471,7 +3502,11 @@ Invalid JSON</pre
                                                                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                                         "
                                                                     >
-                                                                        Preview
+                                                                        {{
+                                                                            t(
+                                                                                'result.preview.preview'
+                                                                            )
+                                                                        }}
                                                                     </button>
                                                                     <button
                                                                         @click="drawerTab = 'code'"
@@ -3482,7 +3517,9 @@ Invalid JSON</pre
                                                                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                                         "
                                                                     >
-                                                                        Code
+                                                                        {{
+                                                                            t('result.preview.code')
+                                                                        }}
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -3728,7 +3765,7 @@ Invalid JSON</pre
                                                     class="bg-gray-900 rounded-lg p-4 overflow-auto border border-gray-700"
                                                 >
                                                     <div class="text-xs text-gray-500 mb-2">
-                                                        Mermaid Source
+                                                        {{ t('result.preview.mermaid_source') }}
                                                     </div>
                                                     <pre
                                                         class="font-mono text-sm text-gray-300 h-full"
@@ -3743,16 +3780,24 @@ Invalid JSON</pre
                                                     <div
                                                         class="text-xs text-gray-500 mb-2 flex justify-between items-center"
                                                     >
-                                                        <span>Preview</span>
+                                                        <span>{{
+                                                            t('result.preview.preview')
+                                                        }}</span>
                                                         <button
                                                             @click="toggleMaximize"
                                                             class="text-blue-500 hover:text-blue-400 text-xs px-2 py-1 rounded hover:bg-white/5 transition-colors"
-                                                            title="Toggle Full Width"
+                                                            :title="
+                                                                t(
+                                                                    'result.preview.toggle_full_width'
+                                                                )
+                                                            "
                                                         >
                                                             {{
                                                                 isPreviewMaximized
-                                                                    ? '축소'
-                                                                    : '전체화면'
+                                                                    ? t('result.preview.minimize')
+                                                                    : t(
+                                                                          'result.preview.full_screen'
+                                                                      )
                                                             }}
                                                         </button>
                                                     </div>
@@ -3793,7 +3838,9 @@ Invalid JSON</pre
                                                     <summary
                                                         class="text-sm text-gray-400 cursor-pointer hover:text-gray-300"
                                                     >
-                                                        SVG 소스 보기
+                                                        <span class="text-xs">{{
+                                                            t('result.preview.view_svg_source')
+                                                        }}</span>
                                                     </summary>
                                                     <pre
                                                         class="mt-2 text-sm font-mono text-gray-300 bg-gray-900 p-4 rounded overflow-x-auto max-h-48"
@@ -3819,7 +3866,7 @@ Invalid JSON</pre
                                                 />
                                                 <div class="mt-4 text-sm text-gray-500 font-mono">
                                                     {{ (content?.length || 0).toLocaleString() }}
-                                                    bytes
+                                                    {{ t('result.preview.bytes') }}
                                                 </div>
                                             </div>
 
@@ -3840,7 +3887,7 @@ Invalid JSON</pre
                                                         "
                                                         type="video/mp4"
                                                     />
-                                                    브라우저가 비디오 재생을 지원하지 않습니다.
+                                                    {{ t('result.preview.video_not_supported') }}
                                                 </video>
                                             </div>
 
@@ -3882,7 +3929,9 @@ Invalid JSON</pre
                                                             "
                                                             type="audio/mpeg"
                                                         />
-                                                        브라우저가 오디오 재생을 지원하지 않습니다.
+                                                        {{
+                                                            t('result.preview.audio_not_supported')
+                                                        }}
                                                     </audio>
                                                 </div>
                                             </div>
@@ -3939,9 +3988,9 @@ Invalid JSON</pre
                                                     <div
                                                         class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700"
                                                     >
-                                                        <span class="text-sm text-gray-400"
-                                                            >로그 뷰어</span
-                                                        >
+                                                        <span class="text-sm text-gray-400">{{
+                                                            t('result.preview.log_viewer')
+                                                        }}</span>
                                                         <div
                                                             class="flex items-center gap-2 text-xs"
                                                         >
@@ -3949,25 +3998,33 @@ Invalid JSON</pre
                                                                 ><span
                                                                     class="w-2 h-2 rounded-full bg-red-500"
                                                                 />
-                                                                Error</span
+                                                                {{
+                                                                    t('result.preview.log_error')
+                                                                }}</span
                                                             >
                                                             <span class="flex items-center gap-1"
                                                                 ><span
                                                                     class="w-2 h-2 rounded-full bg-yellow-500"
                                                                 />
-                                                                Warn</span
+                                                                {{
+                                                                    t('result.preview.log_warn')
+                                                                }}</span
                                                             >
                                                             <span class="flex items-center gap-1"
                                                                 ><span
                                                                     class="w-2 h-2 rounded-full bg-blue-500"
                                                                 />
-                                                                Info</span
+                                                                {{
+                                                                    t('result.preview.log_info')
+                                                                }}</span
                                                             >
                                                             <span class="flex items-center gap-1"
                                                                 ><span
                                                                     class="w-2 h-2 rounded-full bg-gray-500"
                                                                 />
-                                                                Debug</span
+                                                                {{
+                                                                    t('result.preview.log_debug')
+                                                                }}</span
                                                             >
                                                         </div>
                                                     </div>
@@ -4072,15 +4129,17 @@ Invalid JSON</pre
                                                             d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
                                                         />
                                                     </svg>
-                                                    <p class="text-lg font-medium">PDF 파일</p>
+                                                    <p class="text-lg font-medium">
+                                                        {{ t('result.preview.pdf_file') }}
+                                                    </p>
                                                     <p class="text-sm mt-1 mb-4">
-                                                        다운로드하여 PDF 뷰어에서 확인하세요.
+                                                        {{ t('result.preview.download_pdf_desc') }}
                                                     </p>
                                                     <button
                                                         class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
                                                         @click="handleDownload"
                                                     >
-                                                        PDF 다운로드
+                                                        {{ t('result.preview.download_pdf') }}
                                                     </button>
                                                 </div>
                                             </div>
@@ -4109,7 +4168,7 @@ Invalid JSON</pre
                                                 <h3
                                                     class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4 px-2"
                                                 >
-                                                    Interaction Log (Latest First)
+                                                    {{ t('result.preview.interaction_log') }}
                                                 </h3>
                                                 <div class="space-y-4">
                                                     <div
@@ -4175,11 +4234,17 @@ Invalid JSON</pre
                                                                         "
                                                                         class="text-xs text-gray-500 italic mt-2"
                                                                     >
-                                                                        Tool Call: {{ block.name }}
+                                                                        {{
+                                                                            t(
+                                                                                'result.preview.tool_call'
+                                                                            )
+                                                                        }}: {{ block.name }}
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <div v-else>No content</div>
+                                                            <div v-else>
+                                                                {{ t('result.preview.no_content') }}
+                                                            </div>
                                                         </div>
 
                                                         <div
@@ -4196,7 +4261,7 @@ Invalid JSON</pre
                                                                 "
                                                                 class="text-green-600 font-bold mb-1"
                                                             >
-                                                                File Op:
+                                                                {{ t('result.preview.file_op') }}:
                                                                 {{
                                                                     (item.metadata?.result as any)
                                                                         .file.filePath
@@ -4231,7 +4296,7 @@ Invalid JSON</pre
                                             <div
                                                 class="text-xs font-semibold text-gray-500 uppercase"
                                             >
-                                                버전 기록
+                                                {{ t('result.preview.version_history') }}
                                             </div>
                                             <div class="space-y-2">
                                                 <!-- Current Version -->
@@ -4250,13 +4315,13 @@ Invalid JSON</pre
                                                         <span
                                                             class="font-medium text-gray-900 dark:text-gray-100"
                                                         >
-                                                            최신 버전 (Current)
+                                                            {{ t('result.preview.latest_version') }}
                                                         </span>
                                                         <span
                                                             v-if="!selectedVersionId"
                                                             class="text-xs text-blue-600 dark:text-blue-400 font-bold"
                                                         >
-                                                            Viewing
+                                                            {{ t('result.preview.viewing') }}
                                                         </span>
                                                     </div>
                                                     <div class="text-xs text-gray-500">
@@ -4265,7 +4330,7 @@ Invalid JSON</pre
                                                                 ? new Date(
                                                                       task.completedAt
                                                                   ).toLocaleString()
-                                                                : '작업 중'
+                                                                : t('result.preview.working')
                                                         }}
                                                     </div>
                                                 </div>
@@ -4288,7 +4353,11 @@ Invalid JSON</pre
                                                         <span
                                                             class="font-medium text-gray-900 dark:text-gray-100"
                                                         >
-                                                            버전 {{ history.length - index }}
+                                                            {{
+                                                                t('result.preview.version_n', {
+                                                                    n: history.length - index,
+                                                                })
+                                                            }}
                                                         </span>
                                                         <span class="text-xs text-gray-500">
                                                             {{
@@ -4311,7 +4380,7 @@ Invalid JSON</pre
                                                     v-if="history.length === 0"
                                                     class="text-center text-gray-500 text-xs py-4"
                                                 >
-                                                    저장된 버전 기록이 없습니다.
+                                                    {{ t('result.preview.no_version_history') }}
                                                 </div>
                                             </div>
                                         </div>
@@ -4339,11 +4408,15 @@ Invalid JSON</pre
                                             ? item.file +
                                               ':' +
                                               (item.type === 'code'
-                                                  ? 'Line ' + item.range?.startLineNumber
-                                                  : 'Text')
+                                                  ? t('result.preview.line') +
+                                                    ' ' +
+                                                    item.range?.startLineNumber
+                                                  : t('result.preview.text'))
                                             : item.type === 'code'
-                                              ? 'Line ' + item.range?.startLineNumber
-                                              : 'Text'
+                                              ? t('result.preview.line') +
+                                                ' ' +
+                                                item.range?.startLineNumber
+                                              : t('result.preview.text')
                                     }}]</span
                                 >
                                 <span class="truncate max-w-[150px]">{{ item.comment }}</span>
@@ -4361,13 +4434,13 @@ Invalid JSON</pre
                             <label
                                 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                             >
-                                피드백 요청
+                                {{ t('result.preview.request_feedback') }}
                             </label>
                             <textarea
                                 v-model="feedback"
                                 rows="2"
                                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                                placeholder="수정이 필요한 내용을 입력하세요..."
+                                :placeholder="t('result.preview.feedback_placeholder')"
                             />
                         </div>
 
@@ -4378,7 +4451,7 @@ Invalid JSON</pre
                                     class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                                     @click="handleClose"
                                 >
-                                    닫기
+                                    {{ t('result.preview.close') }}
                                 </button>
                                 <div class="flex gap-2">
                                     <button
@@ -4386,14 +4459,14 @@ Invalid JSON</pre
                                         :disabled="!feedback.trim()"
                                         @click="handleRetry"
                                     >
-                                        피드백 요청
+                                        {{ t('result.preview.request_feedback') }}
                                     </button>
                                     <button
                                         v-if="task?.status === 'in_review'"
                                         class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
                                         @click="handleApprove"
                                     >
-                                        승인
+                                        {{ t('result.preview.approve') }}
                                     </button>
                                 </div>
                             </div>
