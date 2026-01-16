@@ -79,6 +79,7 @@ describe('EnhancedResultPreview', () => {
                 stubs: {
                     'v-icon': true,
                     transition: false,
+                    Teleport: true,
                 },
                 mocks: {
                     $t: (msg: string) => msg,
@@ -96,12 +97,19 @@ describe('EnhancedResultPreview', () => {
                 } as any,
             },
         });
+
+        // Mock window.electron
+        (window as any).electron = {
+            taskHistory: { getByTask: vi.fn().mockResolvedValue([]) },
+            fs: { exists: vi.fn(), stat: vi.fn(), readDir: vi.fn() },
+            app: { getPaths: vi.fn() },
+        };
     });
 
     it('should use i18n for the title', () => {
         expect(useI18n).toHaveBeenCalled();
         // Check if the title is rendered using the key (since mock t returns key)
-        expect(wrapper.text()).toContain('result.preview.result_preview');
+        expect(wrapper.text()).toContain('result.preview.title');
     });
 
     it('should use i18n for action buttons', async () => {
@@ -114,7 +122,12 @@ describe('EnhancedResultPreview', () => {
         expect(closeBtn.exists()).toBe(true);
     });
 
-    it('should render content with markdown renderer', () => {
+    it('should render content with markdown renderer', async () => {
+        // Wait for nextTick because the component uses a watcher with nextTick to trigger render
+        await wrapper.vm.$nextTick();
+        // Wait one more tick for the async renderMarkdown logic (safe guard)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
         expect(wrapper.text()).toContain('Test Result');
     });
 });
