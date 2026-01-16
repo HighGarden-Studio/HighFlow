@@ -177,8 +177,9 @@ def hello():
 
         const result = buildPlainTextResult(codeWithLanguage, customMeta);
 
-        expect(result.subType).toBe('code');
-        expect(result.meta).toHaveProperty('language', 'python');
+        expect(result.subType).toBe('markdown');
+        // Language detection is handled by the renderer (markdown-it/marked) not the result builder
+        expect(result.meta).not.toHaveProperty('language');
         expect(result.meta).toHaveProperty('provider', 'anthropic');
     });
 });

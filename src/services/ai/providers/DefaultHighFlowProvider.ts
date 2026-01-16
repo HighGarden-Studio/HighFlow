@@ -310,12 +310,61 @@ export class DefaultHighFlowProvider extends GeminiProvider {
 
             const toolDeclarations = this.mapTools(sanitizedConfig.tools);
 
+            // Prepare content parts (Text + Attachments)
+            const requestParts: any[] = [{ text: prompt }];
+
+            // Handle Context Attachments (e.g. from LocalFileProvider)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+                console.log(
+                    `[DefaultHighFlowProvider] Found ${attachments.length} attachments in context`
+                );
+
+                for (const att of attachments) {
+                    // Handle Image Attachments
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            // Strip prefix if present
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            requestParts.push({
+                                inlineData: {
+                                    mimeType: att.mime || 'image/png',
+                                    data: base64Data,
+                                },
+                            });
+                            console.log(`[DefaultHighFlowProvider] Attached image: ${att.name}`);
+                        }
+                    }
+                    // Handle Text File Attachments (bypass truncation)
+                    else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+
+                        if (isText) {
+                            requestParts.push({
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                            console.log(
+                                `[DefaultHighFlowProvider] Attached text file: ${att.name} (${att.value.length} chars)`
+                            );
+                        }
+                    }
+                }
+            }
+
             // Build Gemini API format request
             const request: any = {
                 contents: [
                     {
                         role: 'user',
-                        parts: [{ text: prompt }],
+                        parts: requestParts,
                     },
                 ],
                 generationConfig: {
@@ -506,6 +555,61 @@ export class DefaultHighFlowProvider extends GeminiProvider {
 
             const { systemInstruction: msgSystemInstruction, contents } =
                 this.buildGeminiConversation(sanitizedMessages, sanitizedConfig);
+
+            // Handle Context Attachments (e.g. from LocalFileProvider in Chat)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+                console.log(
+                    `[DefaultHighFlowProvider] Found ${attachments.length} attachments in chat context`
+                );
+
+                // Find or create a user message to attach to
+                // We prefer attaching to the LAST user message to keep it relevant to the current turn
+                let targetMessage = contents
+                    .slice()
+                    .reverse()
+                    .find((c) => c.role === 'user');
+
+                if (!targetMessage) {
+                    // No user message found? Create one at the start (contextual data)
+                    // Note: This might be rare in chat, but possible if only system prompts exist
+                    targetMessage = { role: 'user', parts: [] };
+                    contents.push(targetMessage);
+                }
+
+                for (const att of attachments) {
+                    // Handle Image Attachments
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            targetMessage.parts.push({
+                                inlineData: {
+                                    mimeType: att.mime || 'image/png',
+                                    data: base64Data,
+                                },
+                            });
+                        }
+                    }
+                    // Handle Text File Attachments
+                    else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+
+                        if (isText) {
+                            targetMessage.parts.push({
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
 
             // Merge system instructions
             const systemInstruction = [additionalSystemPrompt, msgSystemInstruction]

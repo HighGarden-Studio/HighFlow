@@ -138,6 +138,60 @@ export class GPTProvider extends BaseAIProvider {
             // 2. Build Base Messages (Provider Logic)
             const baseMessages = this.buildChatMessages(messages);
 
+            // Handle Context Attachments (e.g. from LocalFileProvider in Chat)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+
+                // Find or create a user message to attach to
+                // GPT expects messages in order, we usually attach to the last one
+                let targetMessage = baseMessages
+                    .slice()
+                    .reverse()
+                    .find((m: any) => m.role === 'user') as any;
+
+                if (!targetMessage) {
+                    targetMessage = { role: 'user', content: [] };
+                    (baseMessages as any[]).push(targetMessage);
+                }
+
+                // Ensure content is an array
+                if (typeof targetMessage.content === 'string') {
+                    targetMessage.content = [{ type: 'text', text: targetMessage.content }];
+                } else if (!targetMessage.content) {
+                    targetMessage.content = [];
+                }
+
+                for (const att of attachments) {
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            targetMessage.content.push({
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${att.mime || 'image/png'};base64,${base64Data}`,
+                                },
+                            });
+                        }
+                    } else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+                        if (isText) {
+                            targetMessage.content.push({
+                                type: 'text',
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
+
             // Inject Date/Context
             const additionalSystemPrompt = this.buildSystemPrompt(config, context);
             if (additionalSystemPrompt) {
@@ -423,10 +477,55 @@ export class GPTProvider extends BaseAIProvider {
                 });
             }
 
-            messages.push({
-                role: 'user',
-                content: prompt,
-            });
+            const userContentParts: any[] = [{ type: 'text', text: prompt }];
+
+            // Handle Context Attachments (e.g. from LocalFileProvider)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+                for (const att of attachments) {
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            userContentParts.push({
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${att.mime || 'image/png'};base64,${base64Data}`,
+                                },
+                            });
+                        }
+                    } else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+                        if (isText) {
+                            userContentParts.push({
+                                type: 'text',
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // If we have only 1 text part and no images, revert to simple string for max compatibility
+            // (though OpenAI supports array of 1 text item too)
+            if (userContentParts.length === 1 && userContentParts[0].type === 'text') {
+                messages.push({
+                    role: 'user',
+                    content: userContentParts[0].text,
+                });
+            } else {
+                messages.push({
+                    role: 'user',
+                    content: userContentParts as any,
+                });
+            }
 
             // 2. Adapt Messages
             // Note: Adapter might change 'system' to 'developer'
@@ -498,6 +597,54 @@ export class GPTProvider extends BaseAIProvider {
         if (Array.isArray(input)) {
             // Use existing buildChatMessages to correctly handle multi-modal content
             messages = this.buildChatMessages(input);
+
+            // Handle Context Attachments (e.g. from LocalFileProvider in Stream Chat)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+                let targetMessage = messages
+                    .slice()
+                    .reverse()
+                    .find((m: any) => m.role === 'user') as any;
+
+                if (!targetMessage) {
+                    targetMessage = { role: 'user', content: [] };
+                    (messages as any[]).push(targetMessage);
+                }
+
+                if (typeof targetMessage.content === 'string') {
+                    targetMessage.content = [{ type: 'text', text: targetMessage.content }];
+                } else if (!targetMessage.content) {
+                    targetMessage.content = [];
+                }
+
+                for (const att of attachments) {
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:'))
+                                base64Data = base64Data.split(',')[1];
+                            targetMessage.content.push({
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${att.mime || 'image/png'};base64,${base64Data}`,
+                                },
+                            });
+                        }
+                    } else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+                        if (isText) {
+                            targetMessage.content.push({
+                                type: 'text',
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
 
             // Inject System Prompt (Date/Context)
             const systemPrompt = this.buildSystemPrompt(config, context);
@@ -719,7 +866,7 @@ export class GPTProvider extends BaseAIProvider {
                             return {
                                 type: 'image_url',
                                 image_url: {
-                                    url: `data:${part.mimeType};base64,${part.data}`,
+                                    url: `data:${part.mimeType || 'image/png'};base64,${part.data}`,
                                 },
                             };
                         }

@@ -139,6 +139,56 @@ export class GeminiProvider extends BaseAIProvider {
             const { systemInstruction: msgSystemInstruction, contents } =
                 this.buildGeminiConversation(messages, config);
 
+            // Handle Context Attachments (e.g. from LocalFileProvider in Chat)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+
+                // Find or create a user message to attach to
+                // We prefer attaching to the LAST user message to keep it relevant to the current turn
+                let targetMessage = contents
+                    .slice()
+                    .reverse()
+                    .find((c) => c.role === 'user');
+
+                if (!targetMessage) {
+                    targetMessage = { role: 'user', parts: [] };
+                    contents.push(targetMessage);
+                }
+
+                for (const att of attachments) {
+                    // Handle Image Attachments
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            targetMessage.parts.push({
+                                inlineData: {
+                                    mimeType: att.mime || 'image/png',
+                                    data: base64Data,
+                                },
+                            });
+                        }
+                    }
+                    // Handle Text File Attachments
+                    else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+
+                        if (isText) {
+                            targetMessage.parts.push({
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
+
             // Inject Date/Context
             const additionalSystemPrompt = this.buildSystemPrompt(config, context);
             const systemInstruction = [additionalSystemPrompt, msgSystemInstruction]
@@ -274,9 +324,55 @@ export class GeminiProvider extends BaseAIProvider {
                 throw new Error('Request aborted');
             }
             const systemPrompt = this.buildSystemPrompt(config, context);
+
+            // Prepare content parts (Text + Attachments)
+            const requestParts: any[] = [{ text: prompt }];
+
+            // Handle Context Attachments (e.g. from LocalFileProvider in single task execution)
+            if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+                const attachments = context.metadata.attachments;
+                for (const att of attachments) {
+                    // Handle Image Attachments
+                    if (att.type === 'image' && att.data) {
+                        let base64Data = att.data;
+                        if (typeof base64Data === 'string') {
+                            if (base64Data.startsWith('data:')) {
+                                base64Data = base64Data.split(',')[1];
+                            }
+
+                            requestParts.push({
+                                inlineData: {
+                                    mimeType: att.mime || 'image/png',
+                                    data: base64Data,
+                                },
+                            });
+                        }
+                    }
+                    // Handle Text File Attachments
+                    else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                        const isText =
+                            att.mime?.startsWith('text/') ||
+                            att.mime === 'application/json' ||
+                            att.mime === 'application/javascript' ||
+                            att.mime?.includes('xml');
+
+                        if (isText) {
+                            requestParts.push({
+                                text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                            });
+                        }
+                    }
+                }
+            }
+
             const result = await client.models.generateContent({
                 model: config.model,
-                contents: prompt,
+                contents: [
+                    {
+                        role: 'user',
+                        parts: requestParts,
+                    },
+                ],
                 config: {
                     temperature: config.temperature,
                     topP: config.topP,
@@ -350,12 +446,59 @@ export class GeminiProvider extends BaseAIProvider {
                 systemInstruction = this.buildSystemPrompt(config, context);
             }
 
-            // Build proper Gemini contents (excluding system messages which go to systemInstruction)
+            // Build proper Gemini contents
             contents = this.buildGeminiContents(input.filter((m) => m.role !== 'system'));
         } else {
             // Legacy string input
-            contents = input;
             systemInstruction = this.buildSystemPrompt(config, context);
+            contents = [{ role: 'user', parts: [{ text: input }] }];
+        }
+
+        // Handle Context Attachments (shared logic for stream)
+        if (context?.metadata?.attachments && Array.isArray(context.metadata.attachments)) {
+            const attachments = context.metadata.attachments;
+            // Find or create a user message to attach to (last user message)
+            let targetMessage: any;
+            if (Array.isArray(contents)) {
+                targetMessage = contents
+                    .slice()
+                    .reverse()
+                    .find((c: any) => c.role === 'user');
+                if (!targetMessage) {
+                    targetMessage = { role: 'user', parts: [] };
+                    (contents as any[]).push(targetMessage);
+                }
+            } else {
+                // Should not happen as we converted string input to array above
+                contents = [{ role: 'user', parts: [] }];
+                targetMessage = (contents as any[])[0];
+            }
+
+            for (const att of attachments) {
+                if (att.type === 'image' && att.data && typeof att.data === 'string') {
+                    let base64Data = att.data;
+                    if (base64Data.startsWith('data:')) base64Data = base64Data.split(',')[1];
+                    targetMessage.parts.push({
+                        inlineData: { mimeType: att.mime || 'image/png', data: base64Data },
+                    });
+                } else if (att.type === 'file' && att.value && typeof att.value === 'string') {
+                    const isText =
+                        att.mime?.startsWith('text/') ||
+                        att.mime === 'application/json' ||
+                        att.mime === 'application/javascript' ||
+                        att.mime?.includes('xml');
+                    if (isText) {
+                        targetMessage.parts.push({
+                            text: `\n\n--- File: ${att.name} ---\n${att.value}\n--- End of File ---\n`,
+                        });
+                    }
+                }
+            }
+        } else if (typeof input === 'string') {
+            // If no attachments and string input, revert to string contents for simplicity/compatibility if preferred,
+            // BUT Gemini SDK supports object array fine. Let's keep object array for consistency.
+            // Actually, the original code used `contents = input` (string).
+            // If we change it to object array, it works.
         }
 
         let accumulated = '';
@@ -934,7 +1077,7 @@ export class GeminiProvider extends BaseAIProvider {
                 } else if (content.type === 'image') {
                     return {
                         inlineData: {
-                            mimeType: content.mimeType,
+                            mimeType: content.mimeType || 'image/png',
                             data: content.data, // Expecting raw base64
                         },
                     };
