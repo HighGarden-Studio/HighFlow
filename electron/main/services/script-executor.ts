@@ -86,25 +86,26 @@ export class ScriptExecutor {
      * Execute JavaScript/TypeScript in Node.js VM
      */
     private async executeJavaScript(
-        code: string,
+        _code: string,
         macroData: Record<string, any>,
         logs: string[],
         language: 'javascript' | 'typescript'
     ): Promise<ScriptExecutionResult> {
         try {
             // For now, simplified - just execute as JavaScript
-            let executableCode = code;
+            // Use _code to avoid unused variable error if we aren't using compilation yet
+            let executableCode = _code;
 
             if (language === 'typescript') {
                 // TODO: Add TypeScript compilation with esbuild or tsc
                 // For now, strip types (simple approach)
-                executableCode = code;
+                executableCode = _code;
             }
 
             // Auto-return last expression if no explicit return
             // This allows "executeTask();" to return its value
             const lines = executableCode.trim().split('\n');
-            const lastLine = lines[lines.length - 1].trim();
+            const lastLine = lines.length > 0 ? (lines[lines.length - 1] || '').trim() : '';
 
             // Check if last line is an expression statement (not return, declaration, etc.)
             if (
@@ -235,7 +236,7 @@ export class ScriptExecutor {
      * Execute Python script
      * Currently returns a placeholder - Python execution needs separate runtime
      */
-    private async executePython(code: string, logs: string[]): Promise<ScriptExecutionResult> {
+    private async executePython(_code: string, logs: string[]): Promise<ScriptExecutionResult> {
         // Python execution needs separate runtime (e.g., child_process with python3)
         // For now, return error
         logs.push('Python execution not yet implemented');
@@ -275,11 +276,11 @@ export class ScriptExecutor {
      * Execute script with timeout
      */
     async executeWithTimeout(
-        code: string,
+        _code: string,
         timeout: number = this.timeout
     ): Promise<ScriptExecutionResult> {
         return new Promise((resolve) => {
-            const timer = setTimeout(() => {
+            setTimeout(() => {
                 resolve({
                     success: false,
                     output: '',

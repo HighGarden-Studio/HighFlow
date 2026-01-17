@@ -10,7 +10,7 @@ import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Task } from '../database/schema';
-import type { TaskExecutionMetadata, NotificationEvent } from '@core/types/notifications';
+import type { TaskExecutionMetadata } from '@core/types/notifications';
 import {
     extractImages,
     filterCodeBlocks,
@@ -19,7 +19,6 @@ import {
 } from '../utils/result-processor';
 
 export class TaskNotificationService {
-    private mainWindow: BrowserWindow | null = null;
     private desktopConfig = {
         enabled: true,
         notifyOnTaskStart: true,
@@ -27,8 +26,8 @@ export class TaskNotificationService {
         notifyOnTaskError: true,
     };
 
-    initialize(mainWindow: BrowserWindow) {
-        this.mainWindow = mainWindow;
+    initialize(_mainWindow: BrowserWindow) {
+        // MainWindow retained for potential future use or IPC
         console.log('[TaskNotificationService] Initialized');
     }
 

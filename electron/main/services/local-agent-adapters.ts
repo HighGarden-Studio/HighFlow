@@ -79,7 +79,7 @@ export class ClaudeCodeAdapter implements LocalAgentMessageAdapter {
  * Formats messages for OpenAI Codex CLI
  */
 export class CodexAdapter implements LocalAgentMessageAdapter {
-    formatMessage(content: string, options?: { model?: string }): string {
+    formatMessage(content: string, _options?: { model?: string }): string {
         // Return raw text prompt for CLI argument
         return content;
     }

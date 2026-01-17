@@ -15,13 +15,13 @@ export function extractImages(content: string, maxImages = 3): string[] {
     let match;
 
     while ((match = markdownImageRegex.exec(content)) !== null && images.length < maxImages) {
-        images.push(match[2]);
+        images.push(match[2] || '');
     }
 
     // Match HTML img tags: <img src="url">
     const htmlImageRegex = /<img[^>]+src="([^">]+)"/g;
     while ((match = htmlImageRegex.exec(content)) !== null && images.length < maxImages) {
-        images.push(match[1]);
+        images.push(match[1] || '');
     }
 
     return images.slice(0, maxImages);
@@ -89,7 +89,7 @@ export function isPrimarilyCode(content: string): boolean {
  */
 export function detectLanguage(content: string): string | null {
     const match = content.match(/```(\w+)/);
-    return match ? match[1].toLowerCase() : null;
+    return match ? (match[1] || '').toLowerCase() : null;
 }
 
 /**

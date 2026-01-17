@@ -107,7 +107,7 @@ export class NotificationResolver {
         const hasWebhook =
             config.webhook?.enabled && config.webhook?.url && config.webhook?.events?.length > 0;
 
-        return hasSlack || hasWebhook;
+        return !!(hasSlack || hasWebhook);
     }
 
     /**

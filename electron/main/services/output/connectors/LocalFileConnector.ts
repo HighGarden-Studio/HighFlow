@@ -24,9 +24,10 @@ export class LocalFileConnector implements OutputConnector {
 
             // Basic template replacement
             // Basic template replacement
+            const isoString = new Date().toISOString();
             const replacements: Record<string, string> = {
-                '{{date}}': new Date().toISOString().split('T')[0],
-                '{{time}}': new Date().toISOString().split('T')[1].replace(/:/g, '-').split('.')[0],
+                '{{date}}': isoString.split('T')[0] || '',
+                '{{time}}': (isoString.split('T')[1] || '').replace(/:/g, '-').split('.')[0] || '',
                 '{{taskId}}': context?.taskId ? String(context.taskId) : 'unknown-task',
                 '{{projectId}}': context?.projectId ? String(context.projectId) : 'unknown-project',
                 '{{project.name}}': context?.projectName
@@ -139,9 +140,9 @@ export class LocalFileConnector implements OutputConnector {
         while ((match = regex.exec(content)) !== null) {
             replacements.push({
                 original: match[0],
-                alt: match[1],
+                alt: match[1] || '',
                 ext: match[3] || 'png',
-                data: match[4],
+                data: match[4] || '',
             });
         }
 

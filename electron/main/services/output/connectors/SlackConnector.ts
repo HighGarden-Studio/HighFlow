@@ -12,7 +12,7 @@ export class SlackConnector implements OutputConnector {
     async execute(
         config: OutputTaskConfig,
         content: string,
-        context: { basePath: string; taskId?: string; project?: any }
+        _context: { basePath: string; taskId?: string; project?: any }
     ): Promise<OutputResult> {
         try {
             if (config.destination !== 'slack' || !config.slack) {
