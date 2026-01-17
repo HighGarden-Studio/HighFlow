@@ -342,7 +342,7 @@ export class AutomationEngine {
 
         // Electron IPC를 통한 실제 DB 작업
         if (typeof window !== 'undefined' && window.electron?.tasks) {
-            const task = await window.electron.tasks.create({
+            const task = await (window.electron.tasks as any).create({
                 projectId: template.projectId,
                 title: template.title || 'Automated Task',
                 description: template.description,
@@ -370,7 +370,7 @@ export class AutomationEngine {
         // Electron IPC를 통한 실제 DB 작업
         if (typeof window !== 'undefined' && window.electron?.tasks) {
             // First get the task to find projectId and sequence
-            const existingTask = await window.electron.tasks.get(action.taskId);
+            const existingTask = await (window.electron.tasks as any).get(action.taskId);
             if (!existingTask) {
                 throw new Error(`Task ${action.taskId} not found`);
             }
@@ -395,7 +395,7 @@ export class AutomationEngine {
                 allowedChanges.priority = action.changes.priority;
             }
 
-            const task = await window.electron.tasks.update(
+            const task = await (window.electron.tasks as any).update(
                 existingTask.projectId,
                 existingTask.projectSequence,
                 allowedChanges
@@ -421,7 +421,7 @@ export class AutomationEngine {
 
         // Get task first
         if (typeof window !== 'undefined' && window.electron?.tasks) {
-            const task = await window.electron.tasks.get(action.taskId);
+            const task = await (window.electron.tasks as any).get(action.taskId);
 
             if (!task) {
                 throw new Error(`Task ${action.taskId} not found`);
@@ -592,7 +592,7 @@ export class AutomationEngine {
 
         // Get task and execute via executor
         if (typeof window !== 'undefined' && window.electron?.tasks) {
-            const task = await window.electron.tasks.get(action.taskId);
+            const task = await (window.electron.tasks as any).get(action.taskId);
 
             if (!task) {
                 throw new Error(`Task ${action.taskId} not found`);

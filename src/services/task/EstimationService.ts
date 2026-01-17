@@ -209,7 +209,7 @@ export class EstimationService {
     /**
      * Estimate time based on complexity
      */
-    estimateTime(title: string, description: string, complexity: TaskComplexity): TimeEstimation {
+    estimateTime(_title: string, description: string, complexity: TaskComplexity): TimeEstimation {
         // Base time by complexity (in minutes)
         const baseTimeMap = {
             simple: 60, // 1 hour
@@ -312,8 +312,8 @@ export class EstimationService {
      * Estimate cost based on AI provider usage
      */
     estimateCost(
-        title: string,
-        description: string,
+        _title: string,
+        _description: string,
         complexity: TaskComplexity,
         aiProvider?: string,
         aiModel?: string
@@ -343,12 +343,10 @@ export class EstimationService {
 
         const providerCosts = AI_PROVIDER_COSTS[providerName as keyof typeof AI_PROVIDER_COSTS];
         if (providerCosts) {
-            const modelCosts =
-                providerCosts[modelName as keyof typeof providerCosts] ||
-                Object.values(providerCosts)[0];
+            const modelCosts = (providerCosts as any)[modelName] || Object.values(providerCosts)[0];
             if (modelCosts) {
-                inputCost = (estimatedInputTokens / 1_000_000) * modelCosts.input;
-                outputCost = (estimatedOutputTokens / 1_000_000) * modelCosts.output;
+                inputCost = (estimatedInputTokens / 1_000_000) * (modelCosts as any).input;
+                outputCost = (estimatedOutputTokens / 1_000_000) * (modelCosts as any).output;
             }
         }
 

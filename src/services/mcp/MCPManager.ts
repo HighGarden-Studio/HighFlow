@@ -991,8 +991,11 @@ export class MCPManager {
             try {
                 const imported = await import('eventsource');
                 console.log('[MCPManager] eventsource imported:', Object.keys(imported));
+                const importedAny = imported as any;
                 EventSourceClass =
-                    imported.EventSource || imported.default?.EventSource || imported.default;
+                    importedAny.EventSource ||
+                    importedAny.default?.EventSource ||
+                    importedAny.default;
             } catch (e2) {
                 console.error('[MCPManager] Failed to import eventsource:', e2);
             }
@@ -1248,14 +1251,14 @@ export class MCPManager {
                               throw new Error('SSEClientTransport already started!');
                           }
 
-                          return new Promise<void>((resolve, reject) => {
+                          return new Promise<void>((resolve) => {
                               // @ts-ignore - 'eventsource' supports headers, standard EventSource does not
                               this._eventSource = new EventSourceClass(this._url.href, {
                                   headers: this._headers,
                               });
                               this._abortController = new AbortController();
 
-                              this._eventSource.onopen = (event: any) => {
+                              this._eventSource.onopen = () => {
                                   console.log(
                                       '[MCPManager] SSE connection opened:',
                                       this._url.href
