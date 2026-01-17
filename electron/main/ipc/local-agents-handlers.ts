@@ -26,7 +26,7 @@ interface AgentCheckResult {
 
 // Cache for installation status (checked once per app session)
 const installationCache = new Map<string, AgentCheckResult>();
-let cacheInitialized = false;
+// let cacheInitialized = false;
 
 /**
  * Check if a command is installed and get its version

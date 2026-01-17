@@ -25,7 +25,7 @@ import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { registerAuthHandlers } from './ipc/auth-handlers';
 import { registerAiSettingsHandlers } from './ipc/ai-settings-handlers';
 import { registerScriptTemplateHandlers } from './ipc/script-template-handlers';
-import { registerHttpHandlers } from './ipc/http-handlers';
+// import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
 import type { ProjectStatus, ProjectExportData } from '@core/types/database';
@@ -332,7 +332,7 @@ async function registerIpcHandlers(): Promise<void> {
                 if (userData && userData.email) {
                     try {
                         // Fallback name to email username if missing
-                        const name = userData.name || userData.email.split('@')[0];
+                        const name = userData.name || userData.email.split('@')[0] || 'User';
 
                         const user = await userRepository.ensureUser({
                             email: userData.email,

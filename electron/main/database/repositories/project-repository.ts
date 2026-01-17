@@ -414,6 +414,7 @@ export class ProjectRepository {
                 description: projectRest.description,
                 status: projectRest.status as any,
                 goal: projectRest.goal,
+                goals: projectRest.goal, // Deprecated map
                 baseDevFolder: projectRest.baseDevFolder,
                 tags: projectRest.tags as string[] | null,
                 mainPrompt: projectRest.mainPrompt,

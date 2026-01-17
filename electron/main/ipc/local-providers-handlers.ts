@@ -91,12 +91,6 @@ export function registerLocalProviderHandlers(): void {
 
                 // Inject API key if provided
                 if (apiKey) {
-                    const importedFactory =
-                        await import('../../../src/services/ai/providers/ProviderFactory');
-                    const ProviderFactoryClass =
-                        importedFactory.ProviderFactory ||
-                        (importedFactory as any).default?.ProviderFactory;
-
                     // We need to access the provider factory instance used by the manager.
                     // Since it's private in Manager, we have to settle for updating the config via Manager's public methods if available.
                     // Manager has setApiKeys({ [providerId]: apiKey }).

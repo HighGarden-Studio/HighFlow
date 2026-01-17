@@ -211,7 +211,7 @@ export class ProviderModelsRepository {
             averageLatency: metadata.averageLatency || 0,
             features: features as any[],
             bestFor: bestFor,
-            description: model.description,
+            // description: model.description, // Removed as not in ModelInfo
             supportedActions: supportedActions,
             deprecated: Boolean(model.deprecated),
             characteristics: metadata.characteristics || [],

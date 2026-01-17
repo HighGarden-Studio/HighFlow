@@ -8,7 +8,7 @@
 import { ipcMain, dialog, shell, BrowserWindow, app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execSync } from 'child_process';
+import { exec } from 'child_process';
 import * as util from 'util';
 
 const execAsync = util.promisify(exec);

@@ -25,7 +25,6 @@ import type {
     MCPRequestEvent,
     MCPResponseEvent,
 } from '../../../src/services/events/EventBus';
-import type { TaskResult } from '../../../src/services/workflow/types';
 import { buildDependencyContext } from '../services/dependency-context-builder';
 // import { MCPPermissionError } from '../../../src/services/mcp/errors';
 // import { InputProviderManager } from '../../../src/services/workflow/input/InputProviderManager';

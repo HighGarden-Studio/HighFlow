@@ -5,8 +5,8 @@
  */
 
 import { db } from '../client';
-import { taskHistory, tasks, type TaskHistory, type NewTaskHistory } from '../schema';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { taskHistory, type TaskHistory, type NewTaskHistory } from '../schema';
+import { eq, desc, and } from 'drizzle-orm';
 import type {
     TaskHistoryEventType,
     TaskHistoryEventData,
