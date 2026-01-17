@@ -9,7 +9,7 @@
 
 ## 🌟 Overview
 
-HighFlow is a next-generation workflow manager that orchestrates complex tasks using multiple AI agents. It combines traditional project management tools (Kanban, DAG visualization) with an intelligent execution engine capable of automating tasks, generating content, and interacting with your local development environment.
+HighFlow is a workflow manager that orchestrates complex tasks using multiple AI agents. It combines traditional project management tools (Kanban, DAG visualization) with an intelligent execution engine capable of automating tasks, generating content, and interacting with your local development environment.
 
 [![Watch the video](.github/images/screenshot_calculator.png)](https://www.youtube.com/embed/DfGlhDefjGU)
 
@@ -81,15 +81,15 @@ HighFlow integrates with major AI providers. Configure them in **Settings → AI
 
 #### ✅ Currently Supported
 
-| Provider             | Models                           | Features                       |
-| -------------------- | -------------------------------- | ------------------------------ |
-| **OpenAI**           | gpt-4o, gpt-4o-mini, o1, o1-mini | Chat, Code, Vision, TTS, STT   |
-| **Anthropic**        | Claude 3.5 Sonnet, Opus, Haiku   | Long context, Vision, Tool use |
-| **Google AI**        | Gemini 2.0 Pro/Flash, Gemini 1.5 | Multi-modal, Extended context  |
-| **Groq**             | Llama 3.3, Mixtral               | Ultra-fast inference           |
-| **Mistral AI**       | Large, Medium, Small             | European AI, Code-optimized    |
-| **LM Studio**        | Local models                     | Privacy-first, Offline         |
-| **HighFlow Default** | Cloud credits                    | No API key required            |
+| Provider             | Features                       |
+| -------------------- | ------------------------------ |
+| **OpenAI**           | Chat, Code, Vision, TTS, STT   |
+| **Anthropic**        | Long context, Vision, Tool use |
+| **Google AI**        | Multi-modal, Extended context  |
+| **Groq**             | Ultra-fast inference           |
+| **Mistral AI**       | European AI, Code-optimized    |
+| **LM Studio**        | Privacy-first, Offline         |
+| **HighFlow Default** | No API key required            |
 
 #### 🏠 Local Models
 
