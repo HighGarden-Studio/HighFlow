@@ -118,6 +118,7 @@ export const projects = sqliteTable(
         coverImage: text('cover_image'),
         color: text('color'),
         emoji: text('emoji'),
+        tags: text('tags', { mode: 'json' }).notNull().default('[]'),
         isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
         isFavorite: integer('is_favorite', { mode: 'boolean' }).notNull().default(false),
         estimatedHours: real('estimated_hours'),
@@ -141,9 +142,11 @@ export const projects = sqliteTable(
         memory: text('memory', { mode: 'json' }), // Project memory (summary, decisions, glossary)
         mcpConfig: text('mcp_config', { mode: 'json' }), // Project-specific MCP configuration
         notificationConfig: text('notification_config', { mode: 'json' }), // Project notification settings
-        curatorOperatorId: integer('curator_operator_id').references(() => operators.id, {
+        curatorOperatorId: integer('curator_operator_id').references((): any => operators.id, {
             onDelete: 'set null',
         }), // Override global curator with project-specific operator
+        aiOptimizedPrompt: text('ai_optimized_prompt'), // AI 실행용 최적화된 프롬프트
+        requiredMCPs: text('required_mcps', { mode: 'json' }).notNull().default('[]'), // 필요한 MCP 서버 목록
         createdAt: integer('created_at', { mode: 'timestamp' })
             .notNull()
             .default(sql`CURRENT_TIMESTAMP`),
@@ -718,7 +721,9 @@ export const operators = sqliteTable(
     'operators',
     {
         id: integer('id').primaryKey({ autoIncrement: true }),
-        projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }), // NULL for global
+        projectId: integer('project_id').references((): any => projects.id, {
+            onDelete: 'cascade',
+        }), // NULL for global
 
         // Basic Info
         name: text('name').notNull(),

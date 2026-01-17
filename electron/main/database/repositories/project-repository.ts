@@ -4,7 +4,6 @@
  * Data access layer for projects with comprehensive query methods
  */
 
-import { app } from 'electron';
 import { db } from '../client';
 import {
     projects,
@@ -63,8 +62,8 @@ export class ProjectRepository {
             with: {
                 tasks: options.includeTasks
                     ? {
-                          where: (tasks, { isNull }) => isNull(tasks.deletedAt),
-                          orderBy: (tasks, { asc }) => [asc(tasks.order)],
+                          where: (tasks: any, { isNull }: any) => isNull(tasks.deletedAt),
+                          orderBy: (tasks: any, { asc }: any) => [asc(tasks.order)],
                       }
                     : undefined,
                 members: options.includeMembers
@@ -80,95 +79,19 @@ export class ProjectRepository {
 
         return result;
     }
-
-    /**
-     * Find projects by owner
-     */
-    async findByOwner(ownerId: number): Promise<Project[]> {
-        return await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.ownerId, ownerId), eq(projects.isArchived, false)))
-            .orderBy(desc(projects.updatedAt));
-    }
-
-    /**
-     * Find projects by team
-     */
-    async findByTeam(teamId: number): Promise<Project[]> {
-        return await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.teamId, teamId), eq(projects.isArchived, false)))
-            .orderBy(desc(projects.updatedAt));
-    }
-
-    /**
-     * Find projects by status
-     */
-    async findByStatus(status: ProjectStatus): Promise<Project[]> {
-        return await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.status, status), eq(projects.isArchived, false)))
-            .orderBy(desc(projects.updatedAt));
-    }
-
-    /**
-     * Find favorite projects for a user
-     */
-    async findFavorites(userId: number): Promise<Project[]> {
-        return await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.ownerId, userId), eq(projects.isFavorite, true)))
-            .orderBy(desc(projects.updatedAt));
-    }
-
-    /**
-     * Find archived projects
-     */
-    async findArchived(userId: number): Promise<Project[]> {
-        return await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.ownerId, userId), eq(projects.isArchived, true)))
-            .orderBy(desc(projects.archivedAt));
-    }
-
-    /**
-     * Search projects by title or description
-     */
-    async search(query: string, userId: number): Promise<Project[]> {
-        const searchPattern = `%${query}%`;
-        return await db
-            .select()
-            .from(projects)
-            .where(
-                and(
-                    eq(projects.ownerId, userId),
-                    eq(projects.isArchived, false),
-                    or(
-                        like(projects.title, searchPattern),
-                        like(projects.description, searchPattern)
-                    )
-                )
-            )
-            .orderBy(desc(projects.updatedAt));
-    }
-
+    // ...
     /**
      * Create new project
      */
     async create(data: NewProject): Promise<Project> {
-        const result = await db
+        const result = (await db
             .insert(projects)
             .values({
                 ...data,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             })
-            .returning();
+            .returning()) as Project[];
 
         if (!result[0]) {
             throw new Error('Failed to create project');
@@ -181,14 +104,14 @@ export class ProjectRepository {
      * Update existing project
      */
     async update(id: number, data: Partial<Project>): Promise<Project> {
-        const result = await db
+        const result = (await db
             .update(projects)
             .set({
                 ...data,
                 updatedAt: new Date(),
             })
             .where(eq(projects.id, id))
-            .returning();
+            .returning()) as Project[];
 
         if (!result[0]) {
             throw new Error('Project not found');
@@ -550,7 +473,7 @@ export class ProjectRepository {
             for (const opData of data.operators) {
                 const { tempId, ...rest } = opData;
                 // Check if similar operator already exists (optional, keeping it simple for now by creating new ones)
-                const [newOp] = await db
+                const result = (await db
                     .insert(operators)
                     .values({
                         ...rest,
@@ -559,7 +482,9 @@ export class ProjectRepository {
                         createdAt: new Date(),
                         updatedAt: new Date(),
                     })
-                    .returning();
+                    .returning()) as unknown[];
+
+                const newOp = result[0] as any; // Cast as any or Operator, simplified for now
                 operatorIdMap.set(tempId, newOp.id);
             }
         }

@@ -81,16 +81,22 @@ export class OperatorRepository {
      * Create new operator
      */
     async create(data: NewOperator): Promise<Operator> {
-        const [created] = await db
+        const result = (await db
             .insert(operators)
             .values({
                 ...data,
+                // Sanitize boolean fields that might come as null from upper layers
+                isCurator: data.isCurator ?? false,
+                isReviewer: data.isReviewer ?? false,
+                isActive: data.isActive ?? true,
                 usageCount: 0,
                 successRate: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             })
-            .returning();
+            .returning()) as Operator[];
+
+        const created = result[0];
 
         if (!created) {
             throw new Error('Failed to create operator');
@@ -103,14 +109,30 @@ export class OperatorRepository {
      * Update operator
      */
     async update(id: number, data: Partial<Operator>): Promise<Operator> {
-        const [updated] = await db
+        const updateData: any = { ...data };
+
+        // Remove undefined fields
+        Object.keys(updateData).forEach(
+            (key) => updateData[key] === undefined && delete updateData[key]
+        );
+
+        // Handle explicit nulls for non-nullable booleans if necessary,
+        // but for Partial update, usually we just pass what's there.
+        // However, if data has nulls for booleans that schema forbids, we must fix.
+        if (data.isCurator === null) updateData.isCurator = false;
+        if (data.isReviewer === null) updateData.isReviewer = false;
+        if (data.isActive === null) updateData.isActive = true;
+
+        const result = (await db
             .update(operators)
             .set({
-                ...data,
+                ...updateData,
                 updatedAt: new Date(),
             })
             .where(eq(operators.id, id))
-            .returning();
+            .returning()) as Operator[];
+
+        const updated = result[0];
 
         if (!updated) {
             throw new Error('Operator not found');
@@ -156,20 +178,26 @@ export class OperatorRepository {
      * Get operator MCPs
      */
     async getMCPs(operatorId: number): Promise<OperatorMCP[]> {
-        return await db.select().from(operatorMCPs).where(eq(operatorMCPs.operatorId, operatorId));
+        const results = (await db
+            .select()
+            .from(operatorMCPs)
+            .where(eq(operatorMCPs.operatorId, operatorId))) as unknown[];
+        return results as OperatorMCP[];
     }
 
     /**
      * Add MCP to operator
      */
     async addMCP(data: NewOperatorMCP): Promise<OperatorMCP> {
-        const [created] = await db
+        const result = (await db
             .insert(operatorMCPs)
             .values({
                 ...data,
                 createdAt: new Date(),
             })
-            .returning();
+            .returning()) as OperatorMCP[];
+
+        const created = result[0];
 
         if (!created) {
             throw new Error('Failed to add MCP to operator');
@@ -242,7 +270,7 @@ export class OperatorRepository {
      * Find global curator operator
      */
     async findGlobalCurator(): Promise<Operator | undefined> {
-        const [curator] = await db
+        const result = (await db
             .select()
             .from(operators)
             .where(
@@ -252,7 +280,9 @@ export class OperatorRepository {
                     eq(operators.isActive, true)
                 )
             )
-            .limit(1);
+            .limit(1)) as unknown[];
+
+        const curator = result[0] as Operator | undefined;
 
         return curator;
     }

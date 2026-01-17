@@ -909,7 +909,7 @@ export interface Operator extends BaseEntity {
     marketplaceVersion?: string;
 }
 
-export interface OperatorMCP extends BaseEntity {
+export interface OperatorMCP extends Omit<BaseEntity, 'updatedAt'> {
     operatorId: number;
     mcpServerSlug: string;
     config: Record<string, unknown> | null; // MCP-specific config override
