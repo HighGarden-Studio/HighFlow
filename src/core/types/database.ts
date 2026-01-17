@@ -1128,9 +1128,19 @@ export interface ProjectExportData {
         title: string;
         description: string | null;
         status: 'active' | 'archived';
+        goals: string | null; // Deprecated, mapped to goal
         goal: string | null;
         baseDevFolder: string | null;
         tags: string[] | null;
+        mainPrompt: string | null;
+        aiProvider: string | null;
+        aiModel: string | null;
+        aiOptimizedPrompt: string | null;
+        outputType: string | null; // web|document|image|video|code|data|other
+        outputPath: string | null;
+        mcpConfig: Record<string, any> | null;
+        requiredMCPs: string[] | null;
+        notificationConfig: Record<string, any> | null;
     };
     tasks: CleanTaskExport[];
     operators: OperatorExport[];

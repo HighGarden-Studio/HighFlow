@@ -13,7 +13,7 @@ import {
     type Project,
     type NewProject,
 } from '../schema';
-import { eq, desc, and, sql, or, like, asc, isNull, inArray } from 'drizzle-orm';
+import { eq, desc, and, sql, asc, isNull, inArray } from 'drizzle-orm';
 import type {
     ProjectStatus,
     ProjectExportData,
@@ -415,16 +415,16 @@ export class ProjectRepository {
                 status: projectRest.status as any,
                 goal: projectRest.goal,
                 baseDevFolder: projectRest.baseDevFolder,
-                tags: projectRest.tags,
+                tags: projectRest.tags as string[] | null,
                 mainPrompt: projectRest.mainPrompt,
                 aiProvider: projectRest.aiProvider,
                 aiModel: projectRest.aiModel,
                 aiOptimizedPrompt: projectRest.aiOptimizedPrompt,
                 outputType: projectRest.outputType,
                 outputPath: projectRest.outputPath,
-                mcpConfig: sanitizeMcpConfig(projectRest.mcpConfig),
-                requiredMCPs: projectRest.requiredMCPs,
-                notificationConfig: projectRest.notificationConfig,
+                mcpConfig: sanitizeMcpConfig(projectRest.mcpConfig as any),
+                requiredMCPs: projectRest.requiredMCPs as string[] | null,
+                notificationConfig: projectRest.notificationConfig as any,
             },
             tasks: cleanTasks,
             operators: operatorData,
@@ -477,7 +477,11 @@ export class ProjectRepository {
                     .insert(operators)
                     .values({
                         ...rest,
-                        tags: rest.tags || [],
+                        // Ensure non-nullable fields have defaults
+                        role: rest.role || 'assistant',
+                        aiProvider: rest.aiProvider || 'openai', // Default to openai if missing
+                        aiModel: rest.aiModel || 'gpt-4o', // Default model
+                        tags: (rest.tags || []) as string[],
                         projectId: newProject.id, // Assign to new project
                         createdAt: new Date(),
                         updatedAt: new Date(),
