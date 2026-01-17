@@ -28,7 +28,7 @@
         "type-check": "vue-tsc --noEmit",
         "test": "vitest",
         "test:unit": "vitest run --config vitest.config.ts",
-        "test:integration": "vitest run --config vitest.config.ts tests/integration/**/*.spec.ts",
+        "test:integration": "vitest run --config vitest.config.ts tests/integration/",
         "test:components": "vitest run --config vitest.config.ts src/**/*.spec.ts",
         "test:perf": "vitest run --config vitest.config.ts tests/performance/**/*.spec.ts",
         "test:e2e": "playwright test",

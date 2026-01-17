@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultHighFlowProvider } from '../../src/services/ai/providers/DefaultHighFlowProvider';
 
 // Mock dependencies
-vi.mock('../../../../electron/main/config', () => ({
+vi.mock('../../electron/main/config', () => ({
     config: { BACKEND_URL: 'https://mock-backend.com' },
 }));
 
 // Mock database repository
-vi.mock('../../../../electron/main/database/repositories/provider-models-repository', () => ({
+vi.mock('../../electron/main/database/repositories/provider-models-repository', () => ({
     providerModelsRepository: {
         getModels: vi.fn().mockResolvedValue([]),
         saveModels: vi.fn().mockResolvedValue(true),
