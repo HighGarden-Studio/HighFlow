@@ -951,14 +951,14 @@
                 },
                 "google": {
                     "description": "Gemini Pro, Gemini Flash, PaLM 모델 제공"
+                },
+                "highflow": {
+                    "title": "✨ 기본 제공 HighFlow AI (Credit)",
+                    "credit_usage": "로그인 후 앱 계정의 크레딧을 사용합니다",
+                    "no_api_key": "별도의 API 키가 필요하지 않습니다",
+                    "no_streaming": "스트리밍은 지원하지 않습니다",
+                    "login_notice": "로그인하지 않은 경우 Task 실행 시 로그인 안내가 표시됩니다."
                 }
-            },
-            "highflow": {
-                "title": "✨ 기본 제공 HighFlow AI (Credit)",
-                "credit_usage": "로그인 후 앱 계정의 크레딧을 사용합니다",
-                "no_api_key": "별도의 API 키가 필요하지 않습니다",
-                "no_streaming": "스트리밍은 지원하지 않습니다",
-                "login_notice": "로그인하지 않은 경우 Task 실행 시 로그인 안내가 표시됩니다."
             }
         },
         "mcp": {

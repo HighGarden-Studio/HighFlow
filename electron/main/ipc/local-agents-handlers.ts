@@ -53,10 +53,7 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
     }
 
     const enhancedPath = getEnhancedPath();
-    console.log(
-        `[LocalAgents] Checking ${command} with PATH:`,
-        enhancedPath.split(':').slice(0, 10).join(':') + '...'
-    );
+    // console.log(`[LocalAgents] Checking ${command} with PATH: ...`);
 
     let result: AgentCheckResult;
 
@@ -67,7 +64,7 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
             env: { ...process.env, PATH: enhancedPath },
         });
 
-        console.log(`[LocalAgents] ${command} --version output:`, stdout.trim());
+        // console.log(`[LocalAgents] ${command} --version output:`, stdout.trim());
 
         // Extract version number from output
         const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);

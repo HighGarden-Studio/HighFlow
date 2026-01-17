@@ -86,6 +86,10 @@ const activeReviews = new Map<string, ReviewState>();
 // Store pending execution requests for busy tasks (TargetKey -> SourceKey)
 // This implements a "Latest Request Only" (Debounce) queue for Repeat/Always tasks.
 const executionQueue = new Map<string, string>();
+// Track processed trigger events using ID: `${Target}<-${Source}@${Timestamp}`
+// This prevents processing the EXACT SAME completion event multiple times (e.g. from rapid IPC calls or re-renders)
+// while allowing distinct events (even if rapid) to proceed.
+const processedTriggerEvents = new Set<string>();
 const executor = new AdvancedTaskExecutor();
 
 /**
@@ -220,9 +224,9 @@ function areTaskDependenciesMet(
         if (completedDeps.length > 0) {
             if (lastRunAt) {
                 const lastRunTime = new Date(lastRunAt).getTime();
-                // Check if ANY completed dep is new
+                // Check if ANY completed dep is new (use >= to handle precision loss)
                 const hasNew = completedDeps.some(
-                    (d) => d.completedAt && new Date(d.completedAt).getTime() > lastRunTime
+                    (d) => d.completedAt && new Date(d.completedAt).getTime() >= lastRunTime
                 );
                 met = hasNew;
             } else {
@@ -245,7 +249,7 @@ function areTaskDependenciesMet(
         if (allDone && lastRunAt) {
             const lastRunTime = new Date(lastRunAt).getTime();
             const hasNew = dependencyInfo.some(
-                (d) => d.completedAt && new Date(d.completedAt).getTime() > lastRunTime
+                (d) => d.completedAt && new Date(d.completedAt).getTime() >= lastRunTime
             );
             if (!hasNew) {
                 met = false; // Stale
@@ -276,15 +280,12 @@ export async function checkAndExecuteDependentTasks(
     options?: { triggerChain?: string[]; control?: { next: number[]; reason?: string } }
 ): Promise<void> {
     try {
-        console.log(
-            `[TaskExecution] Checking dependent tasks for completed task ${projectId}-${sequence}}`
-        );
+        // Check dependent tasks
+        // console.log(`[TaskExecution] Checking dependent tasks for completed task ${projectId}-${sequence}}`);
 
         // Project Pause Check
         if (GlobalExecutionService.getInstance().isProjectPaused(completedTask.projectId)) {
-            console.log(
-                `[TaskExecution] Project ${completedTask.projectId} execution is PAUSED. Skipping auto-execution for task ${projectId}-${sequence}'s dependents.`
-            );
+            // Project execution is PAUSED. Skipping auto-execution.
             return;
         }
 
@@ -408,15 +409,15 @@ export async function checkAndExecuteDependentTasks(
 
             // 1. REPEAT/ALWAYS Policy Handling
             if (policy === 'repeat' || (policy as string) === 'always') {
-                if (task.status === 'in_progress' || task.status === 'getting_input') {
+                const depKey = getTaskKey(task.projectId, task.projectSequence);
+                const isRunning = activeExecutions.has(depKey);
+
+                if (task.status === 'in_progress' || task.status === 'getting_input' || isRunning) {
                     // Task is busy. Queue this request (Debounce: overwrite with latest trigger)
                     console.log(
-                        `[TaskExecution] Task ${task.projectId}-${task.projectSequence} is busy. Queueing re-execution request from ${projectId}-${sequence}`
+                        `[TaskExecution] Task ${task.projectId}-${task.projectSequence} is busy (Status: ${task.status}, Active: ${isRunning}). Queueing re-execution request from ${projectId}-${sequence}`
                     );
-                    executionQueue.set(
-                        getTaskKey(task.projectId, task.projectSequence),
-                        getTaskKey(projectId, sequence)
-                    );
+                    executionQueue.set(depKey, getTaskKey(projectId, sequence));
                     return false; // Do not execute immediately
                 }
 
@@ -424,7 +425,6 @@ export async function checkAndExecuteDependentTasks(
                 // We allow cyclic workflows (e.g. Turn-Based Games: A -> B -> A -> B...)
                 // But we must prevent infinite INSTANT recursion stack overflows.
                 // We allow a specific task to appear in the chain up to 10 times.
-                const depKey = `${task.projectId}-${task.projectSequence}`;
                 if (options?.triggerChain) {
                     const loopCount = options.triggerChain.filter((id) => id === depKey).length;
                     if (loopCount >= 10) {
@@ -516,6 +516,29 @@ export async function checkAndExecuteDependentTasks(
             const shouldExecute = checkResult.met;
 
             if (shouldExecute) {
+                // Check Trigger Lock (Unique Event ID)
+                // We use a combination of Target ID + Source ID + Source Completion Time to identify unique trigger events.
+                // This allows rapid distinct triggers (different sources or different completion times) but blocks
+                // duplicate processing of the exact same completion event (which causes the double execution bug).
+                const depKey = getTaskKey(dependentTask.projectId, dependentTask.projectSequence);
+                const sourceKey = `${projectId}-${sequence}`;
+                const completionTime = completedTask.completedAt
+                    ? new Date(completedTask.completedAt).getTime()
+                    : Date.now();
+                const triggerEventId = `${depKey}<-${sourceKey}@${completionTime}`;
+
+                if (processedTriggerEvents.has(triggerEventId)) {
+                    console.warn(
+                        `[TaskExecution] Skipping duplicate trigger event ${triggerEventId} (Already processed)`
+                    );
+                    continue;
+                }
+
+                // Register this event as processed
+                processedTriggerEvents.add(triggerEventId);
+                // Auto-cleanup after 60 seconds (events are ephemeral)
+                setTimeout(() => processedTriggerEvents.delete(triggerEventId), 60000);
+
                 // Auto-executing dependent task
 
                 // Build new chain
@@ -575,9 +598,6 @@ export async function resetStuckTasks(): Promise<number> {
         for (const task of inProgressTasks) {
             // If no active execution exists for this task, reset it to todo
             if (!activeExecutions.has(getTaskKey(task.projectId, task.projectSequence))) {
-                console.log(
-                    `[TaskExecution] Resetting stuck task ${task.projectId}-${task.projectSequence} from in_progress to todo`
-                );
                 await taskRepository.updateByKey(task.projectId, task.projectSequence, {
                     status: 'todo',
                 });

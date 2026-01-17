@@ -171,13 +171,10 @@ class AIClient {
                     key.length > 10
                         ? `${key.substring(0, 8)}...${key.substring(key.length - 4)}`
                         : '***';
-                console.log(
-                    `[AIClient] Got API key for ${provider} from Pinia store: ${maskedKey} (length: ${key.length})`
-                );
                 return key;
             }
         } catch (e) {
-            console.log(`[AIClient] Pinia store not available, trying localStorage`, e);
+            // Silently fail if Pinia not available, fall back to localStorage
         }
 
         // Fallback to localStorage directly
@@ -192,9 +189,6 @@ class AIClient {
                         key.length > 10
                             ? `${key.substring(0, 8)}...${key.substring(key.length - 4)}`
                             : '***';
-                    console.log(
-                        `[AIClient] Got API key for ${provider} from localStorage: ${maskedKey} (length: ${key.length})`
-                    );
                     return key;
                 }
             }
@@ -1075,9 +1069,7 @@ class AIClient {
 
         for (const provider of providers) {
             try {
-                console.log(`[AIClient] Trying provider: ${provider}`);
                 const response = await this.tryProviderCompletion(provider, messages, options);
-                console.log(`[AIClient] Success with provider: ${provider}`);
                 return { ...response, provider };
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);

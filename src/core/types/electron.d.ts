@@ -92,6 +92,7 @@ export interface AppAPI {
     onNotification: (
         callback: (data: { type: string; message: string; duration?: number }) => void
     ) => () => void;
+    updateDesktopNotifications: (config: any) => void;
 }
 
 export interface WindowAPI {

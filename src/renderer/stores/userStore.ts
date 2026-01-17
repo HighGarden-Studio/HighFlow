@@ -62,7 +62,7 @@ export const useUserStore = defineStore('user', () => {
 
             if (result.success && result.data) {
                 setUser(result.data.user);
-                console.log('✅ User logged in:', user.value?.email);
+                console.debug('✅ User logged in:', user.value?.email);
                 return true;
             } else {
                 error.value = result.error || 'Login failed';
@@ -88,7 +88,7 @@ export const useUserStore = defineStore('user', () => {
         try {
             const result = await window.electron.auth.logout();
             clearUser();
-            console.log('✅ User logged out');
+            console.debug('✅ User logged out');
         } catch (err: any) {
             error.value = err.message || 'Logout failed';
             console.error('❌ Logout error:', err);
@@ -109,7 +109,7 @@ export const useUserStore = defineStore('user', () => {
 
             if (result.success && result.data) {
                 setUser(result.data);
-                console.log('✅ User refreshed:', user.value?.email);
+                console.debug('✅ User refreshed:', user.value?.email);
                 return true;
             } else if (result.data === null) {
                 // No session - not an error
@@ -133,7 +133,7 @@ export const useUserStore = defineStore('user', () => {
      * Auto-login on app start
      */
     async function autoLogin(): Promise<boolean> {
-        console.log('🔄 Attempting auto-login...');
+        console.debug('🔄 Attempting auto-login...');
         return await refreshUser();
     }
 

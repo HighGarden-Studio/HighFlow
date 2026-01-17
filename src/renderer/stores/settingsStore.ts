@@ -169,8 +169,8 @@ function scoreLmStudioModel(modelId: string): number {
     let score = 0;
     const moeMatch = name.match(/(\d+)\s*(x|×)\s*(\d+)\s*b/);
     if (moeMatch) {
-        const experts = parseInt(moeMatch[1], 10);
-        const size = parseInt(moeMatch[3], 10);
+        const experts = parseInt(moeMatch[1] || '0', 10);
+        const size = parseInt(moeMatch[3] || '0', 10);
         if (!isNaN(experts) && !isNaN(size)) {
             score = experts * size;
         }
@@ -178,19 +178,19 @@ function scoreLmStudioModel(modelId: string): number {
     if (score === 0) {
         const billionMatch = name.match(/(\d+(\.\d+)?)\s*(b|billion)/);
         if (billionMatch) {
-            score = parseFloat(billionMatch[1]);
+            score = parseFloat(billionMatch[1] || '0');
         }
     }
     if (score === 0) {
         const shorthandMatch = name.match(/(\d+(\.\d+)?)b/);
         if (shorthandMatch) {
-            score = parseFloat(shorthandMatch[1]);
+            score = parseFloat(shorthandMatch[1] || '0');
         }
     }
     if (score === 0) {
         const millionMatch = name.match(/(\d+(\.\d+)?)m/);
         if (millionMatch) {
-            score = parseFloat(millionMatch[1]) / 1000;
+            score = parseFloat(millionMatch[1] || '0') / 1000;
         }
     }
     if (score === 0) {
@@ -292,7 +292,7 @@ export interface IntegrationAccount {
     email: string;
     avatar?: string;
     authData?: any; // Token, refresh token, etc. (Store securely in main process ideally, but for UI ref)
-    connectedAt: Date;
+    connectedAt: string;
 }
 
 export interface IntegrationConfig {
@@ -301,7 +301,7 @@ export interface IntegrationConfig {
     enabled: boolean;
     connected: boolean;
     config?: Record<string, any>;
-    lastSync?: Date;
+    lastSync?: string;
     icon?: string;
     category?: string;
     accounts?: IntegrationAccount[];
@@ -448,6 +448,7 @@ const TAG_PERMISSION_DEFAULTS: Partial<Record<MCPServerTag, MCPPermissionId[]>> 
     memory: ['read', 'write'],
     code: ['read', 'write', 'execute'],
     design: ['read'],
+    communication: ['read', 'write', 'network'],
 };
 
 function buildMCPPermissionDefaults(server?: Partial<MCPServerConfig>): MCPPermissionMap {
@@ -2198,6 +2199,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         memory: 'settings.mcp.tags.memory',
         code: 'settings.mcp.tags.code',
         design: 'settings.mcp.tags.design',
+        communication: 'settings.mcp.tags.communication',
     };
 
     /**
@@ -2395,9 +2397,8 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
      * Sync desktop notification settings to main process
      */
     function syncDesktopNotifications() {
-        if (window.electron?.ipcRenderer) {
-            window.electron.ipcRenderer.send(
-                'settings:update-notifications',
+        if (window.electron?.app?.updateDesktopNotifications) {
+            window.electron.app.updateDesktopNotifications(
                 JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
             );
         }
@@ -2431,6 +2432,11 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                             ...defaultProvider,
                             apiKey: storedProvider.apiKey,
                             enabled: storedProvider.enabled,
+                            // Merge stored models if available
+                            models:
+                                storedProvider.models && storedProvider.models.length > 0
+                                    ? storedProvider.models
+                                    : defaultProvider.models,
                             // Only use stored model if it's valid, otherwise use default
                             defaultModel: storedModelValid
                                 ? storedProvider.defaultModel
@@ -2526,9 +2532,13 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             }
 
             // Load models from DB cache for all enabled providers
-            console.log('[SettingsStore] Loading models from DB cache on startup...');
+            console.debug('[SettingsStore] Loading models from DB cache on startup...');
             for (const provider of aiProviders.value) {
-                if (provider.enabled && provider.apiKey) {
+                const hasAuth =
+                    provider.apiKey ||
+                    provider.authMethods.includes('oauth') ||
+                    provider.requiresLogin;
+                if (provider.enabled && hasAuth) {
                     try {
                         const models = await window.electron.ai.getModelsFromCache(provider.id);
                         if (models && models.length > 0) {
@@ -2543,7 +2553,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                                     models: modelNames,
                                 };
                                 aiProviders.value = updatedProviders;
-                                console.log(
+                                console.debug(
                                     `[SettingsStore] Loaded ${models.length} models from DB for ${provider.id}`
                                 );
                             }
@@ -2570,18 +2580,6 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                         console.warn(`Failed to detect provider ${provider.id}:`, err)
                     );
                 });
-
-            /**
-             * Sync desktop notification settings to main process
-             */
-            function syncDesktopNotifications() {
-                if (window.electron?.ipcRenderer) {
-                    window.electron.ipcRenderer.send(
-                        'settings:update-notifications',
-                        JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
-                    );
-                }
-            }
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to load settings';
             console.error('Failed to load settings:', e);
@@ -2607,9 +2605,9 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             saveToStorage('setupWizard', setupWizard.value);
 
             // Sync desktop notification settings to main process whenever saved
-            if (window.electron?.ipcRenderer) {
-                window.electron.ipcRenderer.send(
-                    'settings:update-notifications',
+            // Sync desktop notification settings to main process whenever saved
+            if (window.electron?.app?.updateDesktopNotifications) {
+                window.electron.app.updateDesktopNotifications(
                     JSON.parse(JSON.stringify(generalSettings.value.desktopNotifications))
                 );
             }
@@ -2630,7 +2628,11 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         if (index >= 0) {
             const currentProvider = aiProviders.value[index];
             if (currentProvider) {
-                const updatedProvider = { ...currentProvider, ...updates };
+                const updatedProvider: AIProviderConfig = {
+                    ...currentProvider,
+                    ...updates,
+                    id: currentProvider.id,
+                };
                 aiProviders.value[index] = updatedProvider;
 
                 await saveSettings();
@@ -2641,10 +2643,11 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                     window.electron.ai &&
                     window.electron.ai.saveProviderConfig
                 ) {
-                    console.log(`[SettingsStore] Syncing ${providerId} config to backend`);
+                    console.debug(`[SettingsStore] Syncing ${providerId} config to backend`);
                     // We only send minimal config (e.g. key, url), or the whole object?
                     // Let's send the specific updates merged with current config
-                    await window.electron.ai.saveProviderConfig(providerId, updatedProvider);
+                    const safeConfig = JSON.parse(JSON.stringify(updatedProvider));
+                    await window.electron.ai.saveProviderConfig(providerId, safeConfig);
                 }
             }
         }
@@ -2697,7 +2700,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                         const modelList = fetchedModels.map((m: any) => m.name);
 
                         // Analyze model characteristics using AI (background, non-blocking)
-                        console.log(
+                        console.debug(
                             `[Settings] Starting model characteristics analysis for ${fetchedModels.length} models...`
                         );
 
@@ -2748,7 +2751,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                                             providerId as any,
                                             analyzedModels
                                         );
-                                        console.log(
+                                        console.debug(
                                             `[Settings] Model characteristics analysis complete for ${providerId}`
                                         );
                                     }
@@ -2811,7 +2814,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
 
             // Check error response
             const data = await response.json().catch(() => ({}));
-            console.log('Anthropic validation response:', response.status, data);
+            console.debug('Anthropic validation response:', response.status, data);
 
             // 401 or authentication errors = invalid key
             if (response.status === 401) return false;
@@ -2847,6 +2850,8 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         }
 
         const provider = aiProviders.value[providerIndex];
+        if (!provider) return null;
+
         const sanitized = sanitizeModelList(models);
         const preferredModel = selectPreferredLmStudioModel(sanitized, provider.defaultModel);
 
@@ -2958,10 +2963,11 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
                 const index = aiProviders.value.findIndex((p) => p.id === providerId);
                 if (index >= 0) {
                     const currentProvider = aiProviders.value[index];
-                    if (currentProvider.isConnected) {
+                    if (currentProvider && currentProvider.isConnected) {
                         aiProviders.value[index] = {
                             ...currentProvider,
                             isConnected: false,
+                            id: currentProvider.id,
                         };
                     }
                 }
@@ -3011,12 +3017,15 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             const index = aiProviders.value.findIndex((p) => p.id === providerId);
             if (index >= 0) {
                 const currentProvider = aiProviders.value[index];
-                if (!currentProvider.isConnected || currentProvider.baseUrl !== normalizedUrl) {
-                    aiProviders.value[index] = {
-                        ...currentProvider,
-                        isConnected: true,
-                        baseUrl: currentProvider.baseUrl || normalizedUrl,
-                    };
+                if (currentProvider) {
+                    if (!currentProvider.isConnected || currentProvider.baseUrl !== normalizedUrl) {
+                        aiProviders.value[index] = {
+                            ...currentProvider,
+                            isConnected: true,
+                            baseUrl: currentProvider.baseUrl || normalizedUrl,
+                            id: currentProvider.id,
+                        };
+                    }
                 }
             }
 
@@ -3033,10 +3042,11 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             const index = aiProviders.value.findIndex((p) => p.id === providerId);
             if (index >= 0) {
                 const currentProvider = aiProviders.value[index];
-                if (currentProvider.isConnected) {
+                if (currentProvider && currentProvider.isConnected) {
                     aiProviders.value[index] = {
                         ...currentProvider,
                         isConnected: false,
+                        id: currentProvider.id,
                     };
                 }
             }
@@ -3054,7 +3064,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
 
         // Skip direct API validation in browser due to CORS issues.
         // The real validation will happen when models are fetched in the Main process.
-        console.log(
+        console.debug(
             '[SettingsStore] Skipping strict OpenAI CORS validation, checking format only.'
         );
         return true;
@@ -3502,6 +3512,12 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
             compactMode: false,
             showTaskIds: false,
             enableAnimations: true,
+            desktopNotifications: {
+                enabled: true,
+                notifyOnTaskStart: true,
+                notifyOnTaskComplete: true,
+                notifyOnTaskError: true,
+            },
         };
 
         // Reset shortcuts
@@ -3580,8 +3596,6 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
 
             // Find provider config to get API key
             const providerConfig = aiProviders.value.find((p) => p.id === providerId);
-            const apiKey = providerConfig?.apiKey;
-
             // Use IPC to fetch models (consistent with validateApiKey) - avoids Browser environment issues
             // and ensures we get the full list of models just like validation
             console.log(`[SettingsStore] Fetching models via IPC for ${providerId}`);

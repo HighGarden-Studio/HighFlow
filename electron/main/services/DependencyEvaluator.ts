@@ -195,9 +195,9 @@ export class DependencyEvaluator {
         if (this.dependentTaskLastRunAt && task.completedAt) {
             const completedAt = new Date(task.completedAt).getTime();
             const lastRunAt = this.dependentTaskLastRunAt.getTime();
-            // If completed AFTER the last run, it's new.
-            // Giving a small buffer (e.g. 100ms) might be wise, but strict > is safer for logic.
-            isNew = completedAt > lastRunAt;
+            // If completed AFTER or AT THE SAME TIME as the last run, it's new.
+            // We use >= because DB timestamp precision (seconds) might cause events to appear simultaneous
+            isNew = completedAt >= lastRunAt;
         }
 
         return { value: true, isNew };

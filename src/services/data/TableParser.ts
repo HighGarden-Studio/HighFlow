@@ -52,11 +52,12 @@ export class TableParser {
         }
 
         // Extract columns from the first record keys
-        const columns = Object.keys(records[0]);
+        const firstRecord = records[0] as Record<string, any>;
+        const columns = Object.keys(firstRecord);
 
         return {
             columns,
-            rows: records,
+            rows: records as Record<string, any>[],
             metadata: {
                 rowCount: records.length,
                 format: 'csv',
@@ -80,7 +81,10 @@ export class TableParser {
 
         // Use the first sheet by default
         const sheetName = workbook.SheetNames[0];
+        if (!sheetName) throw new Error('Excel file contains no valid sheet name');
+
         const sheet = workbook.Sheets[sheetName];
+        if (!sheet) throw new Error('Excel sheet data not found');
 
         // Convert to JSON
         // header: 1 returns array of arrays (good for finding headers), header: 'A' returns raw.
@@ -96,7 +100,8 @@ export class TableParser {
         }
 
         // Extract columns from first row
-        const columns = Object.keys(rows[0]);
+        const firstRow = rows[0] as Record<string, any>;
+        const columns = Object.keys(firstRow);
 
         return {
             columns,

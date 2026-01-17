@@ -131,6 +131,9 @@ const appAPI = {
     getPaths: (): Promise<AppPaths> => ipcRenderer.invoke('app:getPaths'),
 
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+
+    updateDesktopNotifications: (config: any) =>
+        ipcRenderer.send('settings:update-notifications', config),
 };
 
 // ========================================

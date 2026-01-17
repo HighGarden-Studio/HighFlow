@@ -50,5 +50,5 @@ export function registerAuthHandlers() {
         }
     });
 
-    console.log('✅ Auth IPC handlers registered');
+    // Auth IPC handlers registered
 }

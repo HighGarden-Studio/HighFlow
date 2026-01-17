@@ -600,7 +600,7 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                         <p
                                             class="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2"
                                         >
-                                            {{ $t('settings.ai.highflow.title') }}
+                                            {{ $t('settings.ai.providers.highflow.title') }}
                                         </p>
                                         <ul
                                             class="text-xs text-blue-700 dark:text-blue-300 space-y-1"
@@ -610,7 +610,9 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                                     >✓</span
                                                 >
                                                 <span>{{
-                                                    $t('settings.ai.highflow.credit_usage')
+                                                    $t(
+                                                        'settings.ai.providers.highflow.credit_usage'
+                                                    )
                                                 }}</span>
                                             </li>
                                             <li class="flex items-start gap-2">
@@ -618,7 +620,7 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                                     >✓</span
                                                 >
                                                 <span>{{
-                                                    $t('settings.ai.highflow.no_api_key')
+                                                    $t('settings.ai.providers.highflow.no_api_key')
                                                 }}</span>
                                             </li>
                                             <li class="flex items-start gap-2">
@@ -626,12 +628,14 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                                                     >⚠</span
                                                 >
                                                 <span>{{
-                                                    $t('settings.ai.highflow.no_streaming')
+                                                    $t(
+                                                        'settings.ai.providers.highflow.no_streaming'
+                                                    )
                                                 }}</span>
                                             </li>
                                         </ul>
                                         <p class="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                                            {{ $t('settings.ai.highflow.login_notice') }}
+                                            {{ $t('settings.ai.providers.highflow.login_notice') }}
                                         </p>
                                     </div>
                                 </div>

@@ -309,7 +309,7 @@ export const useProjectStore = defineStore('projects', () => {
         });
 
         const unsubscribeCuratorCompleted = api.events.on('curator:completed', (payload: any) => {
-            console.log('[ProjectStore] Curator completed, refreshing project...', payload);
+            console.debug('[ProjectStore] Curator completed, refreshing project...', payload);
             if (currentProject.value?.id === payload.projectId) {
                 fetchProject(payload.projectId).then((updatedProject) => {
                     if (updatedProject) {

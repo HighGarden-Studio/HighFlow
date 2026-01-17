@@ -11,7 +11,7 @@
     "private": true,
     "scripts": {
         "dev": "vite",
-        "dev:electron": "tsx scripts/dev.ts",
+        "dev:electron": "node scripts/rebuild-electron.js && tsx scripts/dev.ts",
         "build": "vue-tsc --noEmit && vite build",
         "build:dir": "vite build && tsx scripts/build.ts && electron-builder --dir",
         "build:mac": "vite build && tsx scripts/build.ts && electron-builder --mac",

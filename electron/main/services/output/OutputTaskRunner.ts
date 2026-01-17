@@ -292,7 +292,8 @@ export class OutputTaskRunner {
                     if (lastOutputRun === 0) {
                         shouldInclude = true; // First run, include all current state
                     } else {
-                        shouldInclude = depCompletedAt > lastOutputRun;
+                        // Use >= to handle precision loss where dep completes at same second as last run
+                        shouldInclude = depCompletedAt >= lastOutputRun;
                     }
                 } else {
                     // Snapshot mode: Always include latest state of dependencies

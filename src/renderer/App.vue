@@ -204,7 +204,7 @@ function matchShortcut(event: KeyboardEvent, shortcut: any): boolean {
 }
 
 function executeShortcut(id: string) {
-    console.log(`⌨️ Executing shortcut: ${id}`);
+    console.debug(`⌨️ Executing shortcut: ${id}`);
     switch (id) {
         case 'command-palette':
         case 'search':
@@ -324,17 +324,17 @@ async function handleLogout() {
 async function checkForUpdates() {
     try {
         const currentVersion = await window.electron.app.getVersion();
-        console.log('[VersionCheck] Current version:', currentVersion);
+        console.debug('[VersionCheck] Current version:', currentVersion);
 
         const info = await versionAPI.checkVersion(currentVersion);
-        console.log('[VersionCheck] Version info:', info);
+        console.debug('[VersionCheck] Version info:', info);
 
         if (info.needsUpdate) {
             versionInfo.value = info;
             showUpdateModal.value = true;
 
             if (info.forceUpdate) {
-                console.log('[VersionCheck] Force update required');
+                console.debug('[VersionCheck] Force update required');
             }
         }
     } catch (error) {
@@ -356,6 +356,8 @@ function handleCloseUpdateModal() {
 }
 
 // Lifecycle
+let notificationCleanup: (() => void) | null = null;
+
 onMounted(async () => {
     // Initialize UI store
     await uiStore.initialize();
@@ -402,14 +404,9 @@ onMounted(async () => {
 
     // Listen for global notifications from main process
     if (window.electron?.app?.onNotification) {
-        const cleanup = window.electron.app.onNotification((data: any) => {
-            console.log('[App] Received notification:', data);
+        notificationCleanup = window.electron.app.onNotification((data: any) => {
+            console.debug('[App] Received notification:', data);
             uiStore.showToast({ message: data.message, type: data.type || 'info' });
-        });
-
-        // Clean up on unmount
-        onUnmounted(() => {
-            cleanup();
         });
     }
 
@@ -427,7 +424,7 @@ onMounted(async () => {
         if (Notification.permission === 'default') {
             try {
                 const permission = await Notification.requestPermission();
-                console.log('[App] Notification permission:', permission);
+                console.debug('[App] Notification permission:', permission);
             } catch (err) {
                 console.warn('[App] Failed to request notification permission:', err);
             }
@@ -436,6 +433,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (notificationCleanup) notificationCleanup();
     window.removeEventListener('keydown', handleGlobalKeyDown, true);
     // Remove IPC listeners if needed (optional for main app component)
     indexManager.shutdown();

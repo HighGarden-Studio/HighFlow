@@ -22,7 +22,7 @@ export function registerAiSettingsHandlers(): void {
             const key = `ai_provider_${providerId}`;
             await settingsRepository.setJSON(key, config);
 
-            console.log(`[IPC] Successfully saved config for ${providerId}`);
+            // Successfully saved config for provider
             return { success: true };
         } catch (error) {
             console.error(`[IPC] Failed to save config for ${providerId}:`, error);

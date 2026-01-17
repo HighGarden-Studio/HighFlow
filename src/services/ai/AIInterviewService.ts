@@ -567,19 +567,17 @@ export class AIInterviewService {
         metadata?: Record<string, any>
     ): void {
         try {
-            console.info(`[AIInterviewService][${stage}] Dispatching prompt`, {
+            // Only log summary info, not full prompt body unless needed for deep debugging
+            const summary = {
                 provider: provider || 'auto',
                 length: prompt.length,
-                metadata,
-            });
-            console.debug(`[AIInterviewService][${stage}] Prompt Body:\n${prompt}`);
-            if (metadata?.systemPrompt) {
-                console.debug(
-                    `[AIInterviewService][${stage}] System Prompt:\n${metadata.systemPrompt}`
-                );
-            }
+                hasSystemPrompt: !!metadata?.systemPrompt,
+            };
+
+            // Use debug level for prompt details (filtered out by default in many consoles)
+            console.debug(`[AIInterviewService][${stage}] Dispatching request`, summary);
         } catch (error) {
-            console.warn('[AIInterviewService] Failed to log prompt', error);
+            // Ignore logging errors
         }
     }
 

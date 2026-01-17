@@ -64,7 +64,7 @@ export const useHistoryStore = defineStore('history', () => {
             // Clear redo stack when new command is executed
             redoStack.value = [];
 
-            console.log(`✅ Command executed: ${command.description}`);
+            console.debug(`✅ Command executed: ${command.description}`);
         } catch (error) {
             console.error('Command execution failed:', error);
             throw error;
@@ -87,7 +87,7 @@ export const useHistoryStore = defineStore('history', () => {
         try {
             await command.undo();
             redoStack.value.push(command);
-            console.log(`↩️ Undone: ${command.description}`);
+            console.debug(`↩️ Undone: ${command.description}`);
         } catch (error) {
             console.error('Undo failed:', error);
             // Put it back on undo stack if undo fails
@@ -114,7 +114,7 @@ export const useHistoryStore = defineStore('history', () => {
         try {
             await command.execute();
             undoStack.value.push(command);
-            console.log(`↪️ Redone: ${command.description}`);
+            console.debug(`↪️ Redone: ${command.description}`);
         } catch (error) {
             console.error('Redo failed:', error);
             // Put it back on redo stack if redo fails
@@ -131,7 +131,7 @@ export const useHistoryStore = defineStore('history', () => {
     function clear(): void {
         undoStack.value = [];
         redoStack.value = [];
-        console.log('🗑️ History cleared');
+        console.debug('🗑️ History cleared');
     }
 
     /**

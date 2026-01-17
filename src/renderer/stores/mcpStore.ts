@@ -125,7 +125,7 @@ export const useMCPStore = defineStore('mcp', () => {
         });
 
         isSubscribed.value = true;
-        console.log('[MCPStore] Initialized global MCP listeners');
+        console.debug('[MCPStore] Initialized global MCP listeners');
     }
 
     // Clear logs for a task (e.g. when retrying)

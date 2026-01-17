@@ -159,7 +159,6 @@ const taskCardClasses = computed(() => [
         :class="taskCardClasses"
         @click="
             () => {
-                console.log('[BaseTaskCard] Card clicked:', task.id, task.title, task.taskType);
                 emit('click', task);
             }
         "

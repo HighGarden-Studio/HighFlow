@@ -29,7 +29,14 @@ interface ChatCompletionPayload {
 
 export class LmStudioProvider extends BaseAIProvider {
     readonly name: AIProvider = 'lmstudio';
-    readonly models: ModelInfo[];
+    // Remove explicit 'models' property declaration here to inherit from BaseAIProvider
+    // or keep it compatible. If BaseAIProvider has it public, we need to make it public.
+    // If we assign to it, it shouldn't be readonly in constructor unless initialized.
+
+    // Actually, BaseAIProvider likely defines models as public.
+    // Let's rely on inheritance or use public if needed.
+    // The previous error likely was about readonly modifier or initialization.
+    // Let's assume we implement it.
 
     private baseUrl: string;
     private apiKey?: string;
@@ -40,7 +47,9 @@ export class LmStudioProvider extends BaseAIProvider {
         this.baseUrl = this.normalizeBaseUrl(config.baseUrl);
         this.apiKey = config.apiKey || undefined;
         this.defaultModel = this.normalizeModel(config.defaultModel);
-        this.models = [
+
+        // Initialize with default model
+        this.setDynamicModels([
             {
                 name: this.defaultModel,
                 provider: 'lmstudio',
@@ -49,10 +58,15 @@ export class LmStudioProvider extends BaseAIProvider {
                 costPerInputToken: 0,
                 costPerOutputToken: 0,
                 averageLatency: 450,
-                features: ['streaming', 'system_prompt', 'json_mode'],
+                features: ['streaming', 'system_prompt', 'json_mode'] as AIFeature[],
                 bestFor: ['Local experimentation', 'Offline prototyping', 'Privacy-sensitive work'],
             },
-        ];
+        ]);
+    }
+
+    async fetchModels(): Promise<ModelInfo[]> {
+        // In the future, we could query GET /v1/models from LM Studio
+        return this.models;
     }
 
     setConfig(config: LmStudioProviderConfig): void {
@@ -64,7 +78,15 @@ export class LmStudioProvider extends BaseAIProvider {
         }
         if (config.defaultModel) {
             this.defaultModel = this.normalizeModel(config.defaultModel);
-            this.models[0].name = this.defaultModel;
+            // Update the default model in the list safely
+            const currentModels = this.models;
+            if (currentModels.length > 0) {
+                const firstModel = currentModels[0];
+                if (firstModel) {
+                    firstModel.name = this.defaultModel;
+                    this.setDynamicModels(currentModels);
+                }
+            }
         }
     }
 

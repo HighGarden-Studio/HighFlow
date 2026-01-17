@@ -88,17 +88,12 @@ function loadAssignedOperator() {
 
 onMounted(() => {
     loadAssignedOperator();
-    console.log(
-        `[AiTaskCard] Task ${props.task.projectSequence} mounted. hasUnreadResult=${props.task.hasUnreadResult}`
-    );
 });
 
 watch(
     () => props.task.hasUnreadResult,
-    (newVal) => {
-        console.log(
-            `[AiTaskCard] Task ${props.task.projectSequence} hasUnreadResult changed to: ${newVal}`
-        );
+    (_newVal) => {
+        // Handle unread result changes if needed
     }
 );
 

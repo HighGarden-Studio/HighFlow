@@ -14,7 +14,7 @@ import {
     isValidStatusTransition,
     taskKeyToString,
 } from '@core/types/database';
-import { useActivityLogStore } from './activityLogStore';
+// import { useActivityLogStore } from './activityLogStore';
 import { useMCPStore } from './mcpStore';
 import { useSettingsStore } from './settingsStore';
 import { useProjectStore } from './projectStore';
@@ -93,7 +93,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // arrived after 'task:status-changed' (done).
             // We ignore the status regression unless we are sure it's a new execution.
             // (Note: Valid retries usually set local status to in_progress via actions before this event arrives)
-            if (existing.status === 'done' && task.status === 'in_progress') {
+            if (existing && existing.status === 'done' && task.status === 'in_progress') {
                 console.warn(
                     '[TaskStore] Ignoring stale task update (Done -> InProgress regression):',
                     {
@@ -102,13 +102,13 @@ export const useTaskStore = defineStore('tasks', () => {
                         newStatus: task.status,
                     }
                 );
-
-                // Merge everything EXCEPT status and inputSubStatus to be safe
-                const { status, inputSubStatus, ...otherUpdates } = task;
-                tasks.value[index] = { ...existing, ...otherUpdates };
-            } else {
-                tasks.value[index] = { ...existing, ...task };
+                // Force keep local status
+                task = {
+                    ...task,
+                    status: existing.status,
+                };
             }
+            tasks.value[index] = { ...existing, ...task };
         } else if (sameProject) {
             tasks.value.push(task);
         }
@@ -233,18 +233,21 @@ export const useTaskStore = defineStore('tasks', () => {
             const mergedData = data.map((t) => {
                 const key = getTaskKey(t);
                 if (failedTaskIds.value.has(key)) {
-                    console.log(`[TaskStore] Preserving failed status for task ${key}`);
+                    console.debug(`[TaskStore] Preserving failed status for task ${key}`);
                     return { ...t, status: 'failed' as TaskStatus };
                 }
                 return t;
             });
 
-            console.log('[TaskStore] fetchTasks response:', {
+            console.debug('[TaskStore] fetchTasks response:', {
                 count: mergedData?.length,
                 sample: mergedData?.[0],
                 hasUnreadResult: mergedData?.[0]?.hasUnreadResult,
             });
-            console.log('[TaskStore] Full sample task:', JSON.stringify(mergedData?.[0], null, 2));
+            console.debug(
+                '[TaskStore] Full sample task:',
+                JSON.stringify(mergedData?.[0], null, 2)
+            );
             tasks.value = mergedData;
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to fetch tasks';
@@ -428,7 +431,11 @@ export const useTaskStore = defineStore('tasks', () => {
             // We don't need to delete other fields because we are only sending updateData now
 
             const plainData = JSON.parse(JSON.stringify(cleanUpdateData));
-            console.log('📝 TaskStore.updateTask calling API:', { projectId, sequence }, plainData);
+            console.debug(
+                '📝 TaskStore.updateTask calling API:',
+                { projectId, sequence },
+                plainData
+            );
 
             const task = await api.tasks.update(projectId, sequence, plainData);
 
@@ -452,7 +459,7 @@ export const useTaskStore = defineStore('tasks', () => {
                                         t.projectId === projectId && t.projectSequence === sequence
                                 );
                                 if (currentLocal && currentLocal.status === 'done') {
-                                    console.log(
+                                    console.debug(
                                         '[TaskStore] Ignoring stale input status update (Task is already Done)'
                                     );
                                     return;
@@ -647,7 +654,7 @@ export const useTaskStore = defineStore('tasks', () => {
         projectId: number,
         sequence: number,
         newStatus: TaskStatus,
-        options: {
+        _options: {
             approvalResponse?: string;
             refinementPrompt?: string;
             additionalWorkPrompt?: string;
@@ -897,7 +904,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             }
 
-            console.log('Executing task with API keys:', {
+            console.debug('Executing task with API keys:', {
                 hasAnthropic: !!apiKeys.anthropic,
                 hasOpenAI: !!apiKeys.openai,
                 hasGoogle: !!apiKeys.google,
@@ -999,12 +1006,6 @@ export const useTaskStore = defineStore('tasks', () => {
             // But "TaskKey Migration" claim implies backend handles composite.
             // Let's assume I can pass (projectId, sequence) if I update preload.
             // Since I haven't updated preload `submitInput`, I'll use the ID if available, else warn.
-
-            // Wait, I updated preload `update`, `delete`, `reorder`, `stopTask`. Not `submitInput`.
-            // So `submitInput` in preload expects `(taskId, input)`.
-            // If `taskId` is undefined, calling it will fail.
-            // I should update preload for `submitInput` too.
-            // But for now, let's keep it safe.
 
             // For now, call with ID if available, otherwise we fail.
             // Wait, if task.id is undefined, we fail.
@@ -1183,7 +1184,11 @@ export const useTaskStore = defineStore('tasks', () => {
         if (isInputWaiting) {
             window.dispatchEvent(
                 new CustomEvent('task:input-status-changed', {
-                    detail: { taskId: task.id, inputSubStatus: null },
+                    detail: {
+                        projectId: task.projectId,
+                        projectSequence: task.projectSequence,
+                        inputSubStatus: null,
+                    },
                 })
             );
         }
@@ -1623,7 +1628,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             }
 
-            console.log('[TaskStore] Starting auto review for task:', projectId, sequence);
+            console.debug('[TaskStore] Starting auto review for task:', projectId, sequence);
 
             // Build payload and serialize to ensure it's cloneable (remove Vue reactivity)
             const payload = {
@@ -1700,7 +1705,7 @@ export const useTaskStore = defineStore('tasks', () => {
             'taskExecution:completed',
             (data: any) => {
                 const { projectId, projectSequence, result, hasUnreadResult } = data;
-                console.log('[TaskStore] Task execution completed:', {
+                console.debug('[TaskStore] Task execution completed:', {
                     projectId,
                     projectSequence,
                     hasUnreadResult,
@@ -1736,7 +1741,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 // Use projectSequence if available, otherwise sequence
                 const seq = projectSequence ?? sequence;
 
-                console.log('[TaskStore] Status changed event:', {
+                console.debug('[TaskStore] Status changed event:', {
                     projectId,
                     sequence: seq,
                     status,
@@ -1757,7 +1762,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
                     // For INPUT tasks transitioning to in_progress, refetch full data to get inputSubStatus
                     if (task.taskType === 'input' && status === 'in_progress') {
-                        console.log('[TaskStore] INPUT task starting, refetching full data:', {
+                        console.debug('[TaskStore] INPUT task starting, refetching full data:', {
                             projectId,
                             sequence: seq,
                         });
@@ -1788,7 +1793,7 @@ export const useTaskStore = defineStore('tasks', () => {
                         // [Fix] Clear MCP logs if task is starting (backend-triggered)
                         // Only clear if local status is NOT 'in_progress' to avoid racing with optimistic update in executeTask
                         if (status === 'in_progress' && task.status !== 'in_progress') {
-                            console.log(
+                            console.debug(
                                 '[TaskStore] Backend triggered task start, clearing MCP logs'
                             );
                             useMCPStore().clearTaskLogs(projectId, seq);
@@ -1836,7 +1841,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution started
             const unsubscribeStarted = api.taskExecution.onStarted(
                 (data: { projectId: number; projectSequence: number; startedAt: Date }) => {
-                    console.log('[TaskStore] Execution started:', data);
+                    console.debug('[TaskStore] Execution started:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -1896,7 +1901,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     executingTaskIds.value.delete(getTaskKey(task));
 
                     // Update progress with Vue reactivity
-                    // Optimized: Mutate map directly instead of cloning
+                    // Optimized: Mutate map directly
                     const taskKey = getTaskKey(task);
                     const existing = executionProgress.value.get(taskKey);
 
@@ -1943,8 +1948,8 @@ export const useTaskStore = defineStore('tasks', () => {
                     result: any;
                     hasUnreadResult?: boolean;
                 }) => {
-                    console.log('🔍 [TaskStore] Execution completed handler CALLED:', data);
-                    console.log('[TaskStore] Execution completed:', data);
+                    console.debug('[TaskStore] Execution completed handler CALLED:', data);
+                    console.debug('[TaskStore] Execution completed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2037,9 +2042,9 @@ export const useTaskStore = defineStore('tasks', () => {
 
                         // Trigger auto-review if enabled
                         if (currentTaskInStore.autoReview) {
-                            console.log(
+                            console.debug(
                                 '[TaskStore] Auto-review enabled, starting review for task:',
-                                task.id
+                                getTaskKey(task)
                             );
                             // Defer to next tick to ensure state is updated
                             // Defer to next tick to ensure state is updated
@@ -2062,7 +2067,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution failed
             const unsubscribeFailed = api.taskExecution.onFailed(
                 (data: { projectId: number; projectSequence: number; error: string }) => {
-                    console.log('[TaskStore] Execution failed:', data);
+                    console.debug('[TaskStore] Execution failed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2111,7 +2116,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution paused
             const unsubscribePaused = api.taskExecution.onPaused(
                 (data: { projectId: number; projectSequence: number; pausedAt: Date }) => {
-                    console.log('[TaskStore] Execution paused:', data);
+                    console.debug('[TaskStore] Execution paused:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2146,7 +2151,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution resumed
             const unsubscribeResumed = api.taskExecution.onResumed(
                 (data: { projectId: number; projectSequence: number }) => {
-                    console.log('[TaskStore] Execution resumed:', data);
+                    console.debug('[TaskStore] Execution resumed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2181,7 +2186,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution stopped
             const unsubscribeStopped = api.taskExecution.onStopped(
                 (data: { projectId: number; projectSequence: number }) => {
-                    console.log('[TaskStore] Execution stopped:', data);
+                    console.debug('[TaskStore] Execution stopped:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2223,7 +2228,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     options?: string[];
                     context?: unknown;
                 }) => {
-                    console.log('[TaskStore] Approval required:', data);
+                    console.debug('[TaskStore] Approval required:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2264,7 +2269,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Review started
             const unsubscribeReviewStarted = api.taskExecution.onReviewStarted(
                 (data: { projectId: number; projectSequence: number; startedAt: Date }) => {
-                    console.log('[TaskStore] Review started:', data);
+                    console.debug('[TaskStore] Review started:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2326,7 +2331,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     passed: boolean;
                     score: number;
                 }) => {
-                    console.log('[TaskStore] Auto-review completed:', data);
+                    console.debug('[TaskStore] Auto-review completed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2346,7 +2351,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     if (index >= 0) {
                         const reviewFailed = !data.passed;
                         const currentTaskInStore = tasks.value[index];
-                        console.log('[TaskStore] Updating task reviewFailed:', reviewFailed);
+                        console.debug('[TaskStore] Updating task reviewFailed:', reviewFailed);
                         tasks.value[index] = {
                             ...currentTaskInStore,
                             status: data.passed
@@ -2367,7 +2372,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Review failed
             const unsubscribeReviewFailed = api.taskExecution.onReviewFailed(
                 (data: { projectId: number; projectSequence: number; error: string }) => {
-                    console.log('[TaskStore] Review failed:', data);
+                    console.debug('[TaskStore] Review failed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2396,7 +2401,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Review cancelled (or Rejected)
             const unsubscribeRejected = api.taskExecution.onRejected(
                 (data: { projectId: number; projectSequence: number; response?: string }) => {
-                    console.log('[TaskStore] Task rejected:', data);
+                    console.debug('[TaskStore] Task rejected:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2610,7 +2615,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
 
                 createdTasks.push(createdTask);
-                taskIdMap.set(i, createdTask.id);
+                taskIdMap.set(i, createdTask.projectSequence); // Use projectSequence as the ID
 
                 // 로컬 상태에 추가
                 tasks.value.push(createdTask);
@@ -2627,51 +2632,6 @@ export const useTaskStore = defineStore('tasks', () => {
         } finally {
             loading.value = false;
         }
-    }
-
-    function shouldRegenerateTaskFromPrompt(
-        originalTask: Task | null,
-        updates: Partial<Task>
-    ): boolean {
-        if (!originalTask) {
-            return false;
-        }
-
-        const descriptionChanged =
-            typeof updates.description === 'string' &&
-            updates.description.trim() !== (originalTask.description || '').trim();
-        const generatedPromptChanged =
-            typeof updates.generatedPrompt === 'string' &&
-            updates.generatedPrompt.trim() !== (originalTask.generatedPrompt || '').trim();
-        const optimizedPromptChanged =
-            typeof updates.aiOptimizedPrompt === 'string' &&
-            updates.aiOptimizedPrompt.trim() !== (originalTask.aiOptimizedPrompt || '').trim();
-
-        if (!(descriptionChanged || generatedPromptChanged || optimizedPromptChanged)) {
-            return false;
-        }
-
-        const nextPrompt = getUpdatedPromptValue(originalTask, updates).trim();
-        return nextPrompt.length > 0;
-    }
-
-    function getUpdatedPromptValue(originalTask: Task, updates: Partial<Task>): string {
-        if (typeof updates.description === 'string' && updates.description.trim().length > 0) {
-            return updates.description;
-        }
-        if (
-            typeof updates.generatedPrompt === 'string' &&
-            updates.generatedPrompt.trim().length > 0
-        ) {
-            return updates.generatedPrompt;
-        }
-        if (
-            typeof updates.aiOptimizedPrompt === 'string' &&
-            updates.aiOptimizedPrompt.trim().length > 0
-        ) {
-            return updates.aiOptimizedPrompt;
-        }
-        return extractPromptText(originalTask);
     }
 
     function extractPromptText(task: Partial<Task> | null): string {
