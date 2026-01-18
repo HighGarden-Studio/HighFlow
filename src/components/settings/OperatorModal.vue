@@ -275,7 +275,6 @@
                                         placeholder="Add tag..."
                                         class="flex-1 min-w-[100px] bg-transparent border-none text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm"
                                         @keydown.enter.prevent="addTag"
-                                        @keydown.comma.prevent="addTag"
                                         @blur="addTag"
                                     />
                                 </div>

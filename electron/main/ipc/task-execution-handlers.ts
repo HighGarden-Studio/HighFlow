@@ -3955,10 +3955,10 @@ function parseReviewScore(content: string): number {
 
     // Various patterns to match score
     const patterns = [
-        /평가\s*점수[:\s]*(\d+)\s*[\/점]/i,
-        /점수[:\s]*(\d+)\s*[\/점]/i,
-        /(\d+)\s*[\/]\s*10\s*점?/i,
-        /(\d+)\s*점\s*[\/]\s*10/i,
+        /평가\s*점수[:\s]*(\d+)\s*[/점]/i,
+        /점수[:\s]*(\d+)\s*[/점]/i,
+        /(\d+)\s*[/]\s*10\s*점?/i,
+        /(\d+)\s*점\s*[/]\s*10/i,
         /score[:\s]*(\d+)/i,
         /(\d+)\s*out\s*of\s*10/i,
         /총점[:\s]*(\d+)/i,

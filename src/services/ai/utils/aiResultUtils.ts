@@ -1,6 +1,6 @@
 import type { AiResult, AiKind, AiSubType } from '@core/types/ai';
 
-const JSON_PATTERN = /^[\s{\[].*}[\s\]]?$/s;
+const JSON_PATTERN = /^[\s{[].*}[\s\]]?$/s;
 const YAML_HINT = /^(---|\w[\w\s-]*:)/m;
 const SQL_HINT = /\b(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|UPSERT)\b/i;
 const DIFF_HINT = /^@@|^\+{3}|^-{3}|^diff\s/m;
