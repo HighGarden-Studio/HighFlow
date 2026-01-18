@@ -127,10 +127,9 @@ export class LmStudioProvider extends BaseAIProvider {
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
-        const self = this;
         const prompt = this.getPromptText(input);
-        const generator = async function* () {
-            const response = await self.execute(prompt, config, context);
+        return async function* (this: LmStudioProvider) {
+            const response = await this.execute(prompt, config, context);
             if (response.content) {
                 onToken(response.content);
             }
@@ -140,8 +139,7 @@ export class LmStudioProvider extends BaseAIProvider {
                 done: true,
                 metadata: response.metadata,
             };
-        };
-        return generator();
+        }.bind(this)();
     }
 
     async chat(

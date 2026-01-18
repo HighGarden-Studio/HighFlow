@@ -475,17 +475,15 @@ export class CredentialManager {
 let encryptionInstance: EncryptionService | null = null;
 let credentialManager: CredentialManager | null = null;
 
-export function initializeEncryption(
+export async function initializeEncryption(
     config?: Partial<EncryptionConfig>,
     safeStorage?: SecureStorageAPI
 ): Promise<EncryptionService> {
-    return new Promise(async (resolve) => {
-        if (!encryptionInstance) {
-            encryptionInstance = new EncryptionService(config);
-            await encryptionInstance.initialize(safeStorage);
-        }
-        resolve(encryptionInstance);
-    });
+    if (!encryptionInstance) {
+        encryptionInstance = new EncryptionService(config);
+        await encryptionInstance.initialize(safeStorage);
+    }
+    return encryptionInstance;
 }
 
 export function getEncryptionService(): EncryptionService | null {
