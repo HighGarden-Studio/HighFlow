@@ -54,7 +54,7 @@ export class ClaudeProvider extends BaseAIProvider {
             const models: ModelInfo[] = [];
 
             // Use SDK to list models with auto-pagination
-            for await (const model of client.models.list()) {
+            for await (const model of (client as any).models.list()) {
                 models.push({
                     name: model.id,
                     provider: 'anthropic',

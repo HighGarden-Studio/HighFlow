@@ -131,7 +131,9 @@ export class MistralProvider extends BaseAIProvider {
 
             const rawContent = response.choices?.[0]?.message?.content || '';
             const content = this.normalizeContent(rawContent);
-            const toolCalls = this.parseToolCalls(response.choices?.[0]?.message?.toolCalls);
+            const toolCalls = this.parseToolCalls(
+                (response.choices?.[0]?.message?.toolCalls as any) || undefined
+            );
             return {
                 content,
                 tokensUsed,

@@ -51,7 +51,7 @@
 
                 <!-- Phase Content (Collapsible) -->
                 <div v-if="isPhaseExpanded(group.phase)" class="phase-content">
-                    <div v-for="(log, index) in group.logs" :key="log.id" class="log-entry">
+                    <div v-for="log in group.logs" :key="log.id" class="log-entry">
                         <!-- Log Header -->
                         <div class="log-header" @click="toggleExpand(logs.indexOf(log))">
                             <div class="header-left">
@@ -239,7 +239,7 @@ function getPhaseStats(logs: LogEntry[]) {
     logs.forEach((log) => {
         if (log.duration) {
             const match = log.duration.match(/(\d+)ms/);
-            if (match) {
+            if (match && match[1]) {
                 totalDuration += parseInt(match[1]);
             }
         }

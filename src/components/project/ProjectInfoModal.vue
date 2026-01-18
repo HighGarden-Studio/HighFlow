@@ -65,6 +65,40 @@ const emit = defineEmits<{
 
 const isOpen = computed(() => props.open && props.project !== null);
 
+// Local project state
+const localProject = ref<Project | any | null>(null);
+
+// Sync with props
+watch(
+    () => props.project,
+    (newVal) => {
+        localProject.value = JSON.parse(JSON.stringify(newVal)); // Deep clone to avoid prop mutation
+    },
+    { immediate: true, deep: true }
+);
+
+// Refresh project data from API
+async function refreshProjectData() {
+    if (!localProject.value?.id) return;
+    try {
+        const api = getAPI();
+        const freshData = await api.projects.get(localProject.value.id);
+        if (freshData) {
+            localProject.value = freshData;
+            console.log('[ProjectInfoModal] Refreshed project data');
+        }
+    } catch (error) {
+        console.error('Failed to refresh project data:', error);
+    }
+}
+
+// Watch tab change to refresh context
+watch(activeTab, async (newTab) => {
+    if (newTab === 'context') {
+        await refreshProjectData();
+    }
+});
+
 // ========================================
 // Methods
 // ========================================
@@ -78,38 +112,39 @@ function handleEdit() {
 }
 
 async function handleOpenOutput() {
-    if (!props.project?.outputPath) return;
+    if (!localProject.value?.outputPath) return;
 
     try {
         const api = getAPI();
-        await api.shell.openPath(props.project.outputPath);
+        await api.shell.openPath(localProject.value.outputPath);
     } catch (error) {
         console.error('Failed to open output path:', error);
     }
 }
 
 async function handleUpdateGuidelines(guidelines: string) {
-    if (!props.project) return;
+    if (!localProject.value) return;
 
     try {
         const api = getAPI();
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             projectGuidelines: guidelines,
         } as any);
-        (props.project as any).projectGuidelines = guidelines;
+        (localProject.value as any).projectGuidelines = guidelines;
+        emit('update');
     } catch (error) {
         console.error('Failed to update guidelines:', error);
     }
 }
 
 async function handleUpdateBaseFolder(folder: string): Promise<void> {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             baseDevFolder: folder,
         });
-        (props.project as any).baseDevFolder = folder;
+        (localProject.value as any).baseDevFolder = folder;
         emit('update');
     } catch (error) {
         console.error('Failed to update base folder:', error);
@@ -117,13 +152,14 @@ async function handleUpdateBaseFolder(folder: string): Promise<void> {
 }
 
 async function handleUpdateOutputType(type: string | null) {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             outputType: type,
         } as any);
-        (props.project as any).outputType = type;
+        (localProject.value as any).outputType = type;
+        emit('update');
     } catch (error) {
         console.error('Failed to update output type:', error);
     }
@@ -133,15 +169,16 @@ async function handleUpdateAISettings(settings: {
     aiProvider: string | null;
     aiModel: string | null;
 }) {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             aiProvider: settings.aiProvider,
             aiModel: settings.aiModel,
         } as any);
-        (props.project as any).aiProvider = settings.aiProvider;
-        (props.project as any).aiModel = settings.aiModel;
+        (localProject.value as any).aiProvider = settings.aiProvider;
+        (localProject.value as any).aiModel = settings.aiModel;
+        emit('update');
     } catch (error) {
         console.error('Failed to update AI settings:', error);
     }
@@ -151,59 +188,61 @@ async function handleUpdateAutoReviewSettings(settings: {
     aiProvider: string | null;
     aiModel: string | null;
 }) {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
         // Store in metadata
-        const metadata = (props.project as any).metadata || {};
+        const metadata = (localProject.value as any).metadata || {};
         const newMetadata = {
             ...metadata,
             autoReviewProvider: settings.aiProvider,
             autoReviewModel: settings.aiModel,
         };
 
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             metadata: newMetadata,
         } as any);
 
         // Update local state
-        if (!(props.project as any).metadata) {
-            (props.project as any).metadata = {};
+        if (!(localProject.value as any).metadata) {
+            (localProject.value as any).metadata = {};
         }
-        (props.project as any).metadata.autoReviewProvider = settings.aiProvider;
-        (props.project as any).metadata.autoReviewModel = settings.aiModel;
+        (localProject.value as any).metadata.autoReviewProvider = settings.aiProvider;
+        (localProject.value as any).metadata.autoReviewModel = settings.aiModel;
+        emit('update');
     } catch (error) {
         console.error('Failed to update Auto Review settings:', error);
     }
 }
 
 async function handleUpdateMCPConfig(config: any) {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
         // Deep clone config to avoid IPC serialization issues with Proxies
         const configData = JSON.parse(JSON.stringify(config));
-        await api.projects.update(props.project.id, {
+        await api.projects.update(localProject.value.id, {
             mcpConfig: configData,
         } as any);
-        (props.project as any).mcpConfig = configData;
+        (localProject.value as any).mcpConfig = configData;
+        emit('update');
     } catch (error) {
         console.error('Failed to update MCP config:', error);
     }
 }
 
 async function handleExportProject() {
-    if (!props.project) return;
+    if (!localProject.value) return;
     try {
         const api = getAPI();
-        const exportData = await api.projects.export(props.project.id);
+        const exportData = await api.projects.export(localProject.value.id);
 
         // Create a blob and trigger download
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${props.project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.json`;
+        a.download = `${localProject.value.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -215,14 +254,14 @@ async function handleExportProject() {
 }
 
 async function handleResetResults() {
-    if (!props.project) return;
+    if (!localProject.value) return;
     if (!confirm(t('project.msg.reset_confirm'))) {
         return;
     }
 
     try {
         const api = getAPI();
-        await api.projects.resetResults(props.project.id);
+        await api.projects.resetResults(localProject.value.id);
         alert(t('msg.reset_success'));
         emit('update');
         emit('close');
@@ -244,6 +283,11 @@ watch(
             };
             window.addEventListener('keydown', handleEscape);
             onCleanup(() => window.removeEventListener('keydown', handleEscape));
+
+            // Allow time for prop to sync then refresh if context tab is active
+            if (activeTab.value === 'context') {
+                setTimeout(() => refreshProjectData(), 100);
+            }
         }
     }
 );
@@ -273,7 +317,7 @@ watch(
                     leave-to-class="opacity-0 scale-95"
                 >
                     <div
-                        v-if="isOpen && project"
+                        v-if="isOpen && localProject"
                         class="relative w-full max-w-4xl max-h-[85vh] bg-gray-900 rounded-xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
                     >
                         <!-- Modal Header -->
@@ -284,14 +328,14 @@ watch(
                                 <div
                                     class="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
                                     :style="{
-                                        backgroundColor: (project as any).color || '#3B82F6',
+                                        backgroundColor: (localProject as any).color || '#3B82F6',
                                     }"
                                 >
-                                    {{ (project as any).emoji || '📁' }}
+                                    {{ (localProject as any).emoji || '📁' }}
                                 </div>
                                 <div>
                                     <h2 class="text-lg font-semibold text-white">
-                                        {{ project.title }}
+                                        {{ localProject.title }}
                                     </h2>
                                     <p class="text-sm text-gray-400">
                                         {{ $t('project.info.title') }}
@@ -357,7 +401,7 @@ watch(
                             <!-- Project Info Tab -->
                             <div v-show="activeTab === 'info'" class="p-6">
                                 <ProjectInfoPanel
-                                    :project="project"
+                                    :project="localProject"
                                     @edit="handleEdit"
                                     @open-output="handleOpenOutput"
                                     @update-guidelines="handleUpdateGuidelines"
@@ -371,7 +415,7 @@ watch(
 
                             <!-- AI Context Tab -->
                             <div v-show="activeTab === 'context'">
-                                <ProjectMemoryPanel :project="project" />
+                                <ProjectMemoryPanel :project="localProject" />
                             </div>
                         </div>
 
@@ -380,10 +424,14 @@ watch(
                             <div class="flex items-center justify-between flex-wrap gap-y-4">
                                 <div class="text-sm text-gray-400">
                                     {{ $t('project.info.created_at') }}:
-                                    {{ new Date(project.createdAt).toLocaleDateString('ko-KR') }}
+                                    {{
+                                        new Date(localProject.createdAt).toLocaleDateString('ko-KR')
+                                    }}
                                     <span class="mx-2">|</span>
                                     {{ $t('common.update') }}:
-                                    {{ new Date(project.updatedAt).toLocaleDateString('ko-KR') }}
+                                    {{
+                                        new Date(localProject.updatedAt).toLocaleDateString('ko-KR')
+                                    }}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button

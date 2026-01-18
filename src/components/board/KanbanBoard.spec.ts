@@ -32,7 +32,7 @@ vi.mock('../../composables/useRealtime', () => ({
 // Test Data
 // ==========================================
 
-const createMockTask = (overrides: Partial<Task> = {}): Task => ({
+const createMockTask = (overrides: Partial<Task> | any = {}): Task => ({
     id: Math.random(),
     projectId: 1,
     title: 'Test Task',
@@ -51,9 +51,14 @@ const mockProjects = [
         name: 'Project Alpha',
         color: '#3B82F6',
         tasks: [
-            createMockTask({ id: 1, title: 'Task 1', status: 'todo', priority: 'high' }),
-            createMockTask({ id: 2, title: 'Task 2', status: 'in_progress', priority: 'medium' }),
-            createMockTask({ id: 3, title: 'Task 3', status: 'done', priority: 'low' }),
+            createMockTask({ id: 1, title: 'Task 1', status: 'todo', priority: 'high' } as any),
+            createMockTask({
+                id: 2,
+                title: 'Task 2',
+                status: 'in_progress',
+                priority: 'medium',
+            } as any),
+            createMockTask({ id: 3, title: 'Task 3', status: 'done', priority: 'low' } as any),
         ],
     },
     {
@@ -61,8 +66,8 @@ const mockProjects = [
         name: 'Project Beta',
         color: '#10B981',
         tasks: [
-            createMockTask({ id: 4, projectId: 2, title: 'Beta Task 1', status: 'todo' }),
-            createMockTask({ id: 5, projectId: 2, title: 'Beta Task 2', status: 'blocked' }),
+            createMockTask({ id: 4, projectId: 2, title: 'Beta Task 1', status: 'todo' } as any),
+            createMockTask({ id: 5, projectId: 2, title: 'Beta Task 2', status: 'blocked' } as any),
         ],
     },
 ];
@@ -148,8 +153,10 @@ describe('KanbanBoard', () => {
         it('should render project swimlanes', () => {
             const projectHeaders = wrapper.findAll('h3');
             expect(projectHeaders.length).toBe(2);
-            expect(projectHeaders[0].text()).toBe('Project Alpha');
-            expect(projectHeaders[1].text()).toBe('Project Beta');
+            if (projectHeaders.length >= 2) {
+                expect(projectHeaders[0]?.text()).toBe('Project Alpha');
+                expect(projectHeaders[1]?.text()).toBe('Project Beta');
+            }
         });
 
         it('should display task statistics', () => {
@@ -162,6 +169,8 @@ describe('KanbanBoard', () => {
         it('should render search input', () => {
             const searchInput = wrapper.find('input[type="text"]');
             expect(searchInput.exists()).toBe(true);
+            expect(wrapper.find('.task-card').exists()).toBe(true);
+            expect(wrapper.find('.task-title').text()).toContain('Test Task');
             expect(searchInput.attributes('placeholder')).toBe('Search tasks...');
         });
 
@@ -223,7 +232,7 @@ describe('KanbanBoard', () => {
             await nextTick();
 
             // Statistics should update (only matching tasks counted)
-            const statsText = wrapper.text();
+            wrapper.text();
             // Should show filtered results
             expect(wrapper.vm.searchQuery).toBe('Task 1');
         });
@@ -247,7 +256,7 @@ describe('KanbanBoard', () => {
                             id: 1,
                             title: 'A Task',
                             description: 'Contains searchable keyword',
-                        }),
+                        } as any),
                     ],
                 },
             ];
@@ -288,8 +297,12 @@ describe('KanbanBoard', () => {
                     name: 'Project',
                     color: '#000',
                     tasks: [
-                        createMockTask({ id: 1, title: 'Frontend Task', tags: ['frontend'] }),
-                        createMockTask({ id: 2, title: 'Backend Task', tags: ['backend'] }),
+                        createMockTask({
+                            id: 1,
+                            title: 'Frontend Task',
+                            tags: ['frontend'],
+                        } as any),
+                        createMockTask({ id: 2, title: 'Backend Task', tags: ['backend'] } as any),
                     ],
                 },
             ];
@@ -310,9 +323,9 @@ describe('KanbanBoard', () => {
                     name: 'Project',
                     color: '#000',
                     tasks: [
-                        createMockTask({ id: 1, title: 'Task A', assigneeId: 1 }),
-                        createMockTask({ id: 2, title: 'Task B', assigneeId: 2 }),
-                        createMockTask({ id: 3, title: 'Task C', assigneeId: 1 }),
+                        createMockTask({ id: 1, title: 'Task A', assigneeId: 1 } as any),
+                        createMockTask({ id: 2, title: 'Task B', assigneeId: 2 } as any),
+                        createMockTask({ id: 3, title: 'Task C', assigneeId: 1 } as any),
                     ],
                 },
             ];
@@ -339,21 +352,21 @@ describe('KanbanBoard', () => {
                             priority: 'high',
                             tags: ['frontend'],
                             assigneeId: 1,
-                        }),
+                        } as any),
                         createMockTask({
                             id: 2,
                             title: 'Match Priority',
                             priority: 'high',
                             tags: ['backend'],
                             assigneeId: 2,
-                        }),
+                        } as any),
                         createMockTask({
                             id: 3,
                             title: 'Match Tag',
                             priority: 'low',
                             tags: ['frontend'],
                             assigneeId: 2,
-                        }),
+                        } as any),
                     ],
                 },
             ];
@@ -382,7 +395,10 @@ describe('KanbanBoard', () => {
             await task.trigger('click');
 
             expect(wrapper.emitted('taskClick')).toBeTruthy();
-            expect(wrapper.emitted('taskClick')![0][0]).toMatchObject({ id: 1 });
+            const clickEvent = wrapper.emitted('taskClick');
+            if (clickEvent) {
+                expect(clickEvent?.[0][0]).toMatchObject({ id: 1 });
+            }
         });
 
         it('should emit addTask when add button is clicked', async () => {
@@ -394,7 +410,7 @@ describe('KanbanBoard', () => {
 
         it('should emit taskUpdate when task is moved', async () => {
             const column = wrapper.findComponent({ name: 'KanbanColumn' });
-            const task = createMockTask({ id: 1, status: 'todo' });
+            const task = createMockTask({ id: 1, status: 'todo' } as any);
 
             await column.vm.$emit('taskClick', task);
 
@@ -403,7 +419,7 @@ describe('KanbanBoard', () => {
 
         it('should emit taskExecute event', async () => {
             const column = wrapper.findComponent({ name: 'KanbanColumn' });
-            const task = createMockTask({ id: 1 });
+            const task = createMockTask({ id: 1 } as any);
 
             await column.vm.$emit('taskExecute', task);
 
@@ -412,7 +428,7 @@ describe('KanbanBoard', () => {
 
         it('should emit taskSubdivide event', async () => {
             const column = wrapper.findComponent({ name: 'KanbanColumn' });
-            const task = createMockTask({ id: 1 });
+            const task = createMockTask({ id: 1 } as any);
 
             await column.vm.$emit('taskSubdivide', task);
 

@@ -508,7 +508,7 @@ export class AIInterviewService {
      */
     setEnabledProviders(
         providers: EnabledProviderInfo[],
-        shouldFetchModels: boolean = false
+        _shouldFetchModels: boolean = false
     ): void {
         this.enabledProviders = providers;
         // shouldFetchModels 파라미터는 호환성을 위해 유지하지만 현재는 사용하지 않음
@@ -1500,8 +1500,8 @@ ${
             const aiText =
                 typeof response === 'string'
                     ? response
-                    : typeof response?.content === 'string'
-                      ? response.content
+                    : typeof (response as any)?.content === 'string'
+                      ? (response as any).content
                       : '';
 
             const bridge = aiText?.trim() || '다음 질문으로 이어가 볼게요.';
@@ -1712,7 +1712,7 @@ ${
         // 실제 요구사항 내용 표시 (최대 5개)
         const reqs = context.clarifiedRequirements.slice(0, 5);
         if (reqs.length > 0) {
-            reqs.forEach((req, i) => {
+            reqs.forEach((req, _i) => {
                 response += `- ${req.slice(0, 80)}${req.length > 80 ? '...' : ''}\n`;
             });
         } else {
@@ -2054,7 +2054,7 @@ TypeScript 코드로 작성하고, 파일 시스템을 통해 저장하세요.
         // 위임된 결정사항 정리 (AI가 구체화해야 할 부분)
         const delegatedDecisionsText =
             context.delegatedDecisions.length > 0
-                ? context.delegatedDecisions.map((d, i) => `${i + 1}. ${d}`).join('\n')
+                ? context.delegatedDecisions.map((d, _i) => `${_i + 1}. ${d}`).join('\n')
                 : '없음';
 
         // 프리셋 답변 요약 (AI에게 힌트 제공)
@@ -2169,8 +2169,8 @@ ${attachmentsText}
                             this.selectBestProvider(task.description || task.title || '');
 
                         return {
-                            title: task.title,
-                            description: task.description,
+                            title: task.title || '',
+                            description: task.description || '',
                             category: task.category || 'feature',
                             estimatedMinutes: task.estimatedMinutes || 60,
                             dependencies: task.dependencies || [],
@@ -2211,6 +2211,11 @@ ${attachmentsText}
                 // 태스크가 없으면 기본 태스크 생성
                 if (concretized.suggestedTasks.length === 0) {
                     concretized.suggestedTasks = this.generateSuggestedTasks(context);
+                }
+
+                // 구체화된 아이디어 저장 (프로젝트 생성 시 사용 - session 객체 없음, context는 참조로 전달됨)
+                if (concretized.suggestedTasks && concretized.suggestedTasks.length > 0) {
+                    (context as any).completedData = concretized;
                 }
 
                 eventBus.emit(
@@ -2470,7 +2475,7 @@ ${attachmentsText}
 
         const requirementsSection =
             relevantRequirements.length > 0
-                ? `## 관련 프로젝트 요구사항\n${relevantRequirements.map((r, i) => `- ${r}`).join('\n')}`
+                ? `## 관련 프로젝트 요구사항\n${relevantRequirements.map((r) => `- ${r}`).join('\n')}`
                 : '';
 
         const persona = this.deriveTaskPersona(task, primaryFormat);
@@ -2662,7 +2667,7 @@ ${formatInstructions}
     }
 
     private buildDefaultStepBlueprint(
-        task: any,
+        _task: any,
         format: TaskOutputFormat
     ): { title: string; details: string }[] {
         const isCode = format === 'code';
@@ -2751,7 +2756,7 @@ ${formatInstructions}
     private generateTitle(context: InterviewContext): string {
         const idea = context.originalIdea;
         // 첫 문장 또는 50자 제한
-        const title = idea.split(/[.!?]/)[0].trim();
+        const title = (idea.split(/[.!?]/)[0] || '').trim();
         return title.length > 50 ? title.substring(0, 47) + '...' : title;
     }
 
@@ -2775,25 +2780,8 @@ ${formatInstructions}
     /**
      * 아키텍처 제안
      */
-    private suggestArchitecture(context: InterviewContext): string {
-        const { technicalStack, outputFormats } = context;
-
-        if (outputFormats.includes('웹 애플리케이션')) {
-            if (technicalStack.includes('react') || technicalStack.includes('vue')) {
-                return 'SPA (Single Page Application) with REST/GraphQL API';
-            }
-            return 'Full-stack web application';
-        }
-
-        if (outputFormats.includes('API/백엔드')) {
-            return 'Microservices or Monolithic API architecture';
-        }
-
-        if (outputFormats.includes('모바일 앱')) {
-            return 'Mobile-first with Backend API';
-        }
-
-        return 'To be determined based on requirements';
+    private suggestArchitecture(_context: InterviewContext): string {
+        return 'Microservices Architecture';
     }
 
     /**
@@ -2935,8 +2923,8 @@ ${formatInstructions}
                 suggestedAIProvider: this.selectBestProvider(req),
                 suggestedModel: this.selectBestModel(req),
                 complexity: 'medium',
-                outputFormats: [inferredFormat],
-                primaryOutputFormat: inferredFormat,
+                outputFormats: (taskInfo as any).outputFormats || [],
+                primaryOutputFormat: (taskInfo as any).primaryOutputFormat || 'text',
                 outputDescription: `요구사항 구현 결과물`,
                 codeLanguage: inferredFormat === 'code' ? defaultCodeLang : undefined,
                 mcpTools: this.inferMCPTools(taskInfo, inferredFormat),
@@ -3137,8 +3125,8 @@ ${formatInstructions}
                 const complexity =
                     content.length > 500 || /복잡|complex|architecture|설계/i.test(content);
                 return complexity
-                    ? enabledProvider.models[0]
-                    : enabledProvider.models[1] || enabledProvider.models[0];
+                    ? enabledProvider.models[0] || 'default-model'
+                    : enabledProvider.models[1] || enabledProvider.models[0] || 'default-model';
             }
         }
 
@@ -3155,7 +3143,9 @@ ${formatInstructions}
 
         const complexity = content.length > 500 || /복잡|complex|architecture|설계/i.test(content);
         const models = defaultModels[provider] || ['default-model'];
-        return complexity ? models[0] : models[1] || models[0];
+        return complexity
+            ? models[0] || 'default-model'
+            : models[1] || models[0] || 'default-model';
     }
 
     /**
@@ -3356,7 +3346,7 @@ ${formatInstructions}
 
             let planData: any;
             if (jsonMatch) {
-                planData = JSON.parse(jsonMatch[1]);
+                planData = JSON.parse(jsonMatch[1] || '{}');
             } else {
                 // JSON 블록 없이 직접 JSON인 경우
                 planData = JSON.parse(response.content);
@@ -3536,7 +3526,7 @@ ${context.constraints.length > 0 ? context.constraints.map((c) => `- ${c}`).join
     /**
      * 필요한 MCP 서버 식별
      */
-    private identifyRequiredMCPs(task: any, context: InterviewContext): string[] {
+    private identifyRequiredMCPs(task: any, _context: InterviewContext): string[] {
         const mcps: string[] = [];
         const description = (task.description || '').toLowerCase();
         const prompt = (task.aiOptimizedPrompt || '').toLowerCase();

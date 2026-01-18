@@ -167,10 +167,6 @@ class AIClient {
             const providerConfig = settingsStore.aiProviders.find((p) => p.id === provider);
             if (providerConfig?.apiKey) {
                 const key = providerConfig.apiKey;
-                const maskedKey =
-                    key.length > 10
-                        ? `${key.substring(0, 8)}...${key.substring(key.length - 4)}`
-                        : '***';
                 return key;
             }
         } catch (e) {
@@ -185,10 +181,6 @@ class AIClient {
                 const providerConfig = providers.find((p: any) => p.id === provider);
                 if (providerConfig?.apiKey) {
                     const key = providerConfig.apiKey;
-                    const maskedKey =
-                        key.length > 10
-                            ? `${key.substring(0, 8)}...${key.substring(key.length - 4)}`
-                            : '***';
                     return key;
                 }
             }

@@ -10,7 +10,7 @@ import type {
     Answer,
     StructuredRequirement,
 } from '@core/types/ai';
-import type { Task, Skill, MCPIntegration, Template } from '@core/types/database';
+import type { Skill, MCPIntegration, Template } from '@core/types/database';
 
 // ==========================================
 // Mock Provider Factory
@@ -103,7 +103,7 @@ const mockRequirement: StructuredRequirement = {
     ],
     constraints: {
         budget: 50000,
-        deadline: '2024-06-01',
+        deadline: new Date('2024-06-01') as any,
         technical: ['Vue 3', 'TypeScript', 'PostgreSQL'],
     },
     context: {
@@ -121,7 +121,7 @@ const mockRequirement: StructuredRequirement = {
     },
 };
 
-const mockTask: Task = {
+const mockTask: any = {
     id: 1,
     projectId: 1,
     projectSequence: 1,
@@ -196,7 +196,7 @@ const mockSkills: Skill[] = [
         usageCount: 0,
         rating: 0,
         reviews: [],
-        changelog: [],
+        changelog: [] as any,
     },
     {
         id: 2,
@@ -219,7 +219,7 @@ const mockSkills: Skill[] = [
         usageCount: 0,
         rating: 0,
         reviews: [],
-        changelog: [],
+        changelog: [] as any,
     },
 ];
 
@@ -546,7 +546,7 @@ describe('AdvancedAIEngine', () => {
 
             expect(recommendations).toBeDefined();
             expect(recommendations.length).toBeGreaterThan(0);
-            expect(recommendations[0].relevanceScore).toBeGreaterThan(0);
+            expect(recommendations[0]?.relevanceScore).toBeGreaterThan(0);
         });
     });
 
@@ -574,7 +574,7 @@ describe('AdvancedAIEngine', () => {
 
             expect(matches).toBeDefined();
             expect(matches.length).toBeGreaterThan(0);
-            expect(matches[0].confidence).toBeGreaterThan(0);
+            expect(matches[0]?.confidence).toBeGreaterThan(0);
         });
     });
 

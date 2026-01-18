@@ -2538,7 +2538,6 @@ ${
             return []; // MCP not available in this environment
         }
 
-        const leads: MCPContextInsight[] = [];
         const overrides: Record<string, TaskMCPOverrideEntry> = {};
 
         // Pre-scan to set overrides before collecting tools/insights
@@ -2556,7 +2555,7 @@ ${
         }
 
         // Register overrides for this task
-        mcpManager.setTaskOverrides(task.projectId, task.projectSequence, overrides);
+        mcpManager.setTaskOverrides(task.projectId, task.projectSequence, overrides as any);
 
         const insights: MCPContextInsight[] = [];
 

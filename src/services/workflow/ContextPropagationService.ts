@@ -81,10 +81,6 @@ const DEFAULT_CONFIG: ContextPropagationConfig = {
     excludeFields: ['metadata', 'raw', 'debug'],
 };
 
-const DEFAULT_SUMMARIZATION_PROMPT = `
-다음 태스크 결과를 300자 이내로 요약해주세요. 핵심 정보와 다음 태스크에 필요한 내용만 포함하세요:
-`;
-
 // ========================================
 // Context Propagation Service
 // ========================================
@@ -400,7 +396,7 @@ ${context.wasTruncated ? '(일부 컨텍스트가 길이 제한으로 인해 생
         // Per-result templates
         const perResultMatch = template.match(/\{\{#each\}\}([\s\S]*?)\{\{\/each\}\}/);
         if (perResultMatch) {
-            const perResultTemplate = perResultMatch[1];
+            const perResultTemplate = perResultMatch[1] || '';
             const perResultOutputs = results.map((result) => {
                 return perResultTemplate
                     .replace(/\{\{taskId\}\}/g, String(result.taskId))

@@ -1151,7 +1151,7 @@ export class GeminiProvider extends BaseAIProvider {
                         // Ensure we strip data URI prefix if present
                         let base64Data = content.data!;
                         if (base64Data.startsWith('data:')) {
-                            base64Data = base64Data.split(',')[1];
+                            base64Data = base64Data.split(',')[1] || '';
                         }
 
                         parts.push({
