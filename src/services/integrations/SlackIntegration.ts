@@ -776,7 +776,6 @@ export class SlackIntegration {
      * Verify Slack request signature
      */
     verifyRequestSignature(signature: string, timestamp: string, body: string): boolean {
-        import crypto from 'crypto';
         const sigBasestring = `v0:${timestamp}:${body}`;
         const mySignature = `v0=${crypto
             .createHmac('sha256', this.config.signingSecret)
@@ -823,7 +822,6 @@ export class SlackIntegration {
     }
 
     private generateState(): string {
-        import crypto from 'crypto';
         return crypto.randomBytes(16).toString('hex');
     }
 }
