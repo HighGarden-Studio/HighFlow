@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Google OAuth2 Authentication with PKCE
  */
