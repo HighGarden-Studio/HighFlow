@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMarketplaceStore } from '../../renderer/stores/marketplaceStore';
 
-const props = defineProps<{
+defineProps<{
     activeTab: 'all' | 'purchased' | 'uploads';
 }>();
 

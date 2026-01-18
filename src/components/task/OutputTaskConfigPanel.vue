@@ -180,7 +180,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { LucideFileText, LucideHash, LucideFile, FolderOpen } from 'lucide-vue-next';
-import type { OutputTaskConfig, OutputDestinationType } from '@/core/types/database';
+import type { OutputTaskConfig, OutputDestinationType } from '@core/types/database';
 
 // Props & Emits
 const props = defineProps<{

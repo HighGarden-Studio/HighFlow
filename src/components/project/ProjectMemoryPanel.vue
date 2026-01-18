@@ -48,7 +48,8 @@ const globalCurator = computed(() => operators.value.find((op) => op.isCurator &
 
 const availableOperators = computed(() => operators.value.filter((op) => op.isActive));
 
-const selectedOperatorName = computed(() => {
+// @ts-expect-error - Kept for potential future use
+const _selectedOperatorName = computed(() => {
     if (!selectedCuratorId.value) {
         return globalCurator.value?.name || t('project.memory.global_default');
     }
@@ -62,7 +63,7 @@ async function updateCurator(operatorId: number | null) {
         const api = getAPI();
         await api.projects.update(props.project.id, {
             curatorOperatorId: operatorId,
-        });
+        } as any);
         selectedCuratorId.value = operatorId;
         console.log(`[ProjectMemoryPanel] Updated curator to: ${operatorId || 'default'}`);
     } catch (error) {
@@ -82,7 +83,7 @@ async function resetMemory() {
                 glossary: {},
                 lastUpdatedAt: new Date().toISOString(),
             }),
-        });
+        } as any);
         showResetConfirm.value = false;
         console.log('[ProjectMemoryPanel] Memory reset successfully');
         // Reload the page to show updated memory

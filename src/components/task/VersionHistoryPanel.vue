@@ -38,7 +38,6 @@ const compareFromId = ref<string | null>(null);
 const compareToId = ref<string | null>(null);
 const currentDiff = ref<VersionDiff | null>(null);
 const showDiff = ref(false);
-const isLoading = ref(false);
 
 // ========================================
 // Computed

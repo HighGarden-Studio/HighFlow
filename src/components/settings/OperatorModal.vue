@@ -414,7 +414,7 @@ function onPresetChange() {
 
         // Auto-generate name if empty
         if (!form.value.name) {
-            form.value.name = (preset.name || '').split(' ')[0]; // e.g., "Senior" from "Senior Developer"
+            form.value.name = (preset.name || '').split(' ')[0] || '';
         }
     } else {
         // Custom role - reset to defaults

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useTaskStore, type TaskStatus, type TaskPriority } from '@/stores/taskStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { tagService } from '../../services/task/TagService';

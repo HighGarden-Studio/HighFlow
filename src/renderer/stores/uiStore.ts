@@ -255,6 +255,7 @@ export const useUIStore = defineStore('ui', () => {
 
         // Listen for window maximize changes
         if (window.electron?.window) {
+            // @ts-expect-error - Cleanup function kept for potential future use
             const _cleanup = window.electron.window.onMaximizedChange((maximized) => {
                 isMaximized.value = maximized;
             });

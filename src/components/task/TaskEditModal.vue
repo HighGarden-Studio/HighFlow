@@ -220,7 +220,11 @@ const availableModels = computed(() => {
 watch(
     () => form.value.aiProvider,
     (newProvider) => {
-        if (newProvider && providerModelOptions[newProvider]?.length > 0) {
+        if (
+            newProvider &&
+            providerModelOptions[newProvider] &&
+            providerModelOptions[newProvider].length > 0
+        ) {
             // If current model is not valid for new provider, select first available
             const models = providerModelOptions[newProvider];
             if (

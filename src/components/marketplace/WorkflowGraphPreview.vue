@@ -2,7 +2,7 @@
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
-import { ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 
 // Import VueFlow styles
 import '@vue-flow/core/dist/style.css';

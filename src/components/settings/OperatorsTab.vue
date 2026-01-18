@@ -64,17 +64,12 @@ async function loadOperators() {
     loading.value = true;
     try {
         // Get global operators (projectId = null)
-        operators.value = await window.electron.operators.list(null);
+        operators.value = await window.electron.operators.list(undefined);
     } catch (error) {
         console.error('Failed to load operators:', error);
     } finally {
         loading.value = false;
     }
-}
-
-function openCreateModal() {
-    selectedOperator.value = null;
-    showCreateModal.value = true;
 }
 
 function editOperator(operator: Operator) {

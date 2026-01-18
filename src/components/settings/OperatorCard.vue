@@ -105,9 +105,9 @@ function getProviderLabel(provider?: string): string {
 }
 
 function getProviderColorClass(provider?: string): string {
-    if (!provider) return providerColors.default;
+    if (!provider) return providerColors.default || 'from-gray-400 to-gray-500';
     const normalized = provider.toLowerCase();
-    return providerColors[normalized] ?? providerColors.default;
+    return providerColors[normalized] || providerColors.default || 'from-gray-400 to-gray-500';
 }
 </script>
 
