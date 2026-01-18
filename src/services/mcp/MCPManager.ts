@@ -976,12 +976,12 @@ export class MCPManager {
 
             // Custom SSE Transport to support headers
             // Custom SSE Transport to support headers
-            // @ts-ignore
+            // @ts-expect-error - createRequire is needed for CommonJS modules in ESM
             const require = createRequire(import.meta.url);
 
             let EventSourceClass: any;
             try {
-                // @ts-ignore
+                // @ts-expect-error - eventsource module may not have proper types
                 const eventSourceModule = require('eventsource');
                 EventSourceClass = eventSourceModule.default || eventSourceModule;
             } catch (error) {
@@ -1001,7 +1001,7 @@ export class MCPManager {
             }
             console.log('[MCPManager] EventSource constructor found:', !!EventSourceClass);
 
-            // @ts-ignore
+            // @ts-expect-error - Setting global EventSource for polyfill
             if (!global.EventSource) global.EventSource = EventSourceClass;
 
             // Define SSE transport implementation

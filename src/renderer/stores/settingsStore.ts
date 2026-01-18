@@ -2665,7 +2665,7 @@ This is different from the self-hosted Docker version (\`atlassian-cloud-oauth\`
         // Sanitize API key centrally: trim whitespace and remove non-ASCII characters
         // This prevents header errors and ensures consistent behavior across all providers
         if (provider.apiKey) {
-            provider.apiKey = provider.apiKey.trim().replace(/[^\x00-\x7F]/g, '');
+            provider.apiKey = provider.apiKey.trim().replace(/[^\x20-\x7F]/g, '');
         }
 
         loading.value = true;
