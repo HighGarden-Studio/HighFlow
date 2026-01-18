@@ -1030,6 +1030,7 @@ export class MCPManager {
                           let currentEvent = 'message';
 
                           try {
+                            // eslint-disable-next-line no-constant-condition
                               while (true) {
                                   if (this._abortController?.signal.aborted) break;
 
