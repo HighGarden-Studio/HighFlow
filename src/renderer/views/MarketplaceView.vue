@@ -21,16 +21,16 @@ const showSubmitModal = ref(false);
 const selectedItemForDetail = ref<MarketplaceItem | null>(null);
 
 // Categories for filter dropdown
-const categories: { value: MarketplaceCategory | undefined; label: string }[] = [
-    { value: undefined, label: 'All Categories' },
-    { value: 'data-processing', label: 'Data Processing' },
-    { value: 'data-tools', label: 'Data Tools' },
-    { value: 'automation', label: 'Automation' },
-    { value: 'ai-ml', label: 'AI & ML' },
-    { value: 'web-scraping', label: 'Web Scraping' },
-    { value: 'api-integration', label: 'API Integration' },
-    { value: 'utilities', label: 'Utilities' },
-    { value: 'templates', label: 'Templates' },
+const categories: { value: MarketplaceCategory | null; label: string }[] = [
+    { value: null, label: 'All Categories' },
+    { value: 'content-creation', label: 'Content Creation' },
+    { value: 'development', label: 'Development' },
+    { value: 'productivity', label: 'Productivity' },
+    { value: 'data-analysis', label: 'Data Analysis' },
+    { value: 'business-ops', label: 'Business Operations' },
+    { value: 'education', label: 'Education' },
+    { value: 'personal', label: 'Personal' },
+    { value: 'automated-agents', label: 'Automated Agents' },
     { value: 'other', label: 'Other' },
 ];
 
@@ -42,44 +42,53 @@ const itemTypes: { value: ItemType | undefined; label: string }[] = [
 ];
 
 // Computed
-const displayedItems = computed(() => marketplaceStore.filteredItems);
+const displayedItems = computed(() => marketplaceStore.items);
 const hasItems = computed(() => displayedItems.value.length > 0);
 
 // Actions
 function handleSearch(event: Event) {
     const target = event.target as HTMLInputElement;
-    marketplaceStore.setSearch(target.value);
+    marketplaceStore.searchQuery = target.value;
+    // Debounce would be better here, but calling directly for now
+    marketplaceStore.fetchItems();
 }
 
 function handleCategoryChange(event: Event) {
     const target = event.target as HTMLSelectElement;
-    const category = target.value === '' ? undefined : (target.value as MarketplaceCategory);
-    marketplaceStore.setCategory(category);
+    const category = target.value === '' ? null : (target.value as MarketplaceCategory);
+    marketplaceStore.selectedCategory = category;
+    marketplaceStore.fetchItems();
 }
 
 function handleItemTypeChange(event: Event) {
     const target = event.target as HTMLSelectElement;
-    const itemType = target.value === '' ? undefined : (target.value as ItemType);
-    marketplaceStore.setItemType(itemType);
+    const itemType =
+        target.value === '' ? null : (target.value as 'project' | 'operator' | 'script-template');
+    marketplaceStore.selectedType = itemType;
+    marketplaceStore.fetchItems();
 }
 
-function toggleViewMode() {
-    viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid';
-}
+// function toggleViewMode() {
+//     viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid';
+// }
 
 function clearAllFilters() {
-    marketplaceStore.clearFilters();
+    marketplaceStore.searchQuery = '';
+    marketplaceStore.selectedCategory = null;
+    marketplaceStore.selectedType = null;
+    marketplaceStore.fetchItems();
 }
 
 function handleItemClick(item: MarketplaceItem) {
     selectedItemForDetail.value = item;
     // TODO: Open detail modal
-    uiStore.showToast('Item detail modal coming soon!', 'info');
+    // TODO: Open detail modal
+    uiStore.showToast({ message: 'Item detail modal coming soon!', type: 'info' });
 }
 
 function openSubmitModal() {
     if (!userStore.isAuthenticated) {
-        uiStore.showToast('Please login to submit items', 'warning');
+        uiStore.showToast({ message: 'Please login to submit items', type: 'warning' });
         return;
     }
     showSubmitModal.value = true;
@@ -87,7 +96,7 @@ function openSubmitModal() {
 
 // Lifecycle
 onMounted(async () => {
-    await marketplaceStore.initialize();
+    // marketplaceStore.initialize(); - removed as not defined
     await marketplaceStore.fetchItems();
 });
 </script>
@@ -138,8 +147,8 @@ onMounted(async () => {
                             />
                         </svg>
                         <input
-                            :value="marketplaceStore.filters.search"
-                            @input="handleSearch"
+                            v-model="marketplaceStore.searchQuery"
+                            @change="handleSearch"
                             type="text"
                             placeholder="Search items..."
                             class="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -149,7 +158,7 @@ onMounted(async () => {
 
                 <!-- Category Filter -->
                 <select
-                    :value="marketplaceStore.filters.category || ''"
+                    v-model="marketplaceStore.selectedCategory"
                     @change="handleCategoryChange"
                     class="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -160,7 +169,7 @@ onMounted(async () => {
 
                 <!-- Item Type Filter -->
                 <select
-                    :value="marketplaceStore.filters.itemType || ''"
+                    v-model="marketplaceStore.selectedType"
                     @change="handleItemTypeChange"
                     class="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -172,9 +181,9 @@ onMounted(async () => {
                 <!-- Clear Filters -->
                 <button
                     v-if="
-                        marketplaceStore.filters.search ||
-                        marketplaceStore.filters.category ||
-                        marketplaceStore.filters.itemType
+                        marketplaceStore.searchQuery ||
+                        marketplaceStore.selectedCategory ||
+                        marketplaceStore.selectedType
                     "
                     @click="clearAllFilters"
                     class="px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
@@ -238,9 +247,9 @@ onMounted(async () => {
             <div
                 v-else-if="
                     !hasItems &&
-                    !marketplaceStore.filters.search &&
-                    !marketplaceStore.filters.category &&
-                    !marketplaceStore.filters.itemType
+                    !marketplaceStore.searchQuery &&
+                    !marketplaceStore.selectedCategory &&
+                    !marketplaceStore.selectedType
                 "
                 class="flex flex-col items-center justify-center h-64 text-center"
             >

@@ -74,9 +74,6 @@ const PADDING = 40;
 const svgContainer = ref<HTMLDivElement | null>(null);
 const layout = ref<GraphLayout | null>(null);
 const hoveredNodeId = ref<number | null>(null);
-const isDragging = ref(false);
-const draggedNodeId = ref<number | null>(null);
-const viewBox = ref({ x: 0, y: 0, width: 800, height: 600 });
 const scale = ref(1);
 const panOffset = ref({ x: 0, y: 0 });
 const isPanning = ref(false);
@@ -89,7 +86,7 @@ const panStart = ref({ x: 0, y: 0 });
 const graphNodes = computed(() => layout.value?.nodes || []);
 const graphEdges = computed(() => layout.value?.edges || []);
 
-const statusColors: Record<string, { bg: string; border: string; text: string }> = {
+const statusColors = {
     todo: { bg: '#374151', border: '#6B7280', text: '#D1D5DB' },
     in_progress: { bg: '#1E3A5F', border: '#3B82F6', text: '#93C5FD' },
     in_review: { bg: '#4C1D95', border: '#8B5CF6', text: '#C4B5FD' },
@@ -97,7 +94,7 @@ const statusColors: Record<string, { bg: string; border: string; text: string }>
     blocked: { bg: '#7F1D1D', border: '#EF4444', text: '#FCA5A5' },
 };
 
-const priorityIndicators: Record<string, string> = {
+const priorityIndicators = {
     low: '#6B7280',
     medium: '#F59E0B',
     high: '#F97316',
@@ -113,18 +110,21 @@ function calculateLayout(): GraphLayout {
         return { nodes: [], edges: [], width: 0, height: 0, levels: 0 };
     }
 
+    // Filter out tasks without IDs (shouldn't happen for persisted tasks)
+    const validTasks = props.tasks.filter((t): t is Task & { id: number } => t.id !== undefined);
+
     // Build dependency map
-    const taskMap = new Map<number, Task>(props.tasks.map((t) => [t.id, t]));
+    const taskMap = new Map<number, Task>(validTasks.map((t) => [t.id, t]));
     const dependsOnMap = new Map<number, Set<number>>();
     const dependedByMap = new Map<number, Set<number>>();
 
-    for (const task of props.tasks) {
+    for (const task of validTasks) {
         dependsOnMap.set(task.id, new Set());
         dependedByMap.set(task.id, new Set());
     }
 
     // Parse dependencies from triggerConfig
-    for (const task of props.tasks) {
+    for (const task of validTasks) {
         if (task.triggerConfig) {
             try {
                 const config =
@@ -184,7 +184,7 @@ function calculateLayout(): GraphLayout {
         return level;
     }
 
-    for (const task of props.tasks) {
+    for (const task of validTasks) {
         calculateLevel(task.id);
     }
 
@@ -228,7 +228,7 @@ function calculateLayout(): GraphLayout {
     // Create edges
     const edges: GraphEdge[] = [];
 
-    for (const task of props.tasks) {
+    for (const task of validTasks) {
         const dependencies = dependsOnMap.get(task.id) || new Set();
 
         for (const depId of dependencies) {
@@ -374,15 +374,16 @@ watch(
 // Helpers
 // ========================================
 
-function getStatusColor(status: string): typeof statusColors.todo {
-    return statusColors[status] || statusColors.todo;
+function getStatusColor(status: string) {
+    return (statusColors as any)[status] || statusColors.todo;
 }
 
 function getPriorityColor(priority: string): string {
-    return priorityIndicators[priority] || priorityIndicators.medium;
+    return (priorityIndicators as any)[priority] || priorityIndicators.medium;
 }
 
-function truncateText(text: string, maxLength: number): string {
+function truncateText(text: string | undefined, maxLength: number): string {
+    if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength - 1) + '…';
 }

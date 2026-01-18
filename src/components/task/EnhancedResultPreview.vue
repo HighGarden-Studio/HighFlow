@@ -163,7 +163,7 @@ const parseInline = (tokens: any) => marked.parser(tokens); // In newer marked, 
 
 // Headings
 markdownRenderer.heading = function (this: any, token: Tokens.Heading | string, level?: number) {
-    const text = typeof token === 'string' ? token : this.parser.parseInline(token.tokens);
+    const text = typeof token === 'string' ? token : (marked.parseInline(token.text) as string);
     const depth = typeof token === 'string' ? level || 1 : token.depth;
 
     const sizes = {
@@ -180,7 +180,7 @@ markdownRenderer.heading = function (this: any, token: Tokens.Heading | string, 
 
 // Paragraphs
 markdownRenderer.paragraph = function (this: any, token: Tokens.Paragraph | string) {
-    const text = typeof token === 'string' ? token : this.parser.parseInline(token.tokens);
+    const text = typeof token === 'string' ? token : (marked.parseInline(token.text) as string);
     return `<p class="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">${text}</p>`;
 };
 
@@ -226,7 +226,7 @@ markdownRenderer.link = function (
     } else {
         href = token.href;
         linkTitle = token.title || '';
-        linkText = this.parser.parseInline(token.tokens);
+        linkText = marked.parseInline(token.text) as string;
     }
 
     return `<a href="${href}" title="${linkTitle}" class="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
@@ -269,16 +269,14 @@ const mcpLogs = computed<MCPLogEntry[]>(() => {
 
     // Map store executions to LogEntry format (checking compatibility)
     // MCPExecution and LogEntry interfaces are identical in structure so casting/mapping is trivial
-    return mcpStore.getExecutions(pid, seq).map((e) => ({
+    const executions = mcpStore.getExecutions(pid, seq);
+    if (!executions) return [];
+
+    // Map store executions to LogEntry format (checking compatibility)
+    return executions.map((e) => ({
         ...e,
         // duration in store is string "123ms" or undefined, component expects string
     }));
-});
-
-// Resolve Task ID reliably
-const resolvedTaskId = computed(() => {
-    if (props.taskId) return props.taskId;
-    return props.task?.id;
 });
 
 const emit = defineEmits<{
@@ -395,24 +393,6 @@ function handleAddCodeComment(payload: { range: any; text: string }) {
         file: selectedFile.value?.path,
         range: payload.range,
         selection: payload.text,
-    };
-    newCommentText.value = '';
-    isCommentModalOpen.value = true;
-}
-
-function handleMarkdownMouseUp() {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-
-    // Check if selection is within markdown content (simple check using active element or just assume scoped if triggered inside component)
-    // Ideally check if anchorNode is inside .markdown-content, but here we can just capture text
-    const text = selection.toString().trim();
-    if (!text) return;
-
-    pendingComment.value = {
-        type: 'text',
-        file: selectedFile.value?.path,
-        selection: text,
     };
     newCommentText.value = '';
     isCommentModalOpen.value = true;
@@ -541,7 +521,7 @@ const fileTree = computed(() => {
         const pathParts = rootPath.split(/[/\\]/).filter((p) => p);
         const rootName =
             pathParts.length > 0
-                ? pathParts[pathParts.length - 1]
+                ? pathParts[pathParts.length - 1] || 'Project Root'
                 : currentProject.value?.title || 'Project Root';
 
         const projectNode: FileTreeNode = {
@@ -563,6 +543,7 @@ const fileTree = computed(() => {
 
         for (let i = 1; i < splitPaths.length; i++) {
             const current = splitPaths[i];
+            if (!current) continue;
             let j = 0;
             while (
                 j < commonPrefixParts.length &&
@@ -628,7 +609,7 @@ const fileTree = computed(() => {
                 const prefixParts = commonPrefixParts.filter((p) => p);
                 const folderName =
                     prefixParts.length > 0
-                        ? prefixParts[prefixParts.length - 1]
+                        ? prefixParts[prefixParts.length - 1] || 'External Output'
                         : 'External Output';
 
                 rootNodes.push({
@@ -695,18 +676,20 @@ const fetchHistory = async () => {
         // For Output tasks, log the first entry details
         if (props.task.taskType === 'output' && history.value.length > 0) {
             const firstEntry = history.value[0];
-            let eventData = firstEntry.eventData;
-            if (typeof eventData === 'string') {
-                try {
-                    eventData = JSON.parse(eventData);
-                } catch (e) {}
+            if (firstEntry) {
+                let eventData = firstEntry.eventData;
+                if (typeof eventData === 'string') {
+                    try {
+                        eventData = JSON.parse(eventData);
+                    } catch (e) {}
+                }
+                console.log('[EnhancedResultPreview] First history entry for Output task:', {
+                    eventData: eventData,
+                    hasExecutionResult: !!eventData?.executionResult,
+                    hasFilePath: !!eventData?.executionResult?.filePath,
+                    hasResult: !!(eventData as any)?.result,
+                });
             }
-            console.log('[EnhancedResultPreview] First history entry for Output task:', {
-                eventData: eventData,
-                hasExecutionResult: !!eventData?.executionResult,
-                hasFilePath: !!eventData?.executionResult?.filePath,
-                hasResult: !!eventData?.result,
-            });
         }
     } catch (error: any) {
         console.error('Failed to fetch task history:', error);
@@ -749,7 +732,9 @@ const taskResult = computed(() => {
 });
 const aiResult = computed<AiResult | null>(() => taskResult.value.aiResult);
 const aiMimeType = computed(() => guessMimeFromAiResult(aiResult.value));
-const aiFileExtension = computed(() => inferExtensionFromAiResult(aiResult.value));
+const aiFileExtension = computed(() =>
+    aiResult.value ? inferExtensionFromAiResult(aiResult.value) : ''
+);
 
 const aiValue = computed(() => {
     const result = aiResult.value;
@@ -771,7 +756,7 @@ const fallbackResultContent = computed(() => {
     if (history.value.length > 0) {
         // history is already sorted in fetchHistory
         const lastEntry = history.value[0];
-        if (lastEntry.eventData) {
+        if (lastEntry && lastEntry.eventData) {
             // Handle parsing if string
             let data = lastEntry.eventData;
             if (typeof data === 'string') {
@@ -1207,7 +1192,6 @@ const updateResultFiles = async () => {
                                             absolutePath: fullPath,
                                             type: 'created',
                                             size: fileItem.size,
-                                            mtime: fileItem.mtimeMs || 0, // Assuming list_dir returns mtimeMs or similar? Need to verify or just use filename logic if unavailable
                                             extension: fileItem.name.split('.').pop() || '',
                                         });
                                     }
@@ -1247,7 +1231,6 @@ const updateResultFiles = async () => {
                         absolutePath: taskResultPath,
                         type: 'created',
                         size: stats.size,
-                        mtime: stats.mtimeMs || 0,
                         extension: taskResultPath.split('.').pop() || 'txt',
                     });
                     console.log(
@@ -1257,24 +1240,6 @@ const updateResultFiles = async () => {
             } catch (e) {
                 console.error('[EnhancedResultPreview] Failed to add Output file to tree:', e);
             }
-        }
-
-        // --- Merge files from taskResult (Unified Extraction) ---
-        if (taskResult.value.files && taskResult.value.files.length > 0) {
-            taskResult.value.files.forEach((f) => {
-                if (!f.path) return;
-                const key = f.absolutePath || f.path;
-                if (!filesMap.has(key)) {
-                    filesMap.set(key, {
-                        path: f.path,
-                        absolutePath: key,
-                        type: f.type || 'created',
-                        size: f.size || 0,
-                        extension: f.extension || f.path.split('.').pop() || '',
-                        content: f.content,
-                    } as ResultFile);
-                }
-            });
         }
 
         // --- Merge files from taskResult (Unified Extraction) ---
@@ -1378,7 +1343,7 @@ const suggestedTasks = computed(() => {
             // Check for list item
             const match = trimmed.match(/^[-*]\s+(.*)|^\d+\.\s+(.*)/);
             if (match) {
-                let taskText = (match[1] || match[2]).trim();
+                let taskText = (match[1] || match[2] || '').trim();
                 // Remove bolding if strictly wrapping the whole line, e.g. **Task**
                 taskText = taskText.replace(/^\*\*(.*)\*\*$/, '$1');
                 if (taskText && taskText.length > 5 && !tasks.includes(taskText)) {
@@ -1530,11 +1495,14 @@ watch(
             nextTick(() => {
                 // Check if we now have files
                 if (resultFiles.value.length > 0 && !selectedFile.value) {
-                    selectedFile.value = resultFiles.value[0];
-                    console.log(
-                        '[EnhancedResultPreview] Auto-selected file after history load:',
-                        resultFiles.value[0].path
-                    );
+                    const first = resultFiles.value[0];
+                    if (first) {
+                        selectedFile.value = first;
+                        console.log(
+                            '[EnhancedResultPreview] Auto-selected file after history load:',
+                            first.path
+                        );
+                    }
                 }
             });
         }
@@ -1546,11 +1514,14 @@ watch(
     () => resultFiles.value.length,
     (count) => {
         if (count > 0 && !selectedFile.value) {
-            selectedFile.value = resultFiles.value[0];
-            console.log(
-                '[EnhancedResultPreview] Auto-selected first file from resultFiles:',
-                resultFiles.value[0].path
-            );
+            const first = resultFiles.value[0];
+            if (first) {
+                selectedFile.value = first;
+                console.log(
+                    '[EnhancedResultPreview] Auto-selected first file from resultFiles:',
+                    first.path
+                );
+            }
         }
     }
 );
@@ -1627,7 +1598,7 @@ const loadContent = async () => {
 // Watch for file selection to start/stop polling (legacy polling, kept for safety but reduced)
 watch(
     () => [selectedFile.value, props.task?.status],
-    async (file) => {
+    async () => {
         if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
@@ -1647,25 +1618,6 @@ watch(
     },
     { immediate: true }
 );
-
-// Helper to determine if we should look for a file path in the result
-function getOutputFilePath(): string | null {
-    let taskResultPath = props.task?.result;
-
-    if (
-        (!taskResultPath || taskResultPath === '') &&
-        props.task?.taskType === 'output' &&
-        history.value.length > 0
-    ) {
-        // ... (existing history fallback logic if needed, but resultFiles usually handles this)
-        // For content loading, we mostly rely on selectedFile.
-        // But if no file is selected, we might want to default to something.
-    }
-
-    return typeof taskResultPath === 'string' && taskResultPath.startsWith('/')
-        ? taskResultPath
-        : null;
-}
 
 // Get previous result for diff comparison
 const previousResult = computed(() => {
@@ -1731,36 +1683,16 @@ watch(
     (files) => {
         if (files && files.length > 0 && !selectedFile.value) {
             // For Output tasks, auto-select the file to show content immediately
-            if (props.task?.taskType === 'output') {
-                selectedFile.value = files[0];
-                console.log(
-                    '[EnhancedResultPreview] Auto-selected Output task file:',
-                    files[0].path
-                );
+            const first = files[0];
+            if (props.task?.taskType === 'output' && first) {
+                selectedFile.value = first;
+                console.log('[EnhancedResultPreview] Auto-selected Output task file:', first.path);
             }
             // Optional: Auto-select criteria for other task types
         }
     },
     { immediate: true }
 );
-
-const imageMimeType = computed(() => {
-    return aiResult.value?.meta?.mime || 'image/png';
-});
-
-const pngImageSrc = computed(() => {
-    if (outputFormat.value !== 'png') {
-        return '';
-    }
-    const value = content.value || '';
-    if (!value) {
-        return '';
-    }
-    if (value.startsWith('data:') || /^https?:\/\//i.test(value)) {
-        return value;
-    }
-    return `data:${imageMimeType.value};base64,${value}`;
-});
 
 // Script execution logs
 const scriptLogs = computed(() => {
@@ -2280,7 +2212,7 @@ function handleRetry() {
 
     if (feedbackItems.value.length > 0) {
         finalFeedback += '\n\n# Attached Comments:\n';
-        feedbackItems.value.forEach((item, index) => {
+        feedbackItems.value.forEach((item, _index) => {
             // finalFeedback += `\n--- Comment ${index + 1} ---\n`;
             if (item.file && item.range) {
                 finalFeedback += `@${item.file}:${item.range.startLineNumber} ${item.comment}\n`;
@@ -2443,15 +2375,6 @@ function getFormatFromExtension(ext?: string): OutputFormat {
         xml: 'code',
     };
     return map[normalized] || 'text';
-}
-
-function coerceOutputFormat(format: unknown, fallback: OutputFormat = 'markdown'): OutputFormat {
-    if (typeof format !== 'string') {
-        return fallback;
-    }
-    return (OUTPUT_FORMAT_VALUES as ReadonlyArray<string>).includes(format)
-        ? (format as OutputFormat)
-        : fallback;
 }
 
 function base64ToBlob(data: string, mime: string): Blob {
@@ -3578,14 +3501,13 @@ onMounted(() => {
                                                                 ></div>
                                                             </div>
 
-                                                            <!-- Code Editor -->
                                                             <CodeEditor
-                                                                v-else
+                                                                v-else-if="selectedCodeBlock"
                                                                 :model-value="
                                                                     selectedCodeBlock.code
                                                                 "
                                                                 :language="
-                                                                    selectedCodeBlock.language
+                                                                    selectedCodeBlock.language as any
                                                                 "
                                                                 :readonly="true"
                                                                 :show-line-numbers="true"

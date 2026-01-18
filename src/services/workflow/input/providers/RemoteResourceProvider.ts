@@ -16,10 +16,8 @@ async function fetchResource(
 
     if (authType === 'google_oauth') {
         try {
-            const token = await window.electron.ipcRenderer.invoke(
-                'auth:get-google-token',
-                accountId
-            );
+            const electron = window.electron as any;
+            const token = await electron.ipcRenderer.invoke('auth:get-google-token', accountId);
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             } else {
@@ -67,13 +65,13 @@ export class RemoteResourceProvider implements InputProvider {
         return (config as any)?.sourceType === 'REMOTE_RESOURCE';
     }
 
-    async start(task: Task, ctx: ExecutionContext): Promise<void> {
+    async start(task: Task, _ctx: ExecutionContext): Promise<void> {
         console.log(
             `[RemoteResourceProvider] Task #${task.projectSequence} is waiting for remote resource.`
         );
     }
 
-    async validate(task: Task, payload: any): Promise<{ valid: boolean; error?: string }> {
+    async validate(_task: Task, payload: any): Promise<{ valid: boolean; error?: string }> {
         if (!payload || !payload.url) {
             return { valid: false, error: 'URL is required' };
         }
@@ -209,5 +207,5 @@ export class RemoteResourceProvider implements InputProvider {
         }
     }
 
-    async cancel(task: Task): Promise<void> {}
+    async cancel(_task: Task): Promise<void> {}
 }

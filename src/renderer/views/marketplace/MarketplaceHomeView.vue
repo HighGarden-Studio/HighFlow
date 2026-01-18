@@ -21,11 +21,11 @@ const filteredItems = computed(() => {
     let result = store.items;
 
     if (store.selectedCategory) {
-        result = result.filter((item) => item.categories.includes(store.selectedCategory!));
+        result = result.filter((item) => item.category === store.selectedCategory);
     }
 
     if (store.selectedType) {
-        result = result.filter((item) => item.type === store.selectedType);
+        result = result.filter((item) => item.itemType === store.selectedType);
     }
 
     if (store.searchQuery) {
@@ -33,8 +33,8 @@ const filteredItems = computed(() => {
         result = result.filter(
             (item) =>
                 item.name.toLowerCase().includes(query) ||
-                item.summary.toLowerCase().includes(query) ||
-                item.tags.some((tag) => tag.toLowerCase().includes(query))
+                item.description.toLowerCase().includes(query) ||
+                item.tags?.some((tag) => tag.toLowerCase().includes(query))
         );
     }
 

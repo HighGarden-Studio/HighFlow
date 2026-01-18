@@ -38,15 +38,20 @@ watch(
 );
 
 const item = computed(() => store.currentItem);
+const isOwned = computed(() => {
+    if (!item.value) return false;
+    return store.isPurchased(item.value.id);
+});
 
 const formattedDate = computed(() => {
     if (!item.value) return '';
-    return new Date(item.value.lastUpdated).toLocaleDateString();
+    return new Date(item.value.updatedAt).toLocaleDateString();
 });
 
 const previewGraphData = computed(() => {
-    if (item.value?.previewGraph?.nodes?.length > 0) {
-        return item.value.previewGraph;
+    const val = item.value as any;
+    if (val?.previewGraph?.nodes?.length > 0) {
+        return val.previewGraph;
     }
     return null;
 });
@@ -55,7 +60,7 @@ async function handlePurchase() {
     if (!item.value) return;
 
     // If owned, handle Import
-    if (item.value.isOwned) {
+    if (isOwned.value) {
         try {
             await store.importItem(item.value.id);
             toast.success(`Imported ${item.value.name} successfully!`);
@@ -119,10 +124,10 @@ async function handlePurchase() {
                     </h1>
                     <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400 mb-4">
                         <span class="font-medium text-gray-900 dark:text-gray-200">{{
-                            item.author.name
+                            item.author?.name || 'Unknown'
                         }}</span>
                         <svg
-                            v-if="item.author.isVerified"
+                            v-if="item.author?.isVerified"
                             class="w-5 h-5 text-blue-500"
                             fill="currentColor"
                             viewBox="0 0 20 20"
@@ -140,11 +145,11 @@ async function handlePurchase() {
                                     d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
                                 />
                             </svg>
-                            {{ item.stats.rating.toFixed(1) }}
+                            {{ item.averageRating.toFixed(1) }}
                         </span>
-                        <span class="text-xs">({{ item.stats.reviewCount }} reviews)</span>
+                        <span class="text-xs">({{ item.reviewCount }} reviews)</span>
                         <span class="mx-2">•</span>
-                        <span class="text-gray-500">{{ item.version }}</span>
+                        <span class="text-gray-500">{{ item.clientVersion }}</span>
                     </div>
                 </div>
 
@@ -161,7 +166,7 @@ async function handlePurchase() {
                             v-if="store.loading"
                             class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"
                         ></span>
-                        <span>{{ item.isOwned ? 'Import' : 'Get It' }}</span>
+                        <span>{{ isOwned ? 'Import' : 'Get It' }}</span>
                     </button>
                     <p v-if="store.error" class="text-red-500 text-xs">{{ store.error }}</p>
                 </div>
@@ -211,7 +216,7 @@ async function handlePurchase() {
 
                     <!-- Workflow Graph for Projects -->
                     <div
-                        v-if="item.type === 'project'"
+                        v-if="item.itemType === 'project'"
                         class="h-[500px] border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900"
                     >
                         <WorkflowGraphPreview
@@ -226,7 +231,7 @@ async function handlePurchase() {
 
                     <!-- Code Snippet for Scripts (Placeholder) -->
                     <div
-                        v-else-if="item.type === 'script_template'"
+                        v-else-if="item.itemType === 'script-template'"
                         class="h-[500px] p-4 bg-gray-900 rounded-lg overflow-auto font-mono text-sm text-gray-300"
                     >
                         // Script Preview Placeholder console.log('Hello World');
@@ -329,7 +334,7 @@ async function handlePurchase() {
                     <div class="flex justify-between">
                         <dt class="text-gray-500">Installs</dt>
                         <dd class="text-gray-900 dark:text-gray-300 font-medium">
-                            {{ item.stats.installCount.toLocaleString() }}
+                            {{ (item.downloadCount || 0).toLocaleString() }}
                         </dd>
                     </div>
                     <div class="flex justify-between">
@@ -345,11 +350,9 @@ async function handlePurchase() {
                 </h3>
                 <div class="flex flex-wrap gap-2">
                     <span
-                        v-for="cat in item.categories"
-                        :key="cat"
                         class="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                     >
-                        {{ cat }}
+                        {{ item.category }}
                     </span>
                 </div>
             </div>

@@ -64,7 +64,7 @@ vi.mock('marked', () => {
         marked: {
             parse: (text: string) => text,
             Renderer: MockRenderer,
-            parser: (tokens: any) => '',
+            parser: (_tokens: any) => '',
             use: vi.fn(),
         },
     };

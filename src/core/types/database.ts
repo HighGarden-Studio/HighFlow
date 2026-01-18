@@ -609,6 +609,7 @@ export interface Task {
     output?: TaskOutput | null; // Standardized output for all task types
     notificationConfig?: unknown; // Notification settings for this task
     metadata?: any; // Additional metadata (e.g., DAG position)
+    id?: number; // Optional ID for frontend convenience
 }
 
 export interface TaskExecutionResult {

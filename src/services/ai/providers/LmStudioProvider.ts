@@ -248,7 +248,7 @@ export class LmStudioProvider extends BaseAIProvider {
             model: (config.model as AIModel) || this.defaultModel,
             messages: preparedMessages,
             temperature: config.temperature ?? 0.7,
-            max_tokens: config.maxTokens ?? this.models[0].maxOutputTokens,
+            max_tokens: config.maxTokens ?? (this.models[0]?.maxOutputTokens || 4096),
             stream: false,
         };
 

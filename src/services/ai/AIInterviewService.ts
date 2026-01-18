@@ -506,12 +506,9 @@ export class AIInterviewService {
      * 연동된 Provider 목록 설정
      * settingsStore에서 연동된 Provider 목록을 받아 설정합니다.
      */
-    setEnabledProviders(
-        providers: EnabledProviderInfo[],
-        _shouldFetchModels: boolean = false
-    ): void {
+    setEnabledProviders(providers: EnabledProviderInfo[]): void {
         this.enabledProviders = providers;
-        // shouldFetchModels 파라미터는 호환성을 위해 유지하지만 현재는 사용하지 않음
+        // shouldFetchModels parameter removed
         console.log(
             '[AIInterviewService] Enabled providers set:',
             providers.map((p) => p.id).join(', ')

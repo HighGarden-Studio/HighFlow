@@ -104,7 +104,7 @@ export class EncryptionService {
         const iv = crypto.randomBytes(this.config.ivLength);
         const cipher = crypto.createCipheriv(this.config.algorithm as any, this.masterKey!, iv, {
             authTagLength: this.config.authTagLength,
-        });
+        } as any);
 
         let encrypted = cipher.update(plainText, 'utf8', 'base64');
         encrypted += cipher.final('base64');
@@ -136,7 +136,7 @@ export class EncryptionService {
             (data.algorithm || this.config.algorithm) as any,
             this.masterKey!,
             iv,
-            { authTagLength: this.config.authTagLength }
+            { authTagLength: this.config.authTagLength } as any
         );
 
         decipher.setAuthTag(authTag);
@@ -264,7 +264,7 @@ export class EncryptionService {
         const iv = crypto.randomBytes(this.config.ivLength);
         const cipher = crypto.createCipheriv(this.config.algorithm as any, this.masterKey!, iv, {
             authTagLength: this.config.authTagLength,
-        });
+        } as any);
 
         const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
 
@@ -293,7 +293,7 @@ export class EncryptionService {
             (metadata.algorithm || this.config.algorithm) as any,
             this.masterKey!,
             iv,
-            { authTagLength: this.config.authTagLength }
+            { authTagLength: this.config.authTagLength } as any
         );
 
         decipher.setAuthTag(authTag);
