@@ -214,8 +214,8 @@ const tabs = computed(() => [
 
 const activeWebhooksCount = computed(() => webhooks.value.filter((w) => w.active).length);
 
-// Computed for selected git provider config (for template type safety)
-const selectedGitConfig = computed(() => {
+// Function for selected git provider config (for template type safety)
+function getSelectedGitConfig(): GitConfig {
     const config = gitConfigs[selectedGitProvider.value];
     if (config) return config;
     // Create default config if missing (shouldn't happen)
@@ -228,7 +228,9 @@ const selectedGitConfig = computed(() => {
     };
     gitConfigs[selectedGitProvider.value] = defaultConfig;
     return defaultConfig;
-});
+}
+
+const selectedGitConfig = computed(() => getSelectedGitConfig());
 
 const selectedGitStatus = computed(() => {
     return integrationStatus[selectedGitProvider.value] ?? { connected: false };

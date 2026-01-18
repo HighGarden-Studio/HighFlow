@@ -146,7 +146,7 @@ export function registerTaskHistoryHandlers(): void {
 
                 // Broadcast event to renderer
                 const wins = BrowserWindow.getAllWindows();
-                if (wins.length > 0) {
+                if (wins.length > 0 && wins[0]) {
                     wins[0].webContents.send('task-history:created', transformedEntry);
                 }
 

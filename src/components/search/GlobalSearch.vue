@@ -174,12 +174,13 @@ function navigateToResult(result: SearchResult) {
         case 'project':
             router.push(`/projects/${result.entityId}/board`);
             break;
-        case 'task':
+        case 'task': {
             const projectId = result.metadata.projectId as number;
             if (projectId) {
                 router.push(`/projects/${projectId}/board?task=${result.entityId}`);
             }
             break;
+        }
         case 'skill':
             router.push(`/skills/${result.entityId}`);
             break;
@@ -205,13 +206,14 @@ function handleKeyDown(event: KeyboardEvent) {
             event.preventDefault();
             selectedIndex.value = (selectedIndex.value - 1 + itemCount) % Math.max(1, itemCount);
             break;
-        case 'Enter':
+        case 'Enter': {
             event.preventDefault();
             const selectedItem = displayItems.value[selectedIndex.value];
             if (selectedItem) {
                 handleSelect(selectedItem);
             }
             break;
+        }
         case 'Escape':
             event.preventDefault();
             emit('close');
