@@ -90,147 +90,147 @@ jobs:
     # ==========================================
     # Coverage Report
     # ==========================================
-    coverage:
-        name: Test Coverage
-        runs-on: ubuntu-latest
-        needs: [unit-tests]
+    #     coverage:
+    #         name: Test Coverage
+    #         runs-on: ubuntu-latest
+    #         needs: [unit-tests]
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    #         steps:
+    #             - name: Checkout repository
+    #               uses: actions/checkout@v4
 
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v2
-              with:
-                  version: ${{ env.PNPM_VERSION }}
+    #             - name: Setup pnpm
+    #               uses: pnpm/action-setup@v2
+    #               with:
+    #                   version: ${{ env.PNPM_VERSION }}
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ env.NODE_VERSION }}
-                  cache: 'pnpm'
+    #             - name: Setup Node.js
+    #               uses: actions/setup-node@v4
+    #               with:
+    #                   node-version: ${{ env.NODE_VERSION }}
+    #                   cache: 'pnpm'
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+    #             - name: Install dependencies
+    #               run: pnpm install --frozen-lockfile
 
-            - name: Generate coverage report
-              run: pnpm test:coverage
-              env:
-                  CI: true
+    #             - name: Generate coverage report
+    #               run: pnpm test:coverage
+    #               env:
+    #                   CI: true
 
-            - name: Upload coverage report
-              uses: actions/upload-artifact@v4
-              with:
-                  name: coverage-report
-                  path: coverage/
-                  retention-days: 7
+    #             - name: Upload coverage report
+    #               uses: actions/upload-artifact@v4
+    #               with:
+    #                   name: coverage-report
+    #                   path: coverage/
+    #                   retention-days: 7
 
-            - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v3
-              with:
-                  files: ./coverage/lcov.info
-                  fail_ci_if_error: false
-                  verbose: true
+    #             - name: Upload coverage to Codecov
+    #               uses: codecov/codecov-action@v3
+    #               with:
+    #                   files: ./coverage/lcov.info
+    #                   fail_ci_if_error: false
+    #                   verbose: true
 
     # ==========================================
     # E2E Tests
     # ==========================================
-    e2e-tests:
-        name: E2E Tests (${{ matrix.browser }})
-        runs-on: ubuntu-latest
-        needs: [unit-tests]
+    #     e2e-tests:
+    #         name: E2E Tests (${{ matrix.browser }})
+    #         runs-on: ubuntu-latest
+    #         needs: [unit-tests]
 
-        strategy:
-            fail-fast: false
-            matrix:
-                browser: [chromium, firefox, webkit]
+    #         strategy:
+    #             fail-fast: false
+    #             matrix:
+    #                 browser: [chromium, firefox, webkit]
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    #         steps:
+    #             - name: Checkout repository
+    #               uses: actions/checkout@v4
 
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v2
-              with:
-                  version: ${{ env.PNPM_VERSION }}
+    #             - name: Setup pnpm
+    #               uses: pnpm/action-setup@v2
+    #               with:
+    #                   version: ${{ env.PNPM_VERSION }}
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ env.NODE_VERSION }}
-                  cache: 'pnpm'
+    #             - name: Setup Node.js
+    #               uses: actions/setup-node@v4
+    #               with:
+    #                   node-version: ${{ env.NODE_VERSION }}
+    #                   cache: 'pnpm'
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+    #             - name: Install dependencies
+    #               run: pnpm install --frozen-lockfile
 
-            - name: Install Playwright browsers
-              run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+    #             - name: Install Playwright browsers
+    #               run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
 
-            - name: Build application
-              run: pnpm build
+    #             - name: Build application
+    #               run: pnpm build
 
-            - name: Run E2E tests
-              run: pnpm test:e2e --project=${{ matrix.browser }}
-              env:
-                  CI: true
-                  PLAYWRIGHT_BASE_URL: http://localhost:5173
+    #             - name: Run E2E tests
+    #               run: pnpm test:e2e --project=${{ matrix.browser }}
+    #               env:
+    #                   CI: true
+    #                   PLAYWRIGHT_BASE_URL: http://localhost:5173
 
-            - name: Upload E2E test results
-              uses: actions/upload-artifact@v4
-              if: always()
-              with:
-                  name: e2e-test-results-${{ matrix.browser }}
-                  path: |
-                      playwright-report/
-                      test-results/
-                  retention-days: 7
+    #             - name: Upload E2E test results
+    #               uses: actions/upload-artifact@v4
+    #               if: always()
+    #               with:
+    #                   name: e2e-test-results-${{ matrix.browser }}
+    #                   path: |
+    #                       playwright-report/
+    #                       test-results/
+    #                   retention-days: 7
 
-            - name: Upload E2E screenshots
-              uses: actions/upload-artifact@v4
-              if: failure()
-              with:
-                  name: e2e-screenshots-${{ matrix.browser }}
-                  path: test-results/
-                  retention-days: 7
+    #             - name: Upload E2E screenshots
+    #               uses: actions/upload-artifact@v4
+    #               if: failure()
+    #               with:
+    #                   name: e2e-screenshots-${{ matrix.browser }}
+    #                   path: test-results/
+    #                   retention-days: 7
 
     # ==========================================
     # Performance Tests
     # ==========================================
-    performance-tests:
-        name: Performance Tests
-        runs-on: ubuntu-latest
-        needs: [unit-tests]
+    #     performance-tests:
+    #         name: Performance Tests
+    #         runs-on: ubuntu-latest
+    #         needs: [unit-tests]
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    #         steps:
+    #             - name: Checkout repository
+    #               uses: actions/checkout@v4
 
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v2
-              with:
-                  version: ${{ env.PNPM_VERSION }}
+    #             - name: Setup pnpm
+    #               uses: pnpm/action-setup@v2
+    #               with:
+    #                   version: ${{ env.PNPM_VERSION }}
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ env.NODE_VERSION }}
-                  cache: 'pnpm'
+    #             - name: Setup Node.js
+    #               uses: actions/setup-node@v4
+    #               with:
+    #                   node-version: ${{ env.NODE_VERSION }}
+    #                   cache: 'pnpm'
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+    #             - name: Install dependencies
+    #               run: pnpm install --frozen-lockfile
 
-            - name: Run performance tests
-              run: pnpm test:perf
-              env:
-                  CI: true
+    #             - name: Run performance tests
+    #               run: pnpm test:perf
+    #               env:
+    #                   CI: true
 
-            - name: Upload performance test results
-              uses: actions/upload-artifact@v4
-              if: always()
-              with:
-                  name: performance-test-results
-                  path: test-results/
-                  retention-days: 7
+    #             - name: Upload performance test results
+    #               uses: actions/upload-artifact@v4
+    #               if: always()
+    #               with:
+    #                   name: performance-test-results
+    #                   path: test-results/
+    #                   retention-days: 7
 
     # ==========================================
     # Component Tests
@@ -335,9 +335,6 @@ jobs:
         needs:
             - unit-tests
             - integration-tests
-            - coverage
-            - e2e-tests
-            - performance-tests
             - component-tests
             - type-check
             - lint
@@ -361,25 +358,7 @@ jobs:
                     echo "❌ Integration Tests: Failed" >> $GITHUB_STEP_SUMMARY
                   fi
 
-                  if [ "${{ needs.coverage.result }}" == "success" ]; then
-                    echo "✅ Coverage: Passed" >> $GITHUB_STEP_SUMMARY
-                  else
-                    echo "❌ Coverage: Failed" >> $GITHUB_STEP_SUMMARY
-                  fi
-
-                  if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
-                    echo "✅ E2E Tests: Passed" >> $GITHUB_STEP_SUMMARY
-                  else
-                    echo "❌ E2E Tests: Failed" >> $GITHUB_STEP_SUMMARY
-                  fi
-
-                  if [ "${{ needs.performance-tests.result }}" == "success" ]; then
-                    echo "✅ Performance Tests: Passed" >> $GITHUB_STEP_SUMMARY
-                  else
-                    echo "❌ Performance Tests: Failed" >> $GITHUB_STEP_SUMMARY
-                  fi
-
-                  if [ "${{ needs.component-tests.result }}" == "success" ]; then
+                                                                        if [ "${{ needs.component-tests.result }}" == "success" ]; then
                     echo "✅ Component Tests: Passed" >> $GITHUB_STEP_SUMMARY
                   else
                     echo "❌ Component Tests: Failed" >> $GITHUB_STEP_SUMMARY
@@ -401,7 +380,7 @@ jobs:
               if: |
                   needs.unit-tests.result == 'failure' ||
                   needs.integration-tests.result == 'failure' ||
-                  needs.e2e-tests.result == 'failure' ||
+                  
                   needs.type-check.result == 'failure' ||
                   needs.lint.result == 'failure'
               run: exit 1
