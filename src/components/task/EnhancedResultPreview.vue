@@ -155,10 +155,10 @@ const SUBTYPE_EXTENSION_MAP: Partial<Record<AiSubType, string>> = {
 // Let's try replacing `this.parser.parse(...)` with `marked.parser(...)`.
 
 const markdownRenderer = new marked.Renderer();
-// @ts-ignore
-const parseTokens = (tokens: any) => marked.parser(tokens);
-// @ts-ignore
-const parseInline = (tokens: any) => marked.parser(tokens); // In newer marked, parser handles inline too if structured correctly?
+// @ts-expect-error - Using marked.parser for token parsing
+const _parseTokens = (tokens: any) => marked.parser(tokens);
+// @ts-expect-error - Using marked.parser for inline token parsing
+const _parseInline = (tokens: any) => marked.parser(tokens); // In newer marked, parser handles inline too if structured correctly?
 // Actually, `marked.parser` takes `src` (tokens).
 
 // Headings
@@ -681,7 +681,9 @@ const fetchHistory = async () => {
                 if (typeof eventData === 'string') {
                     try {
                         eventData = JSON.parse(eventData);
-                    } catch (e) {}
+                    } catch (_e) {
+                        // Ignore JSON parse errors
+                    }
                 }
                 console.log('[EnhancedResultPreview] First history entry for Output task:', {
                     eventData: eventData,
@@ -1528,7 +1530,7 @@ watch(
 
 // Get task result content
 const contentRefreshTrigger = ref(0);
-let pollInterval: NodeJS.Timeout | null = null;
+let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 // Clean up polling
 onUnmounted(() => {

@@ -4,7 +4,7 @@
  * Type definitions for the Electron IPC bridge exposed via preload
  */
 
-import type { Project, Task, NewProject, NewTask } from '@core/types/database';
+import type { Project, Task, NewProject as _NewProject, NewTask } from '@core/types/database';
 import type { EnabledProviderInfo, MCPServerRuntimeConfig } from './ai';
 
 export interface AppInfo {
