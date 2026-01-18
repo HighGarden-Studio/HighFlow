@@ -254,7 +254,9 @@ export function registerFsHandlers(_mainWindow: BrowserWindow | null): void {
                             ) {
                                 hasCodex = true;
                             }
-                        } catch {}
+                        } catch {
+                            // Ignore errors reading docs directory
+                        }
                     }
                     if (hasCodex && includeCodex) types.push('codex');
 

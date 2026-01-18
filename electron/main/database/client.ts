@@ -7,6 +7,7 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
 import path from 'node:path';
+import { app } from 'electron';
 import * as schema from './schema';
 import * as relations from './relations';
 import { runMigrations } from './migrator';
@@ -21,7 +22,6 @@ const getUserDataPath = (): string => {
     }
 
     // Running in Electron
-    const { app } = require('electron');
     return app.getPath('userData');
 };
 
