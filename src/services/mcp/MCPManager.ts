@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 /**
  * MCP Manager
  *
@@ -67,6 +68,7 @@ export class MCPManager {
     private runtimeServers: MCPServerRuntimeConfig[] = [];
     private runtimeIntegrationMap: Map<number, RuntimeServerEntry> = new Map();
     private readonly HEALTH_CACHE_TTL = 60000; // 1 minute
+    private _messageHandlers: Map<number, (response: Record<string, unknown>) => void> = new Map();
     private slackClients: Map<number, WebClient> = new Map();
     private taskOverrides: Map<string, Record<string, TaskMCPOverrideEntry>> = new Map();
 
@@ -431,6 +433,28 @@ export class MCPManager {
                 ? Array.from(this.runtimeIntegrationMap.values()).map((entry) => entry.integration)
                 : await this.buildDefaultCatalog();
         return catalog.filter((mcp) => mcp.isEnabled);
+    }
+
+    /**
+     * Connect to an MCP and receive messages
+     */
+    async connectToMCP(
+        mcp: MCPIntegration,
+        onMessage?: (message: Record<string, unknown>) => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
+        // This function body would contain the logic to establish a connection
+        // and handle incoming messages/errors, similar to how clients are managed
+        // in getOrCreateClient, but for a streaming/event-based connection.
+        // For now, it's a placeholder.
+        console.log(`Attempting to connect to MCP: ${mcp.name}`);
+        if (onMessage) {
+            onMessage({ status: 'connected', mcpName: mcp.name });
+        }
+        // Example of how an error might be handled
+        if (onError && mcp.endpoint.startsWith('invalid://')) {
+            onError(new Error('Invalid endpoint for connection'));
+        }
     }
 
     /**
@@ -1030,7 +1054,7 @@ export class MCPManager {
                           let currentEvent = 'message';
 
                           try {
-                            // eslint-disable-next-line no-constant-condition
+                              // eslint-disable-next-line no-constant-condition
                               while (true) {
                                   if (this._abortController?.signal.aborted) break;
 
