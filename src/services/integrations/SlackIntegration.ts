@@ -5,6 +5,8 @@
  * slash commands, and interactive messages support.
  */
 
+import crypto from 'crypto';
+
 // ========================================
 // Types
 // ========================================
