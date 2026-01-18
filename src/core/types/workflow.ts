@@ -73,7 +73,7 @@ export interface ScriptTaskReturn {
 export function parseScriptReturn(output: string | any): ScriptTaskReturn {
     // Already parsed object
     if (typeof output === 'object' && output !== null) {
-        if (output.hasOwnProperty('result')) {
+        if (Object.prototype.hasOwnProperty.call(output, 'result')) {
             return output as ScriptTaskReturn;
         }
         // Legacy object format - wrap it
@@ -86,7 +86,7 @@ export function parseScriptReturn(output: string | any): ScriptTaskReturn {
             const parsed = JSON.parse(output);
 
             // Check if it's ScriptTaskReturn format
-            if (parsed.hasOwnProperty('result')) {
+            if (Object.prototype.hasOwnProperty.call(parsed, 'result')) {
                 return parsed as ScriptTaskReturn;
             }
 

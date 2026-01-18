@@ -72,7 +72,7 @@ const renderDiagrams = async () => {
 
     try {
         await mermaid.run({
-            nodes: diagrams as NodeListOf<HTMLElement>,
+            nodes: Array.from(diagrams) as HTMLElement[],
         });
     } catch (e) {
         console.error('Mermaid rendering error:', e);

@@ -4,7 +4,7 @@
  * Handles IPC communication for task history operations
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { taskHistoryRepository } from '../database/repositories/task-history-repository';
 import type {
     TaskHistoryEventType,
@@ -145,9 +145,8 @@ export function registerTaskHistoryHandlers(): void {
                 const transformedEntry = transformHistoryEntry(entry);
 
                 // Broadcast event to renderer
-                const { BrowserWindow } = require('electron');
                 const wins = BrowserWindow.getAllWindows();
-                if (wins.length > 0) {
+                if (wins.length > 0 && wins[0]) {
                     wins[0].webContents.send('task-history:created', transformedEntry);
                 }
 

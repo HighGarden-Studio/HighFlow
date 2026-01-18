@@ -128,7 +128,7 @@ export class LocalFileConnector implements OutputConnector {
         let updatedContent = content;
 
         // Regex to find ![alt](data:image/...)
-        const regex = /!\[([^\]]*)\]\((data:image\/([a-zA-Z]*);base64,([^\"]*))\)/g;
+        const regex = /!\[([^\]]*)\]\((data:image\/([a-zA-Z]*);base64,([^"]*))\)/g;
 
         let match;
         // Reset lastIndex because we're using global flag
@@ -176,6 +176,6 @@ export class LocalFileConnector implements OutputConnector {
     }
 
     private sanitizeFilename(name: string): string {
-        return name.replace(/[^a-z0-9_\-\.]/gi, '_');
+        return name.replace(/[^a-z0-9_\-.]/gi, '_');
     }
 }

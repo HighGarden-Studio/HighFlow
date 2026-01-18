@@ -6,6 +6,9 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { createHash } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { getMainWindow } from '../index';
 import { AdvancedTaskExecutor } from '../../../src/services/workflow/AdvancedTaskExecutor';
 import { PromptMacroService } from '../../../src/services/workflow/PromptMacroService';
@@ -1011,7 +1014,9 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         if (typeof cfg === 'string') {
                             try {
                                 cfg = JSON.parse(cfg);
-                            } catch {}
+                            } catch {
+                                // Ignore JSON parse errors, use cfg as-is
+                            }
                         }
                         const sType = (cfg as any)?.sourceType;
                         if (
@@ -2370,7 +2375,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
                         let shortError = rawError;
                         try {
                             // Try to parse JSON error (common with Google/Gemini)
-                            const jsonMatch = rawError.match(/\{.*\"error\".*\}/s);
+                            const jsonMatch = rawError.match(/\{.*"error".*\}/s);
                             if (jsonMatch) {
                                 const parsed = JSON.parse(jsonMatch[0]);
                                 if (parsed.error && parsed.error.message) {
@@ -3839,10 +3844,6 @@ function isBase64Image(str: string): boolean {
  * Save base64 image to temp file and return file path
  */
 function saveBase64ImageToTempFile(base64Data: string, taskIdOrKey?: number | string): string {
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
-
     try {
         // Base64 데이터 형식 감지
         let imageData = base64Data;
@@ -3954,10 +3955,10 @@ function parseReviewScore(content: string): number {
 
     // Various patterns to match score
     const patterns = [
-        /평가\s*점수[:\s]*(\d+)\s*[\/점]/i,
-        /점수[:\s]*(\d+)\s*[\/점]/i,
-        /(\d+)\s*[\/]\s*10\s*점?/i,
-        /(\d+)\s*점\s*[\/]\s*10/i,
+        /평가\s*점수[:\s]*(\d+)\s*[/점]/i,
+        /점수[:\s]*(\d+)\s*[/점]/i,
+        /(\d+)\s*[/]\s*10\s*점?/i,
+        /(\d+)\s*점\s*[/]\s*10/i,
         /score[:\s]*(\d+)/i,
         /(\d+)\s*out\s*of\s*10/i,
         /총점[:\s]*(\d+)/i,

@@ -500,7 +500,7 @@ export class ProjectRepository {
         // Since we preserve projectSequence, we don't need to remap dependencies if they refer to sequences.
 
         for (const taskData of data.tasks) {
-            const { tempId, dependsOn, assignedOperatorId, ...rest } = taskData;
+            const { tempId: _tempId, dependsOn, assignedOperatorId, ...rest } = taskData;
 
             // Remap operator ID
             const newOperatorId = assignedOperatorId

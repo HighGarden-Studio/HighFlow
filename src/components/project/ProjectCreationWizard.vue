@@ -1415,12 +1415,11 @@ async function readLocalGuidelinesIfExists(repoPath?: string): Promise<string | 
         } catch (e) {
             // Ignore
         }
-
-        return null;
     } catch (error) {
         console.warn('[ProjectCreationWizard] Failed to read guidelines:', error);
-        return null;
     }
+
+    return null;
 }
 
 // ========================================

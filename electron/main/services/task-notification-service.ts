@@ -5,6 +5,7 @@
  */
 
 import { BrowserWindow, Notification } from 'electron';
+import * as crypto from 'crypto';
 import { notificationResolver } from './notification-resolver';
 import { db } from '../database/client';
 import { tasks, projects } from '../database/schema';
@@ -503,7 +504,6 @@ export class TaskNotificationService {
 
             // Add signature if secret is provided
             if (config.secret) {
-                const crypto = require('crypto');
                 const signature = crypto
                     .createHmac('sha256', config.secret)
                     .update(body)

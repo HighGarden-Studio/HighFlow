@@ -158,8 +158,8 @@
                                         type="text"
                                         placeholder="Add tag..."
                                         class="flex-1 min-w-[100px] bg-transparent border-none text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm"
+                                        @keydown="handleTagKeydown"
                                         @keydown.enter.prevent="addTag"
-                                        @keydown.comma.prevent="addTag"
                                         @blur="addTag"
                                     />
                                 </div>
@@ -215,6 +215,13 @@ const form = ref({
 
 // Tag management
 const tagInput = ref('');
+
+function handleTagKeydown(event: KeyboardEvent) {
+    if (event.key === ',') {
+        event.preventDefault();
+        addTag();
+    }
+}
 
 function addTag() {
     const tag = tagInput.value.trim();

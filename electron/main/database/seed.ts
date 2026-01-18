@@ -422,7 +422,11 @@ export async function seedDatabase(): Promise<void> {
         const demoTaskIdMap: Record<string, number> = {};
 
         for (const taskData of demoTasks) {
-            const { dependsOnTitle, dependsOnTitles, ...insertData } = taskData as any;
+            const {
+                dependsOnTitle: _dependsOnTitle,
+                dependsOnTitles: _dependsOnTitles,
+                ...insertData
+            } = taskData as any;
             const taskInsertResult = await db
                 .insert(schema.tasks)
                 .values({

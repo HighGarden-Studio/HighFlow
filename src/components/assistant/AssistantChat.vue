@@ -196,12 +196,13 @@ function handleActionClick(action: AssistantAction) {
             case 'board':
                 router.push(`/projects/${entityId || action.payload.projectId}/board`);
                 break;
-            case 'task':
+            case 'task': {
                 const projectId = action.payload.projectId;
                 if (projectId) {
                     router.push(`/projects/${projectId}/board?task=${entityId}`);
                 }
                 break;
+            }
             case 'dashboard':
                 router.push('/dashboard');
                 break;
