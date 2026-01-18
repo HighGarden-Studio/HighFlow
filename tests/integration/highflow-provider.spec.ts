@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console, vue/one-component-per-file */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultHighFlowProvider } from '../../src/services/ai/providers/DefaultHighFlowProvider';
 
