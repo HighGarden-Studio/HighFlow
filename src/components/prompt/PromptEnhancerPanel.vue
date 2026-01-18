@@ -145,7 +145,7 @@ watch(() => props.initialPrompt, (newVal) => {
         </svg>
         <h3 class="text-lg font-semibold text-gray-200">프롬프트 고도화</h3>
       </div>
-      <button @click="emit('close')" class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200">
+      <button class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200" @click="emit('close')">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -168,17 +168,17 @@ watch(() => props.initialPrompt, (newVal) => {
           <span class="text-xs text-gray-500">{{ prompt.length }}자</span>
           <div class="flex space-x-2">
             <button
-              @click="analyzePrompt"
               :disabled="!prompt.trim() || isAnalyzing"
               class="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 rounded-lg text-sm transition-colors"
+              @click="analyzePrompt"
             >
               <span v-if="isAnalyzing">분석 중...</span>
               <span v-else>분석하기</span>
             </button>
             <button
-              @click="enhancePrompt"
               :disabled="!prompt.trim() || isEnhancing"
               class="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
+              @click="enhancePrompt"
             >
               <span v-if="isEnhancing">개선 중...</span>
               <span v-else>AI 개선</span>
@@ -327,8 +327,8 @@ watch(() => props.initialPrompt, (newVal) => {
               +{{ enhancementResult.analysis.overallScore - (analysis?.overallScore || 0) }}점 개선
             </span>
             <button
-              @click="applyEnhancement"
               class="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm"
+              @click="applyEnhancement"
             >
               적용
             </button>
@@ -388,15 +388,15 @@ watch(() => props.initialPrompt, (newVal) => {
     <!-- Footer -->
     <div class="panel-footer">
       <button
-        @click="emit('close')"
         class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm"
+        @click="emit('close')"
       >
         취소
       </button>
       <button
-        @click="applyAndSave"
         :disabled="!prompt.trim()"
         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-sm"
+        @click="applyAndSave"
       >
         적용하기
       </button>

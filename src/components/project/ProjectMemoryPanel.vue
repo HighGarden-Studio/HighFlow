@@ -162,9 +162,9 @@ const lastUpdatedFormatted = computed(() => {
                     <label class="config-label">{{ t('project.memory.memory_curator') }}</label>
                     <select
                         v-model="selectedCuratorId"
-                        @change="updateCurator(selectedCuratorId)"
                         class="curator-select"
                         :disabled="isLoadingOperators"
+                        @change="updateCurator(selectedCuratorId)"
                     >
                         <option :value="null">
                             {{ globalCurator?.name || t('project.memory.sys_curator') }} ({{
@@ -229,9 +229,9 @@ const lastUpdatedFormatted = computed(() => {
                     </span>
                 </h3>
                 <button
-                    @click="showResetConfirm = true"
                     class="px-3 py-1.5 text-xs font-medium rounded bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex items-center gap-1.5"
                     :title="t('project.memory.reset_confirm_title')"
+                    @click="showResetConfirm = true"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -332,16 +332,16 @@ const lastUpdatedFormatted = computed(() => {
                         </p>
                         <div class="flex gap-3 justify-end">
                             <button
-                                @click="showResetConfirm = false"
                                 :disabled="isResetting"
                                 class="px-4 py-2 text-sm font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                                @click="showResetConfirm = false"
                             >
                                 {{ t('project.memory.cancel') }}
                             </button>
                             <button
-                                @click="resetMemory"
                                 :disabled="isResetting"
                                 class="px-4 py-2 text-sm font-medium rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                @click="resetMemory"
                             >
                                 <svg
                                     v-if="isResetting"

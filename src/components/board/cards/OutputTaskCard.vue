@@ -169,8 +169,8 @@ const detailsLabel = computed(() => {
             <div
                 v-if="task.status === 'in_progress' && !task.isPaused"
                 class="mb-3 p-2 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800 cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 transition-all shadow-sm group"
-                @click.stop="emit('previewResult', task)"
                 title="클릭하여 실시간 결과 보기"
+                @click.stop="emit('previewResult', task)"
             >
                 <!-- Header with live indicator -->
                 <div class="flex items-center justify-between mb-1.5">

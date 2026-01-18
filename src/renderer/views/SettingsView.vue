@@ -436,13 +436,13 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                         <button
                                             v-for="theme in ['light', 'dark', 'system'] as Theme[]"
                                             :key="theme"
-                                            @click="setTheme(theme)"
                                             :class="[
                                                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
                                                 currentTheme === theme
                                                     ? 'bg-blue-600 text-white'
                                                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
                                             ]"
+                                            @click="setTheme(theme)"
                                         >
                                             {{ t('settings.general.appearance.theme.' + theme) }}
                                         </button>
@@ -476,13 +476,13 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                                 { code: 'ko', label: '한국어' },
                                             ]"
                                             :key="lang.code"
-                                            @click="currentLocale = lang.code"
                                             :class="[
                                                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                                 currentLocale === lang.code
                                                     ? 'bg-blue-600 text-white'
                                                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
                                             ]"
+                                            @click="currentLocale = lang.code"
                                         >
                                             {{ lang.label }}
                                         </button>
@@ -946,6 +946,13 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                             <!-- Model Refresh Button -->
                                             <button
                                                 v-if="provider.enabled"
+                                                :disabled="refreshingProviders.has(provider.id)"
+                                                class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                                :title="
+                                                    t('settings.ai.update_models_title', {
+                                                        provider: provider.name,
+                                                    })
+                                                "
                                                 @click.stop="
                                                     () => {
                                                         console.log(
@@ -956,13 +963,6 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                                         );
                                                         refreshProviderModels(provider.id);
                                                     }
-                                                "
-                                                :disabled="refreshingProviders.has(provider.id)"
-                                                class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                                                :title="
-                                                    t('settings.ai.update_models_title', {
-                                                        provider: provider.name,
-                                                    })
                                                 "
                                             >
                                                 <svg
@@ -1007,8 +1007,8 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
                                             </button>
                                             <button
                                                 class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                @click="openProviderModal(provider.id)"
                                                 :disabled="provider.isComingSoon"
+                                                @click="openProviderModal(provider.id)"
                                             >
                                                 {{
                                                     provider.isComingSoon
@@ -1355,8 +1355,8 @@ const tabs = computed<{ id: TabId; label: string; icon: string; description?: st
             :open="showProviderModal"
             @close="closeProviderModal"
             @save="handleProviderSave"
-            @connectOAuth="handleConnectOAuth"
-            @disconnectOAuth="handleDisconnectOAuth"
+            @connect-o-auth="handleConnectOAuth"
+            @disconnect-o-auth="handleDisconnectOAuth"
         />
 
         <!-- Import Modal -->

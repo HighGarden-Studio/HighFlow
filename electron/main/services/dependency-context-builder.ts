@@ -260,7 +260,7 @@ export function areTaskDependenciesMet(
     const dependsOn = triggerConfig.dependsOn;
     const originalExpression = dependsOn.expression;
     const operator = dependsOn.operator || 'all';
-    let dependencyTaskIds = (dependsOn.taskIds as number[]) || [];
+    const dependencyTaskIds = (dependsOn.taskIds as number[]) || [];
 
     // Resolve Expression if present
     let resolvedExpression = '';

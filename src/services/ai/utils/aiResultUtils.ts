@@ -11,7 +11,7 @@ const LOG_HINT = /\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE)\b.*\d{2}:\d{2}:\d{2}/;
 const MERMAID_HINT =
     /\b(graph\s+|flowchart\s+|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|zenuml|sankey-beta|xychart-beta|block-beta|packet-beta|quadrantChart|requirementDiagram|c4Context|c4Container|c4Component|c4Dynamic|c4Deployment)\b|```mermaid/;
 const SVG_HINT = /<svg[\s>]/i;
-const CSV_HINT = /^(?:\s*"?[\w\s\-.:\/]+"?(?:\s*,\s*"?[\w\s\-.:\/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
+const CSV_HINT = /^(?:\s*"?[\w\s\-.:/]+"?(?:\s*,\s*"?[\w\s\-.:/]+"?)+\s*(?:\r?\n|$)){2,}$/m;
 
 const PDF_HINT = /%PDF-|JVBER/i;
 

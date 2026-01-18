@@ -169,8 +169,8 @@ describe('KanbanBoard', () => {
         it('should render search input', () => {
             const searchInput = wrapper.find('input[type="text"]');
             expect(searchInput.exists()).toBe(true);
-            expect(wrapper.find('.task-card').exists()).toBe(true);
-            expect(wrapper.find('.task-title').text()).toContain('Test Task');
+            expect(wrapper.find('[data-task-id]').exists()).toBe(true);
+            expect(wrapper.text()).toContain('Task 1');
             expect(searchInput.attributes('placeholder')).toBe('Search tasks...');
         });
 
@@ -397,7 +397,8 @@ describe('KanbanBoard', () => {
             expect(wrapper.emitted('taskClick')).toBeTruthy();
             const clickEvent = wrapper.emitted('taskClick');
             if (clickEvent) {
-                expect(clickEvent?.[0][0]).toMatchObject({ id: 1 });
+                const args = clickEvent![0] as any[];
+                expect(args[0]).toMatchObject({ id: 1 });
             }
         });
 

@@ -445,8 +445,8 @@ onMounted(() => {
                     <!-- Project Header -->
                     <div
                         class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-                        @click="toggleProject(project.id)"
                         :data-testid="'project-header-' + project.id"
+                        @click="toggleProject(project.id)"
                     >
                         <div class="flex items-center gap-3">
                             <!-- Expand/Collapse Icon -->

@@ -184,7 +184,7 @@ onMounted(async () => {
             <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b border-gray-800">
                 <h2 class="text-xl font-bold text-white">{{ t('marketplace.publish.title') }}</h2>
-                <button @click="close" class="text-gray-400 hover:text-white transition-colors">
+                <button class="text-gray-400 hover:text-white transition-colors" @click="close">
                     <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -278,8 +278,8 @@ onMounted(async () => {
                     <div class="flex gap-4">
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input
-                                type="radio"
                                 v-model="visibility"
+                                type="radio"
                                 value="public"
                                 class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
                             />
@@ -289,8 +289,8 @@ onMounted(async () => {
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input
-                                type="radio"
                                 v-model="visibility"
+                                type="radio"
                                 value="restricted"
                                 class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
                             />
@@ -361,8 +361,8 @@ onMounted(async () => {
                             type="file"
                             multiple
                             accept="image/png, image/jpeg, image/webp"
-                            @change="handleFileSelect"
                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            @change="handleFileSelect"
                         />
                         <div class="flex flex-col items-center gap-2 text-gray-400">
                             <svg
@@ -394,8 +394,8 @@ onMounted(async () => {
                         >
                             <img :src="url" class="w-full h-full object-cover" />
                             <button
-                                @click="removeFile(idx)"
                                 class="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                @click="removeFile(idx)"
                             >
                                 <svg
                                     class="w-3 h-3"
@@ -424,15 +424,15 @@ onMounted(async () => {
             <!-- Footer -->
             <div class="p-6 border-t border-gray-800 flex justify-end gap-3">
                 <button
-                    @click="close"
                     class="px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                    @click="close"
                 >
                     Cancel
                 </button>
                 <button
-                    @click="submit"
                     :disabled="loading || !isValid"
                     class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    @click="submit"
                 >
                     <span
                         v-if="loading"

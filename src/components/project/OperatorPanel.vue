@@ -3,9 +3,9 @@
         <!-- Header / Toggle -->
         <div class="flex items-center justify-between px-2 py-1 border-b border-gray-700/50">
             <button
-                @click="togglePanel"
                 class="toggle-btn flex-1 text-left"
                 :title="isCollapsed ? 'Show Library' : 'Hide Library'"
+                @click="togglePanel"
             >
                 <div class="flex items-center">
                     <svg
@@ -39,13 +39,13 @@
                 <!-- Tabs -->
                 <div class="flex border-b border-gray-700/50">
                     <button
-                        @click="activeTab = 'operators'"
                         class="flex-1 py-2 text-sm font-medium text-center transition-colors border-b-2"
                         :class="
                             activeTab === 'operators'
                                 ? 'text-blue-400 border-blue-400 bg-blue-500/10'
                                 : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-700/30'
                         "
+                        @click="activeTab = 'operators'"
                     >
                         Operators
                         <span v-if="operators.length > 0" class="ml-1 text-xs opacity-70"
@@ -53,13 +53,13 @@
                         >
                     </button>
                     <button
-                        @click="activeTab = 'scripts'"
                         class="flex-1 py-2 text-sm font-medium text-center transition-colors border-b-2"
                         :class="
                             activeTab === 'scripts'
                                 ? 'text-blue-400 border-blue-400 bg-blue-500/10'
                                 : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-700/30'
                         "
+                        @click="activeTab = 'scripts'"
                     >
                         Scripts
                         <span v-if="scripts.length > 0" class="ml-1 text-xs opacity-70"
@@ -73,18 +73,18 @@
                     <!-- Filter Bar -->
                     <div v-if="uniqueTags.length > 0" class="filter-bar">
                         <button
-                            @click="selectTag(null)"
                             class="filter-chip"
                             :class="{ active: selectedTag === null }"
+                            @click="selectTag(null)"
                         >
                             All
                         </button>
                         <button
                             v-for="tag in uniqueTags"
                             :key="tag"
-                            @click="selectTag(tag)"
                             class="filter-chip"
                             :class="{ active: selectedTag === tag }"
+                            @click="selectTag(tag)"
                         >
                             {{ tag }}
                         </button>
@@ -124,9 +124,9 @@
                                 :key="operator.id"
                                 class="operator-card"
                                 draggable="true"
+                                :style="{ borderColor: operator.color || undefined }"
                                 @dragstart="handleDragStart($event, operator)"
                                 @dragend="handleDragEnd"
-                                :style="{ borderColor: operator.color || undefined }"
                             >
                                 <div
                                     class="operator-avatar"

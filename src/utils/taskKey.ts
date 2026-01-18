@@ -26,13 +26,16 @@ export function taskKeyToString(key: TaskKey): string {
  */
 export function stringToTaskKey(str: string): TaskKey {
     const parts = str.split('-');
-    const projectId = parseInt(parts[0], 10);
-    const projectSequence = parseInt(parts[1], 10);
+    if (parts.length < 2) {
+        throw new Error(`Invalid TaskKey string format: ${str}`);
+    }
+    const projectId = parseInt(parts[0]!, 10);
+    const projectSequence = parseInt(parts[1]!, 10);
 
     if (isNaN(projectId) || isNaN(projectSequence)) {
         throw new Error(`Invalid TaskKey string format: ${str}`);
     }
-    return { projectId: projectId as number, projectSequence: projectSequence as number };
+    return { projectId, projectSequence };
 }
 
 /**

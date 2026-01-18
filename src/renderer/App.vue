@@ -456,8 +456,8 @@ onUnmounted(() => {
                     <!-- App name removed as per user request (duplicated in header) -->
                 </div>
                 <button
-                    @click="toggleSidebar"
                     class="p-1.5 rounded-lg hover:bg-gray-800 transition-colors"
+                    @click="toggleSidebar"
                 >
                     <svg
                         :class="[
@@ -483,13 +483,13 @@ onUnmounted(() => {
                 <button
                     v-for="item in navItems"
                     :key="item.name"
-                    @click="navigateTo(item.path)"
                     :class="[
                         'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left',
                         activeRoute?.toString().includes(item.name)
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-400 hover:bg-gray-800 hover:text-white',
                     ]"
+                    @click="navigateTo(item.path)"
                 >
                     <!-- Folder icon -->
                     <svg
@@ -569,9 +569,9 @@ onUnmounted(() => {
                                 <p class="text-xs text-gray-500 truncate">{{ userEmail }}</p>
                             </div>
                             <button
-                                @click="handleLogout"
                                 class="p-1 text-gray-500 hover:text-red-400 hover:bg-gray-800 rounded transition-colors"
                                 :title="$t('auth.logout')"
+                                @click="handleLogout"
                             >
                                 <svg
                                     class="w-4 h-4"
@@ -629,9 +629,9 @@ onUnmounted(() => {
                 <template v-else>
                     <button
                         v-if="sidebarOpen"
-                        @click="handleLogin"
                         :disabled="userStore.isLoading"
                         class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-900 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        @click="handleLogin"
                     >
                         <svg class="w-5 h-5" viewBox="0 0 24 24">
                             <path
@@ -657,10 +657,10 @@ onUnmounted(() => {
                     </button>
                     <button
                         v-else
-                        @click="handleLogin"
                         :disabled="userStore.isLoading"
                         class="w-8 h-8 flex items-center justify-center bg-white hover:bg-gray-100 rounded-full transition-all disabled:opacity-50"
                         title="Google Login"
+                        @click="handleLogin"
                     >
                         <svg class="w-5 h-5" viewBox="0 0 24 24">
                             <path
@@ -687,8 +687,8 @@ onUnmounted(() => {
                 <div v-if="sidebarOpen" class="mt-3 pt-3 border-t border-gray-800/50">
                     <div class="flex items-center justify-between mb-2">
                         <button
-                            @click="toggleLanguage"
                             class="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/50"
+                            @click="toggleLanguage"
                         >
                             <span class="text-sm">{{ locale === 'ko' ? '🇰🇷' : '🇺🇸' }}</span>
                             <span>{{ currentLocaleLabel }}</span>
@@ -726,7 +726,6 @@ onUnmounted(() => {
                     <div class="flex items-center gap-1 mr-2">
                         <!-- Undo Button -->
                         <button
-                            @click="historyStore.undo()"
                             :disabled="!historyStore.canUndo"
                             :title="
                                 historyStore.canUndo
@@ -739,6 +738,7 @@ onUnmounted(() => {
                                     ? 'hover:bg-gray-800 text-gray-400 hover:text-white'
                                     : 'text-gray-600 cursor-not-allowed',
                             ]"
+                            @click="historyStore.undo()"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -757,7 +757,6 @@ onUnmounted(() => {
 
                         <!-- Redo Button -->
                         <button
-                            @click="historyStore.redo()"
                             :disabled="!historyStore.canRedo"
                             :title="
                                 historyStore.canRedo
@@ -770,6 +769,7 @@ onUnmounted(() => {
                                     ? 'hover:bg-gray-800 text-gray-400 hover:text-white'
                                     : 'text-gray-600 cursor-not-allowed',
                             ]"
+                            @click="historyStore.redo()"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -789,8 +789,8 @@ onUnmounted(() => {
 
                     <!-- Search Bar (clickable) -->
                     <button
-                        @click="showSearch = true"
                         class="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-lg transition-colors"
+                        @click="showSearch = true"
                     >
                         <svg
                             class="w-4 h-4 text-gray-500"
@@ -816,7 +816,7 @@ onUnmounted(() => {
                     <!-- Windows controls (hidden on macOS via v-if="false" in original code) -->
                     <div class="flex items-center gap-1">
                         <template v-if="false">
-                            <button @click="minimizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
+                            <button class="p-1.5 hover:bg-gray-800 rounded" @click="minimizeWindow">
                                 <svg
                                     class="w-4 h-4 text-gray-400"
                                     fill="none"
@@ -831,7 +831,7 @@ onUnmounted(() => {
                                     />
                                 </svg>
                             </button>
-                            <button @click="maximizeWindow" class="p-1.5 hover:bg-gray-800 rounded">
+                            <button class="p-1.5 hover:bg-gray-800 rounded" @click="maximizeWindow">
                                 <svg
                                     class="w-4 h-4 text-gray-400"
                                     fill="none"
@@ -846,7 +846,7 @@ onUnmounted(() => {
                                     />
                                 </svg>
                             </button>
-                            <button @click="closeWindow" class="p-1.5 hover:bg-red-600 rounded">
+                            <button class="p-1.5 hover:bg-red-600 rounded" @click="closeWindow">
                                 <svg
                                     class="w-4 h-4 text-gray-400"
                                     fill="none"
@@ -893,8 +893,8 @@ onUnmounted(() => {
                 >
                     <span class="flex-1">{{ toast.message }}</span>
                     <button
-                        @click="uiStore.dismissToast(toast.id)"
                         class="p-1 hover:bg-white/20 rounded"
+                        @click="uiStore.dismissToast(toast.id)"
                     >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -935,9 +935,9 @@ onUnmounted(() => {
         <!-- AI Assistant Floating Button -->
         <button
             v-if="!showAssistant"
-            @click="toggleAssistant"
             class="fixed bottom-12 right-4 z-40 w-14 h-14 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-full shadow-lg shadow-purple-500/25 flex items-center justify-center transition-all hover:scale-105 group"
             :title="$t('common.ai_assistant')"
+            @click="toggleAssistant"
         >
             <span class="text-2xl group-hover:scale-110 transition-transform">🤖</span>
         </button>

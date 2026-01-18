@@ -123,9 +123,10 @@ const contentLabel = computed(() => {
         const paths =
             config.localFile?.filePaths ||
             (config.localFile?.filePath ? [config.localFile.filePath] : []);
-        if (paths.length === 0) return t('task.input.local.file_placeholder') || 'No file selected';
-
-        const firstFile = paths[0].split(/[/\\]/).pop(); // basename
+        const firstPath = paths[0];
+        if (!firstPath) return t('task.input.local.file_placeholder') || 'No file selected';
+        const fileName = firstPath.split(/[/\\]/).pop();
+        const firstFile = fileName || ''; // basename
         if (paths.length > 1) {
             return `${firstFile} 외 ${paths.length - 1}개`;
         }

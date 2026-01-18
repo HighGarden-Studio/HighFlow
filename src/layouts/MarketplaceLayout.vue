@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
 import { useMarketplaceStore } from '../renderer/stores/marketplaceStore';
+import type { MarketplaceCategory } from '../core/types/marketplace';
 
 const store = useMarketplaceStore();
-const router = useRouter();
-const route = useRoute();
 
 const categories = [
     { id: 'all', name: 'All Categories', icon: '🔍' },
@@ -19,15 +16,16 @@ const types = [
     { id: 'all', name: 'All Types' },
     { id: 'project', name: 'Projects' },
     { id: 'operator', name: 'Operators' },
-    { id: 'script_template', name: 'Scripts' },
+    { id: 'script-template', name: 'Scripts' },
 ];
 
 function handleCategorySelect(categoryId: string) {
-    store.selectedCategory = categoryId === 'all' ? null : categoryId;
+    store.selectedCategory = categoryId === 'all' ? null : (categoryId as MarketplaceCategory);
 }
 
 function handleTypeSelect(typeId: string) {
-    store.selectedType = typeId === 'all' ? null : (typeId as any);
+    store.selectedType =
+        typeId === 'all' ? null : (typeId as 'project' | 'operator' | 'script-template');
 }
 </script>
 
@@ -54,7 +52,6 @@ function handleTypeSelect(typeId: string) {
                         <button
                             v-for="type in types"
                             :key="type.id"
-                            @click="handleTypeSelect(type.id)"
                             :class="[
                                 'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors',
                                 store.selectedType === type.id ||
@@ -62,6 +59,7 @@ function handleTypeSelect(typeId: string) {
                                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800',
                             ]"
+                            @click="handleTypeSelect(type.id)"
                         >
                             {{ type.name }}
                         </button>
@@ -77,7 +75,6 @@ function handleTypeSelect(typeId: string) {
                         <button
                             v-for="cat in categories"
                             :key="cat.id"
-                            @click="handleCategorySelect(cat.id)"
                             :class="[
                                 'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2',
                                 store.selectedCategory === cat.id ||
@@ -85,6 +82,7 @@ function handleTypeSelect(typeId: string) {
                                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800',
                             ]"
+                            @click="handleCategorySelect(cat.id)"
                         >
                             <span>{{ cat.icon }}</span>
                             {{ cat.name }}

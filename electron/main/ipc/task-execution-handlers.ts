@@ -171,7 +171,7 @@ function areTaskDependenciesMet(
     const dependsOn = triggerConfig.dependsOn;
     const originalExpression = dependsOn.expression;
     const operator = dependsOn.operator || 'all';
-    let dependencySequences = (dependsOn.taskIds as number[]) || [];
+    const dependencySequences = (dependsOn.taskIds as number[]) || [];
 
     // Resolve Expression if present
     let resolvedExpression = '';
@@ -2039,7 +2039,7 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
 
                     // Context Injection & Prompt Construction (Consolidated)
                     const contextPackage = buildContextPackage(freshProject || project, task);
-                    let basePrompt = task.generatedPrompt || task.description || '';
+                    const basePrompt = task.generatedPrompt || task.description || '';
 
                     // Language Instruction (Standard AI)
                     let languageInstruction = '';

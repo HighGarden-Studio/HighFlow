@@ -177,18 +177,18 @@ function clearFilters() {
                 <button
                     v-for="tag in settingsStore.allMCPTags"
                     :key="tag"
-                    @click="toggleTag(tag)"
                     :class="[
                         'px-3 py-1 rounded-full text-xs font-medium transition-colors',
                         selectedTags.includes(tag) ? 'bg-blue-600 text-white' : getTagColor(tag),
                     ]"
+                    @click="toggleTag(tag)"
                 >
                     {{ t(settingsStore.getMCPTagDisplayName(tag)) }}
                 </button>
                 <button
                     v-if="selectedTags.length > 0 || searchQuery"
-                    @click="clearFilters"
                     class="px-3 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                    @click="clearFilters"
                 >
                     {{ t('settings.mcp.filter_reset') }}
                 </button>
@@ -200,7 +200,6 @@ function clearFilters() {
             <div
                 v-for="server in filteredServers"
                 :key="server.id"
-                @click="openServerModal(server)"
                 :class="[
                     'rounded-xl p-4 border-2 cursor-pointer transition-all hover:shadow-lg group',
                     server.isConnected && server.enabled
@@ -209,6 +208,7 @@ function clearFilters() {
                           ? 'bg-yellow-900/20 border-yellow-700 hover:border-yellow-600'
                           : 'bg-gray-800 border-gray-700 hover:border-gray-600',
                 ]"
+                @click="openServerModal(server)"
             >
                 <!-- Header -->
                 <div class="flex items-start gap-3 mb-3">
@@ -294,9 +294,9 @@ function clearFilters() {
                             v-if="server.website"
                             :href="server.website"
                             target="_blank"
-                            @click.stop
                             class="p-1 text-gray-400 hover:text-white transition-colors"
                             :title="t('settings.agents.actions.docs')"
+                            @click.stop
                         >
                             <svg
                                 class="w-4 h-4"
@@ -316,9 +316,9 @@ function clearFilters() {
                             v-if="server.repository"
                             :href="server.repository"
                             target="_blank"
-                            @click.stop
                             class="p-1 text-gray-400 hover:text-white transition-colors"
                             title="GitHub"
+                            @click.stop
                         >
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                 <path

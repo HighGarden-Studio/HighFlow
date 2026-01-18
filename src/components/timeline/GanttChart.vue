@@ -70,8 +70,9 @@ const isDetailedView = computed(() => props.zoomLevel === 'hour');
 
 // Helper to get actual start date if available
 function getActualStartDate(task: Task): Date | null {
-    if (props.firstStartedAtMap && props.firstStartedAtMap[task.projectSequence]) {
-        return new Date(props.firstStartedAtMap[task.projectSequence]);
+    const dateStr = props.firstStartedAtMap?.[String(task.projectSequence)];
+    if (dateStr) {
+        return new Date(dateStr);
     }
     if (task.startedAt) return new Date(task.startedAt);
     return null;
@@ -357,17 +358,17 @@ const dependencyLines = computed<DependencyPath[]>(() => {
     const taskMap = new Map<number, TimelineItem>();
 
     processedTasks.value.forEach((item) => {
-        if (item.type === 'task' && item.data) {
+        if (item.type === 'task' && item.data && item.data.id !== undefined) {
             taskMap.set(item.data.id, item);
         }
     });
 
     props.tasks.forEach((task) => {
         // Explicit dependencies
-        if (task.dependencies && Array.isArray(task.dependencies)) {
+        if (task.dependencies && Array.isArray(task.dependencies) && task.id !== undefined) {
             task.dependencies.forEach((depId) => {
                 const from = taskMap.get(depId);
-                const to = taskMap.get(task.id);
+                const to = taskMap.get(task.id!);
                 if (from && to) {
                     lines.push(calculatePath(from, to));
                 }
@@ -376,11 +377,12 @@ const dependencyLines = computed<DependencyPath[]>(() => {
         // Trigger dependencies
         if (
             task.triggerConfig?.dependsOn?.taskIds &&
-            Array.isArray(task.triggerConfig.dependsOn.taskIds)
+            Array.isArray(task.triggerConfig.dependsOn.taskIds) &&
+            task.id !== undefined
         ) {
             task.triggerConfig.dependsOn.taskIds.forEach((depId) => {
                 const from = taskMap.get(depId);
-                const to = taskMap.get(task.id);
+                const to = taskMap.get(task.id!);
                 if (from && to) {
                     lines.push(calculatePath(from, to));
                 }
@@ -458,8 +460,8 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
         <div class="flex-1 overflow-hidden relative flex flex-col">
             <!-- Time Axis Header -->
             <div
-                class="h-[50px] border-b border-gray-800 bg-gray-800/80 overflow-hidden relative"
                 ref="headerRef"
+                class="h-[50px] border-b border-gray-800 bg-gray-800/80 overflow-hidden relative"
             >
                 <div
                     class="absolute top-0 h-full flex items-end pb-2"
@@ -664,9 +666,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                             item.data.status === 'todo' ||
                                             item.data.status === 'blocked'
                                         "
-                                        @click="handleExecuteTask($event, item.data)"
                                         class="p-1.5 bg-blue-500/20 hover:bg-blue-500/40 rounded border border-blue-500/30 hover:border-blue-500/60 transition-all group/btn"
                                         title="Execute Task"
+                                        @click="handleExecuteTask($event, item.data)"
                                     >
                                         <svg
                                             class="w-3.5 h-3.5 text-blue-400 group-hover/btn:text-blue-300"
@@ -682,9 +684,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                     <!-- Approve Button -->
                                     <button
                                         v-if="canApprove(item.data)"
-                                        @click.stop="$emit('approve-task', item.data)"
                                         class="p-1.5 bg-green-500/20 hover:bg-green-500/40 rounded border border-green-500/30 hover:border-green-500/60 transition-all group/btn"
                                         title="Approve Task"
+                                        @click.stop="$emit('approve-task', item.data)"
                                     >
                                         <svg
                                             class="w-3.5 h-3.5 text-green-400 group-hover/btn:text-green-300"
@@ -702,9 +704,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                     <!-- View Results Button -->
                                     <button
                                         v-if="hasResults(item.data)"
-                                        @click.stop="$emit('view-results', item.data)"
                                         class="p-1.5 bg-purple-500/20 hover:bg-purple-500/40 rounded border border-purple-500/30 hover:border-purple-500/60 transition-all group/btn"
                                         title="View Results"
+                                        @click.stop="$emit('view-results', item.data)"
                                     >
                                         <svg
                                             class="w-3.5 h-3.5 text-purple-400 group-hover/btn:text-purple-300"
@@ -765,9 +767,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                             item.data.status === 'todo' ||
                                             item.data.status === 'blocked'
                                         "
-                                        @click="handleExecuteTask($event, item.data)"
                                         class="flex-1 p-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 rounded text-blue-400 hover:text-blue-300 transition-all"
                                         title="Execute"
+                                        @click="handleExecuteTask($event, item.data)"
                                     >
                                         <svg
                                             class="w-3 h-3 mx-auto"
@@ -781,9 +783,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                     </button>
                                     <button
                                         v-if="canApprove(item.data)"
-                                        @click.stop="$emit('approve-task', item.data)"
                                         class="flex-1 p-1 bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 rounded text-green-400 hover:text-green-300 transition-all"
                                         title="Approve"
+                                        @click.stop="$emit('approve-task', item.data)"
                                     >
                                         <svg
                                             class="w-3 h-3 mx-auto"
@@ -799,9 +801,9 @@ function calculatePath(from: TimelineItem, to: TimelineItem): DependencyPath {
                                     </button>
                                     <button
                                         v-if="hasResults(item.data)"
-                                        @click.stop="$emit('view-results', item.data)"
                                         class="flex-1 p-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 rounded text-purple-400 hover:text-purple-300 transition-all"
                                         title="Results"
+                                        @click.stop="$emit('view-results', item.data)"
                                     >
                                         <svg
                                             class="w-3 h-3 mx-auto"

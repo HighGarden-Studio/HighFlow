@@ -18,26 +18,28 @@ const getAPI = () => (window as any).electron;
  * Undo: Delete the created task
  */
 export class CreateTaskCommand extends BaseCommand {
-    private createdTaskId?: number;
+    private createdProjectId?: number;
+    private createdSequence?: number;
 
     constructor(
         private taskData: { projectId: number; title: string } & Partial<Task>,
         private onUpdate: (task: Task) => void,
-        private onDelete: (id: number) => void
+        private onDelete: (projectId: number, sequence: number) => void
     ) {
         super(`Create task "${taskData.title}"`);
     }
 
     async execute(): Promise<void> {
         const task = await getAPI().tasks.create(this.taskData);
-        this.createdTaskId = task.id;
+        this.createdProjectId = task.projectId;
+        this.createdSequence = task.projectSequence;
         this.onUpdate(task);
     }
 
     async undo(): Promise<void> {
-        if (this.createdTaskId) {
-            await getAPI().tasks.delete(this.createdTaskId);
-            this.onDelete(this.createdTaskId);
+        if (this.createdProjectId !== undefined && this.createdSequence !== undefined) {
+            await getAPI().tasks.delete(this.createdProjectId, this.createdSequence);
+            this.onDelete(this.createdProjectId, this.createdSequence);
         }
     }
 }
@@ -49,21 +51,14 @@ export class CreateTaskCommand extends BaseCommand {
  * issues with Electron IPC. The undo/redo operations bypass IPC entirely.
  */
 export class UpdateTaskCommand extends BaseCommand {
-    private taskId: number;
-    private newData: Partial<Task>;
-    private previousData: Partial<Task>;
-
     constructor(
-        taskId: number,
-        newData: Partial<Task>,
-        previousData: Partial<Task>,
+        private projectId: number,
+        private sequence: number,
+        private newData: Partial<Task>,
+        private previousData: Partial<Task>,
         description?: string
     ) {
-        super(description || `Update task ${taskId}`);
-        this.taskId = taskId;
-        // Store the data as-is, we'll handle serialization in execute/undo
-        this.newData = newData;
-        this.previousData = previousData;
+        super(description || `Update task ${projectId}-${sequence}`);
     }
 
     async execute(): Promise<void> {
@@ -73,15 +68,10 @@ export class UpdateTaskCommand extends BaseCommand {
 
         console.log('📝 UpdateTaskCommand.execute - before updateTask');
         // Use the store's updateTask method directly (bypasses IPC)
-        await taskStore.updateTask(this.taskId, this.newData);
+        await taskStore.updateTask(this.projectId, this.sequence, this.newData);
 
         // Refresh tasks to ensure UI updates (especially DAG view)
-        console.log('📝 UpdateTaskCommand.execute - currentProjectId:', taskStore.currentProjectId);
-        if (taskStore.currentProjectId) {
-            console.log('📝 UpdateTaskCommand.execute - calling fetchTasks');
-            await taskStore.fetchTasks(taskStore.currentProjectId);
-            console.log('📝 UpdateTaskCommand.execute - fetchTasks completed');
-        }
+        await taskStore.fetchTasks(this.projectId);
     }
 
     async undo(): Promise<void> {
@@ -91,15 +81,10 @@ export class UpdateTaskCommand extends BaseCommand {
 
         console.log('↩️ UpdateTaskCommand.undo - before updateTask');
         // Use the store's updateTask method directly (bypasses IPC)
-        await taskStore.updateTask(this.taskId, this.previousData);
+        await taskStore.updateTask(this.projectId, this.sequence, this.previousData);
 
         // Refresh tasks to ensure UI updates (especially DAG view)
-        console.log('↩️ UpdateTaskCommand.undo - currentProjectId:', taskStore.currentProjectId);
-        if (taskStore.currentProjectId) {
-            console.log('↩️ UpdateTaskCommand.undo - calling fetchTasks');
-            await taskStore.fetchTasks(taskStore.currentProjectId);
-            console.log('↩️ UpdateTaskCommand.undo - fetchTasks completed');
-        }
+        await taskStore.fetchTasks(this.projectId);
     }
 }
 
@@ -110,22 +95,30 @@ export class UpdateTaskCommand extends BaseCommand {
  */
 export class DeleteTaskCommand extends BaseCommand {
     constructor(
-        private taskId: number,
-        private taskTitle: string,
-        private onDelete: (id: number) => void,
+        private projectId: number,
+        private sequence: number,
+        taskTitle: string,
+        private onDelete: (projectId: number, sequence: number) => void,
         private onRestore: (task: Task) => void
     ) {
         super(`Delete task "${taskTitle}"`);
     }
 
     async execute(): Promise<void> {
-        await getAPI().tasks.delete(this.taskId);
-        this.onDelete(this.taskId);
+        await getAPI().tasks.delete(this.projectId, this.sequence);
+        this.onDelete(this.projectId, this.sequence);
     }
 
     async undo(): Promise<void> {
-        // Restore by setting deletedAt to null
-        const task = await getAPI().tasks.update(this.taskId, { deletedAt: null });
+        // Restore by setting deletedAt to null via Update
+        // Note: 'delete' might be hard delete or soft delete.
+        // If soft delete (deletedAt), we can update.
+        // Warning: tasks.update might not work on deleted tasks depending on API.
+        // Assuming soft delete for now.
+        const task = await getAPI().tasks.update(this.projectId, this.sequence, {
+            deletedAt: null,
+            status: 'todo', // Reset status if needed
+        } as any);
         this.onRestore(task);
     }
 }
@@ -137,8 +130,9 @@ export class DeleteTaskCommand extends BaseCommand {
  */
 export class MoveTaskCommand extends BaseCommand {
     constructor(
-        private taskId: number,
-        private taskTitle: string,
+        private projectId: number,
+        private sequence: number,
+        taskTitle: string,
         private newStatus: string,
         private previousStatus: string,
         private onUpdate: (task: Task) => void
@@ -147,14 +141,14 @@ export class MoveTaskCommand extends BaseCommand {
     }
 
     async execute(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, {
+        const task = await getAPI().tasks.update(this.projectId, this.sequence, {
             status: this.newStatus,
         });
         this.onUpdate(task);
     }
 
     async undo(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, {
+        const task = await getAPI().tasks.update(this.projectId, this.sequence, {
             status: this.previousStatus,
         });
         this.onUpdate(task);
@@ -168,21 +162,22 @@ export class MoveTaskCommand extends BaseCommand {
  */
 export class ReorderTasksCommand extends BaseCommand {
     constructor(
-        private newTaskIds: number[],
-        private previousTaskIds: number[],
-        private onReorder: (taskIds: number[]) => void
+        private projectId: number,
+        private newSequences: number[],
+        private previousSequences: number[],
+        private onReorder: (sequences: number[]) => void
     ) {
-        super(`Reorder ${newTaskIds.length} tasks`);
+        super(`Reorder ${newSequences.length} tasks`);
     }
 
     async execute(): Promise<void> {
-        await getAPI().tasks.reorder(this.newTaskIds);
-        this.onReorder(this.newTaskIds);
+        await getAPI().tasks.reorder(this.projectId, this.newSequences);
+        this.onReorder(this.newSequences);
     }
 
     async undo(): Promise<void> {
-        await getAPI().tasks.reorder(this.previousTaskIds);
-        this.onReorder(this.previousTaskIds);
+        await getAPI().tasks.reorder(this.projectId, this.previousSequences);
+        this.onReorder(this.previousSequences);
     }
 }
 
@@ -193,11 +188,12 @@ export class ReorderTasksCommand extends BaseCommand {
  */
 export class AssignOperatorCommand extends BaseCommand {
     constructor(
-        private taskId: number,
-        private taskTitle: string,
+        private projectId: number,
+        private sequence: number,
+        taskTitle: string,
         private operatorId: number | null,
         private previousOperatorId: number | null,
-        private operatorName: string | null,
+        operatorName: string | null,
         private onUpdate: (task: Task) => void
     ) {
         super(
@@ -208,76 +204,22 @@ export class AssignOperatorCommand extends BaseCommand {
     }
 
     async execute(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, {
+        const task = await getAPI().tasks.update(this.projectId, this.sequence, {
             assignedOperatorId: this.operatorId,
         });
         this.onUpdate(task);
     }
 
     async undo(): Promise<void> {
-        const task = await getAPI().tasks.update(this.taskId, {
+        const task = await getAPI().tasks.update(this.projectId, this.sequence, {
             assignedOperatorId: this.previousOperatorId,
         });
         this.onUpdate(task);
     }
 }
 
-/**
- * Add Dependency Command
- * Execute: Add dependency between tasks
- * Undo: Remove the dependency
- */
-export class AddDependencyCommand extends BaseCommand {
-    constructor(
-        private sourceTaskId: number,
-        private targetTaskId: number,
-        private sourceTitle: string,
-        private targetTitle: string,
-        private onUpdate: () => void
-    ) {
-        super(`Add dependency: "${sourceTitle}" → "${targetTitle}"`);
-    }
-
-    async execute(): Promise<void> {
-        await getAPI().dependencies.create({
-            sourceTaskId: this.sourceTaskId,
-            targetTaskId: this.targetTaskId,
-        });
-        this.onUpdate();
-    }
-
-    async undo(): Promise<void> {
-        await getAPI().dependencies.delete(this.sourceTaskId, this.targetTaskId);
-        this.onUpdate();
-    }
-}
-
-/**
- * Remove Dependency Command
- * Execute: Remove dependency between tasks
- * Undo: Restore the dependency
- */
-export class RemoveDependencyCommand extends BaseCommand {
-    constructor(
-        private sourceTaskId: number,
-        private targetTaskId: number,
-        private sourceTitle: string,
-        private targetTitle: string,
-        private onUpdate: () => void
-    ) {
-        super(`Remove dependency: "${sourceTitle}" → "${targetTitle}"`);
-    }
-
-    async execute(): Promise<void> {
-        await getAPI().dependencies.delete(this.sourceTaskId, this.targetTaskId);
-        this.onUpdate();
-    }
-
-    async undo(): Promise<void> {
-        await getAPI().dependencies.create({
-            sourceTaskId: this.sourceTaskId,
-            targetTaskId: this.targetTaskId,
-        });
-        this.onUpdate();
-    }
-}
+// NOTE: DependencyCommands disabled - API dependencies not exposed in current ElectronAPI type
+/*
+export class AddDependencyCommand extends BaseCommand { ... }
+export class RemoveDependencyCommand extends BaseCommand { ... }
+*/

@@ -178,11 +178,11 @@ function handleWizardClose() {
             </div>
             <button
                 v-if="isLoggedIn"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
                 @click="
                     wizardProps = {};
                     showWizard = true;
                 "
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
             >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -268,18 +268,18 @@ function handleWizardClose() {
                     </p>
                     <button
                         v-if="currentTab === 'purchased'"
-                        @click="router.push('/marketplace')"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors inline-block"
+                        @click="router.push('/marketplace')"
                     >
                         Browse Marketplace
                     </button>
                     <button
                         v-else
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors inline-block"
                         @click="
                             wizardProps = {};
                             showWizard = true;
                         "
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors inline-block"
                     >
                         Register Your First Item
                     </button>

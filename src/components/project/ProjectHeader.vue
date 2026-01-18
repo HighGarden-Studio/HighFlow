@@ -72,8 +72,8 @@ onMounted(async () => {
     <header class="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-4">
             <button
-                @click="router.push('/projects')"
                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                @click="router.push('/projects')"
             >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -89,9 +89,9 @@ onMounted(async () => {
                     <h1 class="text-xl font-bold text-white">{{ projectTitle }}</h1>
                     <button
                         v-if="showProjectInfo"
-                        @click="emit('projectInfo')"
                         class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                         title="Project Info"
+                        @click="emit('projectInfo')"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -110,7 +110,6 @@ onMounted(async () => {
         <div class="flex items-center gap-4">
             <!-- Global Pause Toggle -->
             <button
-                @click="togglePause"
                 class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm"
                 :class="
                     isGlobalPaused
@@ -118,6 +117,7 @@ onMounted(async () => {
                         : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
                 "
                 :title="isGlobalPaused ? 'Resume All Tasks' : 'Pause All Tasks'"
+                @click="togglePause"
             >
                 <svg
                     v-if="!isGlobalPaused"
@@ -147,8 +147,8 @@ onMounted(async () => {
             <!-- New Task Button (Board only) -->
             <button
                 v-if="showNewTask"
-                @click="emit('newTask')"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                @click="emit('newTask')"
             >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -164,46 +164,46 @@ onMounted(async () => {
             <!-- View Switcher -->
             <div class="bg-gray-800 rounded-lg p-1">
                 <button
-                    @click="router.push(`/projects/${projectId}`)"
                     :class="[
                         'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                         currentView === 'overview'
                             ? 'bg-gray-700 text-white shadow-sm'
                             : 'text-gray-400 hover:text-white',
                     ]"
+                    @click="router.push(`/projects/${projectId}`)"
                 >
                     Overview
                 </button>
                 <button
-                    @click="router.push(`/projects/${projectId}/board`)"
                     :class="[
                         'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                         currentView === 'board'
                             ? 'bg-gray-700 text-white shadow-sm'
                             : 'text-gray-400 hover:text-white',
                     ]"
+                    @click="router.push(`/projects/${projectId}/board`)"
                 >
                     Kanban
                 </button>
                 <button
-                    @click="router.push(`/projects/${projectId}/dag`)"
                     :class="[
                         'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                         currentView === 'dag'
                             ? 'bg-gray-700 text-white shadow-sm'
                             : 'text-gray-400 hover:text-white',
                     ]"
+                    @click="router.push(`/projects/${projectId}/dag`)"
                 >
                     DAG
                 </button>
                 <button
-                    @click="router.push(`/projects/${projectId}/timeline`)"
                     :class="[
                         'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                         currentView === 'timeline'
                             ? 'bg-gray-700 text-white shadow-sm'
                             : 'text-gray-400 hover:text-white',
                     ]"
+                    @click="router.push(`/projects/${projectId}/timeline`)"
                 >
                     Timeline
                 </button>

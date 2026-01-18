@@ -12,11 +12,11 @@
                     <span class="stat-label">Successful</span>
                     <span class="stat-value">{{ overallStats.successful }}</span>
                 </div>
-                <div class="stat-item failed" v-if="overallStats.failed > 0">
+                <div v-if="overallStats.failed > 0" class="stat-item failed">
                     <span class="stat-label">Failed</span>
                     <span class="stat-value">{{ overallStats.failed }}</span>
                 </div>
-                <div class="stat-item" v-if="overallStats.avgDuration > 0">
+                <div v-if="overallStats.avgDuration > 0" class="stat-item">
                     <span class="stat-label">Avg Duration</span>
                     <span class="stat-value">{{ overallStats.avgDuration }}ms</span>
                 </div>
@@ -67,7 +67,7 @@
                                 <span class="tool-name">{{ log.tool }}</span>
                             </div>
                             <div class="header-right">
-                                <span class="duration" v-if="log.duration">{{ log.duration }}</span>
+                                <span v-if="log.duration" class="duration">{{ log.duration }}</span>
                                 <span class="expand-icon">{{
                                     isExpanded(logs.indexOf(log)) ? '▼' : '▶'
                                 }}</span>
@@ -104,8 +104,8 @@
                 <!-- Header (Always visible) -->
                 <div
                     class="log-header"
-                    @click="toggleExpand(index)"
                     :class="{ expanded: isExpanded(index) }"
+                    @click="toggleExpand(index)"
                 >
                     <div class="header-left">
                         <span class="icon" :class="log.status">
@@ -118,7 +118,7 @@
                         <span class="tool-name">{{ log.tool }}</span>
                     </div>
                     <div class="header-right">
-                        <span class="duration" v-if="log.duration">{{ log.duration }}</span>
+                        <span v-if="log.duration" class="duration">{{ log.duration }}</span>
                         <span class="expand-icon">{{ isExpanded(index) ? '▼' : '▶' }}</span>
                     </div>
                 </div>

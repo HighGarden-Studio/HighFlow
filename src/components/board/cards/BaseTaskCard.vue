@@ -194,8 +194,8 @@ const taskCardClasses = computed(() => [
         <!-- Delete Button (Top Right, visible on hover) -->
         <button
             class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded opacity-0 group-hover:opacity-100 transition-all z-20"
-            @click.stop="emit('delete', task)"
             title="태스크 삭제"
+            @click.stop="emit('delete', task)"
         >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -218,9 +218,9 @@ const taskCardClasses = computed(() => [
         >
             <div
                 draggable="true"
+                class="w-6 h-6 rounded-full bg-white dark:bg-gray-800 border-2 border-indigo-500 hover:scale-110 transition-transform cursor-crosshair flex items-center justify-center shadow-sm"
                 @dragstart="handleConnectionDragStart"
                 @dragend="handleConnectionDragEnd"
-                class="w-6 h-6 rounded-full bg-white dark:bg-gray-800 border-2 border-indigo-500 hover:scale-110 transition-transform cursor-crosshair flex items-center justify-center shadow-sm"
             >
                 <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
             </div>

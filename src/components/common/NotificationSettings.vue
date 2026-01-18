@@ -214,9 +214,9 @@ function testNotification() {
         <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <span class="text-sm font-medium text-gray-900 dark:text-gray-100">알림 활성화</span>
             <button
-                @click="enabled = !enabled"
                 class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
                 :class="enabled ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-600'"
+                @click="enabled = !enabled"
             >
                 <span
                     class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -451,8 +451,8 @@ function testNotification() {
                 class="flex items-center justify-end pt-3 border-t border-gray-200 dark:border-gray-700"
             >
                 <button
-                    @click="testNotification"
                     class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded transition-colors"
+                    @click="testNotification"
                 >
                     테스트 전송
                 </button>

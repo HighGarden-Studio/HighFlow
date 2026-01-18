@@ -5,7 +5,7 @@
  * Shows project overview and settings
  */
 import { onMounted, computed, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
@@ -13,7 +13,7 @@ import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import MarketplacePublishModal from '../components/marketplace/MarketplacePublishModal.vue';
 
-const route = useRoute();
+// const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 const projectStore = useProjectStore();
@@ -89,7 +89,7 @@ async function handleUpdateAISettings(settings: {
     });
 }
 
-async function handleUpdateMCPConfig(config: any) {
+async function handleUpdateMCPConfig(config: Record<string, unknown> | null) {
     if (!project.value) return;
     await projectStore.updateProject(project.value.id, {
         mcpConfig: config,
@@ -131,7 +131,7 @@ onMounted(async () => {
             <h3 class="text-lg font-medium text-gray-300 mb-2">
                 {{ t('project.not_found') }}
             </h3>
-            <button @click="router.push('/projects')" class="text-blue-500 hover:text-blue-400">
+            <button class="text-blue-500 hover:text-blue-400" @click="router.push('/projects')">
                 {{ t('project.go_back') }}
             </button>
         </div>
@@ -143,8 +143,8 @@ onMounted(async () => {
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-4">
                         <button
-                            @click="router.push('/projects')"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                            @click="router.push('/projects')"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -193,8 +193,8 @@ onMounted(async () => {
                     <div class="flex items-center gap-4">
                         <template v-if="!editing">
                             <button
-                                @click="showPublishModal = true"
                                 class="px-3 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                                @click="showPublishModal = true"
                             >
                                 <svg
                                     class="w-4 h-4"
@@ -213,9 +213,9 @@ onMounted(async () => {
                             </button>
 
                             <button
-                                @click="startEditing"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
                                 :title="t('common.edit')"
+                                @click="startEditing"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -240,20 +240,20 @@ onMounted(async () => {
                                     {{ t('project.tabs.overview') }}
                                 </button>
                                 <button
-                                    @click="goToBoard"
                                     class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                    @click="goToBoard"
                                 >
                                     {{ t('project.tabs.board') }}
                                 </button>
                                 <button
-                                    @click="router.push(`/projects/${projectId}/dag`)"
                                     class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                    @click="router.push(`/projects/${projectId}/dag`)"
                                 >
                                     {{ t('project.tabs.dag') }}
                                 </button>
                                 <button
-                                    @click="router.push(`/projects/${projectId}/timeline`)"
                                     class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                                    @click="router.push(`/projects/${projectId}/timeline`)"
                                 >
                                     {{ t('project.tabs.timeline') }}
                                 </button>
@@ -261,14 +261,14 @@ onMounted(async () => {
                         </template>
                         <template v-else>
                             <button
-                                @click="cancelEditing"
                                 class="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                                @click="cancelEditing"
                             >
                                 {{ t('common.cancel') }}
                             </button>
                             <button
-                                @click="saveEdits"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                                @click="saveEdits"
                             >
                                 {{ t('common.save') }}
                             </button>
@@ -403,8 +403,8 @@ onMounted(async () => {
                             </h3>
                             <div class="space-y-2">
                                 <button
-                                    @click="goToBoard"
                                     class="w-full flex items-center gap-2 px-3 py-2 text-left text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
+                                    @click="goToBoard"
                                 >
                                     <svg
                                         class="w-5 h-5"

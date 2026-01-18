@@ -244,9 +244,9 @@ watch(() => props.workflowId, () => {
           <div class="flex items-center space-x-2">
             <button
               v-if="state.status === 'running'"
-              @click="handlePause(state.workflowId)"
               class="p-1 hover:bg-gray-700 rounded text-yellow-400"
               title="Pause"
+              @click="handlePause(state.workflowId)"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path
@@ -258,9 +258,9 @@ watch(() => props.workflowId, () => {
             </button>
             <button
               v-if="state.status === 'paused'"
-              @click="handleResume(state.workflowId)"
               class="p-1 hover:bg-gray-700 rounded text-green-400"
               title="Resume"
+              @click="handleResume(state.workflowId)"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path
@@ -272,9 +272,9 @@ watch(() => props.workflowId, () => {
             </button>
             <button
               v-if="state.status === 'running' || state.status === 'paused'"
-              @click="handleCancel(state.workflowId)"
               class="p-1 hover:bg-gray-700 rounded text-red-400"
               title="Cancel"
+              @click="handleCancel(state.workflowId)"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path

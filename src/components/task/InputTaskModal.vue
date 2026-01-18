@@ -118,9 +118,9 @@ watch(
                                             <InputTaskForm
                                                 v-if="task"
                                                 :task="task"
+                                                class="w-full"
                                                 @submit="handleSubmit"
                                                 @cancel="handleClose"
-                                                class="w-full"
                                             />
                                         </div>
                                     </div>

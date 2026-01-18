@@ -156,6 +156,7 @@ const cardComponent = computed(() => {
         <component
             :is="cardComponent"
             v-bind="props"
+            :hide-connection-handles="props.hideConnectionHandles"
             @click="
                 (t: Task) => {
                     console.log(
@@ -167,35 +168,34 @@ const cardComponent = computed(() => {
                     emit('click', t);
                 }
             "
-            @previewStream="(t: Task) => emit('previewStream', t)"
+            @preview-stream="(t: Task) => emit('previewStream', t)"
             @edit="(t: Task) => emit('edit', t)"
             @delete="(t: Task) => emit('delete', t)"
             @execute="(t: Task) => emit('execute', t)"
-            @enhancePrompt="(t: Task) => emit('enhancePrompt', t)"
-            @previewPrompt="(t: Task) => emit('previewPrompt', t)"
-            @previewResult="(t: Task) => emit('previewResult', t)"
+            @enhance-prompt="(t: Task) => emit('enhancePrompt', t)"
+            @preview-prompt="(t: Task) => emit('previewPrompt', t)"
+            @preview-result="(t: Task) => emit('previewResult', t)"
             @retry="(t: Task) => emit('retry', t)"
-            @viewHistory="(t: Task) => emit('viewHistory', t)"
-            @viewProgress="(t: Task) => emit('viewProgress', t)"
+            @view-history="(t: Task) => emit('viewHistory', t)"
+            @view-progress="(t: Task) => emit('viewProgress', t)"
             @pause="(t: Task) => emit('pause', t)"
             @resume="(t: Task) => emit('resume', t)"
             @stop="(t: Task) => emit('stop', t)"
             @subdivide="(t: Task) => emit('subdivide', t)"
-            @openApproval="(t: Task) => emit('openApproval', t)"
-            @connectionStart="(t: Task, e: DragEvent) => emit('connectionStart', t, e)"
-            @connectionEnd="(t: Task) => emit('connectionEnd', t)"
-            @connectionCancel="emit('connectionCancel')"
-            @connectProvider="(id: string) => emit('connectProvider', id)"
-            @operatorDrop="
+            @open-approval="(t: Task) => emit('openApproval', t)"
+            @connection-start="(t: Task, e: DragEvent) => emit('connectionStart', t, e)"
+            @connection-end="(t: Task) => emit('connectionEnd', t)"
+            @connection-cancel="emit('connectionCancel')"
+            @connect-provider="(id: string) => emit('connectProvider', id)"
+            @operator-drop="
                 (pid: number, seq: number, oid: number) => emit('operatorDrop', pid, seq, oid)
             "
-            @provideInput="(t: Task) => emit('provideInput', t)"
+            @provide-input="(t: Task) => emit('provideInput', t)"
             @approve="
                 (t: Task) => {
                     emit('approve', t);
                 }
             "
-            :hide-connection-handles="props.hideConnectionHandles"
         />
     </div>
 </template>

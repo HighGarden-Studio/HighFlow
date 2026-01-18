@@ -127,8 +127,8 @@ onMounted(async () => {
         >
             <div class="flex items-center gap-4">
                 <button
-                    @click="router.push('/projects')"
                     class="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                    @click="router.push('/projects')"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -144,9 +144,9 @@ onMounted(async () => {
                         <h1 class="text-xl font-bold text-white">{{ project?.title }}</h1>
                         <button
                             v-if="project"
-                            @click="showInfoPanel = true"
                             class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                             title="Project Info"
+                            @click="showInfoPanel = true"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -192,20 +192,20 @@ onMounted(async () => {
                 <!-- View Switcher -->
                 <div class="flex bg-gray-800 rounded-lg p-1">
                     <button
-                        @click="goToOverview"
                         class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                        @click="goToOverview"
                     >
                         Overview
                     </button>
                     <button
-                        @click="goToBoard"
                         class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                        @click="goToBoard"
                     >
                         Kanban
                     </button>
                     <button
-                        @click="router.push(`/projects/${projectId}/dag`)"
                         class="px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white rounded-md transition-colors"
+                        @click="router.push(`/projects/${projectId}/dag`)"
                     >
                         DAG
                     </button>

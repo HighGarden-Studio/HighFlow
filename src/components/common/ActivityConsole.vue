@@ -61,8 +61,8 @@
                         :key="level.value"
                         class="filter-btn"
                         :class="{ active: filter.levels.includes(level.value) }"
-                        @click="toggleLevel(level.value)"
                         :title="level.label"
+                        @click="toggleLevel(level.value)"
                     >
                         <span class="level-dot" :class="level.value"></span>
                         {{ level.label }}
@@ -90,8 +90,8 @@
                 <div class="toolbar-actions">
                     <button
                         class="action-btn"
-                        @click="toggleAutoscroll"
                         :class="{ active: autoscroll }"
+                        @click="toggleAutoscroll"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -106,7 +106,7 @@
                             />
                         </svg>
                     </button>
-                    <button class="action-btn" @click="clearLogs" title="Clear logs">
+                    <button class="action-btn" title="Clear logs" @click="clearLogs">
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 20 20"

@@ -338,8 +338,8 @@ export class EstimationService {
         // Get cost rates
         let inputCost = 0;
         let outputCost = 0;
-        let modelName = aiModel || 'claude-sonnet-4';
-        let providerName = aiProvider || 'anthropic';
+        const modelName = aiModel || 'claude-sonnet-4';
+        const providerName = aiProvider || 'anthropic';
 
         const providerCosts = AI_PROVIDER_COSTS[providerName as keyof typeof AI_PROVIDER_COSTS];
         if (providerCosts) {

@@ -343,8 +343,8 @@ watch(
                                 </div>
                             </div>
                             <button
-                                @click="handleClose"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                                @click="handleClose"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -365,13 +365,13 @@ watch(
                         <!-- Tab Navigation -->
                         <div class="flex border-b border-gray-700 bg-gray-800/30">
                             <button
-                                @click="activeTab = 'info'"
                                 :class="[
                                     'px-6 py-3 text-sm font-medium transition-colors relative',
                                     activeTab === 'info'
                                         ? 'text-blue-400'
                                         : 'text-gray-400 hover:text-gray-200',
                                 ]"
+                                @click="activeTab = 'info'"
                             >
                                 📋 {{ $t('project.info.title') }}
                                 <div
@@ -380,13 +380,13 @@ watch(
                                 />
                             </button>
                             <button
-                                @click="activeTab = 'context'"
                                 :class="[
                                     'px-6 py-3 text-sm font-medium transition-colors relative',
                                     activeTab === 'context'
                                         ? 'text-blue-400'
                                         : 'text-gray-400 hover:text-gray-200',
                                 ]"
+                                @click="activeTab = 'context'"
                             >
                                 ✨ {{ $t('project.info.context') }}
                                 <div
@@ -435,8 +435,8 @@ watch(
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button
-                                        @click="handleResetResults"
                                         class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                                        @click="handleResetResults"
                                     >
                                         <svg
                                             class="w-4 h-4"
@@ -454,8 +454,8 @@ watch(
                                         {{ $t('project.actions.reset') }}
                                     </button>
                                     <button
-                                        @click="handleExportProject"
                                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                                        @click="handleExportProject"
                                     >
                                         <svg
                                             class="w-4 h-4"
@@ -473,8 +473,8 @@ watch(
                                         {{ $t('project.actions.export') }}
                                     </button>
                                     <button
-                                        @click="handleClose"
                                         class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors whitespace-nowrap"
+                                        @click="handleClose"
                                     >
                                         >
                                         {{ $t('common.close') }}

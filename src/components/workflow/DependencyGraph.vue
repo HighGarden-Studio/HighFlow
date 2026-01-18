@@ -394,7 +394,7 @@ function truncateText(text: string | undefined, maxLength: number): string {
         <!-- Toolbar -->
         <div class="toolbar">
             <div class="toolbar-group">
-                <button @click="handleZoom(1)" class="toolbar-btn" title="확대">
+                <button class="toolbar-btn" title="확대" @click="handleZoom(1)">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -404,7 +404,7 @@ function truncateText(text: string | undefined, maxLength: number): string {
                         />
                     </svg>
                 </button>
-                <button @click="handleZoom(-1)" class="toolbar-btn" title="축소">
+                <button class="toolbar-btn" title="축소" @click="handleZoom(-1)">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -418,7 +418,7 @@ function truncateText(text: string | undefined, maxLength: number): string {
             </div>
 
             <div class="toolbar-group">
-                <button @click="fitToView" class="toolbar-btn" title="화면에 맞추기">
+                <button class="toolbar-btn" title="화면에 맞추기" @click="fitToView">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -428,7 +428,7 @@ function truncateText(text: string | undefined, maxLength: number): string {
                         />
                     </svg>
                 </button>
-                <button @click="resetView" class="toolbar-btn" title="초기화">
+                <button class="toolbar-btn" title="초기화" @click="resetView">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -461,12 +461,12 @@ function truncateText(text: string | undefined, maxLength: number): string {
         <div
             ref="svgContainer"
             class="graph-area"
+            :class="{ panning: isPanning }"
             @mousedown="handlePanStart"
             @mousemove="handlePanMove"
             @mouseup="handlePanEnd"
             @mouseleave="handlePanEnd"
             @wheel="handleWheel"
-            :class="{ panning: isPanning }"
         >
             <svg
                 v-if="layout"

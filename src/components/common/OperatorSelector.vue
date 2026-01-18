@@ -6,8 +6,8 @@
         <div class="flex gap-2">
             <select
                 :value="modelValue"
-                @change="handleChange"
                 class="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                @change="handleChange"
             >
                 <option :value="null">No Operator (Use Task Settings)</option>
                 <option v-for="operator in operators" :key="operator.id" :value="operator.id">
@@ -16,9 +16,9 @@
             </select>
             <button
                 v-if="modelValue"
-                @click="handleClear"
                 class="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 title="Clear operator assignment"
+                @click="handleClear"
             >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -62,7 +62,7 @@ onMounted(async () => {
 async function loadOperators() {
     try {
         // Load operators for this project (or global if projectId is null)
-        operators.value = await window.electron.operators.list(props.projectId);
+        operators.value = await window.electron.operators.list(props.projectId ?? undefined);
     } catch (error) {
         console.error('Failed to load operators:', error);
     }

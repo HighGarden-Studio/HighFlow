@@ -172,7 +172,7 @@ onMounted(() => {
         </svg>
         <h3 class="text-lg font-semibold text-gray-200">템플릿 라이브러리</h3>
       </div>
-      <button @click="emit('close')" class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200">
+      <button class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200" @click="emit('close')">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -188,10 +188,10 @@ onMounted(() => {
           </svg>
           <input
             v-model="searchQuery"
-            @input="loadTemplates"
             type="text"
             placeholder="템플릿 검색..."
             class="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            @input="loadTemplates"
           />
         </div>
 
@@ -199,18 +199,18 @@ onMounted(() => {
         <div class="categories mt-4">
           <div class="flex flex-wrap gap-2">
             <button
-              @click="filterByCategory('')"
               class="category-chip"
               :class="{ active: selectedCategory === '' }"
+              @click="filterByCategory('')"
             >
               전체
             </button>
             <button
               v-for="cat in categories"
               :key="cat.category"
-              @click="filterByCategory(cat.category)"
               class="category-chip"
               :class="{ active: selectedCategory === cat.category }"
+              @click="filterByCategory(cat.category)"
             >
               {{ categoryLabels[cat.category] }}
               <span class="ml-1 text-xs opacity-70">({{ cat.count }})</span>
@@ -224,8 +224,8 @@ onMounted(() => {
           <button
             v-for="tag in popularTags"
             :key="tag.tag"
-            @click="filterByTag(tag.tag)"
             class="tag-chip"
+            @click="filterByTag(tag.tag)"
           >
             #{{ tag.tag }}
           </button>
@@ -238,9 +238,9 @@ onMounted(() => {
           <div
             v-for="template in sortedTemplates"
             :key="template.id"
-            @click="selectTemplate(template)"
             class="template-item"
             :class="{ selected: selectedTemplate?.id === template.id }"
+            @click="selectTemplate(template)"
           >
             <div class="flex items-start justify-between">
               <div>
@@ -345,9 +345,9 @@ onMounted(() => {
               </div>
 
               <button
-                @click="renderTemplate"
                 :disabled="!isFormValid"
                 class="w-full mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 rounded-lg text-sm"
+                @click="renderTemplate"
               >
                 미리보기 생성
               </button>
@@ -396,15 +396,15 @@ onMounted(() => {
     <!-- Footer -->
     <div class="picker-footer">
       <button
-        @click="emit('close')"
         class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm"
+        @click="emit('close')"
       >
         취소
       </button>
       <button
-        @click="applyTemplate"
         :disabled="!renderedPrompt"
         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-sm"
+        @click="applyTemplate"
       >
         적용하기
       </button>

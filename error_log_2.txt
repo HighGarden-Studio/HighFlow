@@ -1,0 +1,145 @@
+
+> HighFlow@0.1.0 type-check /Users/highgarden/Developments/AI/workflow_manager
+> vue-tsc --noEmit
+
+src/components/board/cards/InputTaskCard.vue(128,27): error TS2532: Object is possibly 'undefined'.
+src/components/board/KanbanBoard.spec.ts(400,24): error TS2532: Object is possibly 'undefined'.
+src/components/collaboration/ActiveCollaborators.vue(24,17): error TS2532: Object is possibly 'undefined'.
+src/components/collaboration/ActiveCollaborators.vue(24,31): error TS2532: Object is possibly 'undefined'.
+src/components/marketplace/MarketplaceNavigation.vue(6,7): error TS6133: 'props' is declared but its value is never read.
+src/components/marketplace/WorkflowGraphPreview.vue(5,10): error TS6133: 'ref' is declared but its value is never read.
+src/components/project/ProjectInfoPanel.vue(427,13): error TS2353: Object literal may only specify known properties, and 'emoji' does not exist in type 'Partial<{ title: string; description: string; status: string; aiGuidelines: string; aiProvider: string | null; aiModel: string | null; }>'.
+src/components/project/ProjectInfoPanel.vue(601,13): error TS2353: Object literal may only specify known properties, and 'goal' does not exist in type 'Partial<{ title: string; description: string; status: string; aiGuidelines: string; aiProvider: string | null; aiModel: string | null; }>'.
+src/components/project/ProjectInfoPanel.vue(1021,61): error TS2339: Property 'icon' does not exist on type '{ name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { ...; } | { ...; } | { ...; }'.
+  Property 'icon' does not exist on type '{ name: string; svgPath: string; description: string; }'.
+src/components/project/ProjectInfoPanel.vue(1040,37): error TS2339: Property 'icon' does not exist on type '{ name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { name: string; svgPath: string; description: string; } | { ...; } | { ...; } | { ...; }'.
+  Property 'icon' does not exist on type '{ name: string; svgPath: string; description: string; }'.
+src/components/project/ProjectMemoryPanel.vue(51,7): error TS6133: 'selectedOperatorName' is declared but its value is never read.
+src/components/project/ProjectMemoryPanel.vue(64,13): error TS2353: Object literal may only specify known properties, and 'curatorOperatorId' does not exist in type 'Partial<{ title: string; description: string; status: string; emoji?: string | null | undefined; baseDevFolder?: string | null | undefined; projectGuidelines?: string | null | undefined; }>'.
+src/components/project/ProjectMemoryPanel.vue(79,13): error TS2353: Object literal may only specify known properties, and 'memory' does not exist in type 'Partial<{ title: string; description: string; status: string; emoji?: string | null | undefined; baseDevFolder?: string | null | undefined; projectGuidelines?: string | null | undefined; }>'.
+src/components/project/ProjectResultsViewer.vue(32,6): error TS6196: '_ProjectOutput' is declared but never used.
+src/components/project/ProjectResultsViewer.vue(154,10): error TS6133: '_handleResume' is declared but its value is never read.
+src/components/settings/OperatorCard.vue(108,20): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/settings/OperatorCard.vue(110,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/settings/OperatorModal.vue(185,38): error TS2322: Type 'string' is not assignable to type 'AIProvider | null'.
+src/components/settings/OperatorModal.vue(417,13): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/settings/OperatorsTab.vue(67,64): error TS2345: Argument of type 'null' is not assignable to parameter of type 'number | undefined'.
+src/components/settings/OperatorsTab.vue(75,10): error TS6133: 'openCreateModal' is declared but its value is never read.
+src/components/task/OutputTaskConfigPanel.vue(183,62): error TS2307: Cannot find module '@/core/types/database' or its corresponding type declarations.
+src/components/task/SubdivisionModal.vue(5,1): error TS6133: 'SubtaskSuggestion' is declared but its value is never read.
+src/components/task/TaskCreateModal.vue(2,15): error TS6133: 'computed' is declared but its value is never read.
+src/components/task/TaskDetailPanel.vue(1181,16): error TS6133: 'handleDetailsUpdate' is declared but its value is never read.
+src/components/task/TaskEditModal.vue(223,28): error TS2532: Object is possibly 'undefined'.
+src/components/task/TaskExecutionProgress.vue(31,54): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/task/TaskExecutionProgress.vue(42,73): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type '{ projectId: number; projectSequence: number; } | null | undefined'.
+  Type 'number' is not assignable to type '{ projectId: number; projectSequence: number; }'.
+src/components/task/TaskExecutionProgress.vue(149,62): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/task/TaskExecutionProgress.vue(165,21): error TS2554: Expected 2 arguments, but got 1.
+src/components/task/TaskExecutionProgress.vue(195,13): error TS2322: Type 'number | undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number | null'.
+src/components/task/VersionHistoryPanel.vue(41,7): error TS6133: 'isLoading' is declared but its value is never read.
+src/components/timeline/GanttChart.vue(74,25): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+src/components/timeline/GanttChart.vue(361,25): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/timeline/GanttChart.vue(370,40): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/components/timeline/GanttChart.vue(383,40): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/composables/useTaskExecution.ts(388,40): error TS2554: Expected 2 arguments, but got 1.
+src/composables/useTaskExecution.ts(399,40): error TS2554: Expected 2 arguments, but got 1.
+src/composables/useTaskExecution.ts(411,48): error TS2554: Expected 2 arguments, but got 1.
+src/composables/useTaskExecution.ts(428,60): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/composables/useTaskExecution.ts(444,48): error TS2554: Expected 2 arguments, but got 1.
+src/composables/useTaskExecution.ts(461,62): error TS2345: Argument of type '(data: ProgressPayload) => void' is not assignable to parameter of type '(data: { projectId: number; projectSequence: number; } & ExecutionProgress) => void'.
+  Types of parameters 'data' and 'data' are incompatible.
+    Type '{ projectId: number; projectSequence: number; } & ExecutionProgress' is not assignable to type 'ProgressPayload'.
+      Property 'taskId' is missing in type '{ projectId: number; projectSequence: number; } & ExecutionProgress' but required in type '{ taskId: number; progress?: number | undefined; percentage?: number | undefined; }'.
+src/composables/useTaskExecution.ts(486,13): error TS2345: Argument of type '(data: { taskId: number; result: unknown; }) => void' is not assignable to parameter of type '(data: { projectId: number; projectSequence: number; result: ExecutionResult; }) => void'.
+  Types of parameters 'data' and 'data' are incompatible.
+    Property 'taskId' is missing in type '{ projectId: number; projectSequence: number; result: ExecutionResult; }' but required in type '{ taskId: number; result: unknown; }'.
+src/composables/useTaskExecution.ts(507,22): error TS2339: Property 'taskId' does not exist on type '{ projectId: number; projectSequence: number; error: string; }'.
+src/composables/useTaskExecution.ts(516,22): error TS2339: Property 'taskId' does not exist on type '{ projectId: number; projectSequence: number; pausedAt: Date; }'.
+src/composables/useTaskExecution.ts(524,22): error TS2339: Property 'taskId' does not exist on type '{ projectId: number; projectSequence: number; }'.
+src/composables/useTaskExecution.ts(532,22): error TS2339: Property 'taskId' does not exist on type '{ projectId: number; projectSequence: number; }'.
+src/composables/useTaskExecution.ts(541,22): error TS2339: Property 'taskId' does not exist on type '{ projectId: number; projectSequence: number; } & ApprovalRequest'.
+src/core/commands/TaskCommands.ts(76,25): error TS2554: Expected 3 arguments, but got 2.
+src/core/commands/TaskCommands.ts(94,25): error TS2554: Expected 3 arguments, but got 2.
+src/core/commands/TaskCommands.ts(114,17): error TS6138: Property 'taskTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(141,17): error TS6138: Property 'taskTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(197,17): error TS6138: Property 'taskTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(200,17): error TS6138: Property 'operatorName' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(234,17): error TS6138: Property 'sourceTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(235,17): error TS6138: Property 'targetTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(264,17): error TS6138: Property 'sourceTitle' is declared but its value is never read.
+src/core/commands/TaskCommands.ts(265,17): error TS6138: Property 'targetTitle' is declared but its value is never read.
+src/electron/autoUpdater.ts(160,9): error TS2339: Property 'isQuitting' does not exist on type 'App'.
+src/electron/autoUpdater.ts(224,47): error TS2345: Argument of type 'string | import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo[] | null | undefined' is not assignable to parameter of type 'string | ReleaseNoteInfo[] | null | undefined'.
+  Type 'ReleaseNoteInfo[]' is not assignable to type 'string | ReleaseNoteInfo[] | null | undefined'.
+    Type 'import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo[]' is not assignable to type 'ReleaseNoteInfo[]'.
+      Type 'import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo' is not assignable to type 'ReleaseNoteInfo'.
+        Types of property 'note' are incompatible.
+          Type 'string | null' is not assignable to type 'string'.
+            Type 'null' is not assignable to type 'string'.
+src/electron/autoUpdater.ts(343,50): error TS2345: Argument of type 'string | import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo[] | null | undefined' is not assignable to parameter of type 'string | ReleaseNoteInfo[] | null | undefined'.
+  Type 'ReleaseNoteInfo[]' is not assignable to type 'string | ReleaseNoteInfo[] | null | undefined'.
+    Type 'import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo[]' is not assignable to type 'ReleaseNoteInfo[]'.
+      Type 'import("/Users/highgarden/Developments/AI/workflow_manager/node_modules/.pnpm/builder-util-runtime@9.3.1/node_modules/builder-util-runtime/out/updateInfo").ReleaseNoteInfo' is not assignable to type 'ReleaseNoteInfo'.
+        Types of property 'note' are incompatible.
+          Type 'string | null' is not assignable to type 'string'.
+            Type 'null' is not assignable to type 'string'.
+src/electron/autoUpdater.ts(408,13): error TS2300: Duplicate identifier 'App'.
+src/electron/security.ts(164,7): error TS2353: Object literal may only specify known properties, and 'enableRemoteModule' does not exist in type 'WebPreferences'.
+src/electron/security.ts(271,8): error TS6133: 'webContents' is declared but its value is never read.
+src/layouts/MarketplaceLayout.vue(2,1): error TS6133: 'ref' is declared but its value is never read.
+src/layouts/MarketplaceLayout.vue(7,7): error TS6133: 'router' is declared but its value is never read.
+src/layouts/MarketplaceLayout.vue(8,7): error TS6133: 'route' is declared but its value is never read.
+src/layouts/MarketplaceLayout.vue(26,5): error TS2322: Type 'string | null' is not assignable to type 'MarketplaceCategory | null'.
+  Type 'string' is not assignable to type 'MarketplaceCategory | null'.
+src/renderer/components/marketplace/RegistrationWizard.vue(312,27): error TS2532: Object is possibly 'undefined'.
+src/renderer/stores/uiStore.ts(267,14): error TS2322: Type '() => void' is not assignable to type 'void'.
+src/renderer/stores/userStore.ts(89,19): error TS6133: 'result' is declared but its value is never read.
+src/renderer/views/DAGView.vue(132,20): error TS6133: 'addEdges' is declared but its value is never read.
+src/renderer/views/DAGView.vue(821,31): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/renderer/views/DAGView.vue(834,32): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/renderer/views/DAGView.vue(853,16): error TS6133: 'sourceProjectId' is declared but its value is never read.
+src/renderer/views/DAGView.vue(883,36): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/renderer/views/DAGView.vue(965,38): error TS6133: 'payload' is declared but its value is never read.
+src/renderer/views/DAGView.vue(993,16): error TS6133: 'confirmSubdivision' is declared but its value is never read.
+src/renderer/views/DAGView.vue(1176,10): error TS6133: 'handleConnectProvider' is declared but its value is never read.
+src/renderer/views/DAGView.vue(1451,30): error TS6133: 'state' is declared but its value is never read.
+src/renderer/views/DAGView.vue(1463,27): error TS6133: 'changedKey' is declared but its value is never read.
+src/renderer/views/KanbanBoardView.vue(21,1): error TS6133: 'InlineEdit' is declared but its value is never read.
+src/renderer/views/KanbanBoardView.vue(26,1): error TS6133: 'estimationService' is declared but its value is never read.
+src/renderer/views/KanbanBoardView.vue(27,1): error TS6133: 'aiInterviewService' is declared but its value is never read.
+src/renderer/views/KanbanBoardView.vue(578,38): error TS6133: 'payload' is declared but its value is never read.
+src/renderer/views/KanbanBoardView.vue(632,16): error TS6133: 'handleProjectNameUpdate' is declared but its value is never read.
+src/renderer/views/ProjectDetailView.vue(16,7): error TS6133: 'route' is declared but its value is never read.
+src/services/prompt/PromptEnhancementService.ts(325,31): error TS6133: 'prompt' is declared but its value is never read.
+src/services/prompt/PromptEnhancementService.ts(499,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/prompt/PromptTemplateLibrary.ts(649,32): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/sync/SyncEngine.ts(1,1): error TS6192: All imports in import declaration are unused.
+src/services/task/TagService.ts(149,11): error TS6133: 'tags' is declared but its value is never read.
+src/services/task/TagService.ts(255,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/utils/taskKey.ts(29,32): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/utils/taskKey.ts(30,38): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+ ELIFECYCLE  Command failed with exit code 2.

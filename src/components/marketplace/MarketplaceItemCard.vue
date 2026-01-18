@@ -60,13 +60,13 @@ function handleClick() {
 
 <template>
     <div
-        @click="handleClick"
         :class="[
             'group cursor-pointer transition-all duration-200 hover:scale-[1.02]',
             viewMode === 'grid'
                 ? 'bg-gray-800 border border-gray-700 rounded-xl p-5 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20'
                 : 'bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-blue-500 flex items-center gap-4',
         ]"
+        @click="handleClick"
     >
         <!-- Grid View -->
         <template v-if="viewMode === 'grid'">

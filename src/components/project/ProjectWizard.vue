@@ -208,8 +208,8 @@ async function handleSubmit() {
               Create New Project
             </h2>
             <button
-              @click="emit('close')"
               class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              @click="emit('close')"
             >
               <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -242,13 +242,13 @@ async function handleSubmit() {
 
             <div class="grid grid-cols-3 gap-4">
               <button
-                @click="startMethod = 'blank'"
                 :class="[
                   'p-6 border-2 rounded-lg text-center transition-all',
                   startMethod === 'blank'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="startMethod = 'blank'"
               >
                 <div class="text-4xl mb-2">📝</div>
                 <div class="font-semibold text-gray-900 dark:text-white">Blank Project</div>
@@ -258,13 +258,13 @@ async function handleSubmit() {
               </button>
 
               <button
-                @click="startMethod = 'template'"
                 :class="[
                   'p-6 border-2 rounded-lg text-center transition-all',
                   startMethod === 'template'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="startMethod = 'template'"
               >
                 <div class="text-4xl mb-2">📋</div>
                 <div class="font-semibold text-gray-900 dark:text-white">From Template</div>
@@ -274,13 +274,13 @@ async function handleSubmit() {
               </button>
 
               <button
-                @click="startMethod = 'clone'"
                 :class="[
                   'p-6 border-2 rounded-lg text-center transition-all',
                   startMethod === 'clone'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="startMethod = 'clone'"
               >
                 <div class="text-4xl mb-2">📂</div>
                 <div class="font-semibold text-gray-900 dark:text-white">Clone Project</div>
@@ -333,13 +333,13 @@ async function handleSubmit() {
 
             <div class="grid grid-cols-3 gap-4">
               <button
-                @click="selectedProvider = 'anthropic'"
                 :class="[
                   'p-6 border-2 rounded-lg transition-all',
                   selectedProvider === 'anthropic'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="selectedProvider = 'anthropic'"
               >
                 <div class="font-semibold text-lg mb-2">Claude (Anthropic)</div>
                 <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
@@ -350,13 +350,13 @@ async function handleSubmit() {
               </button>
 
               <button
-                @click="selectedProvider = 'openai'"
                 :class="[
                   'p-6 border-2 rounded-lg transition-all',
                   selectedProvider === 'openai'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="selectedProvider = 'openai'"
               >
                 <div class="font-semibold text-lg mb-2">GPT (OpenAI)</div>
                 <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
@@ -367,13 +367,13 @@ async function handleSubmit() {
               </button>
 
               <button
-                @click="selectedProvider = 'google'"
                 :class="[
                   'p-6 border-2 rounded-lg transition-all',
                   selectedProvider === 'google'
                     ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-700 hover:border-gray-400',
                 ]"
+                @click="selectedProvider = 'google'"
               >
                 <div class="font-semibold text-lg mb-2">Gemini (Google)</div>
                 <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
@@ -555,8 +555,8 @@ async function handleSubmit() {
         <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <button
             v-if="currentStep > 1"
-            @click="prevStep"
             class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+            @click="prevStep"
           >
             ← Back
           </button>
@@ -564,15 +564,14 @@ async function handleSubmit() {
 
           <div class="flex items-center space-x-3">
             <button
-              @click="emit('close')"
               class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+              @click="emit('close')"
             >
               Cancel
             </button>
 
             <button
               v-if="currentStep < totalSteps"
-              @click="nextStep"
               :disabled="!canProceed"
               :class="[
                 'px-6 py-2 rounded-lg font-medium transition',
@@ -580,14 +579,15 @@ async function handleSubmit() {
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed',
               ]"
+              @click="nextStep"
             >
               Continue →
             </button>
 
             <button
               v-else
-              @click="handleSubmit"
               class="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+              @click="handleSubmit"
             >
               Create Project
             </button>

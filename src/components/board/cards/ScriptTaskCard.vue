@@ -457,13 +457,13 @@ function handleViewScript(event: Event) {
                         </button>
                         <button
                             class="px-2 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-orange-600 border border-orange-200 hover:bg-orange-50"
+                            title="다시 실행"
                             @click="
                                 (e) => {
                                     e.stopPropagation();
                                     emit('retry', task);
                                 }
                             "
-                            title="다시 실행"
                         >
                             {{ t('common.retry') }}
                         </button>

@@ -389,9 +389,9 @@ function cancelPlanPreview() {
                     </div>
                     <div class="flex items-center gap-2">
                         <button
-                            @click="clearChat"
                             class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                             :title="t('assistant.clear_chat')"
+                            @click="clearChat"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -408,8 +408,8 @@ function cancelPlanPreview() {
                             </svg>
                         </button>
                         <button
-                            @click="emit('close')"
                             class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                            @click="emit('close')"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -476,8 +476,8 @@ function cancelPlanPreview() {
                             <button
                                 v-for="action in quickActions"
                                 :key="action.id"
-                                @click="handleQuickAction(action.id)"
                                 class="flex items-center gap-2 px-3 py-2.5 bg-gray-700/50 hover:bg-gray-700 rounded-lg text-left transition-colors group"
+                                @click="handleQuickAction(action.id)"
                             >
                                 <span class="text-lg">{{ action.icon }}</span>
                                 <span class="text-sm text-gray-300 group-hover:text-white">{{
@@ -530,7 +530,6 @@ function cancelPlanPreview() {
                                 <button
                                     v-for="action in message.actions"
                                     :key="action.id"
-                                    @click="handleActionClick(action)"
                                     class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
                                     :class="[
                                         action.variant === 'primary'
@@ -541,6 +540,7 @@ function cancelPlanPreview() {
                                                 ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
                                                 : 'bg-gray-600 hover:bg-gray-500 text-white',
                                     ]"
+                                    @click="handleActionClick(action)"
                                 >
                                     {{ action.label }}
                                 </button>
@@ -610,8 +610,8 @@ function cancelPlanPreview() {
                         <button
                             v-for="suggestion in suggestions.slice(0, 3)"
                             :key="suggestion.id"
-                            @click="handleSuggestionClick(suggestion)"
                             class="flex-shrink-0 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-full text-xs text-gray-300 hover:text-white transition-colors"
+                            @click="handleSuggestionClick(suggestion)"
                         >
                             {{ suggestion.title }}
                         </button>
@@ -620,7 +620,7 @@ function cancelPlanPreview() {
 
                 <!-- Input Area -->
                 <div class="px-4 py-3 border-t border-gray-700 bg-gray-800/50">
-                    <form @submit.prevent="sendMessage" class="flex gap-2">
+                    <form class="flex gap-2" @submit.prevent="sendMessage">
                         <input
                             ref="inputRef"
                             v-model="inputMessage"

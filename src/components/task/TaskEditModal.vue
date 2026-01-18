@@ -227,7 +227,7 @@ watch(
                 models &&
                 (!form.value.aiModel || !models.some((m) => m.value === form.value.aiModel))
             ) {
-                const firstModel = models?.[0];
+                const firstModel = models[0];
                 if (firstModel) {
                     form.value.aiModel = firstModel.value;
                 }
@@ -472,8 +472,8 @@ async function estimateTimeWithAI() {
                                             <div class="space-y-1.5 pl-4">
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         >{{task.23}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -482,8 +482,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         >{{task.23.output}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -492,8 +492,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         >{{task.23.status}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -502,8 +502,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                         >{{task.23.summary}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -524,8 +524,8 @@ async function estimateTimeWithAI() {
                                             <div class="space-y-1.5 pl-4">
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{ prev }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -534,8 +534,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{prev.0}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -544,8 +544,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{prev.1}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -554,8 +554,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{ prev.summary }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -564,8 +564,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{ all_results }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -574,8 +574,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                         >{{ all_results.summary }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -595,8 +595,8 @@ async function estimateTimeWithAI() {
                                             <div class="space-y-1.5 pl-4">
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         >{{ date }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -605,8 +605,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         >{{ datetime }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -615,8 +615,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         >{{ project.name }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -625,8 +625,8 @@ async function estimateTimeWithAI() {
                                                 </div>
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                         >{{ project.description }}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -646,8 +646,8 @@ async function estimateTimeWithAI() {
                                             <div class="space-y-1.5 pl-4">
                                                 <div class="flex items-start gap-2">
                                                     <code
-                                                        class="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded font-mono shrink-0"
                                                         v-pre
+                                                        class="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded font-mono shrink-0"
                                                         >{{var:변수명}}</code
                                                     >
                                                     <span class="text-gray-600 dark:text-gray-400"
@@ -673,7 +673,7 @@ async function estimateTimeWithAI() {
                                                     # 이전 태스크 결과를 기반으로 분석
                                                 </div>
                                                 <div>다음 데이터를 분석해주세요:</div>
-                                                <div class="text-indigo-400" v-pre>{{ prev }}</div>
+                                                <div v-pre class="text-indigo-400">{{ prev }}</div>
                                                 <div class="mt-2 text-gray-400">
                                                     # 여러 태스크 결과 종합
                                                 </div>

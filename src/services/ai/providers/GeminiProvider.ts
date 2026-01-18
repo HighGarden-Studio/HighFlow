@@ -600,7 +600,7 @@ export class GeminiProvider extends BaseAIProvider {
             console.log(`[GeminiProvider] Attempting image generation with model: ${modelName}`);
 
             // Gemini 3 Pro Image specific config
-            let generationConfig: any = {
+            const generationConfig: any = {
                 temperature: config.temperature ?? 0.4,
             };
 

@@ -95,9 +95,9 @@ async function handlePurchase() {
         <div class="flex-1 p-8 overflow-y-auto">
             <!-- Back Button -->
             <button
-                @click="goBack"
                 class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 mb-6 transition-colors"
                 title="Back to Marketplace"
+                @click="goBack"
             >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -158,9 +158,9 @@ async function handlePurchase() {
                         {{ Number(item.price) === 0 ? 'Free' : `${Number(item.price)} Credits` }}
                     </div>
                     <button
-                        @click="handlePurchase"
                         :disabled="store.loading"
                         class="w-full px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        @click="handlePurchase"
                     >
                         <span
                             v-if="store.loading"
@@ -178,13 +178,13 @@ async function handlePurchase() {
                     <button
                         v-for="tab in tabs"
                         :key="tab.id"
-                        @click="activeTab = tab.id"
                         :class="[
                             'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
                             activeTab === tab.id
                                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                         ]"
+                        @click="activeTab = tab.id"
                     >
                         {{ tab.name }}
                     </button>

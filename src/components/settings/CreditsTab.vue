@@ -207,9 +207,9 @@ onMounted(async () => {
                     {{ t('settings.credits.transaction_history') }}
                 </h2>
                 <button
-                    @click="loadLedger(false)"
                     :disabled="isLoading"
                     class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                    @click="loadLedger(false)"
                 >
                     <svg
                         class="w-4 h-4 inline-block mr-1"
@@ -241,8 +241,8 @@ onMounted(async () => {
                         </label>
                         <select
                             v-model="selectedDateRange"
-                            @change="handleFilterChange"
                             class="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            @change="handleFilterChange"
                         >
                             <option value="7d">{{ t('settings.credits.period_7d') }}</option>
                             <option value="30d">{{ t('settings.credits.period_30d') }}</option>
@@ -262,7 +262,6 @@ onMounted(async () => {
                             <button
                                 v-for="type in transactionTypes"
                                 :key="type.value"
-                                @click="toggleTypeFilter(type.value)"
                                 :class="[
                                     'px-3 py-1 rounded-full text-xs font-medium transition-all',
                                     selectedTypes.includes(type.value)
@@ -270,6 +269,7 @@ onMounted(async () => {
                                           ' ring-2 ring-offset-1 ring-blue-500'
                                         : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600',
                                 ]"
+                                @click="toggleTypeFilter(type.value)"
                             >
                                 {{ type.label }}
                             </button>
@@ -428,9 +428,9 @@ onMounted(async () => {
                     class="p-4 border-t border-gray-200 dark:border-gray-700 text-center"
                 >
                     <button
-                        @click="loadMore"
                         :disabled="isLoading"
                         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        @click="loadMore"
                     >
                         <span v-if="isLoading">{{ t('settings.credits.loading') }}</span>
                         <span v-else>{{ t('settings.credits.load_more') }}</span>

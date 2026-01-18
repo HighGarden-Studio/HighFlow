@@ -48,8 +48,8 @@
                                 </div>
                             </div>
                             <button
-                                @click="$emit('close')"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                                @click="$emit('close')"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -108,9 +108,9 @@
                                 >
                                 <select
                                     v-model="selectedPreset"
-                                    @change="onPresetChange"
                                     :disabled="form.isCurator"
                                     class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    @change="onPresetChange"
                                 >
                                     <option
                                         v-for="option in rolePresetOptions"
@@ -182,7 +182,7 @@
                                 >
                                 <UnifiedAISelector
                                     :mode="aiMode"
-                                    :provider="form.aiProvider"
+                                    :provider="form.aiProvider as any"
                                     :model="form.aiModel"
                                     :local-agent="localAgent"
                                     :show-local-agents="true"
@@ -224,9 +224,9 @@
                                 :class="{ 'opacity-50 pointer-events-none': form.isCurator }"
                             >
                                 <input
+                                    id="is-reviewer"
                                     v-model="form.isReviewer"
                                     type="checkbox"
-                                    id="is-reviewer"
                                     :disabled="form.isCurator"
                                     class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-purple-600 focus:ring-purple-500 focus:ring-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
@@ -250,9 +250,9 @@
                                     >
                                         <span>{{ tag }}</span>
                                         <button
-                                            @click="removeTag(tag)"
                                             :disabled="form.isCurator"
                                             class="hover:text-white focus:outline-none disabled:cursor-not-allowed"
+                                            @click="removeTag(tag)"
                                         >
                                             <svg
                                                 class="w-3 h-3"
@@ -271,12 +271,12 @@
                                     </div>
                                     <input
                                         v-model="tagInput"
-                                        @keydown.enter.prevent="addTag"
-                                        @keydown.comma.prevent="addTag"
-                                        @blur="addTag"
                                         type="text"
                                         placeholder="Add tag..."
                                         class="flex-1 min-w-[100px] bg-transparent border-none text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm"
+                                        @keydown.enter.prevent="addTag"
+                                        @keydown.comma.prevent="addTag"
+                                        @blur="addTag"
                                     />
                                 </div>
                                 <div class="h-px bg-gray-700 w-full"></div>
@@ -287,14 +287,14 @@
                         <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
                             <div class="flex items-center justify-end gap-3">
                                 <button
-                                    @click="$emit('close')"
                                     class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                    @click="$emit('close')"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    @click="save"
                                     class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg transition-all shadow-lg shadow-purple-900/30"
+                                    @click="save"
                                 >
                                     {{ operator ? 'Update' : 'Create' }}
                                 </button>
@@ -414,7 +414,7 @@ function onPresetChange() {
 
         // Auto-generate name if empty
         if (!form.value.name) {
-            form.value.name = preset.name.split(' ')[0]; // e.g., "Senior" from "Senior Developer"
+            form.value.name = (preset.name || '').split(' ')[0]; // e.g., "Senior" from "Senior Developer"
         }
     } else {
         // Custom role - reset to defaults

@@ -326,8 +326,8 @@ function removeParamRow(serverId: string, rowId: string) {
                         type="checkbox"
                         :checked="selectedIds.includes(server.id)"
                         :disabled="disabled"
-                        @change="toggleTool(server.id)"
                         class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        @change="toggleTool(server.id)"
                     />
                     <span class="text-lg">{{ getMCPIcon(server.id) }}</span>
                     <div class="flex-1 min-w-0">
@@ -418,9 +418,9 @@ function removeParamRow(serverId: string, rowId: string) {
                         >
                         <button
                             type="button"
-                            @click="addEnvRow(serverId)"
                             class="text-xs text-blue-500 hover:text-blue-400"
                             :disabled="disabled"
+                            @click="addEnvRow(serverId)"
                         >
                             + 추가
                         </button>
@@ -446,9 +446,9 @@ function removeParamRow(serverId: string, rowId: string) {
                         />
                         <button
                             type="button"
-                            @click="removeEnvRow(serverId, row.id)"
                             :disabled="disabled"
                             class="text-gray-400 hover:text-red-400"
+                            @click="removeEnvRow(serverId, row.id)"
                         >
                             ✕
                         </button>
@@ -463,9 +463,9 @@ function removeParamRow(serverId: string, rowId: string) {
                         >
                         <button
                             type="button"
-                            @click="addParamRow(serverId)"
                             class="text-xs text-blue-500 hover:text-blue-400"
                             :disabled="disabled"
+                            @click="addParamRow(serverId)"
                         >
                             + 추가
                         </button>
@@ -491,9 +491,9 @@ function removeParamRow(serverId: string, rowId: string) {
                         />
                         <button
                             type="button"
-                            @click="removeParamRow(serverId, row.id)"
                             :disabled="disabled"
                             class="text-gray-400 hover:text-red-400"
+                            @click="removeParamRow(serverId, row.id)"
                         >
                             ✕
                         </button>

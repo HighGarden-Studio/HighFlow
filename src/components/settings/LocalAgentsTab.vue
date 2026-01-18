@@ -123,9 +123,9 @@ onMounted(() => {
         <!-- Refresh Button -->
         <div class="mb-4 flex justify-end">
             <button
-                @click="checkAllAgents"
                 class="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm transition-colors"
                 :disabled="settingsStore.localAgents.some((a) => a.isChecking)"
+                @click="checkAllAgents"
             >
                 <svg
                     class="w-4 h-4"
@@ -250,9 +250,9 @@ onMounted(() => {
                     <!-- Action Buttons -->
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <button
-                            @click="openDetailModal(agent)"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                             :title="t('settings.agents.actions.details')"
+                            @click="openDetailModal(agent)"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -270,16 +270,16 @@ onMounted(() => {
                         </button>
                         <button
                             v-if="agent.isInstalled"
-                            @click="launchAgent(agent)"
                             :disabled="isLaunching"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                            @click="launchAgent(agent)"
                         >
                             {{ t('settings.agents.actions.launch_terminal') }}
                         </button>
                         <button
                             v-else
-                            @click="openExternal(agent.website)"
                             class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                            @click="openExternal(agent.website)"
                         >
                             {{ t('settings.agents.actions.install_guide') }}
                         </button>
@@ -303,9 +303,9 @@ onMounted(() => {
                             </code>
                         </div>
                         <button
-                            @click="copyInstallCommand(agent.installCommand)"
                             class="ml-3 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                             :title="t('settings.agents.actions.copy')"
+                            @click="copyInstallCommand(agent.installCommand)"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -353,8 +353,8 @@ onMounted(() => {
                     </svg>
                     <p class="text-sm text-red-200">{{ launchError }}</p>
                     <button
-                        @click="launchError = null"
                         class="ml-auto p-1 text-red-400 hover:text-red-300"
+                        @click="launchError = null"
                     >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -416,8 +416,8 @@ onMounted(() => {
                                 </div>
                             </div>
                             <button
-                                @click="closeDetailModal"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                                @click="closeDetailModal"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -502,9 +502,9 @@ onMounted(() => {
                                         {{ selectedAgent.installCommand }}
                                     </code>
                                     <button
-                                        @click="copyInstallCommand(selectedAgent.installCommand)"
                                         class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                                         :title="t('settings.agents.actions.copy')"
+                                        @click="copyInstallCommand(selectedAgent.installCommand)"
                                     >
                                         <svg
                                             class="w-5 h-5"
@@ -526,8 +526,8 @@ onMounted(() => {
                             <!-- Links -->
                             <div class="flex gap-3 pt-2">
                                 <button
-                                    @click="openExternal(selectedAgent.website)"
                                     class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                    @click="openExternal(selectedAgent.website)"
                                 >
                                     <svg
                                         class="w-4 h-4"
@@ -545,8 +545,8 @@ onMounted(() => {
                                     {{ t('settings.agents.actions.website') }}
                                 </button>
                                 <button
-                                    @click="openExternal(selectedAgent.docsUrl)"
                                     class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                    @click="openExternal(selectedAgent.docsUrl)"
                                 >
                                     <svg
                                         class="w-4 h-4"
@@ -571,19 +571,19 @@ onMounted(() => {
                             class="px-6 py-4 border-t border-gray-700 bg-gray-800/50 flex justify-end gap-3"
                         >
                             <button
-                                @click="closeDetailModal"
                                 class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                                @click="closeDetailModal"
                             >
                                 {{ t('settings.agents.actions.close') }}
                             </button>
                             <button
                                 v-if="selectedAgent.isInstalled"
+                                :disabled="isLaunching"
+                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                                 @click="
                                     launchAgent(selectedAgent);
                                     closeDetailModal();
                                 "
-                                :disabled="isLaunching"
-                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                             >
                                 {{ t('settings.agents.actions.launch_terminal') }}
                             </button>

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AdvancedTaskExecutor } from '../../src/services/workflow/AdvancedTaskExecutor';
-import { AIServiceManager } from '../../src/services/workflow/AIServiceManager';
 
 // Mock AIServiceManager class
 const { mockExecuteTask } = vi.hoisted(() => {

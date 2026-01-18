@@ -149,7 +149,7 @@ function isImageContent(content: string): boolean {
     return base64Regex.test(content.trim());
 }
 
-function getImageDataUrl(content: string, metadata: any): string {
+function getImageDataUrl(content: string, metadata: Record<string, any>): string {
     // Get mime type from metadata or default to png
     const mime = metadata?.mime || metadata?.mimeType || 'image/png';
 
@@ -193,8 +193,8 @@ onMounted(() => {
                 <span class="text-sm text-gray-500">{{ versions.length }}개 버전</span>
             </div>
             <button
-                @click="emit('close')"
                 class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200"
+                @click="emit('close')"
             >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -214,7 +214,6 @@ onMounted(() => {
                     <div
                         v-for="version in versions"
                         :key="version.id"
-                        @click="selectVersion(version)"
                         class="p-3 rounded-lg cursor-pointer transition-colors"
                         :class="{
                             'bg-blue-600/20 border border-blue-500':
@@ -222,6 +221,7 @@ onMounted(() => {
                             'bg-gray-900/30 hover:bg-gray-900/50': selectedVersionId !== version.id,
                             'ring-2 ring-green-500': version.id === history?.currentVersionId,
                         }"
+                        @click="selectVersion(version)"
                     >
                         <div class="flex items-center justify-between">
                             <div class="flex items-center space-x-2">
@@ -264,8 +264,8 @@ onMounted(() => {
                         <!-- Compare mode selection -->
                         <button
                             v-if="compareToId && !compareFromId && version.id !== compareToId"
-                            @click.stop="selectCompareFrom(version)"
                             class="mt-2 text-xs text-blue-400 hover:text-blue-300"
+                            @click.stop="selectCompareFrom(version)"
                         >
                             이 버전과 비교
                         </button>
@@ -310,8 +310,8 @@ onMounted(() => {
                             </span>
                         </div>
                         <button
-                            @click="cancelCompare"
                             class="text-sm text-gray-400 hover:text-gray-200"
+                            @click="cancelCompare"
                         >
                             비교 닫기
                         </button>
@@ -339,21 +339,21 @@ onMounted(() => {
                         </h4>
                         <div class="flex items-center space-x-2">
                             <button
-                                @click="startCompare"
                                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded text-sm"
+                                @click="startCompare"
                             >
                                 비교
                             </button>
                             <button
                                 v-if="!isCurrentVersion"
-                                @click="rollbackToVersion(selectedVersion)"
                                 class="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded text-sm"
+                                @click="rollbackToVersion(selectedVersion)"
                             >
                                 롤백
                             </button>
                             <button
-                                @click="viewVersion(selectedVersion)"
                                 class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm"
+                                @click="viewVersion(selectedVersion)"
                             >
                                 전체 보기
                             </button>

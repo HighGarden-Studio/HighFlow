@@ -250,9 +250,9 @@ async function handleAction(e: Event) {
                 <div class="flex items-center gap-2">
                     <button
                         v-if="showDelete"
-                        @click.stop="emit('delete', item.id)"
                         class="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         title="Delete Item"
+                        @click.stop="emit('delete', item.id)"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -264,13 +264,13 @@ async function handleAction(e: Event) {
                         </svg>
                     </button>
                     <button
-                        @click="handleAction"
                         :class="[
                             'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm',
                             isOwnedOrFree
                                 ? 'bg-blue-600 hover:bg-blue-700 text-white'
                                 : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600',
                         ]"
+                        @click="handleAction"
                     >
                         {{ actionLabel }}
                     </button>

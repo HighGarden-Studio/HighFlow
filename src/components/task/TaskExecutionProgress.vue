@@ -28,7 +28,10 @@ const taskStore = useTaskStore();
 
 // Get streaming content from global taskStore as fallback
 const globalStreamedContent = computed(() => {
-    const progress = taskStore.executionProgress.get(props.task.id);
+    const progress = taskStore.getExecutionProgress(
+        props.task.projectId,
+        props.task.projectSequence
+    );
     return progress?.content || '';
 });
 
@@ -39,7 +42,13 @@ const effectiveStreamedContent = computed(() => {
 
 // Check if executing from either local or global state
 const isEffectivelyExecuting = computed(() => {
-    return taskExecution.isExecuting.value || taskStore.isTaskExecuting(props.task.id);
+    return (
+        taskExecution.isExecuting.value ||
+        taskStore.isTaskExecuting({
+            projectId: props.task.projectId,
+            projectSequence: props.task.projectSequence,
+        })
+    );
 });
 
 // Local state
@@ -145,8 +154,16 @@ const imageSrc = computed(() => {
 
 // Methods
 async function startExecution() {
+    if (!props.task.id) {
+        emit('failed', 'Task ID is missing');
+        return;
+    }
     try {
-        const result = await taskExecution.executeTaskViaIPC(props.task.id);
+        const result = await taskExecution.executeTaskViaIPC({
+            id: props.task.id,
+            projectId: props.task.projectId,
+            projectSequence: props.task.projectSequence,
+        });
         if (result?.success) {
             emit('completed', {
                 content: taskExecution.streamedContent.value,
@@ -162,17 +179,23 @@ async function startExecution() {
 
 async function stopExecution() {
     // Use taskStore.stopTask for reliable status change
-    await taskStore.stopTask(props.task.id);
+    await taskStore.stopTask(props.task.projectId, props.task.projectSequence);
     emit('stopped');
 }
 
 async function handleApprove() {
-    await taskExecution.approveTask(props.task.id, approvalResponse.value);
+    await taskExecution.approveTask(
+        { projectId: props.task.projectId, projectSequence: props.task.projectSequence },
+        approvalResponse.value
+    );
     approvalResponse.value = '';
 }
 
 async function handleReject() {
-    await taskExecution.rejectTask(props.task.id);
+    await taskExecution.rejectTask({
+        projectId: props.task.projectId,
+        projectSequence: props.task.projectSequence,
+    });
     emit('stopped');
 }
 
@@ -190,15 +213,10 @@ watch(
 watch(
     () => props.task,
     (newTask) => {
-        // Sync currentTaskId to allow listening to IPC events
-        if (newTask.id !== taskExecution.currentTaskId.value) {
-            taskExecution.currentTaskId.value = newTask.id;
-        }
-
         // Sync execution state
         if (newTask.status === 'in_progress' && !newTask.isPaused) {
             if (!taskExecution.isExecuting.value) {
-                taskExecution.isExecuting.value = true;
+                // We let useTaskExecution manage its own state
             }
         } else if (
             newTask.status === 'todo' ||
@@ -206,7 +224,13 @@ watch(
             newTask.status === 'blocked'
         ) {
             if (taskExecution.isExecuting.value) {
-                taskExecution.isExecuting.value = false;
+                // If the currently executing task is this one, stop local state
+                if (
+                    taskExecution.currentTaskRef.value?.projectId === newTask.projectId &&
+                    taskExecution.currentTaskRef.value?.sequence === newTask.projectSequence
+                ) {
+                    taskExecution.isExecuting.value = false;
+                }
             }
         }
     },
@@ -222,8 +246,12 @@ onMounted(() => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-    if (taskExecution.isExecuting.value) {
-        taskExecution.stopExecutionViaIPC();
+    // Stop if we are the one executing?
+    if (
+        taskExecution.isExecuting.value &&
+        taskExecution.currentTaskRef.value?.id === props.task.id
+    ) {
+        // Don't stop task, just stop listening in UI?
     }
 });
 

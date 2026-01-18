@@ -18,13 +18,8 @@ import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
-import InlineEdit from '../../components/common/InlineEdit.vue';
-import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
-import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
 import { tagService } from '../../services/task/TagService';
-import { estimationService } from '../../services/task/EstimationService';
-import { aiInterviewService } from '../../services/ai/AIInterviewService';
 import {
     taskSubdivisionService,
     type SubdivisionSuggestion,
@@ -118,9 +113,11 @@ const resultPreviewTask = computed(() => {
     }
 
     // Augment with execution progress if available
-    const taskKey = `${task.projectId}-${task.projectSequence}`;
-    const progress = taskStore.executionProgress.get(taskKey);
-    const reviewProgressEntry = taskStore.reviewProgress.get(taskKey);
+    const progress = taskStore.getExecutionProgress(task.projectId, task.projectSequence);
+    const reviewProgressEntry = taskStore.getReviewProgress({
+        projectId: task.projectId,
+        projectSequence: task.projectSequence,
+    });
 
     return {
         ...task,
@@ -575,7 +572,7 @@ async function handleEditModalSave(updates: Partial<Task>) {
     closeEditModal();
 }
 
-async function handleEditModalDelete(payload: any) {
+async function handleEditModalDelete() {
     if (editingTask.value) {
         await taskStore.deleteTask(editingTask.value.projectId, editingTask.value.projectSequence);
     }
@@ -628,12 +625,7 @@ async function handleVersionRestore(versionId: string) {
     console.log('Restoring version:', versionId);
 }
 
-// Project name update handler
-async function handleProjectNameUpdate(newName: string) {
-    if (!project.value || !newName.trim()) return;
-    await projectStore.updateProject(project.value.id, { title: newName.trim() });
-}
-
+// Project info update handler
 async function handleProjectInfoUpdate() {
     if (!project.value) return;
     await projectStore.fetchProject(project.value.id);
@@ -762,7 +754,9 @@ const liveResponseType = computed(() => {
             try {
                 JSON.parse(content);
                 return 'json';
-            } catch {}
+            } catch {
+                // ignore
+            }
         }
         if (content.includes('```') || content.match(/^#\s/m)) return 'markdown';
 
@@ -1296,8 +1290,8 @@ onUnmounted(() => {
                             </span>
                         </div>
                         <button
-                            @click="openCreateModal(column.id)"
                             class="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                            @click="openCreateModal(column.id)"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -1322,12 +1316,12 @@ onUnmounted(() => {
                             v-for="task in getTasksForColumn(column.id)"
                             :key="`${task.projectId}_${task.projectSequence}`"
                             draggable="true"
-                            @dragstart="handleDragStart(task)"
-                            @dragend="handleDragEnd"
                             :class="[
                                 'transition-all',
                                 isTaskDragging(task) ? 'opacity-50 scale-95' : '',
                             ]"
+                            @dragstart="handleDragStart(task)"
+                            @dragend="handleDragEnd"
                         >
                             <TaskCard
                                 :task="task"
@@ -1442,8 +1436,8 @@ onUnmounted(() => {
                             </p>
                         </div>
                         <button
-                            @click="closeSubdivisionModal"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                            @click="closeSubdivisionModal"
                         >
                             <svg
                                 class="w-5 h-5"
@@ -1578,15 +1572,15 @@ onUnmounted(() => {
                         <!-- Actions -->
                         <div class="flex gap-3 pt-4 border-t border-gray-700">
                             <button
-                                @click="closeSubdivisionModal"
                                 class="flex-1 px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                                @click="closeSubdivisionModal"
                             >
                                 취소
                             </button>
                             <button
-                                @click="confirmSubdivision"
                                 :disabled="subdivisionCreating"
                                 class="flex-1 px-4 py-2 bg-teal-600 rounded-lg text-white font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                @click="confirmSubdivision"
                             >
                                 <svg
                                     v-if="subdivisionCreating"
@@ -1732,16 +1726,16 @@ onUnmounted(() => {
                     <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
                         <div class="flex gap-3">
                             <button
-                                @click="closeApprovalModal"
                                 :disabled="approvalProcessing"
                                 class="px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors disabled:opacity-50"
+                                @click="closeApprovalModal"
                             >
                                 취소
                             </button>
                             <button
-                                @click="handleRejectTask"
                                 :disabled="approvalProcessing"
                                 class="flex-1 px-4 py-2 bg-red-600 rounded-lg text-white font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                @click="handleRejectTask"
                             >
                                 <svg
                                     v-if="approvalProcessing"
@@ -1780,9 +1774,9 @@ onUnmounted(() => {
                                 거절
                             </button>
                             <button
-                                @click="handleApproveTask"
                                 :disabled="approvalProcessing"
                                 class="flex-1 px-4 py-2 bg-green-600 rounded-lg text-white font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                @click="handleApproveTask"
                             >
                                 <svg
                                     v-if="approvalProcessing"

@@ -181,42 +181,49 @@ const aiModelDisplay = computed(() => {
 const outputTypes = computed(() => ({
     web: {
         name: t('project.output_type.web.name'),
+        icon: 'ph:globe',
         svgPath:
             'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM96.22,176h63.56a145.91,145.91,0,0,1-31.78,43.82A145.91,145.91,0,0,1,96.22,176Zm-3.06-16a140.07,140.07,0,0,1,0-64h69.68a140.07,140.07,0,0,1,0,64Zm66.62-80H96.22a145.91,145.91,0,0,1,31.78-43.82A145.91,145.91,0,0,1,159.78,80ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128Zm114.51,27.36a161.79,161.79,0,0,0,0-54.72,88.32,88.32,0,0,1,46.6,54.72Zm46.6-79.08a88.32,88.32,0,0,1-46.6,54.72,161.79,161.79,0,0,0,0-54.72ZM55,100.64a88.32,88.32,0,0,1,46.6-54.72,161.79,161.79,0,0,0,0,54.72Zm0,54.72a161.79,161.79,0,0,0,0,54.72,88.32,88.32,0,0,1-46.6-54.72Z',
         description: t('project.output_type.web.desc'),
     },
     document: {
         name: t('project.output_type.document.name'),
+        icon: 'ph:file-text',
         svgPath:
             'M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-40-64a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,152Zm0-32a8,8,0,0,1-8,8H104a8,8,0,0,1,0-16h48A8,8,0,0,1,160,120Z',
         description: t('project.output_type.document.desc'),
     },
     image: {
         name: t('project.output_type.image.name'),
+        icon: 'ph:image',
         svgPath:
             'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216v77.38l-24.69-24.7a16,16,0,0,0-22.62,0L144,133.37,100.69,90.07a16,16,0,0,0-22.62,0L40,128.69Zm0,144V154.35L89.66,104.69l53.65,53.65a8,8,0,0,0,11.32,0l34.05-34L216,151.63V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z',
         description: t('project.output_type.image.desc'),
     },
     video: {
         name: t('project.output_type.video.name'),
+        icon: 'ph:film-strip',
         svgPath:
             'M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,72H80V96H40ZM40,112H80v32H40Zm0,88V160H80v40Zm176,0H96V72H216V200ZM96,56h64V40H96Zm80,0h40V40H176Z',
         description: t('project.output_type.video.desc'),
     },
     code: {
         name: t('project.output_type.code.name'),
+        icon: 'logos:visual-studio-code',
         svgPath:
             'M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z',
         description: t('project.output_type.code.desc'),
     },
     data: {
         name: t('project.output_type.data.name'),
+        icon: 'ph:database',
         svgPath:
             'M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM40,112H80v32H40Zm56,0H216v32H96ZM216,64V96H40V64ZM40,160H80v32H40Zm176,32H96V160H216v32Z',
         description: t('project.output_type.data.desc'),
     },
     other: {
         name: t('project.output_type.other.name'),
+        icon: 'ph:question',
         svgPath:
             'M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z',
         description: t('project.output_type.other.desc'),
@@ -711,23 +718,23 @@ function getAssistantLabel(type: string): string {
             <div class="flex items-center space-x-2">
                 <template v-if="isEditingMetadata">
                     <button
-                        @click="cancelEditMetadata"
                         class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200 text-xs"
+                        @click="cancelEditMetadata"
                     >
                         {{ t('common.cancel') }}
                     </button>
                     <button
-                        @click="saveMetadata"
                         class="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white text-xs"
+                        @click="saveMetadata"
                     >
                         {{ t('common.save') }}
                     </button>
                 </template>
                 <button
                     v-else
-                    @click="startEditMetadata"
                     class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200"
                     :title="t('common.edit')"
+                    @click="startEditMetadata"
                 >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
@@ -749,9 +756,9 @@ function getAssistantLabel(type: string): string {
                         t('project.info.initial_prompt')
                     }}</label>
                     <button
-                        @click="copyPrompt"
                         class="text-xs text-gray-500 hover:text-gray-300 flex items-center space-x-1"
                         :title="t('common.copy')"
+                        @click="copyPrompt"
                     >
                         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path
@@ -789,8 +796,8 @@ function getAssistantLabel(type: string): string {
                     }}</label>
                     <button
                         v-if="!isEditingGoal"
-                        @click="startEditGoal"
                         class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        @click="startEditGoal"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -826,8 +833,8 @@ function getAssistantLabel(type: string): string {
                         {{ t('project.info.goal_help') }}
                     </div>
                     <button
-                        @click="startEditGoal"
                         class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                        @click="startEditGoal"
                     >
                         {{ t('project.info.add_goal') }}
                     </button>
@@ -842,14 +849,14 @@ function getAssistantLabel(type: string): string {
                     ></textarea>
                     <div class="flex justify-end space-x-2">
                         <button
-                            @click="cancelEditGoal"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                            @click="cancelEditGoal"
                         >
                             {{ t('common.cancel') }}
                         </button>
                         <button
-                            @click="saveGoal"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                            @click="saveGoal"
                         >
                             {{ t('common.save') }}
                         </button>
@@ -861,8 +868,8 @@ function getAssistantLabel(type: string): string {
             <div class="space-y-2 border-t border-gray-700 pt-4">
                 <div class="flex items-center justify-between">
                     <button
-                        @click="toggleGuidelines"
                         class="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                        @click="toggleGuidelines"
                     >
                         <svg
                             class="w-4 h-4 transition-transform"
@@ -894,9 +901,9 @@ function getAssistantLabel(type: string): string {
                     </button>
                     <div v-if="hasGuidelines" class="flex items-center space-x-1">
                         <button
-                            @click="copyGuidelines"
                             class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
                             :title="t('common.copy')"
+                            @click="copyGuidelines"
                         >
                             <svg
                                 class="w-3.5 h-3.5"
@@ -913,9 +920,9 @@ function getAssistantLabel(type: string): string {
                             </svg>
                         </button>
                         <button
-                            @click="startEditGuidelines"
                             class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
                             :title="t('common.edit')"
+                            @click="startEditGuidelines"
                         >
                             <svg
                                 class="w-3.5 h-3.5"
@@ -956,8 +963,8 @@ function getAssistantLabel(type: string): string {
                             {{ t('project.info.guidelines_empty') }}
                         </div>
                         <button
-                            @click="startEditGuidelines"
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+                            @click="startEditGuidelines"
                         >
                             {{ t('project.info.add_guidelines') }}
                         </button>
@@ -972,14 +979,14 @@ function getAssistantLabel(type: string): string {
                         ></textarea>
                         <div class="flex justify-end space-x-2">
                             <button
-                                @click="cancelEditGuidelines"
                                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                @click="cancelEditGuidelines"
                             >
                                 {{ t('common.cancel') }}
                             </button>
                             <button
-                                @click="saveGuidelines"
                                 class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+                                @click="saveGuidelines"
                             >
                                 {{ t('common.save') }}
                             </button>
@@ -996,8 +1003,8 @@ function getAssistantLabel(type: string): string {
                     }}</label>
                     <button
                         v-if="!isEditingOutputType"
-                        @click="startEditOutputType"
                         class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        @click="startEditOutputType"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -1042,14 +1049,14 @@ function getAssistantLabel(type: string): string {
                     </select>
                     <div class="flex justify-end space-x-2">
                         <button
-                            @click="cancelEditOutputType"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                            @click="cancelEditOutputType"
                         >
                             {{ t('common.cancel') }}
                         </button>
                         <button
-                            @click="saveOutputType"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                            @click="saveOutputType"
                         >
                             {{ t('common.save') }}
                         </button>
@@ -1093,8 +1100,8 @@ function getAssistantLabel(type: string): string {
                     </div>
                     <button
                         v-if="!isEditingAI"
-                        @click.stop="startEditAI"
                         class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer z-10"
+                        @click.stop="startEditAI"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -1158,8 +1165,8 @@ function getAssistantLabel(type: string): string {
                         v-model:mode="editedAIMode"
                         v-model:provider="editedAIProvider"
                         v-model:model="editedAIModel"
-                        v-model:localAgent="editedLocalAgent"
-                        :isDevProject="true"
+                        v-model:local-agent="editedLocalAgent"
+                        :is-dev-project="true"
                         :label="t('project.info.project_default_ai')"
                     />
 
@@ -1188,14 +1195,14 @@ function getAssistantLabel(type: string): string {
                     <!-- Action Buttons -->
                     <div class="flex justify-end space-x-2">
                         <button
-                            @click="cancelEditAI"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                            @click="cancelEditAI"
                         >
                             {{ t('common.cancel') }}
                         </button>
                         <button
-                            @click="saveAISettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                            @click="saveAISettings"
                         >
                             {{ t('common.save') }}
                         </button>
@@ -1215,9 +1222,9 @@ function getAssistantLabel(type: string): string {
                         {{ project.baseDevFolder || t('project.info.base_folder_not_set') }}
                     </div>
                     <button
-                        @click="pickBaseFolder"
                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
                         :title="t('project.info.base_folder_change')"
+                        @click="pickBaseFolder"
                     >
                         <FolderOpen class="w-4 h-4" />
                     </button>
@@ -1232,8 +1239,8 @@ function getAssistantLabel(type: string): string {
                     }}</label>
                     <button
                         v-if="!isEditingMCP"
-                        @click="startEditMCP"
                         class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        @click="startEditMCP"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -1286,7 +1293,7 @@ function getAssistantLabel(type: string): string {
                 <!-- Edit Mode -->
                 <div v-else class="space-y-4">
                     <MCPToolSelector
-                        v-model:selectedIds="selectedMCPServers"
+                        v-model:selected-ids="selectedMCPServers"
                         v-model:config="editedMCPConfig"
                     />
 
@@ -1315,14 +1322,14 @@ function getAssistantLabel(type: string): string {
                     <!-- Action Buttons -->
                     <div class="flex justify-end space-x-2">
                         <button
-                            @click="cancelEditMCP"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                            @click="cancelEditMCP"
                         >
                             {{ t('common.cancel') }}
                         </button>
                         <button
-                            @click="saveMCPSettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                            @click="saveMCPSettings"
                         >
                             {{ t('common.save') }}
                         </button>
@@ -1338,8 +1345,8 @@ function getAssistantLabel(type: string): string {
                     }}</label>
                     <button
                         v-if="!isEditingAutoReview"
-                        @click="startEditAutoReview"
                         class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        @click="startEditAutoReview"
                     >
                         <svg
                             class="w-3.5 h-3.5"
@@ -1407,22 +1414,22 @@ function getAssistantLabel(type: string): string {
                         v-model:mode="editedAutoReviewMode"
                         v-model:provider="editedAutoReviewProvider"
                         v-model:model="editedAutoReviewModel"
-                        v-model:localAgent="editedAutoReviewLocalAgent"
-                        :isDevProject="!!project.baseDevFolder"
+                        v-model:local-agent="editedAutoReviewLocalAgent"
+                        :is-dev-project="!!project.baseDevFolder"
                         :label="t('project.info.auto_review_ai_settings')"
                     />
 
                     <!-- Action Buttons -->
                     <div class="flex justify-end space-x-2">
                         <button
-                            @click="cancelEditAutoReview"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                            @click="cancelEditAutoReview"
                         >
                             {{ t('common.cancel') }}
                         </button>
                         <button
-                            @click="saveAutoReviewSettings"
                             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                            @click="saveAutoReviewSettings"
                         >
                             {{ t('common.save') }}
                         </button>
@@ -1479,9 +1486,9 @@ function getAssistantLabel(type: string): string {
                         {{ project.outputPath }}
                     </div>
                     <button
-                        @click="handleOpenOutput"
                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
                         :title="t('project.info.open_folder')"
+                        @click="handleOpenOutput"
                     >
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path

@@ -6,7 +6,7 @@
  */
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
 // Removed unused addEdges
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { VueFlow, useVueFlow, MarkerType } from '@vue-flow/core';
 import type { Node, Edge } from '@vue-flow/core';
 import dagre from 'dagre';
@@ -29,6 +29,7 @@ import {
     taskSubdivisionService,
     type SubdivisionSuggestion,
 } from '../../services/ai/TaskSubdivisionService';
+import SubdivisionModal from '../../components/task/SubdivisionModal.vue';
 
 // Import Vue Flow styles
 import '@vue-flow/core/dist/style.css';
@@ -37,7 +38,7 @@ import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 
 const route = useRoute();
-const router = useRouter();
+// Removed unused router
 const taskStore = useTaskStore();
 const projectStore = useProjectStore();
 const uiStore = useUIStore();
@@ -104,9 +105,11 @@ const resultPreviewTask = computed(() => {
 
     // Augment with execution progress if available
     // Augment with execution progress if available
-    const taskKey = `${task.projectId}_${task.projectSequence}`;
-    const progress = taskStore.executionProgress.get(taskKey);
-    const reviewProgressEntry = taskStore.reviewProgress.get(taskKey);
+    const progress = taskStore.getExecutionProgress(task.projectId, task.projectSequence);
+    const reviewProgressEntry = taskStore.getReviewProgress({
+        projectId: task.projectId,
+        projectSequence: task.projectSequence,
+    });
 
     return {
         ...task,
@@ -129,7 +132,7 @@ const resultPreviewTask = computed(() => {
 // const vueFlowKey = ref(0);
 
 // Vue Flow setup
-const { onConnect, addEdges, fitView, updateNodeData, project: projectToFlowCoords } = useVueFlow();
+const { onConnect, fitView, updateNodeData, project: projectToFlowCoords } = useVueFlow();
 
 // Nodes and edges
 const nodes = ref<Node[]>([]);
@@ -787,8 +790,10 @@ onConnect(async (params) => {
         return;
     }
 
-    const [sourceProjectId, sourceSequence] = sourceParts;
-    const [targetProjectId, targetSequence] = targetParts;
+    const sourceProjectId = sourceParts[0]!;
+    const sourceSequence = sourceParts[1]!;
+    const targetProjectId = targetParts[0]!;
+    const targetSequence = targetParts[1]!;
 
     if (sourceProjectId === targetProjectId && sourceSequence === targetSequence) {
         console.warn('Cannot connect a task to itself');
@@ -828,6 +833,7 @@ onConnect(async (params) => {
         dependsOn: {
             ...targetTask.triggerConfig?.dependsOn,
             taskIds: [...existingDeps, sourceSequence], // Store SEQUENCE
+            operator: targetTask.triggerConfig?.dependsOn?.operator || 'all',
         },
     };
 
@@ -850,8 +856,9 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
 
         if (sourceParts.length !== 2 || targetParts.length !== 2) continue;
 
-        const [sourceProjectId, sourceSequence] = sourceParts;
-        const [targetProjectId, targetSequence] = targetParts;
+        const sourceSequence = sourceParts[1]!;
+        const targetProjectId = targetParts[0]!;
+        const targetSequence = targetParts[1]!;
 
         const targetTask = tasks.value.find(
             (t) => t.projectId === targetProjectId && t.projectSequence === targetSequence
@@ -877,6 +884,7 @@ async function handleEdgeRemove(edgesToRemove: Edge[]) {
             dependsOn: {
                 ...targetTask.triggerConfig?.dependsOn,
                 taskIds: updatedDeps,
+                operator: targetTask.triggerConfig?.dependsOn?.operator || 'all',
             },
         };
 
@@ -962,7 +970,7 @@ async function handleEditModalSave(updates: Partial<Task>) {
     closeEditModal();
 }
 
-async function handleEditModalDelete(payload: any) {
+async function handleEditModalDelete() {
     // payload might be Task object OR taskId number depending on Modal implementation
     // But we use editingTask.value which is reliable
     if (editingTask.value) {
@@ -1171,13 +1179,6 @@ async function handleInputSubmit(data: any) {
             message: '입력 제출 중 오류가 발생했습니다.',
         });
     }
-}
-
-function handleConnectProvider(providerId: string) {
-    router.push({
-        path: '/settings',
-        query: { tab: 'ai-providers', highlight: providerId },
-    });
 }
 
 /**
@@ -1448,7 +1449,7 @@ onMounted(async () => {
         // Subscribe to taskStore state changes for reliable updates
         // This ensures INPUT task status updates (including inputSubStatus) are reflected immediately
         const unsubscribe = taskStore.$subscribe(
-            async (mutation, state) => {
+            async (mutation, _state) => {
                 // Check if mutation is related to streaming progress or task updates
                 // If it's just a ref update for progress, we use smooth update
                 if (
@@ -1460,7 +1461,7 @@ onMounted(async () => {
                         mutation.events.key === 'executingTaskIds')
                 ) {
                     // Optimized: Only update the specific node that changed
-                    const changedKey = mutation.events.key;
+
                     // For Maps (executionProgress, reviewProgress), the 'key' property of the event is the map Key (composite string)
                     // But wait, Pinia Map mutations might be tricky.
                     // If it's a Map.set(key, value), mutation.events.key is just 'executionProgress' (the field name)?
@@ -1633,6 +1634,17 @@ onMounted(async () => {
             @created="rebuildGraphDebounced"
         />
 
+        <!-- Subdivision Modal -->
+        <SubdivisionModal
+            v-if="showSubdivisionModal && subdivisionTask"
+            :is-open="showSubdivisionModal"
+            :task="subdivisionTask"
+            :loading="subdivisionLoading"
+            :suggestion="subdivisionSuggestion"
+            @close="showSubdivisionModal = false"
+            @confirm="confirmSubdivision"
+        />
+
         <!-- Task Detail Panel -->
         <TaskDetailPanel
             v-if="showDetailPanel && selectedTask"
@@ -1650,7 +1662,7 @@ onMounted(async () => {
             v-if="showResultPreview && resultPreviewTask"
             :open="showResultPreview"
             :task="resultPreviewTask"
-            :taskId="resultPreviewTask.id"
+            :task-id="resultPreviewTask.id"
             @close="showResultPreview = false"
             @retry="handleTaskRetry"
         />
@@ -1671,8 +1683,8 @@ onMounted(async () => {
                 </div>
                 <div class="mt-4 flex justify-end">
                     <button
-                        @click="showExecutionModal = false"
                         class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        @click="showExecutionModal = false"
                     >
                         Close
                     </button>
@@ -1702,7 +1714,7 @@ onMounted(async () => {
                 class="context-menu"
                 @keydown.esc="closeContextMenu"
             >
-                <button @click="handleNewTaskFromContextMenu" class="context-menu-item">
+                <button class="context-menu-item" @click="handleNewTaskFromContextMenu">
                     <svg
                         width="16"
                         height="16"

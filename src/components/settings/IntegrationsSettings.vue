@@ -570,13 +570,13 @@ onMounted(() => {
             <button
                 v-for="tab in tabs"
                 :key="tab.id"
-                @click="activeTab = tab.id as typeof activeTab"
                 :class="[
                     'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
                     activeTab === tab.id
                         ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:bg-gray-700 hover:text-white',
                 ]"
+                @click="activeTab = tab.id as typeof activeTab"
             >
                 <IconRenderer :emoji="tab.icon" class="w-5 h-5" />
                 <span>{{ tab.label }}</span>
@@ -617,9 +617,9 @@ onMounted(() => {
                     <div class="flex items-center gap-2">
                         <template v-if="integrationStatus.slack.connected">
                             <button
-                                @click="testSlack"
                                 :disabled="testingIntegration === 'slack'"
                                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                                @click="testSlack"
                             >
                                 {{
                                     testingIntegration === 'slack'
@@ -628,18 +628,18 @@ onMounted(() => {
                                 }}
                             </button>
                             <button
-                                @click="disconnectSlack"
                                 :disabled="loading"
                                 class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors disabled:opacity-50"
+                                @click="disconnectSlack"
                             >
                                 연결 해제
                             </button>
                         </template>
                         <button
                             v-else
-                            @click="connectSlack"
                             :disabled="loading"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                            @click="connectSlack"
                         >
                             {{
                                 loading
@@ -658,8 +658,8 @@ onMounted(() => {
                         <div class="space-y-3">
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
-                                    type="checkbox"
                                     v-model="slackConfig.notifyOnTaskComplete"
+                                    type="checkbox"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
                                 <span class="text-gray-300">{{
@@ -668,8 +668,8 @@ onMounted(() => {
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
-                                    type="checkbox"
                                     v-model="slackConfig.notifyOnMention"
+                                    type="checkbox"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
                                 <span class="text-gray-300">{{
@@ -678,8 +678,8 @@ onMounted(() => {
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
-                                    type="checkbox"
                                     v-model="slackConfig.notifyOnError"
+                                    type="checkbox"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
                                 <span class="text-gray-300">{{
@@ -729,11 +729,11 @@ onMounted(() => {
                             </p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2" v-if="integrationStatus.discord.connected">
+                    <div v-if="integrationStatus.discord.connected" class="flex items-center gap-2">
                         <button
-                            @click="testDiscord"
                             :disabled="testingIntegration === 'discord'"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                            @click="testDiscord"
                         >
                             {{
                                 testingIntegration === 'discord'
@@ -742,8 +742,8 @@ onMounted(() => {
                             }}
                         </button>
                         <button
-                            @click="disconnectDiscord"
                             class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors"
+                            @click="disconnectDiscord"
                         >
                             {{ t('settings.integrations.actions.disconnect') }}
                         </button>
@@ -763,9 +763,9 @@ onMounted(() => {
                                 class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
                             <button
-                                @click="saveDiscordWebhook"
                                 :disabled="loading || !discordConfig.webhookUrl"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                @click="saveDiscordWebhook"
                             >
                                 {{
                                     loading
@@ -784,8 +784,8 @@ onMounted(() => {
                             <div class="space-y-3">
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="checkbox"
                                         v-model="discordConfig.notifyOnTaskComplete"
+                                        type="checkbox"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
                                     <span class="text-gray-300">{{
@@ -794,8 +794,8 @@ onMounted(() => {
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="checkbox"
                                         v-model="discordConfig.notifyOnProjectUpdate"
+                                        type="checkbox"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
                                     <span class="text-gray-300">{{
@@ -804,8 +804,8 @@ onMounted(() => {
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="checkbox"
                                         v-model="discordConfig.notifyOnError"
+                                        type="checkbox"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
                                     <span class="text-gray-300">{{
@@ -825,13 +825,13 @@ onMounted(() => {
                     <button
                         v-for="provider in ['github', 'gitlab', 'bitbucket'] as const"
                         :key="provider"
-                        @click="selectedGitProvider = provider"
                         :class="[
                             'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                             selectedGitProvider === provider
                                 ? 'bg-gray-600 text-white'
                                 : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700',
                         ]"
+                        @click="selectedGitProvider = provider"
                     >
                         <IconRenderer
                             :emoji="
@@ -880,18 +880,18 @@ onMounted(() => {
                         </div>
                         <template v-if="selectedGitStatus.connected">
                             <button
-                                @click="disconnectGitProvider(selectedGitProvider)"
                                 :disabled="loading"
                                 class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors disabled:opacity-50"
+                                @click="disconnectGitProvider(selectedGitProvider)"
                             >
                                 {{ t('settings.integrations.actions.disconnect') }}
                             </button>
                         </template>
                         <button
                             v-else
-                            @click="connectGitProvider(selectedGitProvider)"
                             :disabled="loading"
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                            @click="connectGitProvider(selectedGitProvider)"
                         >
                             {{
                                 loading
@@ -919,8 +919,8 @@ onMounted(() => {
                                         <span class="text-white text-sm">{{ repo.fullName }}</span>
                                     </div>
                                     <button
-                                        @click="removeRepository(selectedGitProvider, repo.id)"
                                         class="text-gray-400 hover:text-red-400 transition-colors"
+                                        @click="removeRepository(selectedGitProvider, repo.id)"
                                     >
                                         <svg
                                             class="w-4 h-4"
@@ -957,9 +957,9 @@ onMounted(() => {
                                     class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
                                 <button
-                                    @click="addRepository"
                                     :disabled="!newRepoUrl"
                                     class="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                                    @click="addRepository"
                                 >
                                     {{ t('settings.integrations.actions.add') }}
                                 </button>
@@ -974,8 +974,8 @@ onMounted(() => {
                             <div class="space-y-3">
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="checkbox"
                                         v-model="selectedGitConfig.autoLinkCommits"
+                                        type="checkbox"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
                                     <span class="text-gray-300 text-sm">{{
@@ -984,8 +984,8 @@ onMounted(() => {
                                 </label>
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="checkbox"
                                         v-model="selectedGitConfig.autoLinkPRs"
+                                        type="checkbox"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                     />
                                     <span class="text-gray-300 text-sm">{{
@@ -1029,13 +1029,13 @@ onMounted(() => {
                         </div>
                     </div>
                     <div
-                        class="flex items-center gap-2"
                         v-if="integrationStatus.googleDrive.connected"
+                        class="flex items-center gap-2"
                     >
                         <button
-                            @click="syncSkills"
                             :disabled="loading"
                             class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                            @click="syncSkills"
                         >
                             {{
                                 loading
@@ -1044,18 +1044,18 @@ onMounted(() => {
                             }}
                         </button>
                         <button
-                            @click="disconnectGoogleDrive"
                             :disabled="loading"
                             class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors disabled:opacity-50"
+                            @click="disconnectGoogleDrive"
                         >
                             {{ t('settings.integrations.actions.disconnect') }}
                         </button>
                     </div>
                     <button
                         v-else
-                        @click="connectGoogleDrive"
                         :disabled="loading"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                        @click="connectGoogleDrive"
                     >
                         {{
                             loading
@@ -1090,8 +1090,8 @@ onMounted(() => {
                                 </div>
                             </div>
                             <button
-                                @click="selectSkillsFolder"
                                 class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                                @click="selectSkillsFolder"
                             >
                                 {{ t('settings.integrations.actions.select_folder') }}
                             </button>
@@ -1106,8 +1106,8 @@ onMounted(() => {
                         <div class="space-y-4">
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input
-                                    type="checkbox"
                                     v-model="googleDriveConfig.autoSync"
+                                    type="checkbox"
                                     class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
                                 />
                                 <span class="text-gray-300">{{
@@ -1188,8 +1188,8 @@ onMounted(() => {
                         </p>
                     </div>
                     <button
-                        @click="openNewWebhookModal"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                        @click="openNewWebhookModal"
                     >
                         + {{ t('settings.integrations.webhooks.add_btn') }}
                     </button>
@@ -1205,11 +1205,11 @@ onMounted(() => {
                         <div class="flex items-start justify-between">
                             <div class="flex items-center gap-3">
                                 <button
-                                    @click="toggleWebhook(webhook.id)"
                                     :class="[
                                         'relative w-10 h-6 rounded-full transition-colors',
                                         webhook.active ? 'bg-green-600' : 'bg-gray-600',
                                     ]"
+                                    @click="toggleWebhook(webhook.id)"
                                 >
                                     <span
                                         :class="[
@@ -1227,9 +1227,9 @@ onMounted(() => {
                             </div>
                             <div class="flex items-center gap-2">
                                 <button
-                                    @click="testWebhook(webhook.id)"
                                     :disabled="testingIntegration === webhook.id"
                                     class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition-colors disabled:opacity-50"
+                                    @click="testWebhook(webhook.id)"
                                 >
                                     {{
                                         testingIntegration === webhook.id
@@ -1238,8 +1238,8 @@ onMounted(() => {
                                     }}
                                 </button>
                                 <button
-                                    @click="deleteWebhook(webhook.id)"
                                     class="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                                    @click="deleteWebhook(webhook.id)"
                                 >
                                     <svg
                                         class="w-5 h-5"
@@ -1335,8 +1335,8 @@ onMounted(() => {
                                     <input
                                         type="checkbox"
                                         :checked="newWebhookForm.events.includes(event.value)"
-                                        @change="toggleWebhookEvent(event.value)"
                                         class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                                        @change="toggleWebhookEvent(event.value)"
                                     />
                                     <span class="text-gray-300 text-sm">{{ event.label }}</span>
                                 </label>
@@ -1360,13 +1360,12 @@ onMounted(() => {
 
                     <div class="flex justify-end gap-2 mt-6">
                         <button
-                            @click="showNewWebhookModal = false"
                             class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                            @click="showNewWebhookModal = false"
                         >
                             {{ t('settings.integrations.actions.cancel') }}
                         </button>
                         <button
-                            @click="createWebhook"
                             :disabled="
                                 loading ||
                                 !newWebhookForm.name ||
@@ -1374,6 +1373,7 @@ onMounted(() => {
                                 newWebhookForm.events.length === 0
                             "
                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                            @click="createWebhook"
                         >
                             {{
                                 loading

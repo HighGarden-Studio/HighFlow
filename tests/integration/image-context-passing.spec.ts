@@ -3,7 +3,7 @@
  * Tests the flow of image attachments from Input Tasks to AI Tasks
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { TaskAttachment, AiResult } from '@core/types';
 
 // Import the actual implementation

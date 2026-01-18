@@ -85,21 +85,24 @@ onMounted(async () => {
 
     // Register curator event listeners
     const api = getAPI();
-    const cleanupCuratorStarted = api.events.on('curator:started', (data: any) => {
-        if (localTask.value?.id === data.taskId) {
-            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+    const cleanupCuratorStarted = api.events.on('curator:started', (data: unknown) => {
+        const payload = data as Record<string, any>;
+        if (localTask.value?.id === payload.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...payload, timestamp: new Date() });
         }
     });
 
-    const cleanupCuratorStep = api.events.on('curator:step', (data: any) => {
-        if (localTask.value?.id === data.taskId) {
-            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+    const cleanupCuratorStep = api.events.on('curator:step', (data: unknown) => {
+        const payload = data as Record<string, any>;
+        if (localTask.value?.id === payload.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...payload, timestamp: new Date() });
         }
     });
 
-    const cleanupCuratorCompleted = api.events.on('curator:completed', (data: any) => {
-        if (localTask.value?.id === data.taskId) {
-            curatorEvents.value.push({ type: 'curator', ...data, timestamp: new Date() });
+    const cleanupCuratorCompleted = api.events.on('curator:completed', (data: unknown) => {
+        const payload = data as Record<string, any>;
+        if (localTask.value?.id === payload.taskId) {
+            curatorEvents.value.push({ type: 'curator', ...payload, timestamp: new Date() });
         }
     });
 
@@ -271,7 +274,7 @@ const showTemplatePicker = ref(false);
 const promptTextarea = ref<HTMLTextAreaElement | null>(null);
 
 const baseDevFolder = computed(() => {
-    const project = projectStore.currentProject as any;
+    const project = projectStore.currentProject as Record<string, any>;
     return project?.baseDevFolder || null;
 });
 const isDevProject = computed(() => !!baseDevFolder.value);
@@ -341,16 +344,16 @@ const templateToCreate = computed(() => {
                 ? JSON.parse(localTask.value.tags)
                 : localTask.value.tags
             : [],
-        defaultOptions: (localTask.value as any).defaultOptions || {},
+        defaultOptions: (localTask.value as Record<string, any>).defaultOptions || {},
     };
 });
 
-async function handleSaveTemplate(data: any) {
+async function handleSaveTemplate(data: Record<string, any>) {
     try {
         await window.electron.scriptTemplates.create(data);
         showSaveTemplateModal.value = false;
         // Optional: Show success toast
-        console.log('Template saved successfully');
+        // console.log('Template saved successfully');
     } catch (error) {
         console.error('Failed to save template:', error);
         alert('Failed to save template');
@@ -1016,7 +1019,7 @@ function persistExecutionSettings() {
                 ? null
                 : reviewAiModel.value,
         executionType: executionMode.value === 'local' ? 'serial' : localTask.value.executionType,
-        localAgent: selectedLocalAgent.value as any,
+        localAgent: selectedLocalAgent.value as LocalAgentType | null,
         localAgentWorkingDir: localAgentWorkingDir.value,
         requiredMCPs: [...selectedMCPTools.value],
         mcpConfig: localTask.value.mcpConfig,
@@ -1064,7 +1067,7 @@ function getInputConfig(): InputTaskConfig {
 
 function updateTaskProperty(key: string, value: any) {
     if (!localTask.value) return;
-    // @ts-ignore
+    // @ts-expect-error - index signature access
     localTask.value[key] = value;
 }
 
@@ -1073,7 +1076,7 @@ function updateInputConfig(key: keyof InputTaskConfig, value: any) {
     const current = getInputConfig();
     const updated = { ...current, [key]: value };
     // Keep as object - taskStore will handle JSON serialization
-    (localTask.value as any).inputConfig = updated;
+    (localTask.value as unknown as Record<string, any>).inputConfig = updated;
     emit('save', localTask.value);
 }
 
@@ -1106,7 +1109,7 @@ async function handleSelectLocalFile() {
                 ? [{ name: 'Allowed Files', extensions: [...extensions] }]
                 : undefined;
 
-        console.log('[TaskDetailPanel] Opening file dialog with filters:', filters);
+        // console.log('[TaskDetailPanel] Opening file dialog with filters:', filters);
         // Use selectMultipleFiles to support multiple files and folders
         const newPaths = await getAPI().fs.selectMultipleFiles(filters);
 
@@ -1172,30 +1175,13 @@ function handleSave() {
         scriptLanguage: scriptLanguage.value,
     };
 
-    console.log('[TaskDetailPanel] Saving task manually:', updatedTask);
+    // console.log('[TaskDetailPanel] Saving task manually:', updatedTask);
     emit('save', updatedTask as Task);
     emit('close');
 }
 
 // Handle details tab update
-async function handleDetailsUpdate() {
-    if (!localTask.value) return;
-
-    const updatedTask = {
-        ...(localTask.value as any), // Cast to any to allow overriding properties safely
-        priority: priority.value,
-        tags: tags.value, // Use array directly, backend/drizzle handles JSON serialization
-        assignedOperatorId: assignedOperatorId.value,
-        estimatedMinutes: estimatedMinutes.value,
-        dueDate: dueDate.value ? new Date(dueDate.value).toISOString() : null,
-    };
-
-    // Optimistic update
-    localTask.value = updatedTask as Task;
-
-    // Delegate API call to parent's handler (taskStore)
-    emit('save', updatedTask as Task);
-}
+// function handleDetailsUpdate() removed
 
 /**
  * Handle Local Agent execution
@@ -1252,12 +1238,12 @@ async function handleLocalAgentExecute() {
             emit('save', updatedTask);
             localTask.value = updatedTask;
 
-            console.log('Local Agent execution completed:', {
+            /* console.log('Local Agent execution completed:', {
                 agentType: selectedLocalAgent.value,
                 duration: result.stats.duration,
                 sessionId: result.stats.sessionId,
                 messageCount: result.stats.messageCount,
-            });
+            }); */
         }
     } catch (error) {
         console.error('Local Agent execution failed:', error);
@@ -1297,7 +1283,7 @@ async function selectWorkingDirectory() {
  */
 function handleExecutionCompleted(result: { content: string; stats: unknown }) {
     if (!localTask.value) return;
-    console.log('Execution completed:', result);
+    // console.log('Execution completed:', result);
     streamingResult.value = result.content;
     // Task status will be updated via IPC events
 }
@@ -1314,15 +1300,15 @@ function handleExecutionFailed(error: string) {
  * Handle execution stopped from TaskExecutionProgress
  */
 function handleExecutionStopped() {
-    console.log('Execution stopped');
+    // console.log('Execution stopped');
     isExecuting.value = false;
 }
 
 /**
  * Handle approval required from TaskExecutionProgress
  */
-function handleApprovalRequired(data: { question: string; options?: string[] }) {
-    console.log('Approval required:', data);
+function handleApprovalRequired(_data: { question: string; options?: string[] }) {
+    // console.log('Approval required:', data);
     // UI is handled by TaskExecutionProgress component
 }
 
@@ -1359,7 +1345,7 @@ async function handleExecute() {
         // Check if it's a script task or AI task
         if (localTask.value.taskType === 'script') {
             // Execute script task via taskExecution API (unified handler)
-            console.log(`Executing script task ${localTask.value.id}`);
+            // console.log(`Executing script task ${localTask.value.id}`);
 
             if (!localTask.value.scriptCode) {
                 alert(t('task.alert.no_script'));
@@ -1379,7 +1365,7 @@ async function handleExecute() {
                     localTask.value.projectSequence
                 );
                 if (result.success) {
-                    console.log('Script execution completed:', result);
+                    // console.log('Script execution completed:', result);
                 } else {
                     console.error('Script execution failed:', result.error);
                 }
@@ -1388,7 +1374,7 @@ async function handleExecute() {
             }
         } else {
             // Execute AI task (existing logic)
-            console.log(`Executing AI task ${localTask.value.id}`);
+            // console.log(`Executing AI task ${localTask.value.id}`);
             // Local Agent 실행 모드
             if (
                 executionMode.value === 'local' &&
@@ -1409,7 +1395,7 @@ async function handleExecute() {
 }
 
 // Notification config helpers
-function parseNotificationConfig(config: any): any {
+function parseNotificationConfig(config: unknown): Record<string, any> | null {
     if (!config) return null;
     try {
         return typeof config === 'string' ? JSON.parse(config) : config;
@@ -1419,7 +1405,7 @@ function parseNotificationConfig(config: any): any {
     }
 }
 
-async function handleUpdateNotificationConfig(config: any) {
+async function handleUpdateNotificationConfig(config: unknown) {
     if (!localTask.value) return;
 
     try {
@@ -1432,9 +1418,8 @@ async function handleUpdateNotificationConfig(config: any) {
         }
 
         // Update task notification config via API
-        console.log('[TaskDetailPanel] Saving notification config:', config);
+        // console.log('[TaskDetailPanel] Saving notification config:', config);
 
-        // @ts-ignore - API method exists
         const updatedTask = await api.tasks.updateNotificationConfig(
             localTask.value.projectId,
             localTask.value.projectSequence,
@@ -1444,7 +1429,7 @@ async function handleUpdateNotificationConfig(config: any) {
         // 업데이트된 태스크로 localTask 갱신
         if (updatedTask) {
             localTask.value = updatedTask;
-            console.log('[TaskDetailPanel] Notification config saved successfully');
+            // console.log('[TaskDetailPanel] Notification config saved successfully');
         }
     } catch (error) {
         console.error('[TaskDetailPanel] Failed to update notification config:', error);
@@ -1454,10 +1439,10 @@ async function handleUpdateNotificationConfig(config: any) {
     }
 }
 
-async function handleTestNotification(config: any) {
+async function handleTestNotification(config: Record<string, any>) {
     if (!localTask.value) return;
 
-    console.log('Test notification requested with config:', config);
+    // console.log('Test notification requested with config:', config);
 
     try {
         const api = getAPI();
@@ -1472,7 +1457,6 @@ async function handleTestNotification(config: any) {
         }
 
         // Send test notification via API
-        // @ts-ignore - API method exists
         await api.tasks.sendTestNotification(
             localTask.value.projectId,
             localTask.value.projectSequence,
@@ -1758,9 +1742,9 @@ async function handleOpenFile(filePath: string) {
                                         <input
                                             v-model="editedTitle"
                                             class="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xl font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            autoFocus
                                             @keyup.enter="saveTitle"
                                             @keyup.esc="cancelEditTitle"
-                                            autoFocus
                                         />
                                         <button
                                             class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 whitespace-nowrap"
@@ -1784,8 +1768,8 @@ async function handleOpenFile(filePath: string) {
                                         </h2>
                                         <button
                                             class="p-1 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-500"
-                                            @click="startEditTitle"
                                             :title="t('task.detail.edit_title.edit')"
+                                            @click="startEditTitle"
                                         >
                                             <svg
                                                 class="w-4 h-4"
@@ -1869,12 +1853,12 @@ async function handleOpenFile(filePath: string) {
                                     'comments',
                                     'history',
                                 ] as const"
-                                :key="tab"
                                 v-show="
                                     tab !== 'settings' ||
                                     !localTask?.taskType ||
                                     localTask?.taskType === 'ai'
                                 "
+                                :key="tab"
                                 :class="[
                                     'pb-2 px-1 text-sm font-medium transition-colors',
                                     activeTab === tab
@@ -1992,13 +1976,13 @@ async function handleOpenFile(filePath: string) {
                                                 />
                                                 <button
                                                     :disabled="isReadOnly"
-                                                    @click="showTemplatePicker = true"
                                                     :class="[
                                                         'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
                                                         isReadOnly
                                                             ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                                                             : 'bg-gray-600 hover:bg-gray-500 text-white',
                                                     ]"
+                                                    @click="showTemplatePicker = true"
                                                 >
                                                     <svg
                                                         class="w-4 h-4 mr-1.5"
@@ -2017,13 +2001,13 @@ async function handleOpenFile(filePath: string) {
                                                 </button>
                                                 <button
                                                     :disabled="isReadOnly"
-                                                    @click="showPromptEnhancer = true"
                                                     :class="[
                                                         'inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
                                                         isReadOnly
                                                             ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                                                             : 'bg-purple-600 hover:bg-purple-500 text-white',
                                                     ]"
+                                                    @click="showPromptEnhancer = true"
                                                 >
                                                     <svg
                                                         class="w-4 h-4 mr-1.5"
@@ -2082,7 +2066,6 @@ async function handleOpenFile(filePath: string) {
 
                                     <button
                                         :disabled="isReadOnly"
-                                        @click="showSaveTemplateModal = true"
                                         :class="[
                                             'ml-2 inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-all shadow-sm',
                                             isReadOnly
@@ -2090,6 +2073,7 @@ async function handleOpenFile(filePath: string) {
                                                 : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700',
                                         ]"
                                         title="Save current script as a reusable template"
+                                        @click="showSaveTemplateModal = true"
                                     >
                                         <svg
                                             class="w-4 h-4 mr-1.5 text-blue-500"
@@ -2177,13 +2161,13 @@ async function handleOpenFile(filePath: string) {
                                                 },
                                             ]"
                                             :key="type.id"
-                                            @click="updateInputConfig('sourceType', type.id)"
                                             :class="[
                                                 'px-3 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-2',
                                                 getInputConfig().sourceType === type.id
                                                     ? 'bg-yellow-100 dark:bg-yellow-800 border-yellow-500 text-yellow-900 dark:text-yellow-100'
                                                     : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
                                             ]"
+                                            @click="updateInputConfig('sourceType', type.id)"
                                         >
                                             <span>{{ type.icon }}</span>
                                             <span>{{ type.label }}</span>
@@ -2206,18 +2190,18 @@ async function handleOpenFile(filePath: string) {
                                             <button
                                                 v-for="mode in ['short', 'long', 'confirm']"
                                                 :key="mode"
-                                                @click="
-                                                    updateInputConfig('userInput', {
-                                                        ...getInputConfig().userInput,
-                                                        mode,
-                                                    })
-                                                "
                                                 :class="[
                                                     'px-2 py-1 rounded text-xs border capitalize',
                                                     getInputConfig().userInput?.mode === mode
                                                         ? 'bg-yellow-500 text-white border-yellow-500'
                                                         : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400',
                                                 ]"
+                                                @click="
+                                                    updateInputConfig('userInput', {
+                                                        ...getInputConfig().userInput,
+                                                        mode,
+                                                    })
+                                                "
                                             >
                                                 {{ mode }}
                                             </button>
@@ -2232,6 +2216,9 @@ async function handleOpenFile(filePath: string) {
                                         </label>
                                         <input
                                             :value="getInputConfig().userInput?.message || ''"
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
+                                            :placeholder="t('task.input.message_placeholder')"
                                             @input="
                                                 updateInputConfig('userInput', {
                                                     ...getInputConfig().userInput,
@@ -2239,9 +2226,6 @@ async function handleOpenFile(filePath: string) {
                                                         .value,
                                                 })
                                             "
-                                            type="text"
-                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
-                                            :placeholder="t('task.input.message_placeholder')"
                                         />
                                     </div>
 
@@ -2253,6 +2237,9 @@ async function handleOpenFile(filePath: string) {
                                         </label>
                                         <input
                                             :value="getInputConfig().userInput?.placeholder || ''"
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            :placeholder="t('task.input.placeholder_placeholder')"
                                             @input="
                                                 updateInputConfig('userInput', {
                                                     ...getInputConfig().userInput,
@@ -2260,9 +2247,6 @@ async function handleOpenFile(filePath: string) {
                                                         .value,
                                                 })
                                             "
-                                            type="text"
-                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            :placeholder="t('task.input.placeholder_placeholder')"
                                         />
                                     </div>
 
@@ -2278,6 +2262,9 @@ async function handleOpenFile(filePath: string) {
                                                 getInputConfig().userInput?.options?.join(', ') ||
                                                 ''
                                             "
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            :placeholder="t('task.input.options_placeholder')"
                                             @input="
                                                 updateInputConfig('userInput', {
                                                     ...getInputConfig().userInput,
@@ -2290,9 +2277,6 @@ async function handleOpenFile(filePath: string) {
                                                         : undefined,
                                                 })
                                             "
-                                            type="text"
-                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            :placeholder="t('task.input.options_placeholder')"
                                         />
                                     </div>
 
@@ -2309,6 +2293,7 @@ async function handleOpenFile(filePath: string) {
                                                 :checked="
                                                     getInputConfig().userInput?.allowCustom || false
                                                 "
+                                                class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                                 @change="
                                                     updateInputConfig('userInput', {
                                                         ...getInputConfig().userInput,
@@ -2317,7 +2302,6 @@ async function handleOpenFile(filePath: string) {
                                                         ).checked,
                                                     })
                                                 "
-                                                class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                             />
                                             <span
                                                 class="text-sm text-gray-700 dark:text-gray-300"
@@ -2332,6 +2316,7 @@ async function handleOpenFile(filePath: string) {
                                             :checked="
                                                 getInputConfig().userInput?.required !== false
                                             "
+                                            class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                             @change="
                                                 updateInputConfig('userInput', {
                                                     ...getInputConfig().userInput,
@@ -2339,7 +2324,6 @@ async function handleOpenFile(filePath: string) {
                                                         .checked,
                                                 })
                                             "
-                                            class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                         />
                                         <span class="text-sm text-gray-700 dark:text-gray-300">{{
                                             t('task.input.required')
@@ -2383,6 +2367,7 @@ async function handleOpenFile(filePath: string) {
                                                             ext
                                                         )
                                                     "
+                                                    class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                                     @change="
                                                         toggleFileExtension(
                                                             ext,
@@ -2390,7 +2375,6 @@ async function handleOpenFile(filePath: string) {
                                                                 .checked
                                                         )
                                                     "
-                                                    class="w-4 h-4 text-yellow-600 rounded border-gray-300 focus:ring-yellow-500"
                                                 />
                                                 <span class="text-gray-700 dark:text-gray-300">{{
                                                     ext
@@ -2407,6 +2391,7 @@ async function handleOpenFile(filePath: string) {
                                         </label>
                                         <select
                                             :value="getInputConfig().localFile?.readMode || 'text'"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             @change="
                                                 updateInputConfig('localFile', {
                                                     ...getInputConfig().localFile,
@@ -2414,7 +2399,6 @@ async function handleOpenFile(filePath: string) {
                                                         .value,
                                                 })
                                             "
-                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                         >
                                             <option value="auto">
                                                 {{ t('task.input.local.mode.auto') }}
@@ -2459,9 +2443,9 @@ async function handleOpenFile(filePath: string) {
                                                         {{ path.split(/[/\\]/).pop() }}
                                                     </span>
                                                     <button
-                                                        @click="removeLocalFile(idx)"
                                                         class="text-gray-400 hover:text-red-500 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                                                         title="Remove"
+                                                        @click="removeLocalFile(idx)"
                                                     >
                                                         <svg
                                                             class="w-3 h-3"
@@ -2503,7 +2487,6 @@ async function handleOpenFile(filePath: string) {
                                                     />
                                                 </div>
                                                 <button
-                                                    @click="handleSelectLocalFile"
                                                     :class="[
                                                         (getInputConfig().localFile?.filePaths
                                                             ?.length || 0) > 0
@@ -2512,6 +2495,7 @@ async function handleOpenFile(filePath: string) {
                                                         'bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-2',
                                                     ]"
                                                     :title="t('task.input.local.select_file')"
+                                                    @click="handleSelectLocalFile"
                                                 >
                                                     <FolderOpen class="w-4 h-4" />
                                                     <span
@@ -2560,15 +2544,15 @@ async function handleOpenFile(filePath: string) {
                                         </label>
                                         <input
                                             :value="getInputConfig().remoteResource?.url || ''"
+                                            type="text"
+                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            :placeholder="t('task.input.remote.url_placeholder')"
                                             @input="
                                                 updateInputConfig('remoteResource', {
                                                     ...getInputConfig().remoteResource,
                                                     url: ($event.target as HTMLInputElement).value,
                                                 })
                                             "
-                                            type="text"
-                                            class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                            :placeholder="t('task.input.remote.url_placeholder')"
                                         />
                                     </div>
                                 </div>
@@ -2604,8 +2588,8 @@ async function handleOpenFile(filePath: string) {
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     >{{task.23}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2614,8 +2598,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     >{{task.23.output}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2624,8 +2608,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     >{{task.23.status}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2634,8 +2618,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded font-mono shrink-0"
                                                     >{{task.23.summary}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2655,8 +2639,8 @@ async function handleOpenFile(filePath: string) {
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{ prev }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2665,8 +2649,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{prev.0}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2675,8 +2659,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{prev.1}}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2685,8 +2669,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{ prev.summary }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2695,8 +2679,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{ all_results }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2705,8 +2689,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded font-mono shrink-0"
                                                     >{{ all_results.summary }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2726,8 +2710,8 @@ async function handleOpenFile(filePath: string) {
                                         <div class="space-y-1.5 pl-4">
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     >{{ date }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2736,8 +2720,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     >{{ datetime }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2746,8 +2730,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     >{{ project.name }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2756,8 +2740,8 @@ async function handleOpenFile(filePath: string) {
                                             </div>
                                             <div class="flex items-start gap-2">
                                                 <code
-                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     v-pre
+                                                    class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded font-mono shrink-0"
                                                     >{{ project.description }}</code
                                                 >
                                                 <span class="text-gray-600 dark:text-gray-400">{{
@@ -2806,7 +2790,7 @@ async function handleOpenFile(filePath: string) {
                                                 # 이전 태스크 결과를 기반으로 분석
                                             </div>
                                             <div>{{ t('task.macro_example.analyze') }}</div>
-                                            <div class="text-indigo-400" v-pre>{{ prev }}</div>
+                                            <div v-pre class="text-indigo-400">{{ prev }}</div>
                                             <div class="mt-2 text-gray-400">
                                                 # 여러 태스크 결과 종합
                                             </div>
@@ -3232,9 +3216,9 @@ async function handleOpenFile(filePath: string) {
                                         />
                                         <button
                                             type="button"
-                                            @click="selectWorkingDirectory"
                                             class="p-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors border border-gray-600"
                                             :title="t('task.local_agent.browse')"
+                                            @click="selectWorkingDirectory"
                                         >
                                             <FolderOpen class="w-4 h-4" />
                                         </button>
@@ -3316,7 +3300,7 @@ async function handleOpenFile(filePath: string) {
                             <!-- MCP Tools -->
                             <div>
                                 <MCPToolSelector
-                                    v-model:selectedIds="selectedMCPTools"
+                                    v-model:selected-ids="selectedMCPTools"
                                     v-model:config="localTask!.mcpConfig"
                                     :base-config="projectStore.currentProject?.mcpConfig"
                                 />
@@ -4088,12 +4072,12 @@ async function handleOpenFile(filePath: string) {
                                                             </div>
                                                             <div class="flex justify-end">
                                                                 <button
+                                                                    class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
                                                                     @click.stop="
                                                                         toggleHistoryExpansion(
                                                                             entry.id
                                                                         )
                                                                     "
-                                                                    class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
                                                                 >
                                                                     {{
                                                                         expandedHistoryItems.has(
@@ -4140,6 +4124,7 @@ async function handleOpenFile(filePath: string) {
                                                                                 ?.accumulateResults
                                                                         "
                                                                         class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                                                                        title="Scroll to bottom"
                                                                         @click="
                                                                             (
                                                                                 $refs[
@@ -4147,7 +4132,6 @@ async function handleOpenFile(filePath: string) {
                                                                                 ] as any
                                                                             )?.[0]?.scrollToBottom()
                                                                         "
-                                                                        title="Scroll to bottom"
                                                                     >
                                                                         ⬇
                                                                         {{
@@ -4284,10 +4268,10 @@ async function handleOpenFile(filePath: string) {
                                                             class="mt-1 flex justify-end"
                                                         >
                                                             <button
+                                                                class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
                                                                 @click.stop="
                                                                     toggleHistoryExpansion(entry.id)
                                                                 "
-                                                                class="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1 bg-white dark:bg-gray-700 px-2 py-0.5 rounded shadow-sm"
                                                             >
                                                                 {{
                                                                     expandedHistoryItems.has(

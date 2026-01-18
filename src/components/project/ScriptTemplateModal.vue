@@ -46,8 +46,8 @@
                                 </div>
                             </div>
                             <button
-                                @click="$emit('close')"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                                @click="$emit('close')"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -135,8 +135,8 @@
                                     >
                                         <span>{{ tag }}</span>
                                         <button
-                                            @click="removeTag(tag)"
                                             class="hover:text-white focus:outline-none"
+                                            @click="removeTag(tag)"
                                         >
                                             <svg
                                                 class="w-3 h-3"
@@ -155,12 +155,12 @@
                                     </div>
                                     <input
                                         v-model="tagInput"
-                                        @keydown.enter.prevent="addTag"
-                                        @keydown.comma.prevent="addTag"
-                                        @blur="addTag"
                                         type="text"
                                         placeholder="Add tag..."
                                         class="flex-1 min-w-[100px] bg-transparent border-none text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-sm"
+                                        @keydown.enter.prevent="addTag"
+                                        @keydown.comma.prevent="addTag"
+                                        @blur="addTag"
                                     />
                                 </div>
                                 <div class="h-px bg-gray-700 w-full"></div>
@@ -171,14 +171,14 @@
                         <div class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
                             <div class="flex items-center justify-end gap-3">
                                 <button
-                                    @click="$emit('close')"
                                     class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                    @click="$emit('close')"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    @click="save"
                                     class="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white rounded-lg transition-all shadow-lg shadow-blue-900/30"
+                                    @click="save"
                                 >
                                     {{ template ? 'Update' : 'Create' }}
                                 </button>

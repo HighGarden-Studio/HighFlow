@@ -31,13 +31,13 @@
                     <i class="ph ph-brain"></i>
                     <span>{{ operator.aiModel }}</span>
                 </div>
-                <div class="config-item" v-if="operator.isReviewer">
+                <div v-if="operator.isReviewer" class="config-item">
                     <i class="ph ph-check-circle"></i>
                     <span>QA Reviewer</span>
                 </div>
             </div>
 
-            <div class="operator-stats" v-if="operator.usageCount > 0">
+            <div v-if="operator.usageCount > 0" class="operator-stats">
                 <span>{{ operator.usageCount }} tasks</span>
                 <span v-if="operator.successRate"
                     >{{ Math.round(operator.successRate * 100) }}% success</span
@@ -47,15 +47,15 @@
 
         <!-- Footer Actions (Moved) -->
         <div class="operator-actions">
-            <button @click="$emit('edit', operator)" class="btn-action btn-edit" title="Edit">
+            <button class="btn-action btn-edit" title="Edit" @click="$emit('edit', operator)">
                 <i class="ph ph-pencil"></i>
                 <span>Edit</span>
             </button>
             <button
                 v-if="!operator.isCurator"
-                @click="$emit('delete', operator)"
                 class="btn-action btn-delete"
                 title="Delete"
+                @click="$emit('delete', operator)"
             >
                 <i class="ph ph-trash"></i>
                 <span>Delete</span>

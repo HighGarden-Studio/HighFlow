@@ -113,8 +113,8 @@ onMounted(async () => {
                     </p>
                 </div>
                 <button
-                    @click="openSubmitModal"
                     class="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-500/20"
+                    @click="openSubmitModal"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -148,10 +148,10 @@ onMounted(async () => {
                         </svg>
                         <input
                             v-model="marketplaceStore.searchQuery"
-                            @change="handleSearch"
                             type="text"
                             placeholder="Search items..."
                             class="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            @change="handleSearch"
                         />
                     </div>
                 </div>
@@ -159,8 +159,8 @@ onMounted(async () => {
                 <!-- Category Filter -->
                 <select
                     v-model="marketplaceStore.selectedCategory"
-                    @change="handleCategoryChange"
                     class="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    @change="handleCategoryChange"
                 >
                     <option v-for="cat in categories" :key="cat.label" :value="cat.value || ''">
                         {{ cat.label }}
@@ -170,8 +170,8 @@ onMounted(async () => {
                 <!-- Item Type Filter -->
                 <select
                     v-model="marketplaceStore.selectedType"
-                    @change="handleItemTypeChange"
                     class="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    @change="handleItemTypeChange"
                 >
                     <option v-for="type in itemTypes" :key="type.label" :value="type.value || ''">
                         {{ type.label }}
@@ -185,8 +185,8 @@ onMounted(async () => {
                         marketplaceStore.selectedCategory ||
                         marketplaceStore.selectedType
                     "
-                    @click="clearAllFilters"
                     class="px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    @click="clearAllFilters"
                 >
                     Clear Filters
                 </button>
@@ -194,7 +194,6 @@ onMounted(async () => {
                 <!-- View Toggle -->
                 <div class="ml-auto flex items-center gap-1 bg-gray-800 rounded-lg p-1">
                     <button
-                        @click="viewMode = 'grid'"
                         :class="[
                             'p-2 rounded transition-colors',
                             viewMode === 'grid'
@@ -202,6 +201,7 @@ onMounted(async () => {
                                 : 'text-gray-400 hover:text-white',
                         ]"
                         title="Grid view"
+                        @click="viewMode = 'grid'"
                     >
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                             <path
@@ -210,7 +210,6 @@ onMounted(async () => {
                         </svg>
                     </button>
                     <button
-                        @click="viewMode = 'list'"
                         :class="[
                             'p-2 rounded transition-colors',
                             viewMode === 'list'
@@ -218,6 +217,7 @@ onMounted(async () => {
                                 : 'text-gray-400 hover:text-white',
                         ]"
                         title="List view"
+                        @click="viewMode = 'list'"
                     >
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                             <path
@@ -269,8 +269,8 @@ onMounted(async () => {
                 <h3 class="text-lg font-medium text-gray-300 mb-2">Marketplace is Empty</h3>
                 <p class="text-gray-500 mb-4">Be the first to share your projects and operators!</p>
                 <button
-                    @click="openSubmitModal"
                     class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    @click="openSubmitModal"
                 >
                     Submit an Item
                 </button>
@@ -297,8 +297,8 @@ onMounted(async () => {
                 <h3 class="text-lg font-medium text-gray-300 mb-2">No Results Found</h3>
                 <p class="text-gray-500 mb-4">Try adjusting your search or filters</p>
                 <button
-                    @click="clearAllFilters"
                     class="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                    @click="clearAllFilters"
                 >
                     Clear All Filters
                 </button>

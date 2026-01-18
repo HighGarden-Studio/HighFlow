@@ -189,8 +189,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
         <!-- Pause Button -->
         <button
           v-if="canPause"
-          @click="handlePause"
           class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors"
+          @click="handlePause"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
@@ -201,8 +201,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
         <!-- Resume Button -->
         <button
           v-if="canResume"
-          @click="handleResume"
           class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors"
+          @click="handleResume"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
@@ -212,8 +212,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
 
         <!-- Cancel Button -->
         <button
-          @click="handleCancel"
           class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm font-medium transition-colors"
+          @click="handleCancel"
         >
           취소
         </button>
@@ -275,8 +275,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
       <div class="flex space-x-3">
         <button
           v-if="outputPath"
-          @click="openOutputFolder"
           class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm flex items-center space-x-2"
+          @click="openOutputFolder"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
@@ -306,8 +306,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
         <div
           v-for="(result, index) in interimState.completedResults"
           :key="result.taskId"
-          @click="openPreview(result)"
           class="p-3 bg-gray-900/30 rounded-lg cursor-pointer hover:bg-gray-900/50 transition-colors"
+          @click="openPreview(result)"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
@@ -355,8 +355,8 @@ progress.value = workflowProgressService.getProgress(props.workflowId) || null;
               {{ selectedResult?.taskTitle || '결과 미리보기' }}
             </h3>
             <button
-              @click="closePreview"
               class="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-200"
+              @click="closePreview"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

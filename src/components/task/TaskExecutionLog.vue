@@ -3,13 +3,13 @@
         <div class="log-header">
             <h3>{{ title }}</h3>
             <div class="actions">
-                <button v-if="isExecuting" @click="$emit('stop')" class="stop-btn">
+                <button v-if="isExecuting" class="stop-btn" @click="$emit('stop')">
                     <i class="icon-stop"></i> Stop
                 </button>
             </div>
         </div>
 
-        <div class="log-stream" ref="streamContainer">
+        <div ref="streamContainer" class="log-stream">
             <!-- Empty State -->
             <div v-if="processedEvents.length === 0 && !isExecuting" class="empty-state">
                 <div class="icon">🚀</div>
@@ -110,7 +110,7 @@ const props = defineProps<{
     title?: string;
 }>();
 
-const emit = defineEmits(['stop']);
+defineEmits(['stop']);
 
 const expandedThoughts = ref<Set<number>>(new Set());
 const streamContainer = ref<HTMLElement | null>(null);

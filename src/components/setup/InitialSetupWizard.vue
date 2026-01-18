@@ -599,9 +599,9 @@ watch(
                             </p>
                         </div>
                         <button
-                            @click="skipWizard"
                             class="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
                             :title="t('setup.wizard.common.skip')"
+                            @click="skipWizard"
                         >
                             <svg
                                 class="w-6 h-6"
@@ -646,7 +646,6 @@ watch(
                     <div class="mt-4 flex items-center gap-2">
                         <template v-for="(step, idx) in STEPS" :key="step.id">
                             <button
-                                @click="goToStep(step.id)"
                                 :disabled="idx > currentStepIndex"
                                 :class="[
                                     'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all',
@@ -656,6 +655,7 @@ watch(
                                           ? 'bg-green-500 text-white cursor-pointer'
                                           : 'bg-gray-700 text-gray-500 cursor-not-allowed',
                                 ]"
+                                @click="goToStep(step.id)"
                             >
                                 <svg
                                     v-if="idx < currentStepIndex"
@@ -794,7 +794,6 @@ watch(
                             <button
                                 v-for="provider in aiProviderOptions"
                                 :key="provider.id"
-                                @click="selectProvider(provider)"
                                 :class="[
                                     'p-4 border-2 rounded-xl text-left transition-all relative group',
                                     selectedProviderId === provider.id
@@ -803,6 +802,7 @@ watch(
                                           ? 'border-green-600 bg-green-900/20 hover:border-green-500'
                                           : 'border-gray-700 hover:border-gray-600 bg-gray-800/30',
                                 ]"
+                                @click="selectProvider(provider)"
                             >
                                 <div
                                     v-if="providerStatusMap[provider.id]"
@@ -867,8 +867,8 @@ watch(
                                 <div class="flex items-center gap-2">
                                     <button
                                         v-if="selectedProvider.website"
-                                        @click="openExternal(selectedProvider.website!)"
                                         class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors flex items-center gap-1"
+                                        @click="openExternal(selectedProvider.website!)"
                                     >
                                         <svg
                                             class="w-3.5 h-3.5"
@@ -1078,9 +1078,9 @@ watch(
                                         </div>
                                         <button
                                             v-if="!isOAuthConnected"
-                                            @click="connectOAuth"
                                             :disabled="isConnectingOAuth"
                                             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                            @click="connectOAuth"
                                         >
                                             <svg
                                                 v-if="isConnectingOAuth"
@@ -1132,8 +1132,8 @@ watch(
                                             "
                                         />
                                         <button
-                                            @click="showApiKey = !showApiKey"
                                             class="absolute right-12 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white"
+                                            @click="showApiKey = !showApiKey"
                                         >
                                             <svg
                                                 v-if="showApiKey"
@@ -1171,9 +1171,9 @@ watch(
                                             </svg>
                                         </button>
                                         <button
-                                            @click="validateApiKey"
                                             :disabled="!apiKey || isValidating"
                                             class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                                            @click="validateApiKey"
                                         >
                                             {{
                                                 isValidating
@@ -1299,8 +1299,8 @@ watch(
                 >
                     <button
                         v-if="currentStepIndex > 0 && currentStep !== 'complete'"
-                        @click="prevStep"
                         class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
+                        @click="prevStep"
                     >
                         ← {{ t('setup.wizard.common.prev') }}
                     </button>
@@ -1309,15 +1309,14 @@ watch(
                     <div class="flex items-center gap-3">
                         <button
                             v-if="currentStep !== 'welcome' && currentStep !== 'complete'"
-                            @click="skipWizard"
                             class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors"
+                            @click="skipWizard"
                         >
                             {{ t('setup.wizard.common.skip') }}
                         </button>
 
                         <button
                             v-if="currentStep !== 'complete'"
-                            @click="nextStep"
                             :disabled="!canProceed && STEPS[currentStepIndex]?.required"
                             :class="[
                                 'px-6 py-2.5 rounded-lg font-medium transition-colors',
@@ -1325,6 +1324,7 @@ watch(
                                     ? 'bg-blue-600 text-white hover:bg-blue-500'
                                     : 'bg-gray-700 text-gray-500 cursor-not-allowed',
                             ]"
+                            @click="nextStep"
                         >
                             >
                             {{
@@ -1336,8 +1336,8 @@ watch(
 
                         <button
                             v-else
-                            @click="completeSetup"
                             class="px-8 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white rounded-lg font-medium transition-all"
+                            @click="completeSetup"
                         >
                             {{ t('setup.wizard.common.start') }} 🚀
                         </button>

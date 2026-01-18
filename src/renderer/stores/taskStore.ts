@@ -7,7 +7,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Task, TaskStatus } from '@core/types/database';
-import type { TaskPriority, TaskType } from '@core/types/database';
+import type { TaskPriority, TaskType, AIProvider } from '@core/types/database';
+import type { TaskOutputFormat } from '../../services/ai/AIInterviewService';
 import { getAPI } from '../../utils/electron';
 import {
     TASK_STATUS_TRANSITIONS,
@@ -121,7 +122,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Re-apply the same protection for currentTask
             const existing = currentTask.value;
             if (existing.status === 'done' && task.status === 'in_progress') {
-                const { status, inputSubStatus, ...otherUpdates } = task;
+                const { status: _status, inputSubStatus: _inputSubStatus, ...otherUpdates } = task;
                 currentTask.value = { ...existing, ...otherUpdates };
             } else {
                 currentTask.value = { ...existing, ...task };
@@ -239,7 +240,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 return t;
             });
 
-            console.debug('[TaskStore] fetchTasks response:', {
+            /* console.debug('[TaskStore] fetchTasks response:', {
                 count: mergedData?.length,
                 sample: mergedData?.[0],
                 hasUnreadResult: mergedData?.[0]?.hasUnreadResult,
@@ -247,7 +248,7 @@ export const useTaskStore = defineStore('tasks', () => {
             console.debug(
                 '[TaskStore] Full sample task:',
                 JSON.stringify(mergedData?.[0], null, 2)
-            );
+            ); */
             tasks.value = mergedData;
         } catch (e) {
             error.value = e instanceof Error ? e.message : 'Failed to fetch tasks';
@@ -365,7 +366,7 @@ export const useTaskStore = defineStore('tasks', () => {
                         executionPolicy: 'repeat', // 매번 자동 실행 (권장)
                         taskIds: [],
                     },
-                } as any;
+                } as unknown as Record<string, any>;
             }
 
             const task = await api.tasks.create(taskData);
@@ -421,7 +422,7 @@ export const useTaskStore = defineStore('tasks', () => {
         try {
             const api = getAPI();
             // Prepare clean update data - only send what changed
-            const cleanUpdateData = { ...updateData } as any;
+            const cleanUpdateData = { ...updateData } as Record<string, unknown>;
 
             // Remove internal tracking fields that shouldn't be sent to backend
             delete cleanUpdateData.projectId;
@@ -431,11 +432,11 @@ export const useTaskStore = defineStore('tasks', () => {
             // We don't need to delete other fields because we are only sending updateData now
 
             const plainData = JSON.parse(JSON.stringify(cleanUpdateData));
-            console.debug(
+            /* console.debug(
                 '📝 TaskStore.updateTask calling API:',
                 { projectId, sequence },
                 plainData
-            );
+            ); */
 
             const task = await api.tasks.update(projectId, sequence, plainData);
 
@@ -459,9 +460,9 @@ export const useTaskStore = defineStore('tasks', () => {
                                         t.projectId === projectId && t.projectSequence === sequence
                                 );
                                 if (currentLocal && currentLocal.status === 'done') {
-                                    console.debug(
+                                    /* console.debug(
                                         '[TaskStore] Ignoring stale input status update (Task is already Done)'
-                                    );
+                                    ); */
                                     return;
                                 }
 
@@ -813,9 +814,9 @@ export const useTaskStore = defineStore('tasks', () => {
         if (feedback) {
             // Get previous result to include in context
             const previousResult =
-                (task as any).result ||
-                (task as any).executionResult?.content ||
-                (task as any).output?.result ||
+                (task as Record<string, any>).result ||
+                (task as Record<string, any>).executionResult?.content ||
+                (task as Record<string, any>).output?.result ||
                 '';
 
             const historyContext = `\n\n---\n### Previous Result\n${previousResult}\n\n### User Feedback\n${feedback}\n\nplease try again based on this feedback.`;
@@ -825,7 +826,7 @@ export const useTaskStore = defineStore('tasks', () => {
 
             // Update local state first
             await updateTask(projectId, sequence, {
-                // @ts-ignore - aiPrompt likely exists on task but type might be missing it explicitly in some versions
+                // @ts-expect-error - aiPrompt might rely on legacy type definition
                 aiPrompt: newPrompt,
                 status: 'todo',
             });
@@ -904,13 +905,13 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             }
 
-            console.debug('Executing task with API keys:', {
+            /* console.debug('Executing task with API keys:', {
                 hasAnthropic: !!apiKeys.anthropic,
                 hasOpenAI: !!apiKeys.openai,
                 hasGoogle: !!apiKeys.google,
                 hasGroq: !!apiKeys.groq,
                 hasLmStudio: !!apiKeys.lmstudio,
-            });
+            }); */
 
             const enabledProviderPayload = buildEnabledProvidersPayload(
                 settingsStore.getEnabledProvidersForRecommendation()
@@ -981,7 +982,7 @@ export const useTaskStore = defineStore('tasks', () => {
     async function submitInput(
         projectId: number,
         sequence: number,
-        input: any
+        input: unknown
     ): Promise<{ success: boolean; error?: string }> {
         // Validation check if task exists
         const task = tasks.value.find(
@@ -1160,7 +1161,9 @@ export const useTaskStore = defineStore('tasks', () => {
             if (api?.taskExecution) {
                 await api.taskExecution.stop(projectId, sequence).catch(() => {});
             }
-        } catch {}
+        } catch {
+            // ignore
+        }
 
         const updatedTask = tasks.value.find(
             (t) => t.projectId === projectId && t.projectSequence === sequence
@@ -1628,7 +1631,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 }
             }
 
-            console.debug('[TaskStore] Starting auto review for task:', projectId, sequence);
+            // console.debug('[TaskStore] Starting auto review for task:', projectId, sequence);
 
             // Build payload and serialize to ensure it's cloneable (remove Vue reactivity)
             const payload = {
@@ -1705,11 +1708,11 @@ export const useTaskStore = defineStore('tasks', () => {
             'taskExecution:completed',
             (data: any) => {
                 const { projectId, projectSequence, result, hasUnreadResult } = data;
-                console.debug('[TaskStore] Task execution completed:', {
+                /* console.debug('[TaskStore] Task execution completed:', {
                     projectId,
                     projectSequence,
                     hasUnreadResult,
-                });
+                }); */
 
                 const index = tasks.value.findIndex(
                     (t) => t.projectId === projectId && t.projectSequence === projectSequence
@@ -1918,19 +1921,22 @@ export const useTaskStore = defineStore('tasks', () => {
                         executionProgress.value.set(taskKey, {
                             ...existing,
                             progress:
-                                (data as any).percentage || data.progress || existing.progress,
+                                (data as Record<string, any>).percentage ||
+                                data.progress ||
+                                existing.progress,
                             phase: data.phase || existing.phase,
                             content: newContent,
-                            tokensUsed: (data as any).tokensUsed,
-                            cost: (data as any).cost,
+                            tokensUsed: (data as Record<string, any>).tokensUsed,
+                            cost: (data as Record<string, any>).cost,
                         });
                     } else {
                         executionProgress.value.set(taskKey, {
-                            progress: (data as any).percentage || data.progress || 0,
+                            progress:
+                                (data as Record<string, any>).percentage || data.progress || 0,
                             phase: data.phase || 'running',
                             content: data.content || data.delta || '',
-                            tokensUsed: (data as any).tokensUsed,
-                            cost: (data as any).cost,
+                            tokensUsed: (data as Record<string, any>).tokensUsed,
+                            cost: (data as Record<string, any>).cost,
                         });
                     }
                     // Trigger shallow update if needed, but Map.set should be reactive for watchers of the item or deep watchers.
@@ -1948,8 +1954,8 @@ export const useTaskStore = defineStore('tasks', () => {
                     result: any;
                     hasUnreadResult?: boolean;
                 }) => {
-                    console.debug('[TaskStore] Execution completed handler CALLED:', data);
-                    console.debug('[TaskStore] Execution completed:', data);
+                    // console.debug('[TaskStore] Execution completed handler CALLED:', data);
+                    // console.debug('[TaskStore] Execution completed:', data);
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -1981,7 +1987,7 @@ export const useTaskStore = defineStore('tasks', () => {
                               tokens?: number;
                               duration?: number;
                               provider?: string;
-                              aiResult?: any;
+                              aiResult?: Record<string, any>;
                           }
                         | undefined;
                     const index = tasks.value.findIndex(
@@ -1994,9 +2000,10 @@ export const useTaskStore = defineStore('tasks', () => {
                         if (!currentTaskInStore) return;
 
                         const existingExecution =
-                            (currentTaskInStore as any).executionResult &&
-                            typeof (currentTaskInStore as any).executionResult === 'object'
-                                ? { ...(currentTaskInStore as any).executionResult }
+                            (currentTaskInStore as Record<string, any>).executionResult &&
+                            typeof (currentTaskInStore as Record<string, any>).executionResult ===
+                                'object'
+                                ? { ...(currentTaskInStore as Record<string, any>).executionResult }
                                 : {};
                         const normalizedAiResult = result?.aiResult
                             ? normalizeAiResult(result.aiResult)
@@ -2067,7 +2074,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // Execution failed
             const unsubscribeFailed = api.taskExecution.onFailed(
                 (data: { projectId: number; projectSequence: number; error: string }) => {
-                    console.debug('[TaskStore] Execution failed:', data);
+                    /* console.debug('[TaskStore] Execution failed:', data); */
                     const task = tasks.value.find(
                         (t) =>
                             t.projectId === data.projectId &&
@@ -2356,11 +2363,12 @@ export const useTaskStore = defineStore('tasks', () => {
                             ...currentTaskInStore,
                             status: data.passed
                                 ? 'done'
-                                : (currentTaskInStore as any).autoReview
+                                : (currentTaskInStore as Record<string, any>).autoReview
                                   ? 'failed'
                                   : 'in_review',
                             executionResult: {
-                                ...((currentTaskInStore as any).executionResult || {}),
+                                ...((currentTaskInStore as Record<string, any>).executionResult ||
+                                    {}),
                                 aiReviewResult: data.result,
                             },
                         } as Task;
@@ -2424,30 +2432,31 @@ export const useTaskStore = defineStore('tasks', () => {
         // Auto-execution trigger for dependent tasks and time-based triggers
         const unsubscribeTriggerAutoExecution = api.events.on(
             'task:triggerAutoExecution',
-            async (data: any) => {
-                console.log('[TaskStore] Auto-execution triggered with data:', data);
+            async (data: unknown) => {
+                const payload = data as Record<string, any>;
+                console.log('[TaskStore] Auto-execution triggered with data:', payload);
 
                 let taskToExecute: Task | undefined;
                 let triggerChain: string[] | undefined;
 
-                if (data.projectId && data.projectSequence) {
+                if (payload.projectId && payload.projectSequence) {
                     // Composite Key support
                     taskToExecute = tasks.value.find(
                         (t) =>
-                            t.projectId === data.projectId &&
-                            t.projectSequence === data.projectSequence
+                            t.projectId === payload.projectId &&
+                            t.projectSequence === payload.projectSequence
                     );
-                    triggerChain = data.triggerChain;
+                    triggerChain = payload.triggerChain;
                 } else {
                     console.error(
                         '[TaskStore] Invalid auto-execution trigger data (missing projectId/projectSequence):',
-                        data
+                        payload
                     );
                     return;
                 }
 
                 if (!taskToExecute) {
-                    console.error(`[TaskStore] Task not found for auto-execution trigger`, data);
+                    console.error(`[TaskStore] Task not found for auto-execution trigger`, payload);
                     return;
                 }
 
@@ -2529,7 +2538,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     : [];
                 const normalizedRecommendedProviders = Array.isArray(taskPlan.recommendedProviders)
                     ? taskPlan.recommendedProviders
-                          .map((p: any) =>
+                          .map((p: string | { provider?: string; id?: string }) =>
                               typeof p === 'string'
                                   ? p
                                   : typeof p?.provider === 'string'
@@ -2564,12 +2573,10 @@ export const useTaskStore = defineStore('tasks', () => {
                     status: 'todo',
                     priority: taskPlan.priority,
                     executionType: 'serial',
-                    aiProvider:
-                        ((taskPlan as any).aiProvider as any) ||
-                        ((taskPlan as any).suggestedAIProvider as any) ||
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (normalizedRecommendedProviders[0] as any) ||
-                        null,
+                    aiProvider: ((taskPlan as Record<string, any>).aiProvider ||
+                        (taskPlan as Record<string, any>).suggestedAIProvider ||
+                        normalizedRecommendedProviders[0] ||
+                        null) as AIProvider | null,
                     order: taskPlan.executionOrder,
                     tags: normalizedTags,
                     estimatedMinutes: taskPlan.estimatedMinutes,
@@ -2582,7 +2589,7 @@ export const useTaskStore = defineStore('tasks', () => {
                     requiredMCPs: normalizedRequiredMCPs,
 
                     // 결과물 형식
-                    outputFormat: taskPlan.expectedOutputFormat as any,
+                    outputFormat: taskPlan.expectedOutputFormat as TaskOutputFormat,
                     codeLanguage: taskPlan.codeLanguage,
 
                     // 의존성 트리거 설정
@@ -2603,13 +2610,17 @@ export const useTaskStore = defineStore('tasks', () => {
                 );
 
                 // IPC 반환이 Task 객체인 경우와 {success, task} 래퍼인 경우 모두 지원
-                const createdTask = (result as any).task ? (result as any).task : result;
+                const createdTask = (result as Record<string, any>).task
+                    ? (result as Record<string, any>).task
+                    : result;
                 const successFlag =
-                    (result as any).success === undefined ? true : Boolean((result as any).success);
+                    (result as Record<string, any>).success === undefined
+                        ? true
+                        : Boolean((result as Record<string, any>).success);
 
                 if (!successFlag || !createdTask) {
                     throw new Error(
-                        ((result as any).error as string | undefined) ||
+                        ((result as Record<string, any>).error as string | undefined) ||
                             `Failed to create task: ${taskPlan.title}`
                     );
                 }
@@ -2698,7 +2709,7 @@ export const useTaskStore = defineStore('tasks', () => {
                 recommendedProviders: providerList,
                 requiredMCPs,
                 aiOptimizedPrompt: plan.aiOptimizedPrompt || prompt,
-                aiProvider: (providerForTask as any) ?? null,
+                aiProvider: (providerForTask as AIProvider) ?? null,
                 outputFormat: plan.expectedOutputFormat || taskDraft.outputFormat,
                 codeLanguage: plan.codeLanguage || taskDraft.codeLanguage,
             };

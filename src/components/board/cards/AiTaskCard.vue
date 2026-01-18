@@ -636,8 +636,8 @@ function hexToRgba(hex: string, alpha: number) {
                     'border-blue-400 dark:border-blue-600':
                         task.status === 'in_progress' && !task.isPaused,
                 }"
-                @click.stop="emit('previewStream', task)"
                 :title="t('task.tooltip.click_expand')"
+                @click.stop="emit('previewStream', task)"
             >
                 <!-- Header with live indicator -->
                 <div class="flex items-center justify-between mb-1.5">
@@ -931,8 +931,8 @@ function hexToRgba(hex: string, alpha: number) {
                         <button
                             v-if="!task.triggerConfig?.dependsOn"
                             class="px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
-                            @click="handleRetry"
                             title="다시 실행"
+                            @click="handleRetry"
                         >
                             {{ t('task.retry') }}
                         </button>

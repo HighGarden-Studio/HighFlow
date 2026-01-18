@@ -223,7 +223,7 @@ return {
             >
                 <h2 class="text-xl font-bold text-white mb-4">Create New Task</h2>
 
-                <form @submit.prevent="handleCreateTask" class="space-y-4">
+                <form class="space-y-4" @submit.prevent="handleCreateTask">
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">
                             Task Title
@@ -263,7 +263,6 @@ return {
                                 ] as TaskPriority[]"
                                 :key="priority"
                                 type="button"
-                                @click="newTaskPriority = priority"
                                 :class="[
                                     'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
                                     newTaskPriority === priority
@@ -276,6 +275,7 @@ return {
                                                 : 'bg-red-500/20 text-red-400 ring-1 ring-red-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskPriority = priority"
                             >
                                 {{ priority }}
                             </button>
@@ -290,49 +290,49 @@ return {
                         <div class="flex gap-2">
                             <button
                                 type="button"
-                                @click="newTaskType = 'ai'"
                                 :class="[
                                     'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                     newTaskType === 'ai'
                                         ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskType = 'ai'"
                             >
                                 🤖 AI Task
                             </button>
                             <button
                                 type="button"
-                                @click="newTaskType = 'script'"
                                 :class="[
                                     'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                     newTaskType === 'script'
                                         ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskType = 'script'"
                             >
                                 ⚡ Script
                             </button>
                             <button
                                 type="button"
-                                @click="newTaskType = 'input'"
                                 :class="[
                                     'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                     newTaskType === 'input'
                                         ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskType = 'input'"
                             >
                                 ⌨️ Input
                             </button>
                             <button
                                 type="button"
-                                @click="newTaskType = 'output'"
                                 :class="[
                                     'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                     newTaskType === 'output'
                                         ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskType = 'output'"
                             >
                                 💾 Output
                             </button>
@@ -349,13 +349,13 @@ return {
                                 v-for="lang in ['javascript', 'typescript', 'python']"
                                 :key="lang"
                                 type="button"
-                                @click="newTaskScriptLanguage = lang as any"
                                 :class="[
                                     'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize',
                                     newTaskScriptLanguage === lang
                                         ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500'
                                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
                                 ]"
+                                @click="newTaskScriptLanguage = lang as any"
                             >
                                 {{
                                     lang === 'javascript'
@@ -371,8 +371,8 @@ return {
                     <div class="flex gap-3 pt-2">
                         <button
                             type="button"
-                            @click="emit('close')"
                             class="flex-1 px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                            @click="emit('close')"
                         >
                             Cancel
                         </button>

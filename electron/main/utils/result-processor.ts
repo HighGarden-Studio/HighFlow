@@ -54,7 +54,7 @@ export function filterCodeBlocks(content: string): string {
  */
 export function extractSummary(content: string, maxLength = 200): string {
     // Remove markdown headers
-    let text = content.replace(/^#+\s+/gm, '');
+    const text = content.replace(/^#+\s+/gm, '');
 
     // Get first paragraph
     const paragraphs = text.split('\n\n');

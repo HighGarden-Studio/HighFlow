@@ -7,13 +7,13 @@
                 <button
                     v-for="dest in destinations"
                     :key="dest.value"
-                    @click="updateDestination(dest.value)"
                     class="px-3 py-2 text-sm rounded border transition-colors flex items-center gap-2"
                     :class="[
                         config.destination === dest.value
                             ? 'bg-blue-600/20 border-blue-500 text-blue-400'
                             : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600',
                     ]"
+                    @click="updateDestination(dest.value)"
                 >
                     <component :is="dest.icon" class="w-4 h-4" />
                     {{ dest.label }}
@@ -26,8 +26,8 @@
             <label class="text-xs font-semibold text-gray-400 uppercase">Aggregation</label>
             <select
                 :value="config.aggregation"
-                @change="(e) => updateAggregation((e.target as HTMLSelectElement).value)"
                 class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                @change="(e) => updateAggregation((e.target as HTMLSelectElement).value)"
             >
                 <option value="single">Single (First Result)</option>
                 <option value="concat">Concatenate All Dependencies</option>
@@ -54,6 +54,8 @@
                     <input
                         type="text"
                         :value="config.localFile?.pathTemplate"
+                        placeholder="e.g., reports/{{date}}_{{task.title}}.md"
+                        class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                         @input="
                             (e) =>
                                 updateLocalFile(
@@ -61,14 +63,12 @@
                                     (e.target as HTMLInputElement).value
                                 )
                         "
-                        placeholder="e.g., reports/{{date}}_{{task.title}}.md"
-                        class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                     />
                     <button
-                        @click="selectOutputFolder"
                         type="button"
                         class="px-3 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded text-gray-300 transition-colors"
                         title="폴더 선택"
+                        @click="selectOutputFolder"
                     >
                         <FolderOpen class="w-4 h-4" />
                     </button>
@@ -83,22 +83,23 @@
 
             <div class="flex items-center gap-2">
                 <input
-                    type="checkbox"
                     id="overwrite"
+                    type="checkbox"
                     :checked="config.localFile?.overwrite"
+                    class="rounded bg-gray-700 border-gray-600"
                     @change="
                         (e) => updateLocalFile('overwrite', (e.target as HTMLInputElement).checked)
                     "
-                    class="rounded bg-gray-700 border-gray-600"
                 />
                 <label for="overwrite" class="text-sm text-gray-300">Overwrite if exists</label>
             </div>
 
             <div class="flex items-center gap-2">
                 <input
-                    type="checkbox"
                     id="accumulateResults"
+                    type="checkbox"
                     :checked="config.localFile?.accumulateResults"
+                    class="rounded bg-gray-700 border-gray-600"
                     @change="
                         (e) =>
                             updateLocalFile(
@@ -106,7 +107,6 @@
                                 (e.target as HTMLInputElement).checked
                             )
                     "
-                    class="rounded bg-gray-700 border-gray-600"
                 />
                 <label for="accumulateResults" class="text-sm text-gray-300">
                     Accumulate previous results
@@ -122,9 +122,9 @@
                 <input
                     type="text"
                     :value="config.slack?.channelId"
-                    @input="(e) => updateSlack('channelId', (e.target as HTMLInputElement).value)"
                     placeholder="C12345678"
                     class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    @input="(e) => updateSlack('channelId', (e.target as HTMLInputElement).value)"
                 />
             </div>
             <div class="form-group">
@@ -134,9 +134,9 @@
                 <input
                     type="text"
                     :value="config.slack?.threadTs"
-                    @input="(e) => updateSlack('threadTs', (e.target as HTMLInputElement).value)"
                     placeholder="1234567890.123456"
                     class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    @input="(e) => updateSlack('threadTs', (e.target as HTMLInputElement).value)"
                 />
             </div>
         </div>
@@ -151,12 +151,12 @@
                 <input
                     type="text"
                     :value="config.googleDocs?.documentName"
+                    placeholder="New Document Title"
+                    class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                     @input="
                         (e) =>
                             updateGoogleDocs('documentName', (e.target as HTMLInputElement).value)
                     "
-                    placeholder="New Document Title"
-                    class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                 />
             </div>
             <div class="form-group">
@@ -166,11 +166,11 @@
                 <input
                     type="text"
                     :value="config.googleDocs?.folderId"
+                    placeholder="Folder ID"
+                    class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                     @input="
                         (e) => updateGoogleDocs('folderId', (e.target as HTMLInputElement).value)
                     "
-                    placeholder="Folder ID"
-                    class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                 />
             </div>
         </div>

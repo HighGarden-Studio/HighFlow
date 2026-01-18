@@ -131,12 +131,12 @@ async function handlePurchase(itemId: string) {
                 Try adjusting your search or filters to find what you're looking for.
             </p>
             <button
+                class="mt-4 px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 @click="
                     store.searchQuery = '';
                     store.selectedCategory = null;
                     store.selectedType = null;
                 "
-                class="mt-4 px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
             >
                 Clear all filters
             </button>

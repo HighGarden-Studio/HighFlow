@@ -2514,8 +2514,8 @@ onMounted(() => {
                                 <!-- Fullscreen Toggle -->
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                                    @click="toggleFullscreen"
                                     :title="t('result.preview.full_screen')"
+                                    @click="toggleFullscreen"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2543,8 +2543,8 @@ onMounted(() => {
                                 <!-- Version History -->
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                                    @click="showVersionHistory = !showVersionHistory"
                                     :title="t('result.preview.version_history')"
+                                    @click="showVersionHistory = !showVersionHistory"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2564,8 +2564,8 @@ onMounted(() => {
                                 <!-- Close -->
                                 <button
                                     class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                                    @click="handleClose"
                                     :title="t('result.preview.close')"
+                                    @click="handleClose"
                                 >
                                     <svg
                                         class="w-5 h-5 text-gray-600 dark:text-gray-400"
@@ -2599,8 +2599,8 @@ onMounted(() => {
                                 }}</span>
                                 <button
                                     class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                    @click="isTreeView = !isTreeView"
                                     :title="t('result.preview.toggle_view')"
+                                    @click="isTreeView = !isTreeView"
                                 >
                                     <svg
                                         v-if="isTreeView"
@@ -2652,8 +2652,8 @@ onMounted(() => {
                                                 {{ task }}
                                             </div>
                                             <button
-                                                @click="createTaskFromSuggestion(task)"
                                                 class="w-full px-2 py-1 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-1 opacity-80 group-hover:opacity-100"
+                                                @click="createTaskFromSuggestion(task)"
                                             >
                                                 <svg
                                                     class="w-3 h-3"
@@ -2719,8 +2719,8 @@ onMounted(() => {
                                                 {{ resultLabel }}
                                             </div>
                                             <div
-                                                class="text-xs opacity-70 truncate"
                                                 v-if="resultSubLabel"
+                                                class="text-xs opacity-70 truncate"
                                             >
                                                 {{ resultSubLabel }}
                                             </div>
@@ -2786,8 +2786,8 @@ onMounted(() => {
                                                 {{ resultLabel }}
                                             </div>
                                             <div
-                                                class="text-xs opacity-70 truncate"
                                                 v-if="resultSubLabel"
+                                                class="text-xs opacity-70 truncate"
                                             >
                                                 {{ resultSubLabel }}
                                             </div>
@@ -2809,8 +2809,8 @@ onMounted(() => {
                                                 ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
                                                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                         "
-                                        @click="selectedFile = file"
                                         :title="file.path"
+                                        @click="selectedFile = file"
                                     >
                                         <!-- File Icon based on extension -->
                                         <svg
@@ -2855,31 +2855,30 @@ onMounted(() => {
                                         class="flex-shrink-0 flex items-center border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
                                     >
                                         <button
-                                            @click="viewMode = 'preview'"
                                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
                                             :class="[
                                                 viewMode === 'preview'
                                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
+                                            @click="viewMode = 'preview'"
                                         >
                                             {{ t('result.preview.result_preview') }}
                                         </button>
                                         <button
                                             v-if="outputFormat === 'html'"
-                                            @click="viewMode = 'split'"
                                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
                                             :class="[
                                                 viewMode === 'split'
                                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
+                                            @click="viewMode = 'split'"
                                         >
                                             {{ t('result.preview.split_view') }}
                                         </button>
                                         <button
                                             v-if="scriptLogs.length > 0"
-                                            @click="viewMode = 'log'"
                                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
                                             :class="[
                                                 viewMode === 'log'
@@ -2887,6 +2886,7 @@ onMounted(() => {
                                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
                                             ]"
                                             :title="t('result.preview.view_script_logs')"
+                                            @click="viewMode = 'log'"
                                         >
                                             <div class="flex items-center gap-2">
                                                 <svg
@@ -2910,7 +2910,6 @@ onMounted(() => {
                                         </button>
                                         <!-- Diff View Button -->
                                         <button
-                                            @click="viewMode = 'diff'"
                                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
                                             :class="[
                                                 viewMode === 'diff'
@@ -2926,6 +2925,7 @@ onMounted(() => {
                                                     ? t('result.preview.compare_previous_result')
                                                     : t('result.preview.no_previous_result_compare')
                                             "
+                                            @click="viewMode = 'diff'"
                                         >
                                             <div class="flex items-center gap-2">
                                                 <svg
@@ -3023,8 +3023,8 @@ onMounted(() => {
 
                                     <!-- Preview Content -->
                                     <div
-                                        class="flex-1 flex flex-col overflow-hidden"
                                         v-if="viewMode === 'preview' || viewMode === 'split'"
+                                        class="flex-1 flex flex-col overflow-hidden"
                                     >
                                         <!-- AI Response Header (Visible when file is selected) -->
                                         <div
@@ -3283,8 +3283,8 @@ onMounted(() => {
 
                                                         <div
                                                             class="prose dark:prose-invert max-w-none"
-                                                            v-html="markdownHtml"
                                                             @click="handleMarkdownClick"
+                                                            v-html="markdownHtml"
                                                         ></div>
                                                     </div>
 
@@ -3347,13 +3347,13 @@ onMounted(() => {
                                                         class="absolute bottom-4 right-6 z-10 flex gap-2"
                                                     >
                                                         <button
-                                                            @click="toggleAutoScroll"
                                                             class="px-2 py-1 text-xs rounded-full shadow-lg border font-medium transition-colors flex items-center gap-1 cursor-pointer hover:opacity-90 active:scale-95"
                                                             :class="
                                                                 isAutoScrollActive
                                                                     ? 'bg-blue-100 dark:bg-blue-900/80 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                                                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'
                                                             "
+                                                            @click="toggleAutoScroll"
                                                         >
                                                             <span
                                                                 class="w-1.5 h-1.5 rounded-full"
@@ -3415,14 +3415,14 @@ onMounted(() => {
                                                                     class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-0.5"
                                                                 >
                                                                     <button
-                                                                        @click="
-                                                                            drawerTab = 'preview'
-                                                                        "
                                                                         class="px-3 py-1 text-xs font-medium rounded-md transition-all"
                                                                         :class="
                                                                             drawerTab === 'preview'
                                                                                 ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
                                                                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                                                        "
+                                                                        @click="
+                                                                            drawerTab = 'preview'
                                                                         "
                                                                     >
                                                                         {{
@@ -3432,13 +3432,13 @@ onMounted(() => {
                                                                         }}
                                                                     </button>
                                                                     <button
-                                                                        @click="drawerTab = 'code'"
                                                                         class="px-3 py-1 text-xs font-medium rounded-md transition-all"
                                                                         :class="
                                                                             drawerTab === 'code'
                                                                                 ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
                                                                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                                         "
+                                                                        @click="drawerTab = 'code'"
                                                                     >
                                                                         {{
                                                                             t('result.preview.code')
@@ -3448,8 +3448,8 @@ onMounted(() => {
                                                             </div>
 
                                                             <button
-                                                                @click="selectedCodeBlock = null"
                                                                 class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                                                @click="selectedCodeBlock = null"
                                                             >
                                                                 <svg
                                                                     class="w-4 h-4"
@@ -3496,8 +3496,8 @@ onMounted(() => {
                                                                 class="w-full h-full bg-white dark:bg-gray-800 p-4 overflow-auto flex items-center justify-center"
                                                             >
                                                                 <div
-                                                                    v-html="drawerMermaidSvg"
                                                                     class="w-full h-full flex items-center justify-center p-4 bg-white dark:bg-gray-800"
+                                                                    v-html="drawerMermaidSvg"
                                                                 ></div>
                                                             </div>
 
@@ -3706,13 +3706,13 @@ onMounted(() => {
                                                             t('result.preview.preview')
                                                         }}</span>
                                                         <button
-                                                            @click="toggleMaximize"
                                                             class="text-blue-500 hover:text-blue-400 text-xs px-2 py-1 rounded hover:bg-white/5 transition-colors"
                                                             :title="
                                                                 t(
                                                                     'result.preview.toggle_full_width'
                                                                 )
                                                             "
+                                                            @click="toggleMaximize"
                                                         >
                                                             {{
                                                                 isPreviewMaximized
@@ -3728,8 +3728,8 @@ onMounted(() => {
                                                     >
                                                         <div
                                                             v-if="renderedMermaid"
-                                                            v-html="renderedMermaid"
                                                             class="mermaid-container w-full h-full flex items-center justify-center p-4 bg-white/5 rounded"
+                                                            v-html="renderedMermaid"
                                                         />
                                                         <div
                                                             v-else
@@ -3752,8 +3752,8 @@ onMounted(() => {
                                                     class="flex-1 bg-gray-800 rounded-lg p-6 flex items-center justify-center overflow-auto"
                                                 >
                                                     <div
-                                                        v-html="content"
                                                         class="max-w-full max-h-full svg-container"
+                                                        v-html="content"
                                                     />
                                                 </div>
                                                 <details class="mt-4">
@@ -4343,8 +4343,8 @@ onMounted(() => {
                                 >
                                 <span class="truncate max-w-[150px]">{{ item.comment }}</span>
                                 <button
-                                    @click="removeComment(item.id)"
                                     class="ml-1 text-blue-500 hover:text-blue-700 dark:hover:text-blue-200"
+                                    @click="removeComment(item.id)"
                                 >
                                     ×
                                 </button>
@@ -4426,15 +4426,15 @@ onMounted(() => {
 
                 <div class="flex justify-end gap-2 mt-4">
                     <button
-                        @click="closeCommentModal"
                         class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                        @click="closeCommentModal"
                     >
                         Cancel
                     </button>
                     <button
-                        @click="saveComment"
                         class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium disabled:opacity-50"
                         :disabled="!newCommentText.trim()"
+                        @click="saveComment"
                     >
                         Add Comment
                     </button>

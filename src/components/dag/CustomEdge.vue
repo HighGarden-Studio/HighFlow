@@ -90,13 +90,13 @@ function handleRemove(event: MouseEvent) {
                 >
                     <IconRenderer :emoji="data.formatInfo.icon" class="w-3.5 h-3.5" />
                     <span class="label-text">{{ data.formatInfo.label }}</span>
-                    <button class="delete-button" @click="handleRemove" title="의존성 제거">
+                    <button class="delete-button" title="의존성 제거" @click="handleRemove">
                         ×
                     </button>
                 </div>
                 <div v-else class="edge-label">
                     <span class="label-text">{{ label || 'Output' }}</span>
-                    <button class="delete-button" @click="handleRemove" title="의존성 제거">
+                    <button class="delete-button" title="의존성 제거" @click="handleRemove">
                         ×
                     </button>
                 </div>

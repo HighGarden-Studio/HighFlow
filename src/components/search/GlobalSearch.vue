@@ -363,13 +363,13 @@ onUnmounted(() => {
                         <button
                             v-for="filter in filters"
                             :key="filter.id"
-                            @click="activeFilter = filter.id"
                             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors"
                             :class="
                                 activeFilter === filter.id
                                     ? 'bg-blue-500/20 text-blue-400'
                                     : 'text-gray-400 hover:bg-gray-700 hover:text-gray-300'
                             "
+                            @click="activeFilter = filter.id"
                         >
                             <IconRenderer :emoji="filter.icon" class="w-4 h-4" />
                             <span>{{ filter.label }}</span>
@@ -439,8 +439,8 @@ onUnmounted(() => {
                                     >{{ t('global_search.recent') }}</span
                                 >
                                 <button
-                                    @click="clearRecentSearches"
                                     class="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+                                    @click="clearRecentSearches"
                                 >
                                     {{ t('global_search.clear_recent') }}
                                 </button>
@@ -448,11 +448,11 @@ onUnmounted(() => {
                             <div
                                 v-for="(item, index) in displayItems"
                                 :key="item.id"
-                                @click="handleSelect(item)"
                                 class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors"
                                 :class="
                                     index === selectedIndex ? 'bg-gray-700' : 'hover:bg-gray-700/50'
                                 "
+                                @click="handleSelect(item)"
                             >
                                 <span class="text-gray-400">{{ item.icon }}</span>
                                 <span class="text-gray-300">{{ item.title }}</span>
@@ -502,8 +502,8 @@ onUnmounted(() => {
                                 <div
                                     v-for="result in groupedResults.project"
                                     :key="`project-${result.entityId}`"
-                                    @click="navigateToResult(result)"
                                     class="flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-gray-700/50"
+                                    @click="navigateToResult(result)"
                                 >
                                     <span class="text-xl flex-shrink-0">📁</span>
                                     <div class="flex-1 min-w-0">
@@ -530,8 +530,8 @@ onUnmounted(() => {
                                 <div
                                     v-for="result in groupedResults.task"
                                     :key="`task-${result.entityId}`"
-                                    @click="navigateToResult(result)"
                                     class="flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-gray-700/50"
+                                    @click="navigateToResult(result)"
                                 >
                                     <span class="text-xl flex-shrink-0">✅</span>
                                     <div class="flex-1 min-w-0">
@@ -578,8 +578,8 @@ onUnmounted(() => {
                                 <div
                                     v-for="result in groupedResults.skill"
                                     :key="`skill-${result.entityId}`"
-                                    @click="navigateToResult(result)"
                                     class="flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-gray-700/50"
+                                    @click="navigateToResult(result)"
                                 >
                                     <span class="text-xl flex-shrink-0">⚡</span>
                                     <div class="flex-1 min-w-0">
@@ -606,8 +606,8 @@ onUnmounted(() => {
                                 <div
                                     v-for="result in groupedResults.user"
                                     :key="`user-${result.entityId}`"
-                                    @click="navigateToResult(result)"
                                     class="flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-gray-700/50"
+                                    @click="navigateToResult(result)"
                                 >
                                     <span class="text-xl flex-shrink-0">👤</span>
                                     <div class="flex-1 min-w-0">

@@ -19,14 +19,14 @@ const router = useRouter();
       </p>
       <div class="flex gap-4 justify-center">
         <button
-          @click="router.back()"
           class="px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-800 transition-colors"
+          @click="router.back()"
         >
           Go Back
         </button>
         <button
-          @click="router.push('/projects')"
           class="px-4 py-2 bg-blue-600 rounded-lg text-white font-medium hover:bg-blue-700 transition-colors"
+          @click="router.push('/projects')"
         >
           Go to Projects
         </button>

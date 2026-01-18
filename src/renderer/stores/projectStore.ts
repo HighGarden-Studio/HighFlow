@@ -164,6 +164,8 @@ export const useProjectStore = defineStore('projects', () => {
             aiGuidelines: string;
             aiProvider: string | null;
             aiModel: string | null;
+            emoji: string | null;
+            goal: string | null;
         }>
     ): Promise<Project | null> {
         loading.value = true;

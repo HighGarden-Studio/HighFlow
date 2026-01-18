@@ -169,6 +169,7 @@
         "electron-rebuild": "^3.2.9",
         "electron-updater": "^6.6.2",
         "eslint": "^8.57.0",
+        "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-vue": "^9.22.0",
         "jsdom": "^27.4.0",
         "lucide-vue-next": "^0.344.0",

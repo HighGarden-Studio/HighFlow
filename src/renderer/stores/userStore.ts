@@ -70,7 +70,7 @@ export const useUserStore = defineStore('user', () => {
                 return false;
             }
         } catch (err: any) {
-            error.value = err.message || 'Login failed';
+            error.value = err?.message || 'Login failed';
             console.error('❌ Login error:', err);
             return false;
         } finally {
@@ -86,11 +86,11 @@ export const useUserStore = defineStore('user', () => {
         error.value = null;
 
         try {
-            const result = await window.electron.auth.logout();
+            await window.electron.auth.logout();
             clearUser();
             console.debug('✅ User logged out');
         } catch (err: any) {
-            error.value = err.message || 'Logout failed';
+            error.value = err?.message || 'Logout failed';
             console.error('❌ Logout error:', err);
         } finally {
             isLoading.value = false;
@@ -121,7 +121,7 @@ export const useUserStore = defineStore('user', () => {
                 return false;
             }
         } catch (err: any) {
-            error.value = err.message || 'Failed to refresh user';
+            error.value = err?.message || 'Failed to refresh user';
             console.error('❌ Refresh error:', err);
             return false;
         } finally {

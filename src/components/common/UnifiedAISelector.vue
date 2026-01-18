@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
 import AIProviderSelector from './AIProviderSelector.vue';
 import IconRenderer from './IconRenderer.vue';
@@ -104,8 +104,8 @@ function handleLocalAgentSelect(agentId: string) {
                     <input
                         type="radio"
                         :checked="mode === 'api'"
-                        @change="handleModeChange('api')"
                         class="sr-only"
+                        @change="handleModeChange('api')"
                     />
                     <div
                         class="flex-shrink-0 w-10 h-10 bg-blue-100 dark:bg-blue-800 rounded-lg flex items-center justify-center"
@@ -147,9 +147,9 @@ function handleLocalAgentSelect(agentId: string) {
                     <input
                         type="radio"
                         :checked="mode === 'local'"
-                        @change="handleModeChange('local')"
                         :disabled="!hasInstalledLocalAgent || !isDevProject"
                         class="sr-only"
+                        @change="handleModeChange('local')"
                     />
                     <div
                         class="flex-shrink-0 w-10 h-10 bg-green-100 dark:bg-green-800 rounded-lg flex items-center justify-center"
@@ -219,10 +219,10 @@ function handleLocalAgentSelect(agentId: string) {
                         <input
                             type="radio"
                             :checked="localAgent === agent.id"
-                            @change="handleLocalAgentSelect(agent.id)"
                             :value="agent.id"
                             :disabled="!agent.installed"
                             class="sr-only"
+                            @change="handleLocalAgentSelect(agent.id)"
                         />
                         <IconRenderer :emoji="agent.icon" class="w-5 h-5" />
                         <div class="flex-1">
@@ -256,9 +256,9 @@ function handleLocalAgentSelect(agentId: string) {
             <AIProviderSelector
                 :provider="provider"
                 :model="model"
+                :label="label"
                 @update:provider="$emit('update:provider', $event)"
                 @update:model="$emit('update:model', $event)"
-                :label="label"
             />
         </div>
     </div>

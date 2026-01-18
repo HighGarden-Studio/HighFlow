@@ -212,7 +212,7 @@ const handleSubmit = () => {
             Invalid Input Configuration.
         </div>
 
-        <form v-else @submit.prevent="handleSubmit" class="space-y-6">
+        <form v-else class="space-y-6" @submit.prevent="handleSubmit">
             <!-- User Input Source -->
             <div v-if="config.sourceType === 'USER_INPUT' && config.userInput">
                 <div class="form-group">
@@ -240,10 +240,10 @@ const handleSubmit = () => {
                                 class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all"
                             >
                                 <input
+                                    v-model="formData.value"
                                     type="radio"
                                     :name="'option-' + task.projectSequence"
                                     :value="option"
-                                    v-model="formData.value"
                                     class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                                 />
                                 <span class="text-sm text-gray-700 dark:text-gray-300">{{
@@ -257,10 +257,10 @@ const handleSubmit = () => {
                                 class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all"
                             >
                                 <input
+                                    v-model="formData.selectedOptionType"
                                     type="radio"
                                     :name="'option-' + task.projectSequence"
                                     value="__custom__"
-                                    v-model="formData.selectedOptionType"
                                     class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                                 />
                                 <span class="text-sm text-gray-700 dark:text-gray-300"
@@ -295,8 +295,8 @@ const handleSubmit = () => {
                                 (formData.selectedOptionType === '__custom__' ||
                                     formData.value === '__custom__')
                             "
-                            type="text"
                             v-model="formData.customValue"
+                            type="text"
                             class="w-full px-4 py-2 mt-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                             placeholder="직접 입력하세요..."
                         />
@@ -305,8 +305,8 @@ const handleSubmit = () => {
                     <!-- Short Text Input (only if no options) -->
                     <input
                         v-else-if="config.userInput.mode === 'short'"
-                        type="text"
                         v-model="formData.value"
+                        type="text"
                         class="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                         :placeholder="config.userInput.placeholder || 'Enter text...'"
                     />
@@ -326,9 +326,9 @@ const handleSubmit = () => {
                         class="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
                     >
                         <input
-                            type="checkbox"
                             id="confirm-check"
                             v-model="formData.confirmed"
+                            type="checkbox"
                             class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                         />
                         <label
@@ -368,9 +368,9 @@ const handleSubmit = () => {
                             </span>
                             <button
                                 type="button"
-                                @click="removeFile(idx)"
                                 class="text-gray-400 hover:text-red-500 transition-colors p-1"
                                 title="Remove"
+                                @click="removeFile(idx)"
                             >
                                 <svg
                                     class="w-4 h-4"
@@ -392,8 +392,8 @@ const handleSubmit = () => {
                     <div class="flex gap-2">
                         <button
                             type="button"
-                            @click="triggerFileSelect"
                             class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-600 dark:text-gray-400 transition-all group"
+                            @click="triggerFileSelect"
                         >
                             <FolderOpen
                                 class="w-5 h-5 group-hover:text-blue-500 transition-colors"
@@ -404,16 +404,16 @@ const handleSubmit = () => {
                         </button>
 
                         <input
-                            type="file"
                             ref="fileInput"
+                            type="file"
                             multiple
                             class="hidden"
-                            @change="handleFileChange"
                             :accept="
                                 config.localFile?.acceptedExtensions
                                     ?.map((ext) => (ext.startsWith('.') ? ext : '.' + ext))
                                     .join(',')
                             "
+                            @change="handleFileChange"
                         />
                     </div>
 
@@ -448,8 +448,8 @@ const handleSubmit = () => {
             <div class="flex justify-end space-x-3 pt-2">
                 <button
                     type="button"
-                    @click="$emit('cancel')"
                     class="px-6 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                    @click="$emit('cancel')"
                 >
                     Cancel
                 </button>

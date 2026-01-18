@@ -461,24 +461,6 @@ async function handleAIWizardCreated(projectData: any) {
 // Lifecycle
 </script>
 
-<style scoped>
-@keyframes pulse-border {
-    0%,
-    100% {
-        border-color: rgba(234, 179, 8, 0.5);
-        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
-    }
-    50% {
-        border-color: rgba(234, 179, 8, 1);
-        box-shadow: 0 0 16px 2px rgba(234, 179, 8, 0.4);
-    }
-}
-
-.unread-results-pulse {
-    animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-</style>
-
 <template>
     <div class="flex-1 flex flex-col h-full bg-gray-900">
         <!-- Header -->
@@ -490,15 +472,15 @@ async function handleAIWizardCreated(projectData: any) {
                 </div>
                 <div class="flex items-center gap-2">
                     <button
-                        @click="showAIWizard = true"
                         class="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-500/20"
+                        @click="showAIWizard = true"
                     >
                         <span class="text-lg">✨</span>
                         {{ $t('project.create.button') }}
                     </button>
                     <button
-                        @click="triggerImport"
                         class="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        @click="triggerImport"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -518,8 +500,8 @@ async function handleAIWizardCreated(projectData: any) {
                         @change="handleImportProject"
                     />
                     <button
-                        @click="showCreateModal = true"
                         class="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        @click="showCreateModal = true"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -591,15 +573,15 @@ async function handleAIWizardCreated(projectData: any) {
                 <p class="text-gray-500 mb-4">{{ $t('project.list.empty_desc') }}</p>
                 <div class="flex items-center gap-3">
                     <button
-                        @click="showAIWizard = true"
                         class="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
+                        @click="showAIWizard = true"
                     >
                         <span>✨</span>
                         {{ $t('project.list.ai_start') }}
                     </button>
                     <button
-                        @click="showCreateModal = true"
                         class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        @click="showCreateModal = true"
                     >
                         {{ $t('project.create.empty') }}
                     </button>
@@ -611,11 +593,11 @@ async function handleAIWizardCreated(projectData: any) {
                 <div
                     v-for="project in projects"
                     :key="project.id"
-                    @click="openProject(project.id)"
                     class="bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-blue-500 cursor-pointer transition-all group"
                     :class="{
                         'unread-results-pulse': (taskSummaries[project.id]?.unreadResults || 0) > 0,
                     }"
+                    @click="openProject(project.id)"
                 >
                     <div class="flex items-center gap-4">
                         <!-- Project Icon & Info -->
@@ -820,9 +802,9 @@ async function handleAIWizardCreated(projectData: any) {
 
                             <!-- Project Info Button -->
                             <button
-                                @click="openProjectInfo(project, $event)"
                                 class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                 :title="$t('project.actions.info')"
+                                @click="openProjectInfo(project, $event)"
                             >
                                 <svg
                                     class="w-5 h-5"
@@ -839,13 +821,13 @@ async function handleAIWizardCreated(projectData: any) {
                                 </svg>
                             </button>
                             <button
-                                @click="handleDeleteProject(project, $event)"
                                 class="p-2 text-red-400 hover:text-white hover:bg-red-700/40 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                 :title="
                                     deletingProjectId === project.id
                                         ? $t('project.actions.deleting')
                                         : $t('project.actions.delete')
                                 "
+                                @click="handleDeleteProject(project, $event)"
                             >
                                 <svg
                                     v-if="deletingProjectId === project.id"
@@ -954,7 +936,7 @@ async function handleAIWizardCreated(projectData: any) {
                         {{ $t('project.modal.create_title') }}
                     </h2>
 
-                    <form @submit.prevent="handleCreateProject" class="space-y-4">
+                    <form class="space-y-4" @submit.prevent="handleCreateProject">
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">
                                 {{ $t('project.modal.name_label') }}
@@ -983,8 +965,8 @@ async function handleAIWizardCreated(projectData: any) {
                         <div class="flex gap-3 pt-2">
                             <button
                                 type="button"
-                                @click="showCreateModal = false"
                                 class="flex-1 px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                                @click="showCreateModal = false"
                             >
                                 Cancel
                             </button>
@@ -1100,3 +1082,21 @@ async function handleAIWizardCreated(projectData: any) {
         </Teleport>
     </div>
 </template>
+
+<style scoped>
+@keyframes pulse-border {
+    0%,
+    100% {
+        border-color: rgba(234, 179, 8, 0.5);
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+    }
+    50% {
+        border-color: rgba(234, 179, 8, 1);
+        box-shadow: 0 0 16px 2px rgba(234, 179, 8, 0.4);
+    }
+}
+
+.unread-results-pulse {
+    animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+</style>

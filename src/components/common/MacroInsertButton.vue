@@ -261,14 +261,14 @@ function closeDropdown() {
                         <p class="text-xs text-gray-500 dark:text-gray-400">
                             <span v-html="t('task.macro.tip')"></span>
                             <code
-                                class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 v-pre
+                                class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 >{{task.23}}</code
                             >
                             {{ t('common.or') }}
                             <code
-                                class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 v-pre
+                                class="bg-gray-200 dark:bg-gray-700 px-1 rounded"
                                 >{{prev.1}}</code
                             >
                         </p>

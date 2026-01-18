@@ -53,8 +53,8 @@ const milestoneTaskCounts = computed(() => {
                             </p>
                         </div>
                         <button
-                            @click="emit('cancel')"
                             class="ml-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            @click="emit('cancel')"
                         >
                             <svg
                                 class="w-6 h-6"
@@ -77,24 +77,24 @@ const milestoneTaskCounts = computed(() => {
                 <div class="px-6 border-b border-gray-200 dark:border-gray-700">
                     <div class="flex gap-6">
                         <button
-                            @click="activeTab = 'plan'"
                             class="py-3 text-sm font-medium border-b-2 transition-colors"
                             :class="
                                 activeTab === 'plan'
                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                             "
+                            @click="activeTab = 'plan'"
                         >
                             실행 계획
                         </button>
                         <button
-                            @click="activeTab = 'interview'"
                             class="py-3 text-sm font-medium border-b-2 transition-colors"
                             :class="
                                 activeTab === 'interview'
                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                             "
+                            @click="activeTab = 'interview'"
                         >
                             인터뷰 원본
                         </button>
@@ -293,15 +293,15 @@ const milestoneTaskCounts = computed(() => {
                         </p>
                         <div class="flex gap-3">
                             <button
-                                @click="emit('cancel')"
                                 class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                                @click="emit('cancel')"
                             >
                                 취소
                             </button>
                             <button
-                                @click="emit('create')"
                                 :disabled="loading"
                                 class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                @click="emit('create')"
                             >
                                 <svg
                                     v-if="loading"

@@ -41,12 +41,6 @@ interface ExecutionResult {
     error?: string;
 }
 
-type ProgressPayload = {
-    taskId: number;
-    progress?: number;
-    percentage?: number;
-} & IPCExecutionProgress;
-
 export function useTaskExecution() {
     const providerFactory = new ProviderFactory();
 
@@ -280,7 +274,7 @@ export function useTaskExecution() {
     });
 
     // IPC-based execution via Electron
-    const currentTaskId = ref<number | null>(null);
+    const currentTaskRef = ref<{ projectId: number; sequence: number; id: number } | null>(null);
     const approvalRequest = ref<{ question: string; options?: string[]; context?: unknown } | null>(
         null
     );
@@ -290,7 +284,7 @@ export function useTaskExecution() {
      * Execute a task via IPC (for Electron main process execution)
      */
     async function executeTaskViaIPC(
-        taskId: number,
+        task: { projectId: number; projectSequence: number; id: number },
         options?: { streaming?: boolean; timeout?: number }
     ) {
         const api = getAPI();
@@ -305,7 +299,11 @@ export function useTaskExecution() {
         streamedContent.value = '';
         executionError.value = null;
         progress.value = 0;
-        currentTaskId.value = taskId;
+        currentTaskRef.value = {
+            projectId: task.projectId,
+            sequence: task.projectSequence,
+            id: task.id,
+        };
         approvalRequest.value = null;
 
         executionStats.value = {
@@ -313,10 +311,6 @@ export function useTaskExecution() {
         };
 
         try {
-            // TODO: Check if using default-gemini provider when task is loaded
-            // This requires fetching task data first, which should be done
-            // in the component that calls executeTaskViaIPC
-
             // Get API keys from settings store
             const settingsStore = useSettingsStore();
             const apiKeys: {
@@ -366,7 +360,11 @@ export function useTaskExecution() {
                 })
             );
 
-            const result = await api.taskExecution.execute(taskId, payload);
+            const result = await api.taskExecution.execute(
+                task.projectId,
+                task.projectSequence,
+                payload
+            );
             if (!result.success) {
                 executionError.value = result.error || 'Execution failed';
             }
@@ -380,38 +378,54 @@ export function useTaskExecution() {
     /**
      * Pause execution via IPC
      */
-    async function pauseExecutionViaIPC(taskId?: number) {
+    async function pauseExecutionViaIPC(task?: { projectId: number; projectSequence: number }) {
         const api = getAPI();
-        const id = taskId || currentTaskId.value;
-        if (!api?.taskExecution || !id)
+        const target = task
+            ? { projectId: task.projectId, sequence: task.projectSequence }
+            : currentTaskRef.value;
+
+        if (!api?.taskExecution || !target)
             return { success: false, error: 'API not available or no task ID' };
-        return await api.taskExecution.pause(id);
+        return await api.taskExecution.pause(target.projectId, target.sequence);
     }
 
     /**
      * Resume execution via IPC
      */
-    async function resumeExecutionViaIPC(taskId?: number) {
+    async function resumeExecutionViaIPC(task?: { projectId: number; projectSequence: number }) {
         const api = getAPI();
-        const id = taskId || currentTaskId.value;
-        if (!api?.taskExecution || !id)
+        const target = task
+            ? { projectId: task.projectId, sequence: task.projectSequence }
+            : currentTaskRef.value;
+
+        if (!api?.taskExecution || !target)
             return { success: false, error: 'API not available or no task ID' };
-        return await api.taskExecution.resume(id);
+        return await api.taskExecution.resume(target.projectId, target.sequence);
     }
 
     /**
      * Stop execution via IPC
      */
-    async function stopExecutionViaIPC(taskId?: number) {
+    async function stopExecutionViaIPC(task?: { projectId: number; projectSequence: number }) {
         const api = getAPI();
-        const id = taskId || currentTaskId.value;
-        if (!api?.taskExecution || !id)
+        const target = task
+            ? { projectId: task.projectId, sequence: task.projectSequence }
+            : currentTaskRef.value;
+
+        if (!api?.taskExecution || !target)
             return { success: false, error: 'API not available or no task ID' };
 
-        const result = await api.taskExecution.stop(id);
+        const result = await api.taskExecution.stop(target.projectId, target.sequence);
         if (result.success) {
             isExecuting.value = false;
-            currentTaskId.value = null;
+            // Only clear current task if it matches target
+            if (
+                currentTaskRef.value &&
+                currentTaskRef.value.projectId === target.projectId &&
+                currentTaskRef.value.sequence === target.sequence
+            ) {
+                currentTaskRef.value = null;
+            }
         }
         return result;
     }
@@ -419,13 +433,18 @@ export function useTaskExecution() {
     /**
      * Approve task (for NEEDS_APPROVAL state)
      */
-    async function approveTask(taskId?: number, response?: string) {
+    async function approveTask(
+        task: { projectId: number; projectSequence: number },
+        response?: string
+    ) {
         const api = getAPI();
-        const id = taskId || currentTaskId.value;
-        if (!api?.taskExecution || !id)
-            return { success: false, error: 'API not available or no task ID' };
+        if (!api?.taskExecution) return { success: false, error: 'API not available' };
 
-        const result = await api.taskExecution.approve(id, response);
+        const result = await api.taskExecution.approve(
+            task.projectId,
+            task.projectSequence,
+            response
+        );
         if (result.success) {
             approvalRequest.value = null;
         }
@@ -435,17 +454,21 @@ export function useTaskExecution() {
     /**
      * Reject task (for NEEDS_APPROVAL state)
      */
-    async function rejectTask(taskId?: number) {
+    async function rejectTask(task: { projectId: number; projectSequence: number }) {
         const api = getAPI();
-        const id = taskId || currentTaskId.value;
-        if (!api?.taskExecution || !id)
-            return { success: false, error: 'API not available or no task ID' };
+        if (!api?.taskExecution) return { success: false, error: 'API not available' };
 
-        const result = await api.taskExecution.reject(id);
+        const result = await api.taskExecution.reject(task.projectId, task.projectSequence);
         if (result.success) {
             isExecuting.value = false;
             approvalRequest.value = null;
-            currentTaskId.value = null;
+            if (
+                currentTaskRef.value &&
+                currentTaskRef.value.projectId === task.projectId &&
+                currentTaskRef.value.sequence === task.projectSequence
+            ) {
+                currentTaskRef.value = null;
+            }
         }
         return result;
     }
@@ -457,34 +480,48 @@ export function useTaskExecution() {
         const api = getAPI();
         if (!api?.taskExecution) return;
 
+        const isCurrentTask = (data: { projectId: number; projectSequence: number }) => {
+            return (
+                currentTaskRef.value &&
+                currentTaskRef.value.projectId === data.projectId &&
+                currentTaskRef.value.sequence === data.projectSequence
+            );
+        };
+
         // Progress updates
-        const cleanupProgress = api.taskExecution.onProgress((data: ProgressPayload) => {
-            if (data.taskId === currentTaskId.value) {
-                const progressValue = data.progress ?? data.percentage ?? 0;
-                progress.value = progressValue;
-                if (typeof data.content === 'string') {
-                    streamedContent.value = data.content;
-                } else if (data.delta) {
-                    streamedContent.value += data.delta;
-                }
-                if (data.tokensUsed && executionStats.value) {
-                    executionStats.value.tokensUsed = {
-                        prompt: 0,
-                        completion: data.tokensUsed,
-                        total: data.tokensUsed,
-                    };
-                }
-                if (data.cost && executionStats.value) {
-                    executionStats.value.cost = data.cost;
+        const cleanupProgress = api.taskExecution.onProgress(
+            (data: { projectId: number; projectSequence: number } & IPCExecutionProgress) => {
+                if (isCurrentTask(data)) {
+                    const progressValue = data.percentage ?? 0;
+                    progress.value = progressValue;
+                    if (typeof data.content === 'string') {
+                        streamedContent.value = data.content;
+                    } else if (data.delta) {
+                        streamedContent.value += data.delta;
+                    }
+                    if (data.tokensUsed && executionStats.value) {
+                        executionStats.value.tokensUsed = {
+                            prompt: 0,
+                            completion: data.tokensUsed,
+                            total: data.tokensUsed,
+                        };
+                    }
+                    if (data.cost && executionStats.value) {
+                        executionStats.value.cost = data.cost;
+                    }
                 }
             }
-        });
+        );
         cleanupFns.value.push(cleanupProgress);
 
         // Execution completed
         const cleanupCompleted = api.taskExecution.onCompleted(
-            (data: { taskId: number; result: unknown }) => {
-                if (data.taskId === currentTaskId.value) {
+            (data: {
+                projectId: number;
+                projectSequence: number;
+                result: { cost?: number; model?: string };
+            }) => {
+                if (isCurrentTask(data)) {
                     isExecuting.value = false;
                     progress.value = 100;
                     if (executionStats.value) {
@@ -497,6 +534,7 @@ export function useTaskExecution() {
                             executionStats.value.model = result.model;
                         }
                     }
+                    // Keep currentTaskRef to display final results
                 }
             }
         );
@@ -504,7 +542,7 @@ export function useTaskExecution() {
 
         // Execution failed
         const cleanupFailed = api.taskExecution.onFailed((data) => {
-            if (data.taskId === currentTaskId.value) {
+            if (isCurrentTask(data)) {
                 isExecuting.value = false;
                 executionError.value = data.error;
             }
@@ -513,7 +551,7 @@ export function useTaskExecution() {
 
         // Paused
         const cleanupPaused = api.taskExecution.onPaused((data) => {
-            if (data.taskId === currentTaskId.value) {
+            if (isCurrentTask(data)) {
                 isPaused.value = true;
             }
         });
@@ -521,7 +559,7 @@ export function useTaskExecution() {
 
         // Resumed
         const cleanupResumed = api.taskExecution.onResumed((data) => {
-            if (data.taskId === currentTaskId.value) {
+            if (isCurrentTask(data)) {
                 isPaused.value = false;
             }
         });
@@ -529,16 +567,16 @@ export function useTaskExecution() {
 
         // Stopped
         const cleanupStopped = api.taskExecution.onStopped((data) => {
-            if (data.taskId === currentTaskId.value) {
+            if (isCurrentTask(data)) {
                 isExecuting.value = false;
-                currentTaskId.value = null;
+                currentTaskRef.value = null;
             }
         });
         cleanupFns.value.push(cleanupStopped);
 
         // Approval required
         const cleanupApproval = api.taskExecution.onApprovalRequired((data) => {
-            if (data.taskId === currentTaskId.value) {
+            if (isCurrentTask(data)) {
                 approvalRequest.value = {
                     question: data.question,
                     options: data.options,
@@ -574,7 +612,7 @@ export function useTaskExecution() {
         executionStats,
         executionError,
         progress,
-        currentTaskId,
+        currentTaskRef,
         approvalRequest,
 
         // Computed

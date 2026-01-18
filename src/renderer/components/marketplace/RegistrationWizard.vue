@@ -309,7 +309,7 @@ async function submit() {
         // Helper to convert data URL to File
         const dataURLtoFile = (dataurl: string, filename: string) => {
             const arr = dataurl.split(',');
-            const match = arr[0].match(/:(.*?);/);
+            const match = arr[0]?.match(/:(.*?);/);
             const mime = match ? match[1] : 'image/png';
             const bstr = atob(arr[1] || ''); // Handle undefined arr[1] case
             let n = bstr.length;
@@ -449,7 +449,7 @@ function prevStep() {
                         >
                     </div>
                 </div>
-                <button @click="emit('close')" class="text-gray-400 hover:text-white">
+                <button class="text-gray-400 hover:text-white" @click="emit('close')">
                     <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             stroke-linecap="round"
@@ -469,8 +469,8 @@ function prevStep() {
                     class="grid grid-cols-1 md:grid-cols-3 gap-6"
                 >
                     <button
-                        @click="selectType('project')"
                         class="p-6 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500 rounded-xl text-left transition-all group"
+                        @click="selectType('project')"
                     >
                         <div
                             class="p-3 bg-blue-500/20 text-blue-400 rounded-lg w-fit mb-4 group-hover:bg-blue-500 group-hover:text-white transition-colors"
@@ -497,13 +497,13 @@ function prevStep() {
 
                     <!-- Operator (AI Agent) -->
                     <button
-                        @click="selectType('operator')"
                         class="relative p-4 rounded-xl border-2 transition-all duration-300 text-left group overflow-hidden"
                         :class="[
                             selectedType === 'operator'
                                 ? 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-500/20'
                                 : 'bg-gray-800 border-gray-700 hover:border-gray-600 hover:bg-gray-750',
                         ]"
+                        @click="selectType('operator')"
                     >
                         <div
                             class="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
@@ -539,13 +539,13 @@ function prevStep() {
 
                     <!-- Script Template -->
                     <button
-                        @click="selectType('script-template')"
                         class="relative p-4 rounded-xl border-2 transition-all duration-300 text-left group overflow-hidden"
                         :class="[
                             selectedType === 'script-template'
                                 ? 'bg-purple-600/20 border-purple-500 shadow-lg shadow-purple-500/20'
                                 : 'bg-gray-800 border-gray-700 hover:border-gray-600 hover:bg-gray-750',
                         ]"
+                        @click="selectType('script-template')"
                     >
                         <div
                             class="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
@@ -600,13 +600,13 @@ function prevStep() {
                         <div
                             v-for="item in availableItems"
                             :key="item.id"
-                            @click="selectItem(item)"
                             class="p-4 rounded-lg border cursor-pointer transition-all flex items-start gap-3"
                             :class="
                                 selectedItem?.id === item.id
                                     ? 'bg-blue-600/20 border-blue-500 ring-1 ring-blue-500'
                                     : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
                             "
+                            @click="selectItem(item)"
                         >
                             <div
                                 class="w-10 h-10 rounded-lg flex items-center justify-center text-lg overflow-hidden shrink-0"
@@ -727,8 +727,8 @@ function prevStep() {
                         <div class="flex gap-4">
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input
-                                    type="radio"
                                     v-model="visibility"
+                                    type="radio"
                                     value="public"
                                     class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
                                 />
@@ -738,8 +738,8 @@ function prevStep() {
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input
-                                    type="radio"
                                     v-model="visibility"
+                                    type="radio"
                                     value="restricted"
                                     class="text-blue-600 focus:ring-blue-500 bg-gray-800 border-gray-700"
                                 />
@@ -808,8 +808,8 @@ function prevStep() {
                                 type="file"
                                 multiple
                                 accept="image/png, image/jpeg, image/webp"
-                                @change="handleFileSelect"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                @change="handleFileSelect"
                             />
                             <div class="flex flex-col items-center gap-2 text-gray-400">
                                 <span class="text-sm">Click or Drag & Drop to upload images</span>
@@ -824,8 +824,8 @@ function prevStep() {
                             >
                                 <img :src="url" class="w-full h-full object-cover" />
                                 <button
-                                    @click="removeFile(idx)"
                                     class="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl-lg opacity-0 group-hover:opacity-100"
+                                    @click="removeFile(idx)"
                                 >
                                     x
                                 </button>
@@ -839,8 +839,8 @@ function prevStep() {
             <div class="p-6 border-t border-gray-800 flex justify-between">
                 <button
                     v-if="currentStep !== 'type-selection' && !isEditMode"
-                    @click="prevStep"
                     class="px-4 py-2 text-gray-400 hover:text-white"
+                    @click="prevStep"
                 >
                     Back
                 </button>
@@ -849,9 +849,9 @@ function prevStep() {
 
                 <button
                     v-if="currentStep === 'details'"
-                    @click="submit"
                     :disabled="loading || !isFormValid"
                     class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    @click="submit"
                 >
                     <span
                         v-if="loading"
@@ -867,9 +867,9 @@ function prevStep() {
                 </button>
                 <button
                     v-else
-                    @click="nextStep"
                     :disabled="!selectedItem && currentStep === 'item-selection'"
                     class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50"
+                    @click="nextStep"
                 >
                     Next Step
                 </button>

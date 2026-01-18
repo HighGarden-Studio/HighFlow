@@ -3,18 +3,18 @@
         <!-- Filter Tags -->
         <div v-if="uniqueTags.length > 0" class="filter-bar">
             <button
-                @click="selectTag(null)"
                 class="filter-chip"
                 :class="{ active: selectedTag === null }"
+                @click="selectTag(null)"
             >
                 All
             </button>
             <button
                 v-for="tag in uniqueTags"
                 :key="tag"
-                @click="selectTag(tag)"
                 class="filter-chip"
                 :class="{ active: selectedTag === tag }"
+                @click="selectTag(tag)"
             >
                 {{ tag }}
             </button>
@@ -61,9 +61,9 @@
                             class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                             <button
-                                @click.stop="openModal(template)"
                                 class="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
                                 title="Edit"
+                                @click.stop="openModal(template)"
                             >
                                 <svg
                                     class="w-3 h-3"
@@ -80,9 +80,9 @@
                                 </svg>
                             </button>
                             <button
-                                @click.stop="deleteTemplate(template.id)"
                                 class="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded"
                                 title="Delete"
+                                @click.stop="deleteTemplate(template.id)"
                             >
                                 <svg
                                     class="w-3 h-3"

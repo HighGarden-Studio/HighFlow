@@ -58,8 +58,8 @@ const isSelected = computed(() => props.node.path === props.selectedPath);
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800',
             ]"
             :style="{ paddingLeft: `${currentDepth * 12 + 8}px` }"
-            @click.stop="toggle"
             :title="node.path"
+            @click.stop="toggle"
         >
             <!-- Toggle Arrow for Folders -->
             <span
