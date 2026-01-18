@@ -1030,6 +1030,7 @@ export class MCPManager {
                           let currentEvent = 'message';
 
                           try {
+                            // eslint-disable-next-line no-constant-condition
                               while (true) {
                                   if (this._abortController?.signal.aborted) break;
 
@@ -1248,8 +1249,7 @@ export class MCPManager {
                               throw new Error('SSEClientTransport already started!');
                           }
 
-                          return new Promise<void>((resolve) => {
-                              // @ts-ignore - 'eventsource' supports headers, standard EventSource does not
+                              // @ts-expect-error - eventsource supports headers, standard EventSource does not
                               this._eventSource = new EventSourceClass(this._url.href, {
                                   headers: this._headers,
                               });
