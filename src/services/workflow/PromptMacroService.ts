@@ -212,9 +212,10 @@ export class PromptMacroService {
                     ? JSON.stringify(result.output, null, 2)
                     : String(result.output);
 
-            case 'summary':
+            case 'summary': {
                 const content = this.extractContentForMacro(result.output, result.taskId);
                 return content.length > 500 ? content.substring(0, 500) + '...' : content;
+            }
 
             case 'status':
                 return result.status;
