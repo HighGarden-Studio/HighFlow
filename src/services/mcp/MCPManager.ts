@@ -1250,7 +1250,6 @@ export class MCPManager {
                           }
 
                           return new Promise<void>((resolve) => {
-                              // @ts-ignore - 'eventsource' supports headers, standard EventSource does not
                               this._eventSource = new EventSourceClass(this._url.href, {
                                   headers: this._headers,
                               });
