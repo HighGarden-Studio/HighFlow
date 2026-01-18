@@ -1031,6 +1031,7 @@ export class MCPManager {
 
                           try {
                             // eslint-disable-next-line no-constant-condition
+                            // eslint-disable-next-line no-constant-condition
                               while (true) {
                                   if (this._abortController?.signal.aborted) break;
 
@@ -1250,7 +1251,6 @@ export class MCPManager {
                           }
 
                               // @ts-expect-error - eventsource supports headers, standard EventSource does not
-                              this._eventSource = new EventSourceClass(this._url.href, {
                                   headers: this._headers,
                               });
                               this._abortController = new AbortController();
