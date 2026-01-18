@@ -68,7 +68,6 @@ export class MCPManager {
     private runtimeServers: MCPServerRuntimeConfig[] = [];
     private runtimeIntegrationMap: Map<number, RuntimeServerEntry> = new Map();
     private readonly HEALTH_CACHE_TTL = 60000; // 1 minute
-    private _messageHandlers: Map<number, (response: Record<string, unknown>) => void> = new Map();
     private slackClients: Map<number, WebClient> = new Map();
     private taskOverrides: Map<string, Record<string, TaskMCPOverrideEntry>> = new Map();
 
