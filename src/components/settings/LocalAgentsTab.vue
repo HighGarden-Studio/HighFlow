@@ -7,7 +7,6 @@
  */
 import { ref, onMounted } from 'vue';
 import { getAPI } from '../../utils/electron';
-import { getProviderIcon } from '../../utils/iconMapping';
 import IconRenderer from '../common/IconRenderer.vue';
 import { useSettingsStore, type LocalAgent } from '../../renderer/stores/settingsStore';
 import { useI18n } from 'vue-i18n';
@@ -163,7 +162,7 @@ onMounted(() => {
                                 agent.gradient,
                             ]"
                         >
-                            <IconRenderer :icon="getProviderIcon(agent.id)" class="w-7 h-7" />
+                            <IconRenderer :icon="agent.icon" class="w-7 h-7" />
                         </div>
                         <div>
                             <div class="flex items-center gap-3">
@@ -404,7 +403,7 @@ onMounted(() => {
                                         selectedAgent.gradient,
                                     ]"
                                 >
-                                    {{ selectedAgent.icon }}
+                                    <IconRenderer :icon="selectedAgent.icon" class="w-6 h-6" />
                                 </div>
                                 <div>
                                     <h2 class="text-lg font-semibold text-white">

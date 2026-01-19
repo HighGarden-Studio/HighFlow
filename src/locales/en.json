@@ -1273,6 +1273,9 @@
             },
             "codex": {
                 "description": "OpenAI's AI coding agent. Generates and modifies code based on GPT-4."
+            },
+            "gemini_cli": {
+                "description": "Google's Gemini CLI tool. AI coding assistant powered by Gemini models."
             }
         },
         "integrations": {

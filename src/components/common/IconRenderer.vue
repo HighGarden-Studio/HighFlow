@@ -97,6 +97,10 @@ const iconName = computed<string>(() => {
     return ICON_MAP['❓'] || 'ph:question';
 });
 
+const isImagePath = computed(() => {
+    return iconName.value.startsWith('/') || iconName.value.startsWith('http');
+});
+
 const isCustomIcon = computed(() => {
     return iconName.value.startsWith('custom:');
 });
@@ -107,6 +111,7 @@ const customIconSrc = computed(() => {
 </script>
 
 <template>
-    <img v-if="isCustomIcon" :src="customIconSrc" alt="icon" />
+    <img v-if="isImagePath" :src="iconName" alt="icon" class="object-contain" />
+    <img v-else-if="isCustomIcon" :src="customIconSrc" alt="icon" />
     <Icon v-else :icon="iconName" />
 </template>
