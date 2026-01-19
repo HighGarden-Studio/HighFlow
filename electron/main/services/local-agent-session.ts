@@ -25,7 +25,7 @@ export interface AgentMessage {
 
 export interface SessionInfo {
     id: string;
-    agentType: 'claude' | 'codex';
+    agentType: 'claude' | 'codex' | 'gemini-cli';
     status: SessionStatus;
     workingDirectory: string;
     createdAt: Date;
@@ -118,7 +118,7 @@ function getEnhancedPath(): string {
  */
 export class LocalAgentSession extends EventEmitter {
     readonly id: string;
-    readonly agentType: 'claude' | 'codex';
+    readonly agentType: 'claude' | 'codex' | 'gemini-cli';
     readonly workingDirectory: string;
     private adapter: LocalAgentMessageAdapter;
 
@@ -138,7 +138,11 @@ export class LocalAgentSession extends EventEmitter {
     private remoteThreadId: string | null = null; // Captured thread ID from agent
     private fullOutput: string = ''; // Capture full stdout for fallback
 
-    constructor(agentType: 'claude' | 'codex', workingDirectory: string, sessionId?: string) {
+    constructor(
+        agentType: 'claude' | 'codex' | 'gemini-cli',
+        workingDirectory: string,
+        sessionId?: string
+    ) {
         super();
         this.id = sessionId || randomUUID();
         this.agentType = agentType;
@@ -247,6 +251,12 @@ export class LocalAgentSession extends EventEmitter {
                     }
                     args.push('--skip-git-repo-check');
                     args.push('--dangerously-bypass-approvals-and-sandbox');
+                } else if (this.agentType === 'gemini-cli') {
+                    // Gemini CLI args
+                    args.push('--json'); // Request JSON output
+                    if (options?.model) {
+                        args.push('--model', options.model);
+                    }
                 } else {
                     // Default fallback (should vary by agent)
                     args.push('exec');
@@ -340,6 +350,8 @@ export class LocalAgentSession extends EventEmitter {
                 return 'claude';
             case 'codex':
                 return 'codex';
+            case 'gemini-cli':
+                return 'gemini';
             default:
                 throw new Error(`Unknown agent type: ${this.agentType}`);
         }
@@ -534,6 +546,38 @@ export class LocalAgentSession extends EventEmitter {
             return;
         }
 
+        // Gemini CLI event handling
+        if (this.agentType === 'gemini-cli') {
+            // Handle gemini-cli specific events
+            if (
+                message.type === 'response' ||
+                message.type === 'completion' ||
+                message.text ||
+                message.content
+            ) {
+                const textContent = String(message.text || message.content || '');
+                if (textContent) {
+                    const compatibleMsg = {
+                        type: 'assistant',
+                        message: {
+                            content: [{ type: 'text', text: textContent }],
+                        },
+                    };
+                    this.captureTranscript(compatibleMsg);
+                    this.emit('message', compatibleMsg);
+
+                    if (this.currentOnChunk) {
+                        this.currentOnChunk(textContent);
+                    }
+                }
+            }
+
+            if (message.done || message.finished || message.type === 'completion') {
+                this.completeResponse({ ...message, finished: true });
+            }
+            return;
+        }
+
         // Claude handling
         // Capture transcript
         this.captureTranscript(message);
@@ -714,7 +758,7 @@ export class LocalAgentSessionManager {
      * Create a new session
      */
     async createSession(
-        agentType: 'claude' | 'codex',
+        agentType: 'claude' | 'codex' | 'gemini-cli',
         workingDirectory: string,
         sessionId?: string,
         projectId?: number,

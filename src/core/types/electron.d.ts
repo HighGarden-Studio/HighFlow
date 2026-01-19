@@ -276,7 +276,7 @@ export interface StoreAPI {
 }
 
 // Local Agents Types
-export type LocalAgentType = 'claude' | 'codex';
+export type LocalAgentType = 'claude' | 'codex' | 'gemini-cli';
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error' | 'closed';
 
 export interface AgentCheckResult {
@@ -309,6 +309,17 @@ export interface SendMessageOptions {
     timeout?: number;
     tools?: string[];
     model?: string;
+}
+
+export interface GeminiCLIOptions {
+    model?:
+        | 'gemini-pro'
+        | 'gemini-pro-vision'
+        | 'gemini-1.5-pro'
+        | 'gemini-1.5-flash'
+        | 'gemini-3-pro';
+    temperature?: number;
+    maxOutputTokens?: number;
 }
 
 export interface LocalAgentsAPI {

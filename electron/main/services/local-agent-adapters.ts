@@ -112,14 +112,48 @@ export class CodexAdapter implements LocalAgentMessageAdapter {
 }
 
 /**
+ * Gemini CLI Adapter
+ * Formats messages for Gemini CLI
+ */
+export class GeminiCLIAdapter implements LocalAgentMessageAdapter {
+    formatMessage(content: string, _options?: { model?: string }): string {
+        // Return raw text prompt for CLI argument
+        return content;
+    }
+
+    parseResponse(output: string): { type: string; content: string; done?: boolean } {
+        try {
+            const parsed = JSON.parse(output);
+            // Gemini CLI JSON output structure
+            return {
+                type: parsed.type || 'response',
+                content: parsed.text || parsed.content || String(parsed),
+                done: parsed.done || parsed.finished || false,
+            };
+        } catch {
+            // Fallback to plain text
+            return {
+                type: 'text',
+                content: output,
+                done: false,
+            };
+        }
+    }
+}
+
+/**
  * Get adapter for agent type
  */
-export function getAdapterForAgent(agentType: 'claude' | 'codex'): LocalAgentMessageAdapter {
+export function getAdapterForAgent(
+    agentType: 'claude' | 'codex' | 'gemini-cli'
+): LocalAgentMessageAdapter {
     switch (agentType) {
         case 'claude':
             return new ClaudeCodeAdapter();
         case 'codex':
             return new CodexAdapter();
+        case 'gemini-cli':
+            return new GeminiCLIAdapter();
         default:
             throw new Error(`Unknown agent type: ${agentType}`);
     }

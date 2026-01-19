@@ -43,7 +43,7 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
     }
 
     // Whitelist of allowed commands for security
-    const allowedCommands = ['claude', 'codex'];
+    const allowedCommands = ['claude', 'codex', 'gemini'];
 
     if (!allowedCommands.includes(command)) {
         console.warn(`Command not in whitelist: ${command}`);
@@ -157,7 +157,7 @@ function getEnhancedPath(): string {
  */
 async function launchInTerminal(command: string): Promise<void> {
     // Whitelist of allowed commands for security
-    const allowedCommands = ['claude', 'codex'];
+    const allowedCommands = ['claude', 'codex', 'gemini'];
 
     if (!allowedCommands.includes(command)) {
         throw new Error(`Command not allowed: ${command}`);
@@ -243,7 +243,7 @@ export function registerLocalAgentsHandlers(mainWindow?: BrowserWindow | null): 
         'localAgents:createSession',
         async (
             _event,
-            agentType: 'claude' | 'codex',
+            agentType: 'claude' | 'codex' | 'gemini-cli',
             workingDirectory: string,
             sessionId?: string
         ): Promise<SessionInfo> => {
