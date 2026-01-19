@@ -6,6 +6,7 @@ You're working on the **AI Workflow Manager** - an Electron desktop app for mana
 
 ## 📖 Read First
 
+**CRITICAL**: Read `/TYPESCRIPT_ENFORCEMENT.md` for MANDATORY type safety rules.
 **ALWAYS** reference `/CLAUDE.md` for comprehensive guidelines.
 
 ## 🔑 Key Concepts

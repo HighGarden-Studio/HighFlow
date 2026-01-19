@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console, vue/one-component-per-file */
 /**
  * Integration tests for Image Context Passing
  * Tests the flow of image attachments from Input Tasks to AI Tasks

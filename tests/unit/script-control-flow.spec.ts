@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console, vue/one-component-per-file */
 import { describe, it, expect } from 'vitest';
 import { parseScriptReturn, validateControlFlow } from '@core/types/workflow';
 

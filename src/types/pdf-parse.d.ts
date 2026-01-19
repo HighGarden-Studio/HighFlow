@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 declare module 'pdf-parse' {
     interface PDFData {
         numpages: number;

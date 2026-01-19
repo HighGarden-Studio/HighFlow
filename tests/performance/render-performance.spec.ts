@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console, vue/one-component-per-file */
 /**
  * Performance Tests: Render Performance
  *
