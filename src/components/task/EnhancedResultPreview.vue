@@ -21,6 +21,7 @@ import { Diff } from 'vue-diff';
 import 'vue-diff/dist/index.css';
 import CodeEditor from '../common/CodeEditor.vue';
 import MCPToolExecutionLog, { type LogEntry as MCPLogEntry } from '../ai/MCPToolExecutionLog.vue';
+import AgentViewer from './viewer/AgentViewer.vue';
 import { useI18n } from 'vue-i18n';
 
 // Output format type
@@ -796,7 +797,62 @@ const selectedCodeBlock = ref<{
 const drawerTab = ref<'code' | 'preview'>('code');
 const drawerMermaidSvg = ref<string>('');
 
-// Watch selectedCodeBlock to reset tab or default to preview for HTML/Mermaid
+// Agent/JSON View Mode State
+const agentViewMode = ref<'structured' | 'raw'>('structured');
+
+const isAgentViewAvailable = computed(() => {
+    // Provider-based check
+    const provider =
+        (props.task as any)?.aiProvider ||
+        (props.task?.outputConfig as any)?.provider ||
+        taskResult.value.provider;
+
+    if (['codex', 'gemini-cli'].includes(provider)) {
+        return true;
+    }
+
+    // Robust check for Gemini CLI NDJSON pattern
+    // It starts with standard event types and is line-delimited
+    const content = fallbackResultContent.value?.trim();
+    if (!content) return false;
+
+    // Check for specific Gemini/Agent event types at the start of lines
+    // This regex looks for {"type":"..." at the start of the string or lines
+    const geminiPattern = /^{"type":"(init|message|tool_use|tool_result|result|error)"/m;
+
+    if (geminiPattern.test(content)) {
+        // Additional check: valid JSON line structure (starts with {)
+        if (content.startsWith('{')) {
+            return true;
+        }
+    }
+
+    // Fallback: Check for generic NDJSON if it was classified as JSON
+    if (
+        (taskResult.value.aiResult?.subType === 'json' ||
+            aiMimeType.value === 'application/json') &&
+        content.startsWith('{') &&
+        content.includes('\n{')
+    ) {
+        return true;
+    }
+
+    return false;
+});
+
+// Auto-switch to structured view if available
+watch(
+    isAgentViewAvailable,
+    (avail) => {
+        if (avail) {
+            agentViewMode.value = 'structured';
+        } else {
+            agentViewMode.value = 'raw';
+        }
+    },
+    { immediate: true }
+);
+
 watch(
     () => selectedCodeBlock.value,
     (newValue) => {
@@ -842,6 +898,13 @@ const outputFormat = computed<OutputFormat>(() => {
             }
         }
         return format;
+    }
+
+    // Default heuristics based on content
+    // Agent/Gemini View Priority
+    // If it looks like an agent output, we force JSON format so the AgentViewer block is used
+    if (isAgentViewAvailable.value) {
+        return 'json';
     }
 
     // Default heuristics based on content
@@ -1394,6 +1457,26 @@ const aiResponseContent = computed(() => {
     return (props.task as any)?.executionResult?.content || (props.task as any)?.result || '';
 });
 
+const isAgentResult = computed(() => {
+    // Check provider from task or result
+    const provider =
+        (props.task as any)?.aiProvider ||
+        (props.task?.outputConfig as any)?.provider ||
+        taskResult.value.provider;
+
+    if (['codex', 'gemini-cli'].includes(provider)) {
+        return true;
+    }
+
+    // Fallback to content pattern matching
+    const content = aiResponseContent.value?.trim();
+    if (!content) return false;
+
+    // Check for NDJSON pattern typical of agents
+    const agentPattern = /^{"type":"(init|message|tool_use|tool_result|result|error)"/m;
+    return agentPattern.test(content);
+});
+
 const parsedAiResponse = computed(() => {
     if (!aiResponseContent.value) return '';
     return marked.parse(aiResponseContent.value);
@@ -1892,7 +1975,17 @@ const parsedJsonData = computed(() => {
 
     try {
         return JSON.parse(normalized);
-    } catch {
+    } catch (e) {
+        // Try NDJSON: splitting by newlines and parsing each line
+        const lines = normalized.split(/\r?\n/).filter((l) => l.trim());
+        if (lines.length > 0) {
+            try {
+                // Return as an array of objects
+                return lines.map((line) => JSON.parse(line));
+            } catch {
+                return null;
+            }
+        }
         return null;
     }
 });
@@ -2402,20 +2495,20 @@ onMounted(() => {
 
 <template>
     <Teleport to="body">
-        <div
-            v-if="open"
-            class="fixed inset-0 z-50 overflow-hidden"
-            :class="{ 'pointer-events-none': !open }"
-        >
-            <!-- Backdrop -->
+        <!-- Backdrop with Fade Transition -->
+        <Transition name="fade">
             <div
-                class="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                v-if="open"
+                class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
                 @click="handleClose"
             />
+        </Transition>
 
-            <!-- Panel -->
+        <!-- Panel with Slide Transition -->
+        <Transition name="slide-right">
             <div
-                class="absolute top-0 right-0 flex shadow-2xl transition-all duration-300 ease-in-out"
+                v-if="open"
+                class="fixed top-0 right-0 z-50 flex shadow-2xl"
                 :class="isFullscreen ? 'inset-x-0 w-full' : ''"
                 :style="{
                     width: !isFullscreen ? `${panelWidth}%` : undefined,
@@ -3031,10 +3124,10 @@ onMounted(() => {
                                         <!-- AI Response Header (Visible when file is selected) -->
                                         <div
                                             v-if="selectedFile && aiResponseContent"
-                                            class="flex-shrink-0 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/50 p-4 max-h-[200px] overflow-y-auto"
+                                            class="flex-shrink-0 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/50 p-4 max-h-[400px] overflow-y-auto"
                                         >
                                             <div
-                                                class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 uppercase tracking-wider flex items-center gap-2"
+                                                class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 uppercase tracking-wider flex items-center gap-2"
                                             >
                                                 <svg
                                                     class="w-3 h-3"
@@ -3051,7 +3144,15 @@ onMounted(() => {
                                                 </svg>
                                                 {{ t('result.preview.ai_response') }}
                                             </div>
+
+                                            <AgentViewer
+                                                v-if="isAgentResult"
+                                                :content="aiResponseContent"
+                                                class="w-full"
+                                            />
+
                                             <div
+                                                v-else
                                                 class="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed"
                                                 v-html="parsedAiResponse"
                                             ></div>
@@ -3089,6 +3190,34 @@ onMounted(() => {
                                                 </span>
                                             </div>
                                             <div class="flex items-center gap-2">
+                                                <!-- Agent View Toggle -->
+                                                <div
+                                                    v-if="isAgentViewAvailable"
+                                                    class="flex bg-gray-200 dark:bg-gray-700 rounded p-0.5"
+                                                >
+                                                    <button
+                                                        class="px-2 py-0.5 text-xs font-medium rounded transition-colors"
+                                                        :class="
+                                                            agentViewMode === 'structured'
+                                                                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                                        "
+                                                        @click="agentViewMode = 'structured'"
+                                                    >
+                                                        Structured
+                                                    </button>
+                                                    <button
+                                                        class="px-2 py-0.5 text-xs font-medium rounded transition-colors"
+                                                        :class="
+                                                            agentViewMode === 'raw'
+                                                                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                                        "
+                                                        @click="agentViewMode = 'raw'"
+                                                    >
+                                                        Raw
+                                                    </button>
+                                                </div>
                                                 <button
                                                     class="flex items-center gap-1 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
                                                     :class="{
@@ -3290,34 +3419,56 @@ onMounted(() => {
                                                         ></div>
                                                     </div>
 
-                                                    <!-- JSON Preview (Tree) -->
+                                                    <!-- JSON / Agent Preview -->
                                                     <div
                                                         v-else-if="outputFormat === 'json'"
                                                         ref="contentContainer"
                                                         class="flex-1 w-full h-full overflow-y-auto p-4 scroll-smooth"
                                                     >
-                                                        <!-- MCP Logs interleaved -->
-                                                        <div
-                                                            v-if="mcpLogs.length > 0"
-                                                            class="mb-6 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4"
-                                                        >
-                                                            <MCPToolExecutionLog :logs="mcpLogs" />
-                                                        </div>
-
-                                                        <div
-                                                            v-if="jsonMarkdownHtml"
-                                                            class="prose dark:prose-invert max-w-none"
-                                                        >
-                                                            <div v-html="jsonMarkdownHtml"></div>
-                                                        </div>
-                                                        <pre
-                                                            v-else-if="parsedJsonData"
-                                                            class="text-sm font-mono"
-                                                            v-html="renderJsonTree(parsedJsonData)"
+                                                        <!-- Agent View -->
+                                                        <AgentViewer
+                                                            v-if="
+                                                                agentViewMode === 'structured' &&
+                                                                isAgentViewAvailable
+                                                            "
+                                                            :content="content"
                                                         />
-                                                        <pre v-else class="text-sm text-gray-500">{{
-                                                            t('result.preview.invalid_json')
-                                                        }}</pre>
+
+                                                        <!-- Raw JSON View (Wrapped for fallback) -->
+                                                        <div v-else class="h-full">
+                                                            <!-- MCP Logs interleaved -->
+                                                            <div
+                                                                v-if="mcpLogs.length > 0"
+                                                                class="mb-6 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4"
+                                                            >
+                                                                <MCPToolExecutionLog
+                                                                    :logs="mcpLogs"
+                                                                />
+                                                            </div>
+
+                                                            <div
+                                                                v-if="jsonMarkdownHtml"
+                                                                class="prose dark:prose-invert max-w-none"
+                                                            >
+                                                                <div
+                                                                    v-html="jsonMarkdownHtml"
+                                                                ></div>
+                                                            </div>
+                                                            <pre
+                                                                v-else-if="parsedJsonData"
+                                                                class="text-sm font-mono"
+                                                                v-html="
+                                                                    renderJsonTree(parsedJsonData)
+                                                                "
+                                                            />
+                                                            <pre
+                                                                v-else
+                                                                class="text-sm text-gray-500"
+                                                                >{{
+                                                                    t('result.preview.invalid_json')
+                                                                }}</pre
+                                                            >
+                                                        </div>
                                                     </div>
 
                                                     <!-- Default/Text Preview -->
@@ -4398,7 +4549,7 @@ onMounted(() => {
                     </div>
                 </div>
             </div>
-        </div>
+        </Transition>
     </Teleport>
 
     <!-- Comment Input Modal -->
@@ -4518,5 +4669,60 @@ onMounted(() => {
 
 .markdown-content :deep(li) {
     margin-bottom: 0.25rem;
+}
+
+/* Vue Transition Animations */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+.slide-right-enter-active {
+    transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.slide-right-leave-active {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.slide-right-enter-from {
+    transform: translateX(100%);
+}
+
+.slide-right-leave-to {
+    transform: translateX(100%);
+}
+</style>
+
+<!-- Unscoped styles for Vue Transitions -->
+<style>
+/* Fade transition for backdrop */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+/* Slide-right transition for panel */
+.slide-right-enter-active {
+    transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.slide-right-leave-active {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
+    transform: translateX(100%);
 }
 </style>

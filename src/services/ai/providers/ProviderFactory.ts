@@ -132,6 +132,24 @@ export class ProviderFactory {
     }
 
     /**
+     * Check if provider is ready (async check for auth etc)
+     */
+    async isProviderReady(name: AIProvider): Promise<boolean> {
+        const provider = this.providers.get(name);
+        if (!provider) return false;
+
+        // Check availability (config check)
+        if (!this.isProviderAvailable(name)) return false;
+
+        // Check specific readiness (e.g. auth check)
+        if ('isReady' in provider && typeof (provider as any).isReady === 'function') {
+            return await (provider as any).isReady();
+        }
+
+        return true;
+    }
+
+    /**
      * Get provider names
      */
     getAvailableProviders(): AIProvider[] {

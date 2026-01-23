@@ -40,7 +40,7 @@ export class MistralProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AiResult> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const client = this.getClient();
         const chatMessages = this.buildChatMessages(messages, config, context);
 
@@ -78,7 +78,7 @@ export class MistralProvider extends BaseAIProvider {
         config: AIConfig,
         _context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -197,7 +197,7 @@ export class MistralProvider extends BaseAIProvider {
     async fetchModels(): Promise<ModelInfo[]> {
         // Return empty array if no API key is configured (not an error condition)
         if (!this.injectedApiKey) {
-            console.log('[MistralProvider] No API key configured, skipping model fetch');
+            // console.log('[MistralProvider] No API key configured, skipping model fetch');
             return [];
         }
 
@@ -223,7 +223,7 @@ export class MistralProvider extends BaseAIProvider {
             await (
                 await import('../../../../electron/main/database/repositories/provider-models-repository')
             ).providerModelsRepository.saveModels('mistral', models);
-            console.log(`[MistralProvider] Saved ${models.length} models to DB cache`);
+            // console.log(`[MistralProvider] Saved ${models.length} models to DB cache`);
 
             return models;
         } catch (error) {
@@ -233,7 +233,7 @@ export class MistralProvider extends BaseAIProvider {
                 await import('../../../../electron/main/database/repositories/provider-models-repository')
             ).providerModelsRepository.getModels('mistral');
             if (cachedModels.length > 0) {
-                console.log('[MistralProvider] Using cached models from DB');
+                // console.log('[MistralProvider] Using cached models from DB');
                 return cachedModels;
             }
             console.warn('[MistralProvider] No cached models available');
@@ -326,7 +326,7 @@ export class MistralProvider extends BaseAIProvider {
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const prompt = this.getPromptText(input);
 
         const client = this.getClient();

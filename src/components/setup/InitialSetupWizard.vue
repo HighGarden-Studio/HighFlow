@@ -581,7 +581,7 @@ watch(
     <Teleport to="body">
         <div
             v-if="open"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
             <div
                 class="w-full max-w-3xl max-h-[90vh] bg-gradient-to-br from-gray-900 to-gray-950 rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-700/50"

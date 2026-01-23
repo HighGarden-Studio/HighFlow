@@ -659,6 +659,17 @@ const triggerCurator = async (
             // Fetch API keys from renderer localStorage to inject into Curator
             const win = getMainWindow();
             let apiKeys: any = {};
+            let defaultAiConfig: { providerId: string; modelId: string } | null = null;
+            let isLoggedIn = false;
+
+            // Check login status (Main Process Source of Truth)
+            try {
+                const { getCurrentUser } = await import('../auth/google-oauth');
+                const user = await getCurrentUser();
+                isLoggedIn = !!user;
+            } catch (e) {
+                console.warn('[CuratorTrigger] Failed to check login status:', e);
+            }
 
             if (win) {
                 try {
@@ -687,6 +698,28 @@ const triggerCurator = async (
                             '[CuratorTrigger] Injected API keys (merged):',
                             Object.keys(apiKeys).filter((k) => !!apiKeys[k])
                         );
+
+                        // Determine Default AI Provider (First Enabled)
+                        // Replicates settingsStore.ts logic
+                        const enabledProvider = providers.find((p: any) => {
+                            if (!p.enabled) return false;
+                            if (['ollama', 'lmstudio', 'default-highflow'].includes(p.id)) {
+                                return true;
+                            }
+                            // For others, require key or connection
+                            return !!p.apiKey || p.isConnected;
+                        });
+
+                        if (enabledProvider) {
+                            defaultAiConfig = {
+                                providerId: enabledProvider.id,
+                                modelId: enabledProvider.defaultModel,
+                            };
+                            console.log(
+                                '[CuratorTrigger] Detected User Default AI:',
+                                defaultAiConfig
+                            );
+                        }
                     }
                 } catch (e) {
                     console.warn('[CuratorTrigger] Failed to fetch API keys from renderer:', e);
@@ -694,8 +727,6 @@ const triggerCurator = async (
             }
 
             const curator = CuratorService.getInstance();
-            curator.setApiKeys(apiKeys);
-
             curator.setApiKeys(apiKeys);
 
             await curator.runCurator(
@@ -706,7 +737,9 @@ const triggerCurator = async (
                 project,
                 null,
                 projectRepository,
-                preComputedContext
+                preComputedContext,
+                defaultAiConfig,
+                isLoggedIn
             );
 
             // Update metadata with new hash to prevent duplicates

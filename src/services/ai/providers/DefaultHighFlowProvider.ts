@@ -136,9 +136,12 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 await import('../../../../electron/main/auth/google-oauth');
 
             const token = loadSessionToken();
+            // console.log(
+            //    `[DefaultHighFlowProvider] checkAuthentication called. Token exists: ${!!token}, Length: ${token?.length}`
+            // );
 
             if (!token) {
-                console.warn('[DefaultHighFlowProvider] No session token found');
+                // console.warn('[DefaultHighFlowProvider] No session token found');
                 return { authenticated: false };
             }
 
@@ -150,6 +153,17 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             console.error('[DefaultHighFlowProvider] Authentication check failed:', error);
             return { authenticated: false };
         }
+    }
+
+    /**
+     * Check if provider is ready (authenticated)
+     */
+    async isReady(): Promise<boolean> {
+        const auth = await this.checkAuthentication();
+        // console.log(
+        //    `[DefaultHighFlowProvider] isReady called. Authenticated: ${auth.authenticated}`
+        // );
+        return auth.authenticated;
     }
 
     /**
@@ -268,7 +282,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             config.model = 'gemini-2.5-flash';
         }
 
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         // Check authentication
         const auth = await this.checkAuthentication();
@@ -498,7 +512,7 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             config.model = 'gemini-2.5-flash';
         }
 
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         // Check authentication
         const auth = await this.checkAuthentication();

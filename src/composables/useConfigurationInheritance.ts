@@ -1,6 +1,6 @@
 import { useSettingsStore } from '../renderer/stores/settingsStore';
 import type { Task, Project } from '@core/types/database';
-import type { AIProvider } from '../services/ai/AIInterviewService';
+import type { AIProvider } from '@core/types/ai';
 import {
     resolveAIProvider as resolveCoreAIProvider,
     resolveAutoReviewProvider as resolveCoreAutoReviewProvider,

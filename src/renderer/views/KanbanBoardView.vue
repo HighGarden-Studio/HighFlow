@@ -18,12 +18,16 @@ import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
 import InputTaskModal from '../../components/task/InputTaskModal.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
+import ProjectWorkspaceModal from '../../components/project/ProjectWorkspaceModal.vue';
+
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
+import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import { tagService } from '../../services/task/TagService';
 import {
     taskSubdivisionService,
     type SubdivisionSuggestion,
 } from '../../services/ai/TaskSubdivisionService';
+import AgentViewer from '../../components/task/viewer/AgentViewer.vue';
 
 // 미연동 Provider 정보 타입
 interface MissingProviderInfo {
@@ -77,6 +81,7 @@ const editingTask = ref<Task | null>(null);
 // Result preview state
 // Result preview state
 const showResultPreview = ref(false);
+const showWorkspaceModal = ref(false);
 const previewTaskId = ref<{ projectId: number; projectSequence: number } | null>(null);
 const resultPreviewTask = computed(() => {
     console.log('[KanbanBoardView] resultPreviewTask computed:', {
@@ -133,11 +138,16 @@ const resultPreviewTask = computed(() => {
             (task as any).expectedOutputFormat,
     } as Task;
 });
+
+// Live Preview state
 const showLivePreview = ref(false);
 const livePreviewTask = ref<Task | null>(null);
 
-// Project Info Modal state
 const showProjectInfoModal = ref(false);
+
+function handleProjectInfoClick() {
+    showProjectInfoModal.value = true;
+}
 
 // Input Modal state
 const showInputModal = ref(false);
@@ -324,6 +334,34 @@ async function handleDrop(status: TaskStatus, event?: DragEvent) {
     }
 
     if (task && task.status !== status) {
+        // [Safety] If task is running, stop it first (matches "Stop" button behavior)
+        if (task.status === 'in_progress') {
+            await taskStore.stopTask(task.projectId, task.projectSequence);
+        }
+
+        // [Changed] If moving to 'in_progress', trigger execution instead of just updating status
+        if (status === 'in_progress') {
+            console.log(
+                '📦 Dragged to In Progress - Executing Task:',
+                task.projectId,
+                task.projectSequence
+            );
+            const result = await taskStore.executeTask(task.projectId, task.projectSequence, {
+                force: true, // Force execution even if not in TODO (e.g. restarting DONE task)
+            });
+
+            if (!result.success) {
+                console.error('Failed to execute dropped task:', result.error);
+                uiStore.showToast({
+                    type: 'error',
+                    message: result.error || '태스크 실행에 실패했습니다.',
+                    duration: 5000,
+                });
+                // Note: If execution failed, task remains in previous status (stopped or original)
+            }
+            return;
+        }
+
         console.log('📦 Updating Task Status to:', status);
         await taskStore.updateTask(task.projectId, task.projectSequence, { status });
     }
@@ -625,13 +663,6 @@ async function handleVersionRestore(versionId: string) {
     console.log('Restoring version:', versionId);
 }
 
-// Project info update handler
-async function handleProjectInfoUpdate() {
-    if (!project.value) return;
-    await projectStore.fetchProject(project.value.id);
-    await taskStore.fetchTasks(project.value.id);
-}
-
 async function handleDeleteTask(task: Task) {
     const dependentTasks = taskStore.tasks.filter(
         (t) =>
@@ -705,7 +736,12 @@ const liveResponseContent = computed(() => {
     );
 });
 
+const isAgentStream = computed(() => {
+    return livePreviewTask.value?.aiProvider === 'gemini-cli' && !!liveResponseContent.value;
+});
+
 // Helper to get tasks for a column, potentially merging statuses
+
 function getTasksForColumn(columnId: string) {
     const groups = groupedTasks.value;
     if (!groups) return [];
@@ -773,37 +809,6 @@ const liveResponseType = computed(() => {
     return 'text';
 });
 
-// Helper: Convert markdown to HTML (simple implementation)
-function markdownToHtml(markdown: string): string {
-    if (!markdown) return '';
-
-    let html = markdown
-        // Code blocks
-        .replace(
-            /```(\w+)?\n([\s\S]*?)```/g,
-            '<pre class="bg-gray-950 p-3 rounded-lg overflow-x-auto"><code class="language-$1">$2</code></pre>'
-        )
-        // Inline code
-        .replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1 py-0.5 rounded text-sm">$1</code>')
-        // Headers
-        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-5 mb-3">$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-6 mb-4">$1</h1>')
-        // Bold and italic
-        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        // Links
-        .replace(
-            /\[([^\]]+)\]\(([^)]+)\)/g,
-            '<a href="$2" class="text-blue-400 hover:underline" target="_blank">$1</a>'
-        )
-        // Line breaks
-        .replace(/\n/g, '<br>');
-
-    return html;
-}
-
 // Helper: Format JSON with indentation
 function formatJson(json: string): string {
     try {
@@ -853,6 +858,7 @@ async function getMissingProviderForTask(task: Task): Promise<MissingProviderInf
         // Check if it's a local agent
         const localAgentMap: Record<string, string> = {
             'claude-code': 'claude',
+            'gemini-cli': 'gemini-cli',
             codex: 'codex',
         };
 
@@ -1254,9 +1260,11 @@ onUnmounted(() => {
             :show-connection-mode="true"
             :show-new-task="true"
             :is-connection-mode="isConnectionMode"
-            @project-info="showProjectInfoModal = true"
+            :base-dev-folder="project?.baseDevFolder"
+            @project-info="handleProjectInfoClick"
             @new-task="openCreateModal('todo')"
             @toggle-connection="toggleConnectionMode"
+            @open-workspace="showWorkspaceModal = true"
         />
 
         <!-- Operator Panel -->
@@ -1398,25 +1406,16 @@ onUnmounted(() => {
         />
 
         <!-- Task Detail Panel -->
-        <Teleport to="body">
-            <div v-if="showDetailPanel && selectedTask" class="fixed inset-0 z-50 flex">
-                <div class="absolute inset-0 bg-black/60" @click="closeDetailPanel"></div>
-                <div
-                    class="relative ml-auto w-full max-w-2xl h-full bg-gray-800 border-l border-gray-700 shadow-2xl overflow-hidden"
-                >
-                    <TaskDetailPanel
-                        :task="selectedTask"
-                        :open="showDetailPanel"
-                        @close="closeDetailPanel"
-                        @save="handleTaskSave"
-                        @execute="handleTaskExecute"
-                        @approve="handleTaskApprove"
-                        @reject="handleTaskReject"
-                        @subdivide="handleTaskSubdivide"
-                    />
-                </div>
-            </div>
-        </Teleport>
+        <TaskDetailPanel
+            :task="selectedTask"
+            :open="showDetailPanel"
+            @close="closeDetailPanel"
+            @save="handleTaskSave"
+            @execute="handleTaskExecute"
+            @approve="handleTaskApprove"
+            @reject="handleTaskReject"
+            @subdivide="handleTaskSubdivide"
+        />
 
         <!-- Task Subdivision Modal -->
         <Teleport to="body">
@@ -1618,7 +1617,7 @@ onUnmounted(() => {
             >
                 <!-- Backdrop -->
                 <div
-                    class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    class="absolute inset-0 bg-black/50 backdrop-blur-sm"
                     @click="closeApprovalModal"
                 />
 
@@ -1845,7 +1844,7 @@ onUnmounted(() => {
                 class="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
                 <div
-                    class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    class="absolute inset-0 bg-black/50 backdrop-blur-sm"
                     @click="closeLivePreview"
                 ></div>
                 <div
@@ -1898,11 +1897,11 @@ onUnmounted(() => {
                                 >
                             </div>
                             <div class="flex-1 overflow-y-auto p-4">
-                                <!-- Markdown Viewer -->
-                                <div
-                                    v-if="liveResponseType === 'markdown' && liveResponseContent"
-                                    class="prose prose-invert prose-sm max-w-none"
-                                    v-html="markdownToHtml(liveResponseContent)"
+                                <!-- Agent Viewer (Structured) -->
+                                <AgentViewer
+                                    v-if="isAgentStream"
+                                    :content="liveResponseContent"
+                                    class="h-full"
                                 />
 
                                 <!-- Image Viewer -->
@@ -1966,13 +1965,21 @@ onUnmounted(() => {
             @retry="handleRetry"
         />
 
-        <!-- Project Info Modal -->
-        <ProjectInfoModal
+        <!-- Project Info Panel -->
+        <ProjectInfoPanel
+            v-if="project"
             :project="project"
-            :open="showProjectInfoModal"
+            :show="showProjectInfoModal"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
-            @update="handleProjectInfoUpdate"
+        />
+
+        <!-- Project Workspace Modal -->
+        <ProjectWorkspaceModal
+            v-if="project"
+            :open="showWorkspaceModal"
+            :project-id="projectId"
+            @close="showWorkspaceModal = false"
         />
     </div>
 </template>

@@ -48,18 +48,20 @@ function preventClose(event: Event) {
         >
             <!-- Backdrop -->
             <div
-                class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+                class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
                 :class="{ 'cursor-not-allowed': isForceUpdate }"
                 @click="preventClose"
             />
 
             <!-- Modal -->
-            <div class="flex min-h-full items-center justify-center p-4">
-                <div class="relative w-full max-w-md transform transition-all" @click.stop>
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="relative w-full max-w-md max-h-[90vh] flex flex-col" @click.stop>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full"
+                    >
                         <!-- Header -->
                         <div
-                            class="relative px-6 py-6 border-b border-gray-200 dark:border-gray-700"
+                            class="relative flex-shrink-0 px-6 py-6 border-b border-gray-200 dark:border-gray-700"
                         >
                             <!-- Gradient Background -->
                             <div
@@ -154,7 +156,7 @@ function preventClose(event: Event) {
                         </div>
 
                         <!-- Body -->
-                        <div class="px-6 py-5 space-y-4">
+                        <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                             <!-- Version Information -->
                             <div
                                 class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
@@ -238,7 +240,7 @@ function preventClose(event: Event) {
 
                         <!-- Footer -->
                         <div
-                            class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                            class="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
                         >
                             <button
                                 v-if="showCloseButton"

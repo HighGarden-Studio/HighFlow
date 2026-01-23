@@ -187,7 +187,7 @@ const hasPreviousResult = computed(() => {
 
 const isLocalProvider = computed(() => {
     const provider = assignedOperator.value?.aiProvider || props.task.aiProvider;
-    return ['claude-code', 'codex'].includes(provider || '');
+    return ['claude-code', 'gemini-cli', 'codex'].includes(provider || '');
 });
 
 const displayModel = computed(() => {
@@ -304,6 +304,24 @@ function handleConnectProviderClick() {
         emit('connectProvider', props.missingProvider.id);
     }
 }
+// Error Message Computation
+const errorMessage = computed(() => {
+    const t = props.task as any;
+    if (props.task.status === 'blocked') {
+        return props.task.blockedReason || t.error || 'Task execution blocked';
+    }
+    if (props.task.status === 'failed') {
+        return (
+            t.executionResult?.error ||
+            t.error ||
+            t.result ||
+            t.errorMessage ||
+            'Task execution failed'
+        );
+    }
+    return null;
+});
+
 function hexToRgba(hex: string, alpha: number) {
     // Remove hash if present
     hex = hex.replace('#', '');
@@ -929,7 +947,6 @@ function hexToRgba(hex: string, alpha: number) {
                             {{ task.reviewFailed ? '실패 분석' : t('project.actions.view_result') }}
                         </button>
                         <button
-                            v-if="!task.triggerConfig?.dependsOn"
                             class="px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                             title="다시 실행"
                             @click="handleRetry"
@@ -981,9 +998,30 @@ function hexToRgba(hex: string, alpha: number) {
 
                 <!-- 5. BLOCKED / FAILED: RETRY -->
                 <template v-if="task.status === 'blocked' || task.status === 'failed'">
+                    <div
+                        v-if="errorMessage"
+                        class="w-full mb-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400 break-words"
+                    >
+                        <div class="font-bold flex items-center gap-1 mb-1">
+                            <svg
+                                class="w-3 h-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            {{ task.status === 'blocked' ? 'Blocked' : 'Failed' }}
+                        </div>
+                        {{ errorMessage }}
+                    </div>
                     <button
-                        v-if="!task.triggerConfig?.dependsOn"
-                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm transition-colors"
                         @click.stop="(e) => handleRetry(e)"
                     >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -996,40 +1034,6 @@ function hexToRgba(hex: string, alpha: number) {
                         </svg>
                         {{ t('task.retry') }}
                     </button>
-                    <div
-                        v-else
-                        class="flex-1 px-2 py-1.5 text-xs font-medium text-center text-gray-500 flex items-center justify-center gap-1"
-                    >
-                        <svg
-                            v-if="task.status === 'blocked'"
-                            class="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        <svg
-                            v-else
-                            class="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        {{ task.status === 'blocked' ? '대기중' : '실패' }}
-                    </div>
                 </template>
             </div>
         </template>

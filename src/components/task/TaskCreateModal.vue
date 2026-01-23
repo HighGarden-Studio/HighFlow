@@ -90,6 +90,12 @@ async function handleCreateTask() {
                 taskData.aiModel = currentProject.aiModel;
                 console.log('[TaskCreateModal] Set aiModel:', taskData.aiModel);
             }
+            if (currentProject.mcpConfig) {
+                // Deep clone to avoid reference issues
+                taskData.mcpConfig = JSON.parse(JSON.stringify(currentProject.mcpConfig));
+                taskData.requiredMCPs = Object.keys(taskData.mcpConfig);
+                console.log('[TaskCreateModal] Set mcpConfig and requiredMCPs from project');
+            }
         }
 
         console.log('[TaskCreateModal] Final taskData:', taskData);
@@ -217,7 +223,7 @@ return {
 <template>
     <Teleport to="body">
         <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center">
-            <div class="absolute inset-0 bg-black/60" @click="emit('close')"></div>
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="emit('close')"></div>
             <div
                 class="relative bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-xl"
             >

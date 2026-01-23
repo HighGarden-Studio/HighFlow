@@ -12,7 +12,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { getAPI } from '../../utils/electron';
 import type { Task } from '@core/types/database';
 import ProjectCreationWizard from '../../components/project/ProjectCreationWizard.vue';
-import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import IconRenderer from '../../components/common/IconRenderer.vue';
 import { getProviderIcon } from '../../utils/iconMapping';
 
@@ -296,13 +296,6 @@ function cancelDeleteProject() {
 function closeProjectInfoModal() {
     showProjectInfoModal.value = false;
     selectedProjectForInfo.value = null;
-}
-
-async function handleProjectInfoUpdate() {
-    if (selectedProjectForInfo.value) {
-        await fetchProjectSummary(selectedProjectForInfo.value);
-        await projectStore.fetchProjects();
-    }
 }
 
 // Import Project
@@ -990,17 +983,12 @@ async function handleAIWizardCreated(projectData: any) {
             @created="handleAIWizardCreated"
         />
 
-        <!-- Project Info Modal -->
-        <ProjectInfoModal
+        <!-- Project Info Panel -->
+        <ProjectInfoPanel
+            v-if="selectedProjectForInfo"
             :project="selectedProjectForInfo"
-            :open="showProjectInfoModal"
+            :show="showProjectInfoModal"
             @close="closeProjectInfoModal"
-            @update="handleProjectInfoUpdate"
-            @edit="
-                () => {
-                    closeProjectInfoModal(); /* TODO: open project edit modal */
-                }
-            "
         />
 
         <!-- Delete Project Confirm Modal -->
@@ -1010,7 +998,7 @@ async function handleAIWizardCreated(projectData: any) {
                 class="fixed inset-0 z-50 flex items-center justify-center px-4"
             >
                 <div
-                    class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    class="absolute inset-0 bg-black/50 backdrop-blur-sm"
                     @click="cancelDeleteProject"
                 ></div>
                 <div

@@ -20,6 +20,7 @@ export class AIServiceConfig {
         openai: 'gpt-4o-mini',
         google: 'gemini-2.5-pro',
         'claude-code': 'claude-3-5-sonnet-20250219',
+        'gemini-cli': 'gemini-2.0-flash-thinking-exp-1219',
         codex: 'codex-latest',
         local: 'gpt-3.5-turbo', // Placeholder
         'default-highflow': 'gemini-2.5-flash',
@@ -141,6 +142,7 @@ export class AIServiceConfig {
             case 'google':
                 return !!process.env.GOOGLE_API_KEY;
             case 'claude-code':
+            case 'gemini-cli':
             case 'codex':
                 return true; // Local agents are always considered "configured" (available)
             default:
@@ -152,9 +154,9 @@ export class AIServiceConfig {
      * Get available providers
      */
     static getAvailableProviders(): AIProvider[] {
-        return (['anthropic', 'openai', 'google', 'claude-code', 'codex'] as AIProvider[]).filter(
-            (provider) => this.isProviderConfigured(provider)
-        );
+        return (
+            ['anthropic', 'openai', 'google', 'claude-code', 'gemini-cli', 'codex'] as AIProvider[]
+        ).filter((provider) => this.isProviderConfigured(provider));
     }
 
     /**

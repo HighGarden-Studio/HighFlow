@@ -168,7 +168,7 @@ function formatDate(date: Date): string {
     <div v-if="open" class="fixed inset-0 z-50 overflow-hidden pointer-events-none">
         <!-- Backdrop -->
         <div
-            class="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity pointer-events-auto"
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity pointer-events-auto"
             :class="open ? 'opacity-100' : 'opacity-0'"
             @click="handleClose"
         />

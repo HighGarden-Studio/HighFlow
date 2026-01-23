@@ -948,6 +948,25 @@ export const useTaskStore = defineStore('tasks', () => {
                     return { success: false, error: result.error || 'Failed to execute task' };
                 }
 
+                // [Changed] Special handling for 429/Capacity errors - Move to BLOCKED instead of rollback
+                const errorMessage = result.error || '';
+                const lowerMsg = errorMessage.toLowerCase();
+                if (
+                    lowerMsg.includes('429') ||
+                    lowerMsg.includes('capacity') ||
+                    lowerMsg.includes('quota exceeded') ||
+                    lowerMsg.includes('resource_exhausted') ||
+                    lowerMsg.includes('rate limit') ||
+                    lowerMsg.includes('too many requests') ||
+                    lowerMsg.includes('overloaded')
+                ) {
+                    await updateTask(projectId, sequence, {
+                        status: 'blocked',
+                        blockedReason: `AI Provider Error: ${errorMessage}`,
+                    });
+                    return { success: false, error: errorMessage };
+                }
+
                 // 실패 시 상태 롤백 (단, 이미 상태가 변경된 경우 - 예: failed 이벤트 수신 - 롤백하지 않음)
                 const currentTask = tasks.value.find(
                     (t) => t.projectId === projectId && t.projectSequence === sequence

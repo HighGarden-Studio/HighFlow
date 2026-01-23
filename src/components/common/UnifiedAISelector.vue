@@ -56,6 +56,7 @@ const availableLocalAgents = computed(() => {
         version?: string;
     }[] = [
         { id: 'claude', name: 'Claude Code', icon: '🤖', installed: false },
+        { id: 'gemini-cli', name: 'Gemini CLI', icon: '✨', installed: false },
         { id: 'codex', name: 'OpenAI Codex', icon: '💻', installed: false },
     ];
 

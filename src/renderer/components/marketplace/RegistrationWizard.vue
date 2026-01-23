@@ -412,7 +412,7 @@ function prevStep() {
 
 <template>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="emit('close')"></div>
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="emit('close')"></div>
         <div
             class="relative bg-gray-900 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-700"
         >

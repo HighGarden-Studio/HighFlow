@@ -73,28 +73,7 @@ function goToBoard() {
     router.push(`/projects/${projectId.value}/board`);
 }
 
-async function handleUpdateGuidelines(guidelines: string) {
-    if (!project.value) return;
-    await projectStore.updateProject(project.value.id, { aiGuidelines: guidelines });
-}
-
-async function handleUpdateAISettings(settings: {
-    aiProvider: string | null;
-    aiModel: string | null;
-}) {
-    if (!project.value) return;
-    await projectStore.updateProject(project.value.id, {
-        aiProvider: settings.aiProvider,
-        aiModel: settings.aiModel,
-    });
-}
-
-async function handleUpdateMCPConfig(config: Record<string, unknown> | null) {
-    if (!project.value) return;
-    await projectStore.updateProject(project.value.id, {
-        mcpConfig: config,
-    } as any);
-}
+// Obsolete handlers removed
 
 // Lifecycle
 onMounted(async () => {
@@ -388,13 +367,7 @@ onMounted(async () => {
                     <!-- Sidebar -->
                     <div class="space-y-6">
                         <!-- Project Info Panel -->
-                        <ProjectInfoPanel
-                            :project="project"
-                            @edit="startEditing"
-                            @update-guidelines="handleUpdateGuidelines"
-                            @update-ai-settings="handleUpdateAISettings"
-                            @update-mcp-config="handleUpdateMCPConfig"
-                        />
+                        <ProjectInfoPanel :project="project" @edit="startEditing" />
 
                         <!-- Quick Actions -->
                         <div class="bg-gray-800 rounded-lg p-4">

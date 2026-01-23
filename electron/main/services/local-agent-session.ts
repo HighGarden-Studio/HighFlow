@@ -137,6 +137,7 @@ export class LocalAgentSession extends EventEmitter {
     private executionMode: 'persistent' | 'oneshot' = 'persistent';
     private remoteThreadId: string | null = null; // Captured thread ID from agent
     private fullOutput: string = ''; // Capture full stdout for fallback
+    private lastErrorReason: string | null = null; // Capture specific error reason from agent events
 
     constructor(
         agentType: 'claude' | 'codex' | 'gemini-cli',
@@ -164,6 +165,8 @@ export class LocalAgentSession extends EventEmitter {
         if (this.process) {
             throw new Error('Session already started');
         }
+
+        this.lastErrorReason = null; // Reset error reason
 
         if (this.executionMode === 'oneshot') {
             console.log(
@@ -207,8 +210,21 @@ export class LocalAgentSession extends EventEmitter {
             throw new Error('Session not active');
         }
 
+        this.lastErrorReason = null; // Reset error reason
+
         if (this.status === 'running') {
-            throw new Error('Another message is being processed');
+            // Safety check: if oneshot mode and process is missing/dead, force reset
+            if (
+                this.executionMode === 'oneshot' &&
+                (!this.process || this.process.killed || this.process.exitCode !== null)
+            ) {
+                console.warn(
+                    `[LocalAgentSession] Session ${this.id} status was 'running' but process is dead/null. Resetting to idle.`
+                );
+                this.status = 'idle';
+            } else {
+                throw new Error('Another message is being processed');
+            }
         }
 
         const timeout = options.timeout ?? 0; // 0 = unlimited
@@ -253,9 +269,14 @@ export class LocalAgentSession extends EventEmitter {
                     args.push('--dangerously-bypass-approvals-and-sandbox');
                 } else if (this.agentType === 'gemini-cli') {
                     // Gemini CLI args
-                    args.push('--json'); // Request JSON output
+                    args.push('--output-format', 'stream-json'); // Request Streaming JSON output
+                    args.push('--approval-mode', 'yolo'); // Auto-approve all tools
                     if (options?.model) {
                         args.push('--model', options.model);
+                    }
+                    // Resume previous session if available
+                    if (this.remoteThreadId) {
+                        args.push('--resume', this.remoteThreadId);
                     }
                 } else {
                     // Default fallback (should vary by agent)
@@ -408,8 +429,44 @@ export class LocalAgentSession extends EventEmitter {
         // Handle stderr
         this.process.stderr?.on('data', (data: Buffer) => {
             const text = data.toString();
+
+            // [Filter] Suppress known benign Node.js warnings from child process
+            if (text.includes('MaxListenersExceededWarning') && text.includes('AbortSignal')) {
+                return;
+            }
+
+            // [Filter] Treat info messages printed to stderr as regular logs
+            if (
+                text.includes('YOLO mode is enabled') ||
+                text.includes('Loaded cached credentials') ||
+                text.includes("Server 'sequential-thinking' supports tool updates")
+            ) {
+                console.log(`[LocalAgentSession] ${this.agentType} info:`, text);
+                return;
+            }
+
             console.error(`[LocalAgentSession] ${this.agentType} stderr:`, text);
-            // Do NOT emit 'error' here as it crashes the app for non-fatal warnings
+
+            // Fast-fail on 429 Rate Limit / Capacity errors for Gemini CLI
+            if (this.agentType === 'gemini-cli' || this.agentType === 'codex') {
+                if (
+                    text.includes('status 429') ||
+                    text.includes('RESOURCE_EXHAUSTED') ||
+                    text.includes('No capacity available') ||
+                    text.includes('429 Too Many Requests')
+                ) {
+                    console.error(
+                        `[LocalAgentSession] Detected 429 Rate Limit/Capacity Error for ${this.agentType}. Fast-failing.`
+                    );
+                    this.lastErrorReason =
+                        'Quota exceeded or no capacity available (429). Please try again later or switch models.';
+
+                    // Force kill the process immediately to stop internal tool retries
+                    if (this.process && !this.process.killed) {
+                        this.process.kill('SIGKILL');
+                    }
+                }
+            }
         });
 
         // Handle process exit
@@ -436,7 +493,12 @@ export class LocalAgentSession extends EventEmitter {
             // Only reject if not intentionally closing
             // Exit code 143 = 128 + 15 = SIGTERM (normal termination)
             if (this.currentReject && !this.isClosing) {
-                this.currentReject(new Error(`Process exited unexpectedly with code ${code}`));
+                // Use captured error reason if available, otherwise generic message
+                const failureMessage = this.lastErrorReason
+                    ? `Agent Failed: ${this.lastErrorReason}`
+                    : `Process exited unexpectedly with code ${code}`;
+
+                this.currentReject(new Error(failureMessage));
                 this.currentReject = null;
                 this.currentResolve = null;
                 this.currentOnChunk = null;
@@ -542,39 +604,107 @@ export class LocalAgentSession extends EventEmitter {
                 this.completeResponse({ ...message, finished: true });
             } else if (message.type === 'error') {
                 console.error('[LocalAgentSession] Codex Error Event:', message);
+                // Capture the error message
+                this.lastErrorReason =
+                    typeof message.message === 'string' ? message.message : JSON.stringify(message);
             }
             return;
         }
 
         // Gemini CLI event handling
         if (this.agentType === 'gemini-cli') {
-            // Handle gemini-cli specific events
-            if (
-                message.type === 'response' ||
-                message.type === 'completion' ||
-                message.text ||
-                message.content
-            ) {
-                const textContent = String(message.text || message.content || '');
-                if (textContent) {
+            const msg = message as any;
+
+            // 1. Init event
+            if (msg.type === 'init') {
+                console.log(`[LocalAgentSession] Gemini CLI session started: ${msg.session_id}`);
+                if (msg.session_id) {
+                    this.remoteThreadId = msg.session_id;
+                }
+                this.emit('started', this.getInfo());
+                return;
+            }
+
+            // 2. Message event (User or Assistant)
+            if (msg.type === 'message') {
+                const content = msg.content || '';
+
+                // Only emit assistant messages as 'message' events for the UI
+                if (msg.role === 'assistant') {
                     const compatibleMsg = {
                         type: 'assistant',
                         message: {
-                            content: [{ type: 'text', text: textContent }],
+                            content: [{ type: 'text', text: content }],
                         },
                     };
-                    this.captureTranscript(compatibleMsg);
+
+                    // Capture in transcript
+                    this.captureTranscript({
+                        type: 'assistant',
+                        message: { content: [{ type: 'text', text: content }] },
+                    });
+
                     this.emit('message', compatibleMsg);
 
-                    if (this.currentOnChunk) {
-                        this.currentOnChunk(textContent);
+                    if (this.currentOnChunk && msg.delta) {
+                        // If delta is true, it might be a chunk, but the content seems to be full text in some contexts?
+                        // Docs say "delta": true for simple chunks?
+                        // The example "content": "Here are the files..." with delta: true implies a chunk.
+                        this.currentOnChunk(content);
+                    } else if (this.currentOnChunk && content) {
+                        this.currentOnChunk(content);
                     }
                 }
+                return;
             }
 
-            if (message.done || message.finished || message.type === 'completion') {
-                this.completeResponse({ ...message, finished: true });
+            // 3. Tool Use event
+            if (msg.type === 'tool_use') {
+                console.log(`[LocalAgentSession] Gemini Tool Use: ${msg.tool_name}`);
+                // Capture in transcript for history
+                this.transcript.push({
+                    role: 'assistant',
+                    type: 'tool_use',
+                    timestamp: new Date(msg.timestamp || Date.now()),
+                    metadata: {
+                        tool_name: msg.tool_name,
+                        tool_id: msg.tool_id,
+                        parameters: msg.parameters,
+                    },
+                });
+                return;
             }
+
+            // 4. Tool Result event
+            if (msg.type === 'tool_result') {
+                console.log(`[LocalAgentSession] Gemini Tool Result: ${msg.status}`);
+                this.transcript.push({
+                    role: 'user', // Tool results are inputs to the model
+                    type: 'tool_result',
+                    timestamp: new Date(msg.timestamp || Date.now()),
+                    metadata: {
+                        tool_id: msg.tool_id,
+                        status: msg.status,
+                        output: msg.output,
+                    },
+                });
+                return;
+            }
+
+            // 5. Error event
+            if (msg.type === 'error') {
+                console.error(`[LocalAgentSession] Gemini Error:`, msg);
+                // Non-fatal errors, just log them or emit as transient error?
+                // Depending on severity, we might want to fail the turn.
+                return;
+            }
+
+            // 6. Result event (Completion)
+            if (msg.type === 'result') {
+                this.completeResponse({ ...msg, finished: true });
+                return;
+            }
+
             return;
         }
 

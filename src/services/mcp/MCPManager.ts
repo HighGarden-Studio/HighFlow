@@ -930,15 +930,25 @@ export class MCPManager {
             await client.connect(transport);
         } else if (runtimeConfig?.endpoint?.startsWith('stdio://')) {
             const command = runtimeConfig.endpoint.replace('stdio://', '');
+
+            // Allow overriding args from config (ex. for filesystem paths per project)
+            const overrideArgs = mergedRuntimeConfig?.args as string[] | undefined;
+            const finalArgs =
+                overrideArgs && Array.isArray(overrideArgs)
+                    ? overrideArgs
+                    : runtimeConfig.args || [];
+
             console.log(`[MCPManager Debug] Starting MCP #${mcpId} with runtime endpoint:`, {
                 command,
-                args: runtimeConfig.args,
+                args: finalArgs,
+                originalArgs: runtimeConfig.args,
+                isOverridden: !!overrideArgs,
                 envKeys: Object.keys(transportEnv),
                 hasSlackToken: !!transportEnv.SLACK_BOT_TOKEN,
             });
             const transport = new StdioClientTransport({
                 command,
-                args: runtimeConfig.args || [],
+                args: finalArgs,
                 env: transportEnv,
             });
             await client.connect(transport);

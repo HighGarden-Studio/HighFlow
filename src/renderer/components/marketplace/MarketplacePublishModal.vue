@@ -175,7 +175,7 @@ onMounted(async () => {
 <template>
     <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="close"></div>
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="emit('close')"></div>
 
         <!-- Modal -->
         <div

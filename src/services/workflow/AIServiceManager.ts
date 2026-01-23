@@ -457,7 +457,10 @@ export class AIServiceManager {
 
         try {
             // Determine provider and model
-            const provider = this.resolveProvider(task.aiProvider as AIProvider | null, context);
+            const provider = await this.resolveProvider(
+                task.aiProvider as AIProvider | null,
+                context
+            );
 
             // If we fell back to a different provider, we must reset the model to the new provider's default
             // to avoid sending an incompatible model (e.g. Claude) to the fallback provider (e.g. OpenAI).
@@ -1759,7 +1762,7 @@ export class AIServiceManager {
      * Estimate cost for a task
      */
     async estimateCost(task: Task): Promise<number> {
-        const provider = this.resolveProvider(task.aiProvider as AIProvider | null);
+        const provider = await this.resolveProvider(task.aiProvider as AIProvider | null);
         const model = this.resolveModel(provider, task.aiModel as AIModel | null);
         const prompt = this.buildPrompt(task);
 
@@ -1779,19 +1782,23 @@ export class AIServiceManager {
     // Private Helper Methods
     // ========================================
 
-    private resolveProvider(
+    private async resolveProvider(
         taskProvider: AIProvider | null,
         context?: ExecutionContext
-    ): AIProvider {
+    ): Promise<AIProvider> {
         const enabledProviderIds = this.getEnabledProviderIds();
 
         // 1. Check Task-level Provider
-        if (
-            taskProvider &&
-            enabledProviderIds.includes(taskProvider) &&
-            this.providerFactory.isProviderAvailable(taskProvider)
-        ) {
-            return taskProvider;
+        if (taskProvider) {
+            // console.log(`[AIServiceManager] Resolving Task Provider: ${taskProvider}`);
+            const isTaskProviderReady = await this.providerFactory.isProviderReady(taskProvider);
+            // console.log(
+            //    `[AIServiceManager] Task Provider ${taskProvider} ready: ${isTaskProviderReady}`
+            // );
+
+            if (enabledProviderIds.includes(taskProvider) && isTaskProviderReady) {
+                return taskProvider;
+            }
         }
 
         // 2. Check Project-level Provider (Inheritance)
@@ -1799,18 +1806,26 @@ export class AIServiceManager {
         if (
             projectProvider &&
             enabledProviderIds.includes(projectProvider) &&
-            this.providerFactory.isProviderAvailable(projectProvider)
+            (await this.providerFactory.isProviderReady(projectProvider))
         ) {
             return projectProvider;
         }
 
-        // 3. Fallback to First Available Provider
+        // 3. Fallback to First Available (and Ready) Provider
         for (const providerId of enabledProviderIds) {
-            if (this.providerFactory.isProviderAvailable(providerId)) {
+            // console.log(`[AIServiceManager] Checking fallback provider: ${providerId}`);
+            // Explicit readiness check (e.g. login status for Default HighFlow)
+            const isReady = await this.providerFactory.isProviderReady(providerId);
+            // console.log(`[AIServiceManager] Provider ${providerId} ready status: ${isReady}`);
+
+            if (isReady) {
                 return providerId;
             }
         }
 
+        console.warn(
+            '[AIServiceManager] No ready providers found in fallback, defaulting to anthropic'
+        );
         // 4. Ultimate Fallback
         return 'anthropic';
     }

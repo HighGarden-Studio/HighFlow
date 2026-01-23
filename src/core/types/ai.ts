@@ -44,6 +44,7 @@ export type AIProvider =
     | 'qwen'
     | 'baidu'
     | 'claude-code'
+    | 'gemini-cli'
     | 'codex'
     | 'local';
 

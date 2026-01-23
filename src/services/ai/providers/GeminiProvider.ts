@@ -127,7 +127,7 @@ export class GeminiProvider extends BaseAIProvider {
         context?: ExecutionContext,
         signal?: AbortSignal
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -314,7 +314,7 @@ export class GeminiProvider extends BaseAIProvider {
         context?: ExecutionContext,
         signal?: AbortSignal
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -430,7 +430,7 @@ export class GeminiProvider extends BaseAIProvider {
         context?: ExecutionContext,
         signal?: AbortSignal
     ): AsyncGenerator<StreamChunk> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const client = this.getClient();
 
         let contents: any;

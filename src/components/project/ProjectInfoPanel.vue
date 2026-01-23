@@ -10,8 +10,9 @@
  * - Cost and token usage statistics
  */
 
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
+import ProjectMemoryPanel from './ProjectMemoryPanel.vue';
 import { marked } from 'marked';
 
 import type { MCPConfig, Project } from '@core/types/database';
@@ -37,6 +38,7 @@ function isLocalAgentProvider(provider: string | null): {
     const localAgentMap: Record<string, string> = {
         'claude-code': 'claude',
         codex: 'codex',
+        'gemini-cli': 'gemini-cli',
     };
 
     const agentType = localAgentMap[provider];
@@ -58,25 +60,36 @@ function isLocalAgentProvider(provider: string | null): {
 
 const props = defineProps<{
     project: Project;
+    show?: boolean; // Controls visibility
     compact?: boolean;
 }>();
 
 const emit = defineEmits<{
+    (e: 'close'): void;
     (e: 'edit'): void;
     (e: 'open-output'): void;
-    (e: 'update-guidelines', guidelines: string): void;
-    (e: 'update-base-folder', folder: string): void;
-    (
-        e: 'update-ai-settings',
-        settings: { aiProvider: string | null; aiModel: string | null }
-    ): void;
-    (e: 'update-output-type', type: string | null): void;
-    (
-        e: 'update-auto-review-settings',
-        settings: { aiProvider: string | null; aiModel: string | null }
-    ): void;
-    (e: 'update-mcp-config', config: MCPConfig | null): void;
 }>();
+
+// Panel state
+const activeTab = ref<'info' | 'context'>('info');
+
+function handleClose() {
+    emit('close');
+}
+
+// Watch for show prop to handle body scroll or ESC key if needed
+watch(
+    () => props.show,
+    (show, _, onCleanup) => {
+        if (show) {
+            const handleEscape = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') handleClose();
+            };
+            window.addEventListener('keydown', handleEscape);
+            onCleanup(() => window.removeEventListener('keydown', handleEscape));
+        }
+    }
+);
 
 // ========================================
 // State
@@ -142,11 +155,16 @@ const aiProviderDisplay = computed(() => {
     const providerId = isEditingAI.value ? editedAIProvider.value : effectiveAI.value.provider;
 
     // Check if it's a local agent
-    if (providerId && ['claude-code', 'codex'].includes(providerId)) {
+    if (providerId && isLocalAgentProvider(providerId).isLocal) {
+        const localIcons: Record<string, string> = {
+            'claude-code': '🤖',
+            codex: '💻',
+            'gemini-cli': '✨',
+        };
         return {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
-            icon: getAssistantIcon(providerId),
+            icon: localIcons[providerId] || '💻',
         };
     }
 
@@ -358,7 +376,7 @@ const autoReviewProviderDisplay = computed(() => {
           effectiveAutoReview.value.provider;
 
     // Check if it's a local agent
-    if (providerId && ['claude-code', 'codex'].includes(providerId)) {
+    if (providerId && isLocalAgentProvider(providerId).isLocal) {
         return {
             name: getAssistantLabel(providerId),
             color: 'text-gray-400',
@@ -411,11 +429,18 @@ watch(
 // Methods
 // ========================================
 
+const titleInputRef = ref<HTMLInputElement | null>(null);
+
 function startEditMetadata(): void {
     editedTitle.value = props.project.title;
     // Assuming project has emoji field, cast to any if TS complains or update Project type if possible
     editedEmoji.value = (props.project as any).emoji || '';
     isEditingMetadata.value = true;
+
+    // Focus title input
+    nextTick(() => {
+        titleInputRef.value?.focus();
+    });
 }
 
 function cancelEditMetadata(): void {
@@ -463,9 +488,18 @@ function cancelEditGuidelines(): void {
     editedGuidelines.value = '';
 }
 
-function saveGuidelines(): void {
-    emit('update-guidelines', editedGuidelines.value);
-    isEditingGuidelines.value = false;
+async function saveGuidelines(): Promise<void> {
+    try {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
+            aiGuidelines: editedGuidelines.value || null,
+        });
+        isEditingGuidelines.value = false;
+        // Optimization: update local effective value display immediately if needed,
+        // but store reactivity should handle it via props.project watcher/computed
+    } catch (error) {
+        console.error('Failed to update guidelines:', error);
+    }
 }
 
 function copyGuidelines(): void {
@@ -474,15 +508,22 @@ function copyGuidelines(): void {
     }
 }
 
-function saveBaseFolder(): void {
-    emit('update-base-folder', editedBaseFolder.value);
+async function saveBaseFolder(): Promise<void> {
+    try {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
+            baseDevFolder: editedBaseFolder.value || null,
+        });
+    } catch (error) {
+        console.error('Failed to update base folder:', error);
+    }
 }
 
 async function pickBaseFolder(): Promise<void> {
     const dir = await (window as any)?.electron?.fs?.selectDirectory?.();
     if (dir) {
         editedBaseFolder.value = dir;
-        saveBaseFolder();
+        await saveBaseFolder();
     }
 }
 
@@ -528,31 +569,31 @@ async function saveAISettings(): Promise<void> {
         const agentMap: Record<string, string> = {
             claude: 'claude-code',
             codex: 'codex',
+            'gemini-cli': 'gemini-cli',
         };
         providerToSave = (agentMap[editedLocalAgent.value] || editedLocalAgent.value) as AIProvider;
         // For local agents, the model might be redundant or same as provider ID, but let's keep it clean
         modelToSave = null;
     }
 
-    // Emit settings update
-    emit('update-ai-settings', {
-        aiProvider: providerToSave,
-        aiModel: modelToSave,
-    });
+    try {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
+            aiProvider: providerToSave,
+            aiModel: modelToSave,
+        });
 
-    // If project was synced with Claude, mark as manually overridden
-    if (wasClaudeCodeSynced) {
-        try {
-            const projectStore = useProjectStore();
+        // If project was synced with Claude, mark as manually overridden
+        if (wasClaudeCodeSynced) {
             const overrideUpdate = projectClaudeSyncService.markAsOverridden(props.project as any);
             await projectStore.updateProject(props.project.id, overrideUpdate as any);
             console.log('[ProjectInfoPanel] Marked project settings as manually overridden');
-        } catch (error) {
-            console.error('[ProjectInfoPanel] Failed to mark as overridden:', error);
         }
-    }
 
-    isEditingAI.value = false;
+        isEditingAI.value = false;
+    } catch (error) {
+        console.error('Failed to update AI settings:', error);
+    }
 }
 
 // MCP 관련 함수
@@ -569,9 +610,33 @@ function cancelEditMCP(): void {
     editedMCPConfig.value = null;
 }
 
-function saveMCPSettings(): void {
-    emit('update-mcp-config', editedMCPConfig.value);
-    isEditingMCP.value = false;
+async function saveMCPSettings(): Promise<void> {
+    try {
+        const projectStore = useProjectStore();
+        // Deep clone to ensure no proxies are passed
+        const configToSave = editedMCPConfig.value
+            ? JSON.parse(JSON.stringify(editedMCPConfig.value))
+            : {};
+
+        // Auto-configure filesystem MCP if enabled and baseDevFolder is set
+        if (configToSave['filesystem'] && props.project.baseDevFolder) {
+            configToSave['filesystem'].config = {
+                ...(configToSave['filesystem'].config || {}),
+                args: [
+                    '-y',
+                    '@modelcontextprotocol/server-filesystem',
+                    props.project.baseDevFolder,
+                ],
+            };
+        }
+
+        await projectStore.updateProject(props.project.id, {
+            mcpConfig: configToSave,
+        });
+        isEditingMCP.value = false;
+    } catch (error) {
+        console.error('Failed to update MCP settings:', error);
+    }
 }
 
 // Output Type Methods
@@ -585,9 +650,16 @@ function cancelEditOutputType(): void {
     editedOutputType.value = null;
 }
 
-function saveOutputType(): void {
-    emit('update-output-type', editedOutputType.value);
-    isEditingOutputType.value = false;
+async function saveOutputType(): Promise<void> {
+    try {
+        const projectStore = useProjectStore();
+        await projectStore.updateProject(props.project.id, {
+            outputType: editedOutputType.value || null,
+        });
+        isEditingOutputType.value = false;
+    } catch (error) {
+        console.error('Failed to update output type:', error);
+    }
 }
 
 // Goal Methods
@@ -644,12 +716,21 @@ function cancelEditAutoReview(): void {
     editedAutoReviewLocalAgent.value = null;
 }
 
-function saveAutoReviewSettings(): void {
-    emit('update-auto-review-settings', {
-        aiProvider: editedAutoReviewProvider.value,
-        aiModel: editedAutoReviewModel.value,
-    });
-    isEditingAutoReview.value = false;
+async function saveAutoReviewSettings(): Promise<void> {
+    try {
+        const projectStore = useProjectStore();
+        const currentMetadata = (props.project as any).metadata || {};
+        await projectStore.updateProject(props.project.id, {
+            metadata: {
+                ...currentMetadata,
+                autoReviewProvider: editedAutoReviewProvider.value,
+                autoReviewModel: editedAutoReviewModel.value,
+            },
+        });
+        isEditingAutoReview.value = false;
+    } catch (error) {
+        console.error('Failed to update auto-review settings:', error);
+    }
 }
 
 // Helper functions for displaying assistant types
@@ -660,6 +741,8 @@ function getAssistantIcon(type: string): string {
         'claude-code':
             'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11.89-8.42l-22.26-3a16.09,16.09,0,0,0-13.38,4.93L40,132.19A88,88,0,0,1,128,40a87.53,87.53,0,0,1,15.87,1.46L159.3,56a16,16,0,0,0,12.26,5.61h19.41A88.22,88.22,0,0,1,216,128Z',
         codex: 'M229.66,90.34l-64-64a8,8,0,0,0-11.32,0l-64,64a8,8,0,0,0,11.32,11.32L152,51.31V96a8,8,0,0,0,16,0V51.31l50.34,50.35a8,8,0,0,0,11.32-11.32ZM208,144a40,40,0,1,0-40,40A40,40,0,0,0,208,144Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,144,144ZM88,104A40,40,0,1,0,48,144,40,40,0,0,0,88,104ZM64,144a24,24,0,1,1,24-24A24,24,0,0,1,64,144Zm176,72a40,40,0,1,0-40,40A40,40,0,0,0,240,216Zm-64,0a24,24,0,1,1,24,24A24,24,0,0,1,176,216Z',
+        'gemini-cli':
+            'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z',
     };
     return (icons[type] || icons.git) as string;
 }
@@ -668,6 +751,7 @@ function getAssistantLabel(type: string): string {
     const labels: Record<string, string> = {
         git: 'Git',
         'claude-code': 'Claude Code',
+        'gemini-cli': 'Gemini CLI',
         codex: 'Codex',
 
         cursor: 'Cursor',
@@ -680,860 +764,1049 @@ function getAssistantLabel(type: string): string {
 </script>
 
 <template>
-    <div class="project-info-panel bg-gray-800/50 rounded-lg border border-gray-700">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-700">
-            <div class="flex items-center space-x-3">
-                <div v-if="isEditingMetadata" class="flex items-center space-x-2">
-                    <!-- Color Picker (simplified as preset colors for now or just text input? let's stick to title for MVP inline edit as per plan) -->
-                    <!-- Actually plan said "Transform the Header section (Title, Emoji, Color) into inputs".
-                         Let's Start with Title and Emoji.
-                    -->
-                    <input
-                        v-model="editedEmoji"
-                        class="w-8 h-8 text-center bg-gray-700 border border-gray-600 rounded text-lg focus:outline-none focus:border-blue-500"
-                        placeholder="📝"
-                    />
-                    <input
-                        v-model="editedTitle"
-                        class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500"
-                        :placeholder="t('project.modal.name_label')"
-                        @keyup.enter="saveMetadata"
-                    />
-                </div>
-                <h3 v-else class="text-lg font-semibold text-gray-200">
-                    <span v-if="project.emoji" class="mr-2">{{ project.emoji }}</span>
-                    {{ project.title }}
-                </h3>
-
-                <span
-                    v-if="!isEditingMetadata"
-                    class="px-2 py-0.5 text-xs rounded-full text-white"
-                    :class="statusDisplay.color"
-                >
-                    {{ statusDisplay.name }}
-                </span>
-            </div>
-
-            <div class="flex items-center space-x-2">
-                <template v-if="isEditingMetadata">
-                    <button
-                        class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200 text-xs"
-                        @click="cancelEditMetadata"
-                    >
-                        {{ t('common.cancel') }}
-                    </button>
-                    <button
-                        class="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white text-xs"
-                        @click="saveMetadata"
-                    >
-                        {{ t('common.save') }}
-                    </button>
-                </template>
-                <button
-                    v-else
-                    class="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200"
-                    :title="t('common.edit')"
-                    @click="startEditMetadata"
-                >
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-        <div class="p-4 space-y-4">
-            <!-- Main Prompt Section -->
-            <div v-if="project.mainPrompt" class="space-y-2">
-                <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">{{
-                        t('project.info.initial_prompt')
-                    }}</label>
-                    <button
-                        class="text-xs text-gray-500 hover:text-gray-300 flex items-center space-x-1"
-                        :title="t('common.copy')"
-                        @click="copyPrompt"
-                    >
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                        </svg>
-                        <span>{{ t('common.copy') }}</span>
-                    </button>
-                </div>
-                <div
-                    class="bg-gray-900/50 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto"
-                >
-                    {{ truncatedPrompt }}
-                </div>
-                <button
-                    v-if="compact && project.mainPrompt && project.mainPrompt.length > 150"
-                    class="text-xs text-blue-400 hover:text-blue-300"
-                >
-                    {{ t('common.view_all') }}
-                </button>
-            </div>
-
-            <div v-else class="text-center py-4 text-gray-500 text-sm">
-                {{ t('project.info.no_initial_prompt') }}
-            </div>
-
-            <!-- Project Goal Section -->
-            <div class="space-y-2 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">{{
-                        t('project.info.goal')
-                    }}</label>
-                    <button
-                        v-if="!isEditingGoal"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
-                        @click="startEditGoal"
-                    >
-                        <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                        </svg>
-                        <span>{{ project.goal ? t('common.edit') : t('common.add') }}</span>
-                    </button>
-                </div>
-
-                <!-- View Mode -->
-                <div
-                    v-if="!isEditingGoal && project.goal"
-                    class="bg-gray-900/50 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap"
-                >
-                    {{ project.goal }}
-                </div>
-
-                <!-- Empty State -->
-                <div
-                    v-else-if="!isEditingGoal && !project.goal"
-                    class="bg-gray-900/30 rounded-lg p-4 text-center"
-                >
-                    <div class="text-gray-500 text-sm mb-2">
-                        {{ t('project.info.goal_help') }}
-                    </div>
-                    <button
-                        class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                        @click="startEditGoal"
-                    >
-                        {{ t('project.info.add_goal') }}
-                    </button>
-                </div>
-
-                <!-- Edit Mode -->
-                <div v-if="isEditingGoal" class="space-y-3">
-                    <textarea
-                        v-model="editedGoal"
-                        class="w-full h-32 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-blue-500"
-                        :placeholder="t('project.info.goal_placeholder')"
-                    ></textarea>
-                    <div class="flex justify-end space-x-2">
-                        <button
-                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                            @click="cancelEditGoal"
-                        >
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                            @click="saveGoal"
-                        >
-                            {{ t('common.save') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- AI Guidelines Section -->
-            <div class="space-y-2 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <button
-                        class="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
-                        @click="toggleGuidelines"
-                    >
-                        <svg
-                            class="w-4 h-4 transition-transform"
-                            :class="{ 'rotate-90': showGuidelines }"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M9 5l7 7-7 7"
-                            />
-                        </svg>
-                        <span>{{ t('project.info.ai_guidelines') }}</span>
-                        <span
-                            v-if="hasGuidelines"
-                            class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded"
-                        >
-                            {{ t('project.info.guidelines_set') }}
-                        </span>
-                        <span
-                            v-else
-                            class="px-1.5 py-0.5 text-xs bg-gray-600/50 text-gray-400 rounded"
-                        >
-                            {{ t('project.info.guidelines_not_set') }}
-                        </span>
-                    </button>
-                    <div v-if="hasGuidelines" class="flex items-center space-x-1">
-                        <button
-                            class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
-                            :title="t('common.copy')"
-                            @click="copyGuidelines"
-                        >
-                            <svg
-                                class="w-3.5 h-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                />
-                            </svg>
-                        </button>
-                        <button
-                            class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
-                            :title="t('common.edit')"
-                            @click="startEditGuidelines"
-                        >
-                            <svg
-                                class="w-3.5 h-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Guidelines Content -->
-                <div v-if="showGuidelines" class="space-y-3">
-                    <!-- View Mode -->
-                    <div
-                        v-if="!isEditingGuidelines && hasGuidelines"
-                        class="bg-gray-900/50 rounded-lg p-4 max-h-96 overflow-y-auto"
-                    >
-                        <div
-                            class="guidelines-content prose prose-invert prose-sm max-w-none"
-                            v-html="renderedGuidelines"
-                        ></div>
-                    </div>
-
-                    <!-- Empty State -->
-                    <div
-                        v-else-if="!isEditingGuidelines && !hasGuidelines"
-                        class="bg-gray-900/30 rounded-lg p-6 text-center"
-                    >
-                        <div class="text-gray-500 text-sm mb-3">
-                            {{ t('project.info.guidelines_empty') }}
-                        </div>
-                        <button
-                            class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
-                            @click="startEditGuidelines"
-                        >
-                            {{ t('project.info.add_guidelines') }}
-                        </button>
-                    </div>
-
-                    <!-- Edit Mode -->
-                    <div v-if="isEditingGuidelines" class="space-y-3">
-                        <textarea
-                            v-model="editedGuidelines"
-                            class="w-full h-64 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-purple-500"
-                            :placeholder="t('project.info.guidelines_placeholder')"
-                        ></textarea>
-                        <div class="flex justify-end space-x-2">
-                            <button
-                                class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                                @click="cancelEditGuidelines"
-                            >
-                                {{ t('common.cancel') }}
-                            </button>
-                            <button
-                                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
-                                @click="saveGuidelines"
-                            >
-                                {{ t('common.save') }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Output Type -->
-            <div class="space-y-2 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-400">{{
-                        t('project.info.output_type')
-                    }}</label>
-                    <button
-                        v-if="!isEditingOutputType"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
-                        @click="startEditOutputType"
-                    >
-                        <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                        </svg>
-                        <span>{{ t('common.edit') }}</span>
-                    </button>
-                </div>
-
-                <!-- View Mode -->
-                <div v-if="!isEditingOutputType" class="flex items-center space-x-2">
-                    <IconRenderer :emoji="outputTypeDisplay.icon" class="w-5 h-5" />
-                    <div>
-                        <div class="text-sm font-medium text-gray-300">
-                            {{ outputTypeDisplay.name }}
-                        </div>
-                        <div class="text-xs text-gray-500">
-                            {{ outputTypeDisplay.description }}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Edit Mode -->
-                <div v-else class="space-y-2">
-                    <select
-                        v-model="editedOutputType"
-                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                    >
-                        <option :value="null">{{ t('common.not_selected') }}</option>
-                        <option v-for="(info, type) in outputTypes" :key="type" :value="type">
-                            {{ info.icon }} {{ info.name }}
-                        </option>
-                    </select>
-                    <div class="flex justify-end space-x-2">
-                        <button
-                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                            @click="cancelEditOutputType"
-                        >
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                            @click="saveOutputType"
-                        >
-                            {{ t('common.save') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- AI Settings (Project Default) -->
-            <div class="space-y-3 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <label class="text-sm font-medium text-gray-300">{{
-                            t('project.info.project_default_ai')
-                        }}</label>
-                        <!-- Claude Code Sync Status Badge -->
-                        <span
-                            v-if="claudeSyncStatus"
-                            class="px-2 py-0.5 text-xs rounded-full flex items-center gap-1"
-                            :class="
-                                claudeSyncColor === 'green'
-                                    ? 'bg-green-900/30 text-green-300 border border-green-700/50'
-                                    : 'bg-gray-700/50 text-gray-400 border border-gray-600/50'
-                            "
-                        >
-                            <svg
-                                v-if="claudeSyncColor === 'green'"
-                                class="w-3 h-3"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                            <span>{{ claudeSyncStatus }}</span>
-                        </span>
-                    </div>
-                    <button
-                        v-if="!isEditingAI"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer z-10"
-                        @click.stop="startEditAI"
-                    >
-                        <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                        </svg>
-                        <span>{{ t('common.edit') }}</span>
-                    </button>
-                </div>
-
-                <!-- View Mode -->
-                <div v-if="!isEditingAI" class="grid grid-cols-2 gap-4">
-                    <!-- AI Provider -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-500">{{
-                            t('project.info.ai_provider')
-                        }}</label>
-                        <div class="flex items-center space-x-2">
-                            <IconRenderer :emoji="aiProviderDisplay.icon" class="w-4 h-4" />
-                            <span :class="aiProviderDisplay.color" class="text-sm font-medium">
-                                {{ aiProviderDisplay.name }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- AI Model -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-500">{{
-                            t('project.info.ai_model')
-                        }}</label>
-                        <div class="text-sm font-medium text-gray-300">
-                            {{ aiModelDisplay }}
-                            <span
-                                v-if="effectiveAI.source === 'global' && !props.project.aiModel"
-                                class="text-xs text-gray-500 ml-1"
-                            >
-                                ({{ t('project.info.settings_default') }})
-                            </span>
-                            <span
-                                v-if="effectiveAI.source === 'project' && props.project.aiProvider"
-                                class="text-xs text-blue-400 ml-1"
-                            >
-                                ({{ t('project.info.project_value') }})
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Edit Mode -->
-                <div v-else class="space-y-3">
-                    <!-- Unified AI Selector -->
-                    <UnifiedAISelector
-                        v-model:mode="editedAIMode"
-                        v-model:provider="editedAIProvider"
-                        v-model:model="editedAIModel"
-                        v-model:local-agent="editedLocalAgent"
-                        :is-dev-project="true"
-                        :label="t('project.info.project_default_ai')"
-                    />
-
-                    <!-- Info Banner -->
-                    <div class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3">
-                        <div class="flex items-start space-x-2">
-                            <svg
-                                class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                            <div class="text-xs text-blue-300">
-                                {{ t('project.info.project_default_ai_info') }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-2">
-                        <button
-                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                            @click="cancelEditAI"
-                        >
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                            @click="saveAISettings"
-                        >
-                            {{ t('common.save') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Base Dev Folder -->
-            <div class="space-y-2 border-t border-gray-700 pt-4">
-                <label class="text-sm font-medium text-gray-300">{{
-                    t('project.info.base_folder')
-                }}</label>
-                <div class="flex items-center space-x-2">
-                    <div
-                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
-                    >
-                        {{ project.baseDevFolder || t('project.info.base_folder_not_set') }}
-                    </div>
-                    <button
-                        class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
-                        :title="t('project.info.base_folder_change')"
-                        @click="pickBaseFolder"
-                    >
-                        <FolderOpen class="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-
-            <!-- MCP 설정 -->
-            <div class="space-y-3 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-300">{{
-                        t('project.info.mcp_settings')
-                    }}</label>
-                    <button
-                        v-if="!isEditingMCP"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
-                        @click="startEditMCP"
-                    >
-                        <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                        </svg>
-                        <span>{{ t('common.edit') }}</span>
-                    </button>
-                </div>
-
-                <!-- View Mode -->
-                <div v-if="!isEditingMCP">
-                    <div
-                        v-if="project.mcpConfig && Object.keys(project.mcpConfig).length > 0"
-                        class="space-y-2"
-                    >
-                        <div
-                            v-for="(config, serverId) in project.mcpConfig"
-                            :key="serverId"
-                            class="bg-gray-900/30 rounded-lg p-3"
-                        >
-                            <div class="text-sm font-medium text-gray-300">{{ serverId }}</div>
-                            <div class="text-xs text-gray-500 mt-1">
-                                {{
-                                    t('project.info.mcp_env_count', {
-                                        count: Object.keys(config.env || {}).length,
-                                    })
-                                }},
-                                {{
-                                    t('project.info.mcp_params_count', {
-                                        count: Object.keys(config.params || {}).length,
-                                    })
-                                }}
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="bg-gray-900/30 rounded-lg p-3">
-                        <p class="text-xs text-gray-500">{{ t('project.info.mcp_no_servers') }}</p>
-                    </div>
-                </div>
-
-                <!-- Edit Mode -->
-                <div v-else class="space-y-4">
-                    <MCPToolSelector
-                        v-model:selected-ids="selectedMCPServers"
-                        v-model:config="editedMCPConfig"
-                    />
-
-                    <!-- Info Banner -->
-                    <div class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3">
-                        <div class="flex items-start space-x-2">
-                            <svg
-                                class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                            <div class="text-xs text-blue-300">
-                                {{ t('project.info.mcp_default_info') }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-2">
-                        <button
-                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                            @click="cancelEditMCP"
-                        >
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                            @click="saveMCPSettings"
-                        >
-                            {{ t('common.save') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Auto Review Settings -->
-            <div class="space-y-3 border-t border-gray-700 pt-4">
-                <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-gray-300">{{
-                        t('project.info.auto_review_settings')
-                    }}</label>
-                    <button
-                        v-if="!isEditingAutoReview"
-                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
-                        @click="startEditAutoReview"
-                    >
-                        <svg
-                            class="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                        </svg>
-                        <span>{{ t('common.edit') }}</span>
-                    </button>
-                </div>
-
-                <!-- View Mode -->
-                <div v-if="!isEditingAutoReview" class="grid grid-cols-2 gap-4">
-                    <!-- AI Provider -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-500">{{
-                            t('project.info.ai_provider')
-                        }}</label>
-                        <div class="flex items-center space-x-2">
-                            <template v-if="autoReviewProviderDisplay.svgPath">
-                                <svg
-                                    class="w-4 h-4 text-gray-400"
-                                    viewBox="0 0 256 256"
-                                    fill="currentColor"
-                                >
-                                    <path :d="autoReviewProviderDisplay.svgPath" />
-                                </svg>
-                            </template>
-                            <IconRenderer
-                                v-else
-                                :emoji="autoReviewProviderDisplay.icon || '❓'"
-                                class="w-4 h-4"
-                            />
-                            <span
-                                :class="autoReviewProviderDisplay.color"
-                                class="text-sm font-medium"
-                            >
-                                {{ autoReviewProviderDisplay.name }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- AI Model -->
-                    <div class="space-y-1">
-                        <label class="text-xs text-gray-500">{{
-                            t('project.info.ai_model')
-                        }}</label>
-                        <div class="text-sm font-medium text-gray-300">
-                            {{ autoReviewModelDisplay }}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Edit Mode -->
-                <div v-else class="space-y-3">
-                    <!-- Unified AI Selector -->
-                    <UnifiedAISelector
-                        v-model:mode="editedAutoReviewMode"
-                        v-model:provider="editedAutoReviewProvider"
-                        v-model:model="editedAutoReviewModel"
-                        v-model:local-agent="editedAutoReviewLocalAgent"
-                        :is-dev-project="!!project.baseDevFolder"
-                        :label="t('project.info.auto_review_ai_settings')"
-                    />
-
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-2">
-                        <button
-                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
-                            @click="cancelEditAutoReview"
-                        >
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
-                            @click="saveAutoReviewSettings"
-                        >
-                            {{ t('common.save') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Local Repository Info -->
-            <div v-if="project.metadata?.localRepo" class="space-y-2 border-t border-gray-700 pt-4">
-                <label class="text-sm font-medium text-gray-400">{{
-                    t('project.info.local_repo_info')
-                }}</label>
-
-                <div class="bg-gray-900/50 rounded-lg p-3 space-y-2">
-                    <div class="text-sm text-gray-300 font-mono truncate">
-                        {{ project.metadata.localRepo.path }}
-                    </div>
-
-                    <!-- Multiple Assistant Icons -->
-                    <div v-if="project.metadata.localRepo.types" class="flex items-center gap-2">
-                        <span class="text-xs text-gray-500"
-                            >{{ t('project.info.assistant_in_use') }}:</span
-                        >
-                        <div class="flex items-center gap-1.5">
-                            <span
-                                v-for="type in project.metadata.localRepo.types.filter(
-                                    (t: string) => t !== 'git'
-                                )"
-                                :key="type"
-                                class="px-2 py-1 bg-gray-800 rounded-md text-xs flex items-center gap-1.5"
-                            >
-                                <span>{{ getAssistantIcon(type) }}</span>
-                                <span>{{ getAssistantLabel(type) }}</span>
-                            </span>
-                            <span
-                                v-if="
-                                    project.metadata.localRepo.types.length === 1 &&
-                                    project.metadata.localRepo.types[0] === 'git'
-                                "
-                                class="text-xs text-gray-500"
-                                >{{ t('project.info.git_only') }}</span
-                            >
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Output Path -->
-            <div v-if="project.outputPath" class="space-y-1">
-                <label class="text-xs text-gray-500">{{ t('project.info.output_path') }}</label>
-                <div class="flex items-center space-x-2">
-                    <div
-                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
-                    >
-                        {{ project.outputPath }}
-                    </div>
-                    <button
-                        class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
-                        :title="t('project.info.open_folder')"
-                        @click="handleOpenOutput"
-                    >
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                            />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Statistics -->
-            <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-700">
-                <div class="bg-gray-900/30 rounded-lg p-3">
-                    <div class="text-xs text-gray-500">{{ t('project.info.total_cost') }}</div>
-                    <div class="text-lg font-semibold text-green-400">{{ formattedCost }}</div>
-                </div>
-                <div class="bg-gray-900/30 rounded-lg p-3">
-                    <div class="text-xs text-gray-500">{{ t('project.info.total_tokens') }}</div>
-                    <div class="text-lg font-semibold text-blue-400">{{ formattedTokens }}</div>
-                </div>
-            </div>
-
-            <!-- Time Estimates -->
+    <Teleport to="body">
+        <!-- Backdrop -->
+        <Transition name="fade">
             <div
-                v-if="project.estimatedHours || project.actualHours"
-                class="grid grid-cols-2 gap-3"
+                v-if="show"
+                class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
+                @click="handleClose"
+            ></div>
+        </Transition>
+
+        <!-- Right-Side Slide Panel -->
+        <Transition name="slide-right">
+            <div
+                v-if="show"
+                class="fixed top-0 right-0 z-[70] h-full shadow-2xl bg-gray-900 border-l border-gray-700 w-[600px] max-w-full flex flex-col"
             >
-                <div v-if="project.estimatedHours" class="text-center">
-                    <div class="text-xs text-gray-500">{{ t('project.info.estimated_hours') }}</div>
-                    <div class="text-sm text-gray-300">
-                        {{ project.estimatedHours }}{{ t('project.info.hours_unit') }}
+                <!-- Header -->
+                <div
+                    class="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800/50 flex-shrink-0"
+                >
+                    <div class="flex items-center gap-3 flex-1" style="-webkit-app-region: no-drag">
+                        <div
+                            class="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-blue-600 flex-shrink-0"
+                            style="-webkit-app-region: no-drag"
+                        >
+                            <input
+                                v-if="isEditingMetadata"
+                                v-model="editedEmoji"
+                                class="w-8 h-8 text-center bg-gray-700 border border-gray-600 rounded text-lg focus:outline-none focus:border-blue-500"
+                                placeholder="📝"
+                                @click.stop
+                                @keyup.enter="saveMetadata"
+                                @keyup.esc="cancelEditMetadata"
+                            />
+                            <span v-else>{{ project.emoji || '📁' }}</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <template v-if="isEditingMetadata">
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        ref="titleInputRef"
+                                        v-model="editedTitle"
+                                        class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500 font-semibold"
+                                        :placeholder="t('project.modal.name_label')"
+                                        @keyup.enter="saveMetadata"
+                                        @keyup.esc="cancelEditMetadata"
+                                        @click.stop
+                                    />
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            class="p-1 hover:bg-gray-600 rounded text-green-400"
+                                            @click.stop="saveMetadata"
+                                        >
+                                            <svg
+                                                class="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M5 13l4 4L19 7"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            class="p-1 hover:bg-gray-600 rounded text-red-400"
+                                            @click.stop="cancelEditMetadata"
+                                        >
+                                            <svg
+                                                class="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <h2
+                                    class="text-lg font-semibold text-white cursor-pointer hover:bg-gray-700/50 rounded px-1 -ml-1 transition-colors truncate"
+                                    @click.stop="startEditMetadata"
+                                >
+                                    {{ project.title }}
+                                </h2>
+                                <p class="text-xs text-gray-400">
+                                    {{ t('project.info.title') }}
+                                </p>
+                            </template>
+                        </div>
                     </div>
+                    <button
+                        class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                        @click="handleClose"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
                 </div>
-                <div v-if="project.actualHours" class="text-center">
-                    <div class="text-xs text-gray-500">{{ t('project.info.actual_hours') }}</div>
-                    <div class="text-sm text-gray-300">
-                        {{ project.actualHours }}{{ t('project.info.hours_unit') }}
+
+                <!-- Tabs -->
+                <div class="flex border-b border-gray-700 bg-gray-800/30 flex-shrink-0">
+                    <button
+                        :class="[
+                            'px-6 py-3 text-sm font-medium transition-colors relative',
+                            activeTab === 'info'
+                                ? 'text-blue-400'
+                                : 'text-gray-400 hover:text-gray-200',
+                        ]"
+                        @click="activeTab = 'info'"
+                    >
+                        📋 {{ t('project.info.title') }}
+                        <div
+                            v-if="activeTab === 'info'"
+                            class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
+                        />
+                    </button>
+                    <button
+                        :class="[
+                            'px-6 py-3 text-sm font-medium transition-colors relative',
+                            activeTab === 'context'
+                                ? 'text-blue-400'
+                                : 'text-gray-400 hover:text-gray-200',
+                        ]"
+                        @click="activeTab = 'context'"
+                    >
+                        ✨ {{ t('project.info.context') }}
+                        <div
+                            v-if="activeTab === 'context'"
+                            class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"
+                        />
+                    </button>
+                </div>
+
+                <!-- Content Area -->
+                <div class="flex-1 overflow-y-auto">
+                    <!-- Context Tab -->
+                    <div v-if="activeTab === 'context'" class="h-full">
+                        <ProjectMemoryPanel :project="project" />
+                    </div>
+
+                    <!-- Info Tab (Existing Content) -->
+                    <div v-show="activeTab === 'info'" class="project-info-panel p-6 space-y-6">
+                        <!-- Header -->
+                        <div class="flex items-center justify-between p-4 border-b border-gray-700">
+                            <div class="flex items-center space-x-3">
+                                <h3 class="text-lg font-semibold text-gray-200">
+                                    <span v-if="project.emoji" class="mr-2">{{
+                                        project.emoji
+                                    }}</span>
+                                    {{ project.title }}
+                                </h3>
+
+                                <span
+                                    class="px-2 py-0.5 text-xs rounded-full text-white"
+                                    :class="statusDisplay.color"
+                                >
+                                    {{ statusDisplay.name }}
+                                </span>
+                            </div>
+
+                            <!-- Removed duplicate edit controls. Use top header for editing. -->
+                        </div>
+
+                        <div class="p-4 space-y-4">
+                            <!-- Main Prompt Section -->
+                            <div v-if="project.mainPrompt" class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-gray-400">{{
+                                        t('project.info.initial_prompt')
+                                    }}</label>
+                                    <button
+                                        class="text-xs text-gray-500 hover:text-gray-300 flex items-center space-x-1"
+                                        :title="t('common.copy')"
+                                        @click="copyPrompt"
+                                    >
+                                        <svg
+                                            class="w-3 h-3"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                            />
+                                        </svg>
+                                        <span>{{ t('common.copy') }}</span>
+                                    </button>
+                                </div>
+                                <div
+                                    class="bg-gray-900/50 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto"
+                                >
+                                    {{ truncatedPrompt }}
+                                </div>
+                                <button
+                                    v-if="
+                                        compact &&
+                                        project.mainPrompt &&
+                                        project.mainPrompt.length > 150
+                                    "
+                                    class="text-xs text-blue-400 hover:text-blue-300"
+                                >
+                                    {{ t('common.view_all') }}
+                                </button>
+                            </div>
+
+                            <div v-else class="text-center py-4 text-gray-500 text-sm">
+                                {{ t('project.info.no_initial_prompt') }}
+                            </div>
+
+                            <!-- Project Goal Section -->
+                            <div class="space-y-2 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-gray-400">{{
+                                        t('project.info.goal')
+                                    }}</label>
+                                    <button
+                                        v-if="!isEditingGoal"
+                                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                                        @click="startEditGoal"
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        <span>{{
+                                            project.goal ? t('common.edit') : t('common.add')
+                                        }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- View Mode -->
+                                <div
+                                    v-if="!isEditingGoal && project.goal"
+                                    class="bg-gray-900/50 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap"
+                                >
+                                    {{ project.goal }}
+                                </div>
+
+                                <!-- Empty State -->
+                                <div
+                                    v-else-if="!isEditingGoal && !project.goal"
+                                    class="bg-gray-900/30 rounded-lg p-4 text-center"
+                                >
+                                    <div class="text-gray-500 text-sm mb-2">
+                                        {{ t('project.info.goal_help') }}
+                                    </div>
+                                    <button
+                                        class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                        @click="startEditGoal"
+                                    >
+                                        {{ t('project.info.add_goal') }}
+                                    </button>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div v-if="isEditingGoal" class="space-y-3">
+                                    <textarea
+                                        v-model="editedGoal"
+                                        class="w-full h-32 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-blue-500"
+                                        :placeholder="t('project.info.goal_placeholder')"
+                                    ></textarea>
+                                    <div class="flex justify-end space-x-2">
+                                        <button
+                                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                            @click="cancelEditGoal"
+                                        >
+                                            {{ t('common.cancel') }}
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="saveGoal"
+                                        >
+                                            {{ t('common.save') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Guidelines Section -->
+                            <div class="space-y-2 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <button
+                                        class="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                                        @click="toggleGuidelines"
+                                    >
+                                        <svg
+                                            class="w-4 h-4 transition-transform"
+                                            :class="{ 'rotate-90': showGuidelines }"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M9 5l7 7-7 7"
+                                            />
+                                        </svg>
+                                        <span>{{ t('project.info.ai_guidelines') }}</span>
+                                        <span
+                                            v-if="hasGuidelines"
+                                            class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded"
+                                        >
+                                            {{ t('project.info.guidelines_set') }}
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="px-1.5 py-0.5 text-xs bg-gray-600/50 text-gray-400 rounded"
+                                        >
+                                            {{ t('project.info.guidelines_not_set') }}
+                                        </span>
+                                    </button>
+                                    <div v-if="hasGuidelines" class="flex items-center space-x-1">
+                                        <button
+                                            class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
+                                            :title="t('common.copy')"
+                                            @click="copyGuidelines"
+                                        >
+                                            <svg
+                                                class="w-3.5 h-3.5"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            class="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
+                                            :title="t('common.edit')"
+                                            @click="startEditGuidelines"
+                                        >
+                                            <svg
+                                                class="w-3.5 h-3.5"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Guidelines Content -->
+                                <div v-if="showGuidelines" class="space-y-3">
+                                    <!-- View Mode -->
+                                    <div
+                                        v-if="!isEditingGuidelines && hasGuidelines"
+                                        class="bg-gray-900/50 rounded-lg p-4 max-h-96 overflow-y-auto"
+                                    >
+                                        <div
+                                            class="guidelines-content prose prose-invert prose-sm max-w-none"
+                                            v-html="renderedGuidelines"
+                                        ></div>
+                                    </div>
+
+                                    <!-- Empty State -->
+                                    <div
+                                        v-else-if="!isEditingGuidelines && !hasGuidelines"
+                                        class="bg-gray-900/30 rounded-lg p-6 text-center"
+                                    >
+                                        <div class="text-gray-500 text-sm mb-3">
+                                            {{ t('project.info.guidelines_empty') }}
+                                        </div>
+                                        <button
+                                            class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="startEditGuidelines"
+                                        >
+                                            {{ t('project.info.add_guidelines') }}
+                                        </button>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <div v-if="isEditingGuidelines" class="space-y-3">
+                                        <textarea
+                                            v-model="editedGuidelines"
+                                            class="w-full h-64 bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-purple-500"
+                                            :placeholder="t('project.info.guidelines_placeholder')"
+                                        ></textarea>
+                                        <div class="flex justify-end space-x-2">
+                                            <button
+                                                class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                                @click="cancelEditGuidelines"
+                                            >
+                                                {{ t('common.cancel') }}
+                                            </button>
+                                            <button
+                                                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+                                                @click="saveGuidelines"
+                                            >
+                                                {{ t('common.save') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Output Type -->
+                            <div class="space-y-2 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-gray-400">{{
+                                        t('project.info.output_type')
+                                    }}</label>
+                                    <button
+                                        v-if="!isEditingOutputType"
+                                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                                        @click="startEditOutputType"
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        <span>{{ t('common.edit') }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- View Mode -->
+                                <div
+                                    v-if="!isEditingOutputType"
+                                    class="flex items-center space-x-2"
+                                >
+                                    <IconRenderer :emoji="outputTypeDisplay.icon" class="w-5 h-5" />
+                                    <div>
+                                        <div class="text-sm font-medium text-gray-300">
+                                            {{ outputTypeDisplay.name }}
+                                        </div>
+                                        <div class="text-xs text-gray-500">
+                                            {{ outputTypeDisplay.description }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div v-else class="space-y-2">
+                                    <select
+                                        v-model="editedOutputType"
+                                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                    >
+                                        <option :value="null">
+                                            {{ t('common.not_selected') }}
+                                        </option>
+                                        <option
+                                            v-for="(info, type) in outputTypes"
+                                            :key="type"
+                                            :value="type"
+                                        >
+                                            {{ info.icon }} {{ info.name }}
+                                        </option>
+                                    </select>
+                                    <div class="flex justify-end space-x-2">
+                                        <button
+                                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                            @click="cancelEditOutputType"
+                                        >
+                                            {{ t('common.cancel') }}
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="saveOutputType"
+                                        >
+                                            {{ t('common.save') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Settings (Project Default) -->
+                            <div class="space-y-3 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-sm font-medium text-gray-300">{{
+                                            t('project.info.project_default_ai')
+                                        }}</label>
+                                        <!-- Claude Code Sync Status Badge -->
+                                        <span
+                                            v-if="claudeSyncStatus"
+                                            class="px-2 py-0.5 text-xs rounded-full flex items-center gap-1"
+                                            :class="
+                                                claudeSyncColor === 'green'
+                                                    ? 'bg-green-900/30 text-green-300 border border-green-700/50'
+                                                    : 'bg-gray-700/50 text-gray-400 border border-gray-600/50'
+                                            "
+                                        >
+                                            <svg
+                                                v-if="claudeSyncColor === 'green'"
+                                                class="w-3 h-3"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
+                                            </svg>
+                                            <span>{{ claudeSyncStatus }}</span>
+                                        </span>
+                                    </div>
+                                    <button
+                                        v-if="!isEditingAI"
+                                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer z-10"
+                                        @click.stop="startEditAI"
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        <span>{{ t('common.edit') }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- View Mode -->
+                                <div v-if="!isEditingAI" class="grid grid-cols-2 gap-4">
+                                    <!-- AI Provider -->
+                                    <div class="space-y-1">
+                                        <label class="text-xs text-gray-500">{{
+                                            t('project.info.ai_provider')
+                                        }}</label>
+                                        <div class="flex items-center space-x-2">
+                                            <IconRenderer
+                                                :emoji="aiProviderDisplay.icon"
+                                                class="w-4 h-4"
+                                            />
+                                            <span
+                                                :class="aiProviderDisplay.color"
+                                                class="text-sm font-medium"
+                                            >
+                                                {{ aiProviderDisplay.name }}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- AI Model -->
+                                    <div class="space-y-1">
+                                        <label class="text-xs text-gray-500">{{
+                                            t('project.info.ai_model')
+                                        }}</label>
+                                        <div class="text-sm font-medium text-gray-300">
+                                            {{ aiModelDisplay }}
+                                            <span
+                                                v-if="
+                                                    effectiveAI.source === 'global' &&
+                                                    !props.project.aiModel
+                                                "
+                                                class="text-xs text-gray-500 ml-1"
+                                            >
+                                                ({{ t('project.info.settings_default') }})
+                                            </span>
+                                            <span
+                                                v-if="
+                                                    effectiveAI.source === 'project' &&
+                                                    props.project.aiProvider
+                                                "
+                                                class="text-xs text-blue-400 ml-1"
+                                            >
+                                                ({{ t('project.info.project_value') }})
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div v-else class="space-y-3">
+                                    <!-- Unified AI Selector -->
+                                    <UnifiedAISelector
+                                        v-model:mode="editedAIMode"
+                                        v-model:provider="editedAIProvider"
+                                        v-model:model="editedAIModel"
+                                        v-model:local-agent="editedLocalAgent"
+                                        :is-dev-project="true"
+                                        label=""
+                                    />
+
+                                    <!-- Info Banner -->
+                                    <div
+                                        class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3"
+                                    >
+                                        <div class="flex items-start space-x-2">
+                                            <svg
+                                                class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
+                                            </svg>
+                                            <div class="text-xs text-blue-300">
+                                                {{ t('project.info.project_default_ai_info') }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Buttons -->
+                                    <div class="flex justify-end space-x-2">
+                                        <button
+                                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                            @click="cancelEditAI"
+                                        >
+                                            {{ t('common.cancel') }}
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="saveAISettings"
+                                        >
+                                            {{ t('common.save') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Base Dev Folder -->
+                            <div class="space-y-2 border-t border-gray-700 pt-4">
+                                <label class="text-sm font-medium text-gray-300">{{
+                                    t('project.info.base_folder')
+                                }}</label>
+                                <div class="flex items-center space-x-2">
+                                    <div
+                                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
+                                    >
+                                        {{
+                                            project.baseDevFolder ||
+                                            t('project.info.base_folder_not_set')
+                                        }}
+                                    </div>
+                                    <button
+                                        class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
+                                        :title="t('project.info.base_folder_change')"
+                                        @click="pickBaseFolder"
+                                    >
+                                        <FolderOpen class="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- MCP 설정 -->
+                            <div class="space-y-3 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-gray-300">{{
+                                        t('project.info.mcp_settings')
+                                    }}</label>
+                                    <button
+                                        v-if="!isEditingMCP"
+                                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                                        @click="startEditMCP"
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        <span>{{ t('common.edit') }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- View Mode -->
+                                <div v-if="!isEditingMCP">
+                                    <div
+                                        v-if="
+                                            project.mcpConfig &&
+                                            Object.keys(project.mcpConfig).length > 0
+                                        "
+                                        class="space-y-2"
+                                    >
+                                        <div
+                                            v-for="(config, serverId) in project.mcpConfig"
+                                            :key="serverId"
+                                            class="bg-gray-900/30 rounded-lg p-3"
+                                        >
+                                            <div class="text-sm font-medium text-gray-300">
+                                                {{ serverId }}
+                                            </div>
+                                            <div class="text-xs text-gray-500 mt-1">
+                                                {{
+                                                    t('project.info.mcp_env_count', {
+                                                        count: Object.keys(config.env || {}).length,
+                                                    })
+                                                }},
+                                                {{
+                                                    t('project.info.mcp_params_count', {
+                                                        count: Object.keys(config.params || {})
+                                                            .length,
+                                                    })
+                                                }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-else class="bg-gray-900/30 rounded-lg p-3">
+                                        <p class="text-xs text-gray-500">
+                                            {{ t('project.info.mcp_no_servers') }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div v-else class="space-y-4">
+                                    <MCPToolSelector
+                                        v-model:selected-ids="selectedMCPServers"
+                                        v-model:config="editedMCPConfig"
+                                    />
+
+                                    <!-- Info Banner -->
+                                    <div
+                                        class="bg-blue-900/20 border border-blue-800/30 rounded-lg p-3"
+                                    >
+                                        <div class="flex items-start space-x-2">
+                                            <svg
+                                                class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
+                                            </svg>
+                                            <div class="text-xs text-blue-300">
+                                                {{ t('project.info.mcp_default_info') }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Buttons -->
+                                    <div class="flex justify-end space-x-2">
+                                        <button
+                                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                            @click="cancelEditMCP"
+                                        >
+                                            {{ t('common.cancel') }}
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="saveMCPSettings"
+                                        >
+                                            {{ t('common.save') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Auto Review Settings -->
+                            <div class="space-y-3 border-t border-gray-700 pt-4">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-gray-300">{{
+                                        t('project.info.auto_review_settings')
+                                    }}</label>
+                                    <button
+                                        v-if="!isEditingAutoReview"
+                                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                                        @click="startEditAutoReview"
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        <span>{{ t('common.edit') }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- View Mode -->
+                                <div v-if="!isEditingAutoReview" class="grid grid-cols-2 gap-4">
+                                    <!-- AI Provider -->
+                                    <div class="space-y-1">
+                                        <label class="text-xs text-gray-500">{{
+                                            t('project.info.ai_provider')
+                                        }}</label>
+                                        <div class="flex items-center space-x-2">
+                                            <template v-if="autoReviewProviderDisplay.svgPath">
+                                                <svg
+                                                    class="w-4 h-4 text-gray-400"
+                                                    viewBox="0 0 256 256"
+                                                    fill="currentColor"
+                                                >
+                                                    <path :d="autoReviewProviderDisplay.svgPath" />
+                                                </svg>
+                                            </template>
+                                            <IconRenderer
+                                                v-else
+                                                :emoji="autoReviewProviderDisplay.icon || '❓'"
+                                                class="w-4 h-4"
+                                            />
+                                            <span
+                                                :class="autoReviewProviderDisplay.color"
+                                                class="text-sm font-medium"
+                                            >
+                                                {{ autoReviewProviderDisplay.name }}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- AI Model -->
+                                    <div class="space-y-1">
+                                        <label class="text-xs text-gray-500">{{
+                                            t('project.info.ai_model')
+                                        }}</label>
+                                        <div class="text-sm font-medium text-gray-300">
+                                            {{ autoReviewModelDisplay }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div v-else class="space-y-3">
+                                    <!-- Unified AI Selector -->
+                                    <UnifiedAISelector
+                                        v-model:mode="editedAutoReviewMode"
+                                        v-model:provider="editedAutoReviewProvider"
+                                        v-model:model="editedAutoReviewModel"
+                                        v-model:local-agent="editedAutoReviewLocalAgent"
+                                        :is-dev-project="!!project.baseDevFolder"
+                                        :label="t('project.info.auto_review_ai_settings')"
+                                    />
+
+                                    <!-- Action Buttons -->
+                                    <div class="flex justify-end space-x-2">
+                                        <button
+                                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors"
+                                            @click="cancelEditAutoReview"
+                                        >
+                                            {{ t('common.cancel') }}
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                                            @click="saveAutoReviewSettings"
+                                        >
+                                            {{ t('common.save') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Local Repository Info -->
+                            <div
+                                v-if="project.metadata?.localRepo"
+                                class="space-y-2 border-t border-gray-700 pt-4"
+                            >
+                                <label class="text-sm font-medium text-gray-400">{{
+                                    t('project.info.local_repo_info')
+                                }}</label>
+
+                                <div class="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                                    <div class="text-sm text-gray-300 font-mono truncate">
+                                        {{ project.metadata.localRepo.path }}
+                                    </div>
+
+                                    <!-- Multiple Assistant Icons -->
+                                    <div
+                                        v-if="project.metadata.localRepo.types"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <span class="text-xs text-gray-500"
+                                            >{{ t('project.info.assistant_in_use') }}:</span
+                                        >
+                                        <div class="flex items-center gap-1.5">
+                                            <span
+                                                v-for="type in project.metadata.localRepo.types.filter(
+                                                    (t: string) => t !== 'git'
+                                                )"
+                                                :key="type"
+                                                class="px-2 py-1 bg-gray-800 rounded-md text-xs flex items-center gap-1.5"
+                                            >
+                                                <span>{{ getAssistantIcon(type) }}</span>
+                                                <span>{{ getAssistantLabel(type) }}</span>
+                                            </span>
+                                            <span
+                                                v-if="
+                                                    project.metadata.localRepo.types.length === 1 &&
+                                                    project.metadata.localRepo.types[0] === 'git'
+                                                "
+                                                class="text-xs text-gray-500"
+                                                >{{ t('project.info.git_only') }}</span
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Output Path -->
+                            <div v-if="project.outputPath" class="space-y-1">
+                                <label class="text-xs text-gray-500">{{
+                                    t('project.info.output_path')
+                                }}</label>
+                                <div class="flex items-center space-x-2">
+                                    <div
+                                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
+                                    >
+                                        {{ project.outputPath }}
+                                    </div>
+                                    <button
+                                        class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
+                                        :title="t('project.info.open_folder')"
+                                        @click="handleOpenOutput"
+                                    >
+                                        <svg
+                                            class="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Statistics -->
+                            <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-700">
+                                <div class="bg-gray-900/30 rounded-lg p-3">
+                                    <div class="text-xs text-gray-500">
+                                        {{ t('project.info.total_cost') }}
+                                    </div>
+                                    <div class="text-lg font-semibold text-green-400">
+                                        {{ formattedCost }}
+                                    </div>
+                                </div>
+                                <div class="bg-gray-900/30 rounded-lg p-3">
+                                    <div class="text-xs text-gray-500">
+                                        {{ t('project.info.total_tokens') }}
+                                    </div>
+                                    <div class="text-lg font-semibold text-blue-400">
+                                        {{ formattedTokens }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Time Estimates -->
+                            <div
+                                v-if="project.estimatedHours || project.actualHours"
+                                class="grid grid-cols-2 gap-3"
+                            >
+                                <div v-if="project.estimatedHours" class="text-center">
+                                    <div class="text-xs text-gray-500">
+                                        {{ t('project.info.estimated_hours') }}
+                                    </div>
+                                    <div class="text-sm text-gray-300">
+                                        {{ project.estimatedHours
+                                        }}{{ t('project.info.hours_unit') }}
+                                    </div>
+                                </div>
+                                <div v-if="project.actualHours" class="text-center">
+                                    <div class="text-xs text-gray-500">
+                                        {{ t('project.info.actual_hours') }}
+                                    </div>
+                                    <div class="text-sm text-gray-300">
+                                        {{ project.actualHours }}{{ t('project.info.hours_unit') }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </Transition>
+    </Teleport>
 </template>
 
 <style scoped>

@@ -40,7 +40,7 @@ export class GPTProvider extends BaseAIProvider {
 
     constructor() {
         super();
-        console.log('[GPTProvider] Initialized, models will be loaded from DB cache');
+        // console.log('[GPTProvider] Initialized, models will be loaded from DB cache');
     }
 
     /**
@@ -57,7 +57,7 @@ export class GPTProvider extends BaseAIProvider {
 
             const client = this.getClient();
             const response = await client.models.list();
-            console.log('[GPTProvider] Fetched models:', response.data);
+            // console.log('[GPTProvider] Fetched models:', response.data);
 
             // Map API models to ModelInfo
             const gptModels = response.data
@@ -81,7 +81,7 @@ export class GPTProvider extends BaseAIProvider {
             const { providerModelsRepository: repo1 } =
                 await import('../../../../electron/main/database/repositories/provider-models-repository');
             await repo1.saveModels('openai', gptModels);
-            console.log(`[GPTProvider] Saved ${gptModels.length} models to DB cache`);
+            // console.log(`[GPTProvider] Saved ${gptModels.length} models to DB cache`);
 
             return gptModels;
         } catch (error) {
@@ -91,7 +91,7 @@ export class GPTProvider extends BaseAIProvider {
                 await import('../../../../electron/main/database/repositories/provider-models-repository');
             const cachedModels = await repo2.getModels('openai');
             if (cachedModels.length > 0) {
-                console.log('[GPTProvider] Using cached models from DB');
+                // console.log('[GPTProvider] Using cached models from DB');
                 return cachedModels;
             }
             console.warn('[GPTProvider] No cached models available');
@@ -109,10 +109,10 @@ export class GPTProvider extends BaseAIProvider {
                     'API key not configured. Please set your API key in Settings > AI Providers.'
                 );
             }
-            console.log(
-                '[GPTProvider] Creating new OpenAI client with key length:',
-                this.injectedApiKey.length
-            );
+            // console.log(
+            //    '[GPTProvider] Creating new OpenAI client with key length:',
+            //    this.injectedApiKey.length
+            // );
             this.client = new OpenAI({
                 apiKey: this.injectedApiKey,
                 dangerouslyAllowBrowser: true,
@@ -126,7 +126,7 @@ export class GPTProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -261,7 +261,7 @@ export class GPTProvider extends BaseAIProvider {
         config: AIConfig,
         _context?: ExecutionContext
     ): Promise<AiResult> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const client = this.getClient();
 
@@ -455,7 +455,7 @@ export class GPTProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -586,7 +586,7 @@ export class GPTProvider extends BaseAIProvider {
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const client = this.getClient();
         const adapter = getOpenAIAdapter(config.model);

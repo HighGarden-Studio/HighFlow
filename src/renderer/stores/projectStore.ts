@@ -155,25 +155,13 @@ export const useProjectStore = defineStore('projects', () => {
     /**
      * Update an existing project
      */
-    async function updateProject(
-        id: number,
-        data: Partial<{
-            title: string;
-            description: string;
-            status: string;
-            aiGuidelines: string;
-            aiProvider: string | null;
-            aiModel: string | null;
-            emoji: string | null;
-            goal: string | null;
-        }>
-    ): Promise<Project | null> {
+    async function updateProject(id: number, data: Partial<Project>): Promise<Project | null> {
         loading.value = true;
         error.value = null;
 
         try {
             const api = getAPI();
-            const project = await api.projects.update(id, data);
+            const project = await api.projects.update(id, data as any);
             const index = projects.value.findIndex((p) => p.id === id);
             if (index >= 0) {
                 projects.value[index] = project;

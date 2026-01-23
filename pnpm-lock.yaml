@@ -16,6 +16,9 @@ dependencies:
   '@google/genai':
     specifier: ^1.31.0
     version: 1.34.0(@modelcontextprotocol/sdk@0.5.0)
+  '@headlessui/vue':
+    specifier: ^1.7.23
+    version: 1.7.23(vue@3.5.26)
   '@iconify/vue':
     specifier: ^5.0.0
     version: 5.0.0(vue@3.5.26)
@@ -1821,6 +1824,16 @@ packages:
       - utf-8-validate
     dev: false
 
+  /@headlessui/vue@1.7.23(vue@3.5.26):
+    resolution: {integrity: sha512-JzdCNqurrtuu0YW6QaDtR2PIYCKPUWq28csDyMvN4zmGccmE7lz40Is6hc3LA4HFeCI7sekZ/PQMTNmn9I/4Wg==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      vue: ^3.2.0
+    dependencies:
+      '@tanstack/vue-virtual': 3.13.13(vue@3.5.26)
+      vue: 3.5.26(typescript@5.9.3)
+    dev: false
+
   /@hono/node-server@1.19.7(hono@4.11.1):
     resolution: {integrity: sha512-vUcD0uauS7EU2caukW8z5lJKtoGMokxNbJtBiwHgpqxEXokaHCBkQUmCHhjFB1VUTWdqj25QoMkMKzgjq+uhrw==}
     engines: {node: '>=18.14.1'}
@@ -2987,7 +3000,6 @@ packages:
 
   /@tanstack/virtual-core@3.13.13:
     resolution: {integrity: sha512-uQFoSdKKf5S8k51W5t7b2qpfkyIbdHMzAn+AMQvHPxKUPeo1SsGaA4JRISQT87jm28b7z8OEqPcg1IOZagQHcA==}
-    dev: true
 
   /@tanstack/vue-virtual@3.13.13(vue@3.5.26):
     resolution: {integrity: sha512-Cf2xIEE8nWAfsX0N5nihkPYMeQRT+pHt4NEkuP8rNCn6lVnLDiV8rC8IeIxbKmQC0yPnj4SIBLwXYVf86xxKTQ==}
@@ -2996,7 +3008,6 @@ packages:
     dependencies:
       '@tanstack/virtual-core': 3.13.13
       vue: 3.5.26(typescript@5.9.3)
-    dev: true
 
   /@tootallnate/once@2.0.0:
     resolution: {integrity: sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A==}
