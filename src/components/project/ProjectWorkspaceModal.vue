@@ -4,6 +4,7 @@ import { Dialog, DialogPanel, TransitionChild, TransitionRoot } from '@headlessu
 import { useProjectStore } from '@/stores/projectStore';
 import FileTreeItem from '../task/FileTreeItem.vue';
 import CodeEditor from '../common/CodeEditor.vue';
+// import TerminalComponent from '../common/TerminalComponent.vue';
 
 interface FileTreeNode {
     name: string;
@@ -376,6 +377,30 @@ function getLanguage(path: string): string {
                                                 />
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Terminal Pane (Bottom) -->
+                            <div
+                                class="h-64 border-t border-gray-200 dark:border-gray-700 flex flex-col bg-black"
+                            >
+                                <div
+                                    class="flex items-center justify-between px-4 py-1 bg-gray-800 border-b border-gray-700"
+                                >
+                                    <span class="text-xs text-gray-400 font-mono"
+                                        >Terminal &mdash; {{ currentProject?.baseDevFolder }}</span
+                                    >
+                                    <div class="flex items-center gap-2">
+                                        <!-- Add resize handle or toggle here later -->
+                                    </div>
+                                </div>
+                                <div class="flex-1 overflow-hidden relative">
+                                    <!-- Terminal removed in favor of integrated bottom panel -->
+                                    <div
+                                        class="h-full flex items-center justify-center text-gray-500 bg-gray-900/50 text-xs"
+                                    >
+                                        Use the Terminal tab in the bottom console
                                     </div>
                                 </div>
                             </div>

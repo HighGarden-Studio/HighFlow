@@ -697,8 +697,10 @@ export interface AuthAPI {
 export interface AiAPI {
     fetchModels: (providerId: string, apiKey?: string) => Promise<any[]>;
     getModelsFromCache: (providerId: string) => Promise<any[]>;
+    saveModelsToCache: (providerId: string, models: any[]) => Promise<void>;
     saveProviderConfig: (providerId: string, config: any) => Promise<{ success: boolean }>;
     getProviderConfig: (providerId: string) => Promise<any>;
+    getEnvApiKey: (providerId: string) => Promise<string | null>;
 }
 
 export interface ElectronAPI {
@@ -724,6 +726,19 @@ export interface ElectronAPI {
     ai: AiAPI;
     store?: StoreAPI;
     http?: any;
+    terminal: TerminalAPI;
+}
+
+export interface TerminalAPI {
+    create: (id: string, cwd?: string, cols?: number, rows?: number) => Promise<string>;
+    write: (id: string, data: string) => Promise<void>;
+    resize: (id: string, cols: number, rows: number) => Promise<void>;
+    kill: (id: string) => Promise<void>;
+    onData: (id: string, callback: (data: string) => void) => () => void;
+    onExit: (
+        id: string,
+        callback: (endpoint: { exitCode: number; signal: number }) => void
+    ) => () => void;
 }
 
 // Extend Window interface

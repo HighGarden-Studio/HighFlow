@@ -26,6 +26,7 @@ import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { registerAuthHandlers } from './ipc/auth-handlers';
 import { registerAiSettingsHandlers } from './ipc/ai-settings-handlers';
 import { registerScriptTemplateHandlers } from './ipc/script-template-handlers';
+import { registerTerminalHandlers } from './services/terminal';
 // import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
@@ -219,9 +220,57 @@ async function registerIpcHandlers(): Promise<void> {
                 ownerId: number;
                 baseDevFolder?: string | null;
                 projectGuidelines?: string | null;
+                // Scanner overrides
+                goal?: string;
+                memory?: any;
             }
         ) => {
             try {
+                // If baseDevFolder is provided, try to scan for local agent context
+                if (data.baseDevFolder) {
+                    try {
+                        const { localAgentScanner } =
+                            await import('./services/local-agent-scanner');
+                        console.log(
+                            `[ProjectCreate] Scanning folder for local agents: ${data.baseDevFolder}`
+                        );
+                        const context = await localAgentScanner.scanFolder(data.baseDevFolder);
+
+                        if (context) {
+                            console.log(`[ProjectCreate] Found context from ${context.source}`);
+                            // Auto-populate goal if empty
+                            if (!data.goal && context.goal) {
+                                data.goal = context.goal;
+                            }
+
+                            // Auto-populate memory if empty
+                            // Convert string memory to required JSON structure or just store as is if schema allowed text
+                            // Schema says memory is json: { summary: string, ... }
+                            if (!data.memory && context.memory) {
+                                data.memory = {
+                                    summary: context.memory,
+                                    importedFrom: context.source,
+                                    scannedAt: new Date().toISOString(),
+                                    // Use gathered context as 'long term memory' or just append to summary
+                                };
+                            }
+
+                            // Append to description if sensible
+                            if (context.guidelines) {
+                                data.description =
+                                    (data.description || '') +
+                                    `\n\n[Imported Guidelines]\n${context.guidelines}`;
+                            }
+                        }
+                    } catch (scanErr) {
+                        console.warn(
+                            '[ProjectCreate] Failed to scan local agent context:',
+                            scanErr
+                        );
+                        // Continue creation even if scan fails
+                    }
+                }
+
                 const project = await projectRepo.create(data as any);
                 mainWindow?.webContents.send('project:created', project);
                 return project;
@@ -385,6 +434,81 @@ async function registerIpcHandlers(): Promise<void> {
             }
         }
     );
+
+    ipcMain.handle('projects:sync-local-context', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project) throw new Error('Project not found');
+            if (!project.baseDevFolder) {
+                console.warn('[SyncContext] Project has no baseDevFolder');
+                return { success: false, message: 'No base folder set' };
+            }
+
+            const { localAgentScanner } = await import('./services/local-agent-scanner');
+            console.log(`[SyncContext] Scanning folder for local agents: ${project.baseDevFolder}`);
+            const context = await localAgentScanner.scanFolder(project.baseDevFolder);
+
+            if (context) {
+                console.log(`[SyncContext] Found context from ${context.source}`);
+                const updateData: any = {};
+
+                // Update goal if present
+                if (context.goal) {
+                    updateData.goal = context.goal;
+                }
+
+                // Update memory if present
+                if (context.memory) {
+                    updateData.memory = {
+                        summary: context.memory,
+                        importedFrom: context.source,
+                        scannedAt: new Date().toISOString(),
+                    };
+                }
+
+                // Append guidelines to description if present
+                if (context.guidelines) {
+                    // Check if guidelines are not already in description to avoid duplication
+                    if (!project.description?.includes('[Imported Guidelines]')) {
+                        updateData.description =
+                            (project.description || '') +
+                            `\n\n[Imported Guidelines]\n${context.guidelines}`;
+                    }
+                }
+
+                if (Object.keys(updateData).length > 0) {
+                    const updatedProject = await projectRepo.update(projectId, updateData);
+                    mainWindow?.webContents.send('project:updated', updatedProject);
+                    return { success: true, context, project: updatedProject };
+                }
+            }
+
+            return { success: false, message: 'No local agent context found' };
+        } catch (error) {
+            console.error('Error syncing local context:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('projects:scan-artifacts', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project || !project.baseDevFolder) {
+                return { success: false, message: 'Project or base folder not found' };
+            }
+
+            const { localAgentScanner } = await import('./services/local-agent-scanner');
+            const artifacts = await localAgentScanner.scanProjectArtifacts(project.baseDevFolder);
+
+            return { success: true, artifacts };
+        } catch (error) {
+            console.error('Error scanning artifacts:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    });
 
     // ========================================
     // Task IPC Handlers
@@ -662,6 +786,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register script template handlers
     registerScriptTemplateHandlers();
+
+    // Register terminal handlers
+    registerTerminalHandlers(mainWindow);
 
     console.log('IPC handlers registered');
 }

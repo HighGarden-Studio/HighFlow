@@ -28,6 +28,14 @@ export class GeminiProvider extends BaseAIProvider {
     private client: GoogleGenAI | null = null;
     private injectedApiKey: string | null = null;
 
+    private isLocal: boolean;
+    private localSessionId: string | null = null;
+
+    constructor(isLocal: boolean = false) {
+        super();
+        this.isLocal = isLocal;
+    }
+
     /**
      * Set API key from external source (e.g., settings store via IPC)
      */
@@ -37,17 +45,77 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     /**
+     * Validate config before execution
+     * Override to relax validation for local agent / CLI use cases
+     */
+    protected async validateConfig(config: AIConfig): Promise<void> {
+        // If local agent, skip all validation for now as we don't know what models the CLI supports
+        // unless we fetch them via CLI (future improvement).
+        if (this.isLocal) {
+            return;
+        }
+
+        // If we have no models loaded (e.g. CLI/Local Agent without API key for fetching),
+        // we should just warn and proceed, letting the external agent handle the model.
+        if (!this.models || this.models.length === 0) {
+            console.warn(
+                `[GeminiProvider] No models loaded. Skipping validation for '${config.model}' (assuming Local/CLI Agent)`
+            );
+            return;
+        }
+
+        try {
+            await super.validateConfig(config);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    /**
      * Fetch available models from Gemini API using SDK
      */
     async fetchModels(): Promise<ModelInfo[]> {
+        // If local agent, we might want to fetch via CLI, but for now just return empty or default
+        if (this.isLocal) {
+            return [];
+        }
+
         console.log('[GeminiProvider] Fetching models from API... (Force Update)');
+
+        // Ensure we have a key (from settings or env)
+        await this.ensureApiKey();
+
         try {
             if (!this.injectedApiKey) {
                 console.warn('[GeminiProvider] No API key configured, loading from DB cache');
-                const { providerModelsRepository } =
-                    await import('../../../../electron/main/database/repositories/provider-models-repository');
-                const cachedModels = await providerModelsRepository.getModels('google');
-                return cachedModels;
+
+                // Renderer Process (IPC)
+                if (typeof window !== 'undefined' && window.electron?.ai) {
+                    try {
+                        return await window.electron.ai.getModelsFromCache('google');
+                    } catch (cacheError) {
+                        console.error(
+                            '[GeminiProvider] Failed to load from cache (IPC):',
+                            cacheError
+                        );
+                        return [];
+                    }
+                }
+                // Main Process (Direct DB)
+                else {
+                    try {
+                        // Dynamic import to avoid bundling issues in Renderer
+                        const { providerModelsRepository } =
+                            await import('../../../../electron/main/database/repositories/provider-models-repository');
+                        return await providerModelsRepository.getModels('google');
+                    } catch (dbError) {
+                        console.error(
+                            '[GeminiProvider] Failed to load from database (Main):',
+                            dbError
+                        );
+                        return [];
+                    }
+                }
             }
 
             // Use SDK to fetch models
@@ -83,23 +151,50 @@ export class GeminiProvider extends BaseAIProvider {
                 models.map((m: any) => m.name)
             );
 
-            // Save to DB cache
-            await (
-                await import('../../../../electron/main/database/repositories/provider-models-repository')
-            ).providerModelsRepository.saveModels('google', models);
-            console.log('[GeminiProvider] Saved models to DB cache');
+            // Save Cache
+            if (typeof window !== 'undefined' && window.electron?.ai) {
+                // Renderer IPC
+                try {
+                    await window.electron.ai.saveModelsToCache('google', models);
+                    console.log('[GeminiProvider] Saved models to DB cache (IPC)');
+                } catch (saveError) {
+                    console.warn('[GeminiProvider] Failed to save cache (IPC):', saveError);
+                }
+            } else {
+                // Main Process Direct
+                try {
+                    const { providerModelsRepository } =
+                        await import('../../../../electron/main/database/repositories/provider-models-repository');
+                    await providerModelsRepository.saveModels('google', models);
+                    console.log('[GeminiProvider] Saved models to DB cache (Main)');
+                } catch (saveError) {
+                    console.warn('[GeminiProvider] Failed to save cache (Main):', saveError);
+                }
+            }
 
             return models;
         } catch (error) {
             console.error('[GeminiProvider] Failed to fetch models from API:', error);
-            // Fall back to DB cache
-            const { providerModelsRepository } =
-                await import('../../../../electron/main/database/repositories/provider-models-repository');
-            const cachedModels = await providerModelsRepository.getModels('google');
-            if (cachedModels.length > 0) {
-                console.log('[GeminiProvider] Using cached models from DB');
-                return cachedModels;
+
+            // Fallback to cache on error
+            if (typeof window !== 'undefined' && window.electron?.ai) {
+                try {
+                    const cachedModels = await window.electron.ai.getModelsFromCache('google');
+                    if (cachedModels.length > 0) return cachedModels;
+                } catch (e) {
+                    /* ignore */
+                }
+            } else {
+                try {
+                    const { providerModelsRepository } =
+                        await import('../../../../electron/main/database/repositories/provider-models-repository');
+                    const cachedModels = await providerModelsRepository.getModels('google');
+                    if (cachedModels.length > 0) return cachedModels;
+                } catch (e) {
+                    /* ignore */
+                }
             }
+
             // Return empty array if no cache available
             console.warn('[GeminiProvider] No cached models available');
             return [];
@@ -110,8 +205,13 @@ export class GeminiProvider extends BaseAIProvider {
      * Initialize Google AI client
      */
     private getClient(): GoogleGenAI {
+        if (this.isLocal) {
+            throw new Error('Local agent does not use Google Cloud SDK client.');
+        }
+
         if (!this.client) {
             if (!this.injectedApiKey) {
+                // Should have been ensured by ensureApiKey, but if not:
                 throw new Error(
                     'API key not configured. Please set your API key in Settings > AI Providers.'
                 );
@@ -119,6 +219,37 @@ export class GeminiProvider extends BaseAIProvider {
             this.client = new GoogleGenAI({ apiKey: this.injectedApiKey });
         }
         return this.client;
+    }
+
+    /**
+     * Ensure we have an API key, trying to fetch from env if needed
+     */
+    private async ensureApiKey(): Promise<void> {
+        if (this.isLocal) return; // Skip for local
+        if (this.injectedApiKey) return;
+
+        console.log('[GeminiProvider] ensureApiKey checking for system env key...');
+        if (typeof window !== 'undefined' && window.electron?.ai?.getEnvApiKey) {
+            try {
+                const envKey = await window.electron.ai.getEnvApiKey('google');
+                console.log(
+                    '[GeminiProvider] getEnvApiKey returned:',
+                    envKey ? 'YES (masked)' : 'NO'
+                );
+                if (envKey) {
+                    console.log('[GeminiProvider] Using API Key from system environment');
+                    this.injectedApiKey = envKey;
+                    this.client = null;
+                }
+            } catch (err) {
+                console.warn('[GeminiProvider] Failed to fetch env key:', err);
+            }
+        } else {
+            console.warn('[GeminiProvider] window.electron.ai.getEnvApiKey is NOT available', {
+                electron: !!window.electron,
+                ai: !!window.electron?.ai,
+            });
+        }
     }
 
     async chat(
@@ -130,6 +261,110 @@ export class GeminiProvider extends BaseAIProvider {
         await this.validateConfig(config);
 
         const startTime = Date.now();
+
+        // --- Local Agent Execution ---
+        if (this.isLocal) {
+            if (typeof window !== 'undefined' && window.electron?.localAgents) {
+                try {
+                    console.log('[GeminiProvider] Delegating to Local Agent (gemini-cli)...');
+
+                    let cwd = '';
+                    // Try to resolve project path from context
+                    if (context?.projectId) {
+                        try {
+                            const project = (await window.electron.projects.get(
+                                context.projectId
+                            )) as any;
+                            if (project) {
+                                cwd = project.path || project.baseDevFolder || '';
+                            }
+                        } catch (e) {
+                            console.warn('[GeminiProvider] Failed to resolve project path:', e);
+                        }
+                    }
+
+                    // Fallback to home if no project path
+                    if (!cwd) {
+                        try {
+                            const paths = await window.electron.app.getPaths();
+                            cwd = paths.home;
+                        } catch (e) {
+                            cwd = '/'; // Ultimate fallback
+                        }
+                    }
+
+                    // Reuse or Create Session
+                    // We store sessionId on the instance to keep context across turns if possible
+                    // However, we need to handle if the session died.
+                    if (!this.localSessionId) {
+                        console.log(`[GeminiProvider] Creating new session in ${cwd}`);
+                        const session = await window.electron.localAgents.createSession(
+                            'gemini-cli',
+                            cwd
+                        );
+                        this.localSessionId = session.id;
+                    }
+
+                    // Prepare prompt from messages
+                    const prompt = this.getPromptText(messages);
+
+                    // Send Message
+                    let result;
+                    try {
+                        result = await window.electron.localAgents.sendMessage(
+                            this.localSessionId,
+                            prompt,
+                            { model: config.model }
+                        );
+                    } catch (sendError: any) {
+                        // If session not found or closed, retry once with new session
+                        if (
+                            sendError.message &&
+                            (sendError.message.includes('not found') ||
+                                sendError.message.includes('closed'))
+                        ) {
+                            console.warn('[GeminiProvider] Session lost, recreating...');
+                            const session = await window.electron.localAgents.createSession(
+                                'gemini-cli',
+                                cwd
+                            );
+                            this.localSessionId = session.id;
+                            result = await window.electron.localAgents.sendMessage(
+                                this.localSessionId,
+                                prompt,
+                                { model: config.model }
+                            );
+                        } else {
+                            throw sendError;
+                        }
+                    }
+
+                    if (!result.success) {
+                        throw new Error(result.error || 'Local agent execution failed');
+                    }
+
+                    return {
+                        content: result.content || '',
+                        tokensUsed: { prompt: 0, completion: 0, total: 0 },
+                        cost: 0,
+                        duration: Date.now() - startTime,
+                        model: config.model,
+                        finishReason: 'stop',
+                        metadata: {},
+                    };
+                } catch (err: any) {
+                    console.error('[GeminiProvider] Local Agent execution failed:', err);
+                    throw new Error(`Local Agent Error: ${err.message || String(err)}`);
+                }
+            } else {
+                throw new Error(
+                    'Local agent execution is only available in the Renderer process via IPC.'
+                );
+            }
+        }
+
+        // --- Cloud SDK Execution ---
+        await this.ensureApiKey();
         const client = this.getClient();
 
         return this.executeWithGeminiRetry(async () => {

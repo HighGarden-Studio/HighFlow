@@ -12,9 +12,8 @@ import type {
     MCPToolDefinition,
     MCPServerRuntimeConfig,
 } from '@core/types/ai';
-import { WebClient } from '@slack/web-api';
+import type { WebClient } from '@slack/web-api';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { createRequire } from 'module';
 
 import axios from 'axios';
 import { eventBus } from '../events/EventBus';
@@ -1008,31 +1007,13 @@ export class MCPManager {
             });
 
             // Custom SSE Transport to support headers
-            // Custom SSE Transport to support headers
-            const require = createRequire(import.meta.url);
 
-            let EventSourceClass: any;
-            try {
-                const eventSourceModule = require('eventsource');
-                EventSourceClass = eventSourceModule.default || eventSourceModule;
-            } catch (error) {
-                console.error('[MCPManager] Failed to load eventsource polyfill:', error);
-                EventSourceClass = global.EventSource;
-            }
-            try {
-                const imported = await import('eventsource');
-                console.log('[MCPManager] eventsource imported:', Object.keys(imported));
-                const importedAny = imported as any;
-                EventSourceClass =
-                    importedAny.EventSource ||
-                    importedAny.default?.EventSource ||
-                    importedAny.default;
-            } catch (e2) {
-                console.error('[MCPManager] Failed to import eventsource:', e2);
-            }
-            console.log('[MCPManager] EventSource constructor found:', !!EventSourceClass);
+            // In browser environment, EventSource is native.
+            // If strictly needed for Node specific usage in Renderer (unlikely), we'd need another strategy.
+            // But for now, we assume browser or electron-renderer with native EventSource.
+            const EventSourceClass = (global as any).EventSource || (window as any).EventSource;
 
-            if (!global.EventSource) global.EventSource = EventSourceClass;
+            console.log('[MCPManager] EventSource available:', !!EventSourceClass);
 
             // Define SSE transport implementation
             const isGitHubRemote = mcp.slug === 'github-remote' || mcp.name === 'github-remote';
@@ -1635,7 +1616,7 @@ export class MCPManager {
             return null;
         }
 
-        const client = this.getSlackClient(entry.integration.id, token);
+        const client = await this.getSlackClient(entry.integration.id, token);
         try {
             let data: any;
             if (/list_channels/i.test(toolName)) {
@@ -1686,9 +1667,10 @@ export class MCPManager {
         }
     }
 
-    private getSlackClient(entryId: number, token: string): WebClient {
+    private async getSlackClient(entryId: number, token: string): Promise<WebClient> {
         let client = this.slackClients.get(entryId);
         if (!client) {
+            const { WebClient } = await import('@slack/web-api');
             client = new WebClient(token);
             this.slackClients.set(entryId, client);
         }

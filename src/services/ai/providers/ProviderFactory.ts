@@ -44,26 +44,46 @@ export class ProviderFactory {
         this.providers.set('groq' as AIProvider, new GroqProvider());
         this.providers.set('mistral' as AIProvider, new MistralProvider());
         this.providers.set('lmstudio', new LmStudioProvider());
+        this.providers.set('gemini-cli' as AIProvider, new GeminiProvider(true)); // Alias for gemini-cli
 
         // Load models from DB cache for each provider
-        // Load models from DB cache for each provider
-        // console.log('[ProviderFactory] Loading models from DB cache for all providers...');
-        const providerModelsRepository =
-            await import('../../../../electron/main/database/repositories/provider-models-repository').then(
-                (m) => m.providerModelsRepository
-            );
-
-        for (const [name, provider] of this.providers.entries()) {
-            try {
-                const models = await providerModelsRepository.getModels(name);
-                if (models.length > 0) {
-                    provider.setDynamicModels(models);
-                    // console.log(
-                    //    `[ProviderFactory] Loaded ${models.length} models for ${name} from DB`
-                    // );
+        // Check environment and load models accordingly
+        if (typeof window !== 'undefined' && (window as any).electron?.ai) {
+            // Renderer Process
+            const electron = (window as any).electron;
+            for (const [name, provider] of this.providers.entries()) {
+                try {
+                    const models = await electron.ai.getModelsFromCache(name);
+                    if (models && models.length > 0) {
+                        provider.setDynamicModels(models);
+                    }
+                } catch (error) {
+                    console.warn(
+                        `[ProviderFactory] Failed to load models for ${name} (IPC):`,
+                        error
+                    );
                 }
-            } catch (error) {
-                console.warn(`[ProviderFactory] Failed to load models for ${name}:`, error);
+            }
+        } else {
+            // Main Process or fallback
+            try {
+                const { providerModelsRepository } =
+                    await import('../../../../electron/main/database/repositories/provider-models-repository');
+
+                for (const [name, provider] of this.providers.entries()) {
+                    try {
+                        const models = await providerModelsRepository.getModels(name);
+                        if (models && models.length > 0) {
+                            provider.setDynamicModels(models);
+                        }
+                    } catch (error) {
+                        // Ignore specific model load errors
+                        // console.warn(`[ProviderFactory] Failed to load models for ${name} (DB):`, error);
+                    }
+                }
+            } catch (repoError) {
+                // Repository not found (e.g. strict renderer environment without IPC?)
+                console.warn('[ProviderFactory] Cannot access DB repository in this environment');
             }
         }
     }
@@ -83,6 +103,12 @@ export class ProviderFactory {
         if (keys.google) {
             const geminiProvider = this.providers.get('google') as GeminiProvider;
             geminiProvider?.setApiKey(keys.google);
+
+            // Also set for gemini-cli alias
+            const geminiCliProvider = this.providers.get(
+                'gemini-cli' as AIProvider
+            ) as GeminiProvider;
+            geminiCliProvider?.setApiKey(keys.google);
         }
         if (keys.groq) {
             const groqProvider = this.providers.get('groq' as AIProvider) as GroqProvider;
@@ -99,10 +125,30 @@ export class ProviderFactory {
     }
 
     configureProvider(name: AIProvider, config: Record<string, any>): void {
-        const provider = this.providers.get(name) as BaseAIProvider & {
-            setConfig?: (config: Record<string, any>) => void;
-        };
-        provider?.setConfig?.(config);
+        const provider = this.providers.get(name);
+        if (!provider) return;
+
+        // generic setConfig
+        if ('setConfig' in provider && typeof (provider as any).setConfig === 'function') {
+            (provider as any).setConfig(config);
+        }
+
+        // specific setApiKey fallback
+        if (
+            config.apiKey &&
+            'setApiKey' in provider &&
+            typeof (provider as any).setApiKey === 'function'
+        ) {
+            (provider as any).setApiKey(config.apiKey!);
+        }
+
+        // Handle aliases / synced configurations
+        if (name === 'google' && config.apiKey) {
+            const geminiCli = this.providers.get('gemini-cli' as AIProvider);
+            if (geminiCli && 'setApiKey' in geminiCli) {
+                (geminiCli as any).setApiKey(config.apiKey);
+            }
+        }
     }
 
     /**

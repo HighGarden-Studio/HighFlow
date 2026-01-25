@@ -381,6 +381,73 @@ export class AIServiceManager {
     }
 
     /**
+     * Generate content directly (lightweight wrapper for MultiVendorClient)
+     * Used for system tasks like Project Analysis, Commit Message generation etc.
+     */
+    async generateContent(
+        prompt: string,
+        config: {
+            provider: AIProvider;
+            model: AIModel;
+            temperature?: number;
+            systemPrompt?: string;
+        }
+    ): Promise<{ success: boolean; content: string; error?: any }> {
+        try {
+            const providerName = config.provider;
+            const provider = await this.providerFactory.getProvider(providerName);
+
+            // Basic messages construction
+            const messages: AIMessage[] = [];
+            // If prompt contains System/User structure, it might be better to split,
+            // but for now simple concatenation or handling system prompt if explicit
+            if (config.systemPrompt) {
+                // MultiVendorClient handles system prompt mostly via config.systemPrompt or dedicated message role?
+                // Standard is config.systemPrompt usually, but we can pass as message too depending on implementation.
+                // generateText expects config.systemPrompt.
+            }
+
+            messages.push({ role: 'user', content: prompt });
+
+            const aiConfig: AIConfig = {
+                provider: providerName,
+                model: config.model,
+                temperature: config.temperature ?? 0.7,
+                systemPrompt: config.systemPrompt,
+                maxTokens: 4000,
+            };
+
+            const context: AIExecutionContext = {
+                projectId: 0,
+                projectSequence: 0,
+                previousResults: [],
+            };
+
+            const result = await this.multiVendorClient.generateText(
+                {
+                    messages,
+                    config: aiConfig,
+                    context,
+                },
+                providerName,
+                provider
+            );
+
+            return {
+                success: true,
+                content: result.value,
+            };
+        } catch (error) {
+            console.error('[AIServiceManager] generateContent failed:', error);
+            return {
+                success: false,
+                content: '',
+                error,
+            };
+        }
+    }
+
+    /**
      * Execute a task with AI
      */
     async executeTask(

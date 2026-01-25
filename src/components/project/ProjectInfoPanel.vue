@@ -527,6 +527,112 @@ async function pickBaseFolder(): Promise<void> {
     }
 }
 
+const isAnalyzing = ref(false);
+
+import { aiServiceManager } from '../../services/workflow/AIServiceManager';
+
+async function analyzeProjectWithAI() {
+    if (!props.project.id || !props.project.baseDevFolder) return;
+
+    isAnalyzing.value = true;
+    try {
+        // 1. Scan artifacts via Main process
+        const result = await (window as any).electron.projects.scanArtifacts(props.project.id);
+
+        if (!result.success || !result.artifacts || Object.keys(result.artifacts).length === 0) {
+            console.warn('No artifacts found to analyze');
+            // Fallback to simple sync if no artifacts found? Or just alert.
+            alert('No project artifacts (GEMINI.md, README.md, etc.) found in the base folder.');
+            return;
+        }
+
+        const artifacts = result.artifacts;
+        const artifactsText = Object.entries(artifacts)
+            .map(([name, content]) => `--- File: ${name} ---\n${content}\n`)
+            .join('\n');
+
+        // 2. Construct Prompt for AI
+        const systemPrompt = `
+You are a specialized context management agent responsible for maintaining coherent state across multiple agent interactions and sessions.
+Your role is critical for complex, long-running projects.
+
+Extract the following from the provided project files:
+1. Project Goal (concise, high-level objective)
+2. AI Guidelines (rules, style guides, constraints)
+3. Context Summary (architecture, key decisions, status)
+
+Output purely in JSON format:
+{
+  "goal": "string",
+  "guidelines": "string (markdown)",
+  "context_summary": "string (markdown)"
+}
+`;
+        const userPrompt = `Here are the project artifacts found in ${props.project.baseDevFolder}:\n\n${artifactsText}`;
+
+        // 3. Call AI Service
+        // Determine provider and model
+        // 3. Call AI Service
+        console.log('[ProjectInfoPanel] Analyzing with:', {
+            provider: props.project.aiProvider || 'openai',
+            model: props.project.aiModel, // Can be undefined (local agent)
+        });
+
+        const response = await aiServiceManager.generateContent(
+            systemPrompt + '\n\n' + userPrompt,
+            {
+                provider: props.project.aiProvider || 'openai', // fallback
+                model: props.project.aiModel || 'gemini-1.5-flash', // Keep the ORIGINAL fallback for now? No, user said "Remove defaults".
+                // But `generateContent` might expect a string.
+                // The user said: "Default model... remove it".
+                // "If user settings are empty, just send empty".
+                // Let's pass `props.project.aiModel` directly. If it's undefined, let the provider handle it (or fail, but that's what user wants: "request as is").
+                // Wait, the original code had `|| 'gemini-1.5-flash'`. The user specifically complained about "gemini-1.5".
+                // I will pass `props.project.aiModel as any` or just `props.project.aiModel || ''`.
+                // Looking at types, model is likely string.
+                // Let's try to pass it as is.
+                model: props.project.aiModel || '',
+                temperature: 0.2,
+            }
+        );
+
+        if (response && response.content) {
+            let parsed: any = {};
+            try {
+                // Try to clean markdown code blocks if present
+                const cleanJson = response.content.replace(/```json\n|\n```/g, '').trim();
+                parsed = JSON.parse(cleanJson);
+            } catch (e) {
+                console.warn('Failed to parse AI response as JSON, using raw text');
+                // Fallback: manually heuristics or just dump to description
+            }
+
+            const updateData: any = {};
+            if (parsed.goal) updateData.goal = parsed.goal;
+            if (parsed.guidelines) updateData.aiGuidelines = parsed.guidelines;
+
+            if (parsed.context_summary) {
+                const existingDesc = props.project.description || '';
+                if (!existingDesc.includes('[AI Analysis]')) {
+                    updateData.description =
+                        existingDesc + `\n\n[AI Analysis]\n${parsed.context_summary}`;
+                }
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                const projectStore = useProjectStore();
+                await projectStore.updateProject(props.project.id, updateData);
+                console.log('Project updated with AI analysis');
+            }
+        }
+    } catch (err) {
+        console.error('Failed to analyze project:', err);
+        alert('Failed to analyze project: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+        isAnalyzing.value = false;
+    }
+}
+
 function startEditAI(): void {
     // Use effective values (including inherited) to show current active settings
     const effectiveProvider = props.project.aiProvider || effectiveAI.value.provider;
@@ -1440,14 +1546,16 @@ function getAssistantLabel(type: string): string {
                                 </div>
                             </div>
 
-                            <!-- Base Dev Folder -->
-                            <div class="space-y-2 border-t border-gray-700 pt-4">
+                            <!-- Base Dev Folder with AI Analysis -->
+                            <div class="space-y-3 border-t border-gray-700 pt-4">
                                 <label class="text-sm font-medium text-gray-300">{{
                                     t('project.info.base_folder')
                                 }}</label>
+
+                                <!-- Folder Path & Picker -->
                                 <div class="flex items-center space-x-2">
                                     <div
-                                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate"
+                                        class="flex-1 bg-gray-900/50 rounded px-3 py-2 text-sm text-gray-400 font-mono truncate border border-gray-700/50"
                                     >
                                         {{
                                             project.baseDevFolder ||
@@ -1455,6 +1563,7 @@ function getAssistantLabel(type: string): string {
                                         }}
                                     </div>
                                     <button
+                                        v-if="!isEditingGuidelines"
                                         class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
                                         :title="t('project.info.base_folder_change')"
                                         @click="pickBaseFolder"
@@ -1462,6 +1571,54 @@ function getAssistantLabel(type: string): string {
                                         <FolderOpen class="w-4 h-4" />
                                     </button>
                                 </div>
+
+                                <!-- AI Analysis Button -->
+                                <button
+                                    v-if="project.baseDevFolder && !isEditingGuidelines"
+                                    class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 hover:from-blue-600/30 hover:to-purple-600/30 border border-blue-500/30 rounded-lg text-sm text-blue-200 transition-all group"
+                                    :disabled="isAnalyzing"
+                                    @click="analyzeProjectWithAI"
+                                >
+                                    <div v-if="isAnalyzing" class="flex items-center gap-2">
+                                        <svg
+                                            class="animate-spin h-4 w-4 text-blue-400"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <circle
+                                                class="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                stroke-width="4"
+                                            ></circle>
+                                            <path
+                                                class="opacity-75"
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                            ></path>
+                                        </svg>
+                                        <span>Analyzing Project Context...</span>
+                                    </div>
+                                    <div v-else class="flex items-center gap-2">
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                            class="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform"
+                                        >
+                                            <path
+                                                d="M11.7 2.805a.75.75 0 0 1 .6 0A60.65 60.65 0 0 1 22.83 8.72a.75.75 0 0 1-.231 1.337 49.949 49.949 0 0 0-9.902 3.912l-.003.002-.34.18a.75.75 0 0 1-.707 0A50.009 50.009 0 0 0 2.261 10.057a.75.75 0 0 1-.231-1.337A60.653 60.653 0 0 1 11.7 2.805Z"
+                                            />
+                                            <path
+                                                d="M13.06 15.473a48.45 48.45 0 0 1 7.666-3.282c.134 1.438.227 2.945.227 4.531 0 5.74-4.592 10.76-10.453 10.76-5.859 0-10.453-5.02-10.453-10.76 0-1.586.093-3.093.227-4.531 2.546 1.086 5.166 2.22 7.666 3.282.72.306 1.54.306 2.26.001ZM12 4.152a50.6 50.6 0 0 0-9.052 5.342 53.05 53.05 0 0 1 9.052-4.14 53.05 53.05 0 0 1 9.052 4.14A50.6 50.6 0 0 0 12 4.152Z"
+                                            />
+                                        </svg>
+                                        <span>AI Project Analysis / Sync</span>
+                                    </div>
+                                </button>
                             </div>
 
                             <!-- MCP 설정 -->

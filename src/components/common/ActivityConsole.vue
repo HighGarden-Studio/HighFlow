@@ -1,9 +1,9 @@
 <template>
     <div class="activity-console" :class="{ open: isOpen }">
         <!-- Toggle Bar -->
-        <div class="console-toggle-bar" @click="toggleConsole" @mousedown.prevent="startResize">
+        <div class="console-toggle-bar" @mousedown.prevent="startResize">
             <div class="toggle-info">
-                <span class="toggle-icon">
+                <button class="toggle-icon-btn" @click.stop="toggleConsole">
                     <svg
                         v-if="isOpen"
                         xmlns="http://www.w3.org/2000/svg"
@@ -30,131 +30,184 @@
                             clip-rule="evenodd"
                         />
                     </svg>
-                </span>
-                <span class="toggle-title">Activity Console</span>
-                <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
+                </button>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button
+                        class="tab-btn"
+                        :class="{ active: activeTab === 'activity' && isOpen }"
+                        @click.stop="selectTab('activity')"
+                    >
+                        Activity
+                        <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
+                    </button>
+                    <button
+                        class="tab-btn"
+                        :class="{ active: activeTab === 'terminal' && isOpen }"
+                        @click.stop="selectTab('terminal')"
+                    >
+                        Terminal
+                    </button>
+                </div>
             </div>
 
             <div class="toggle-stats">
-                <span class="stat" :class="{ active: stats.error > 0 }">
-                    <span class="stat-dot error"></span>
-                    {{ stats.error }}
-                </span>
-                <span class="stat" :class="{ active: stats.warning > 0 }">
-                    <span class="stat-dot warning"></span>
-                    {{ stats.warning }}
-                </span>
-                <span class="stat">
-                    <span class="stat-dot info"></span>
-                    {{ stats.info + stats.success }}
-                </span>
+                <template v-if="activeTab === 'activity' || !isOpen">
+                    <span class="stat" :class="{ active: stats.error > 0 }">
+                        <span class="stat-dot error"></span>
+                        {{ stats.error }}
+                    </span>
+                    <span class="stat" :class="{ active: stats.warning > 0 }">
+                        <span class="stat-dot warning"></span>
+                        {{ stats.warning }}
+                    </span>
+                    <span class="stat">
+                        <span class="stat-dot info"></span>
+                        {{ stats.info + stats.success }}
+                    </span>
+                </template>
+                <template v-else-if="activeTab === 'terminal'">
+                    <span class="stat">
+                        <span class="stat-dot success"></span>
+                        {{ currentProjectName }}
+                    </span>
+                </template>
             </div>
         </div>
 
         <!-- Console Content -->
         <div v-show="isOpen" class="console-content" :style="{ height: consoleHeight + 'px' }">
-            <!-- Toolbar -->
-            <div class="console-toolbar">
-                <div class="filter-buttons">
-                    <button
-                        v-for="level in logLevels"
-                        :key="level.value"
-                        class="filter-btn"
-                        :class="{ active: filter.levels.includes(level.value) }"
-                        :title="level.label"
-                        @click="toggleLevel(level.value)"
-                    >
-                        <span class="level-dot" :class="level.value"></span>
-                        {{ level.label }}
-                    </button>
+            <!-- Activity View -->
+            <div v-show="activeTab === 'activity'" class="view-container">
+                <!-- Toolbar -->
+                <div class="console-toolbar">
+                    <div class="filter-buttons">
+                        <button
+                            v-for="level in logLevels"
+                            :key="level.value"
+                            class="filter-btn"
+                            :class="{ active: filter.levels.includes(level.value) }"
+                            :title="level.label"
+                            @click="toggleLevel(level.value)"
+                        >
+                            <span class="level-dot" :class="level.value"></span>
+                            {{ level.label }}
+                        </button>
+                    </div>
+
+                    <div class="filter-categories">
+                        <select v-model="selectedCategory" class="category-select">
+                            <option value="">All Categories</option>
+                            <option v-for="cat in categories" :key="cat.value" :value="cat.value">
+                                {{ cat.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="search-box">
+                        <input
+                            v-model="searchQuery"
+                            type="text"
+                            placeholder="Search logs..."
+                            class="search-input"
+                        />
+                    </div>
+
+                    <div class="toolbar-actions">
+                        <button
+                            class="action-btn"
+                            :class="{ active: autoscroll }"
+                            @click="toggleAutoscroll"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                class="icon"
+                            >
+                                <path
+                                    fill-rule="evenodd"
+                                    d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
+                                    clip-rule="evenodd"
+                                />
+                            </svg>
+                        </button>
+                        <button class="action-btn" title="Clear logs" @click="clearLogs">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                class="icon"
+                            >
+                                <path
+                                    fill-rule="evenodd"
+                                    d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z"
+                                    clip-rule="evenodd"
+                                />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
-                <div class="filter-categories">
-                    <select v-model="selectedCategory" class="category-select">
-                        <option value="">All Categories</option>
-                        <option v-for="cat in categories" :key="cat.value" :value="cat.value">
-                            {{ cat.label }}
-                        </option>
-                    </select>
-                </div>
-
-                <div class="search-box">
-                    <input
-                        v-model="searchQuery"
-                        type="text"
-                        placeholder="Search logs..."
-                        class="search-input"
-                    />
-                </div>
-
-                <div class="toolbar-actions">
-                    <button
-                        class="action-btn"
-                        :class="{ active: autoscroll }"
-                        @click="toggleAutoscroll"
-                    >
+                <!-- Log List -->
+                <div ref="logContainerRef" class="log-container">
+                    <div v-if="filteredLogs.length === 0" class="empty-state">
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
+                            viewBox="0 0 24 24"
                             fill="currentColor"
-                            class="icon"
+                            class="empty-icon"
                         >
                             <path
                                 fill-rule="evenodd"
-                                d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
+                                d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"
                                 clip-rule="evenodd"
                             />
-                        </svg>
-                    </button>
-                    <button class="action-btn" title="Clear logs" @click="clearLogs">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            class="icon"
-                        >
                             <path
-                                fill-rule="evenodd"
-                                d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z"
-                                clip-rule="evenodd"
+                                d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z"
                             />
                         </svg>
-                    </button>
+                        <p>No activity logs yet</p>
+                    </div>
+
+                    <div
+                        v-for="log in filteredLogs"
+                        :key="log.id"
+                        class="log-entry"
+                        :class="log.level"
+                    >
+                        <span class="log-time">{{ formatTime(log.timestamp) }}</span>
+                        <span class="log-level" :class="log.level">{{
+                            log.level.toUpperCase()
+                        }}</span>
+                        <span class="log-category">{{ log.category }}</span>
+                        <span class="log-message">{{ log.message }}</span>
+                        <button
+                            v-if="log.details"
+                            class="details-btn"
+                            @click="toggleDetails(log.id)"
+                        >
+                            {{ expandedLogs.has(log.id) ? '−' : '+' }}
+                        </button>
+                        <div v-if="log.details && expandedLogs.has(log.id)" class="log-details">
+                            <pre>{{ JSON.stringify(log.details, null, 2) }}</pre>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Log List -->
-            <div ref="logContainerRef" class="log-container">
-                <div v-if="filteredLogs.length === 0" class="empty-state">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        class="empty-icon"
-                    >
-                        <path
-                            fill-rule="evenodd"
-                            d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"
-                            clip-rule="evenodd"
-                        />
-                        <path
-                            d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z"
-                        />
-                    </svg>
-                    <p>No activity logs yet</p>
+            <!-- Terminal View -->
+            <div v-show="activeTab === 'terminal'" class="view-container">
+                <div v-if="projectBaseFolder" class="h-full">
+                    <TerminalComponent
+                        :id="`global-terminal-${currentProjectId}`"
+                        :key="currentProjectId"
+                        :cwd="projectBaseFolder"
+                    />
                 </div>
-
-                <div v-for="log in filteredLogs" :key="log.id" class="log-entry" :class="log.level">
-                    <span class="log-time">{{ formatTime(log.timestamp) }}</span>
-                    <span class="log-level" :class="log.level">{{ log.level.toUpperCase() }}</span>
-                    <span class="log-category">{{ log.category }}</span>
-                    <span class="log-message">{{ log.message }}</span>
-                    <button v-if="log.details" class="details-btn" @click="toggleDetails(log.id)">
-                        {{ expandedLogs.has(log.id) ? '−' : '+' }}
-                    </button>
-                    <div v-if="log.details && expandedLogs.has(log.id)" class="log-details">
-                        <pre>{{ JSON.stringify(log.details, null, 2) }}</pre>
-                    </div>
+                <div v-else class="empty-state">
+                    <p>Open a project to use the terminal</p>
                 </div>
             </div>
         </div>
@@ -167,8 +220,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useActivityLogStore, type LogLevel } from '../../renderer/stores/activityLogStore';
+import { useProjectStore } from '../../renderer/stores/projectStore';
+import TerminalComponent from './TerminalComponent.vue';
 
 const store = useActivityLogStore();
+const projectStore = useProjectStore();
 
 // Local state
 const logContainerRef = ref<HTMLElement | null>(null);
@@ -178,6 +234,7 @@ const selectedCategory = ref('');
 const isResizing = ref(false);
 const startY = ref(0);
 const startHeight = ref(0);
+const activeTab = ref<'activity' | 'terminal'>('activity');
 
 // Log levels config
 const logLevels = [
@@ -208,6 +265,10 @@ const filteredLogs = computed(() => store.filteredLogs);
 const unreadCount = computed(() => store.unreadCount);
 const stats = computed(() => store.stats);
 
+const projectBaseFolder = computed(() => projectStore.currentProject?.baseDevFolder);
+const currentProjectId = computed(() => projectStore.currentProject?.id || 'default');
+const currentProjectName = computed(() => projectStore.currentProject?.title || 'No Project');
+
 // Watch for search and category changes
 watch(searchQuery, (value) => {
     store.setFilter({ search: value });
@@ -227,7 +288,7 @@ watch(selectedCategory, (value) => {
 watch(
     () => store.logs.length,
     () => {
-        if (autoscroll.value && isOpen.value) {
+        if (autoscroll.value && isOpen.value && activeTab.value === 'activity') {
             nextTick(() => {
                 if (logContainerRef.value) {
                     logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight;
@@ -242,6 +303,13 @@ function toggleConsole() {
     if (!isResizing.value) {
         store.toggleConsole();
     }
+}
+
+function selectTab(tab: 'activity' | 'terminal') {
+    if (!isOpen.value) {
+        store.toggleConsole();
+    }
+    activeTab.value = tab;
 }
 
 function toggleLevel(level: LogLevel) {
@@ -276,7 +344,12 @@ function formatTime(date: Date): string {
 
 // Resize handling
 function startResize(e: MouseEvent) {
-    if (e.target instanceof HTMLElement && e.target.classList.contains('resize-handle')) {
+    // Allow start resize if matched resize-handle or the header itself
+    const target = e.target as HTMLElement;
+    if (
+        target.classList.contains('resize-handle') ||
+        target.classList.contains('console-toggle-bar')
+    ) {
         isResizing.value = true;
         startY.value = e.clientY;
         startHeight.value = consoleHeight.value;
@@ -322,48 +395,89 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 16px;
-    cursor: pointer;
+    padding: 0 16px;
+    height: 36px;
     user-select: none;
     background: var(--color-bg-tertiary, #252525);
     border-bottom: 1px solid var(--color-border, #333);
+    cursor: ns-resize; /* Indicate resize capability */
 }
 
-.console-toggle-bar:hover {
-    background: var(--color-bg-hover, #2a2a2a);
-}
-
+/* New header styling */
 .toggle-info {
     display: flex;
     align-items: center;
     gap: 8px;
+    height: 100%;
 }
 
-.toggle-icon {
+.toggle-icon-btn {
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--color-text-secondary, #888);
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
+.toggle-icon-btn:hover {
+    background: var(--color-bg-hover, #333);
+    color: var(--color-text-primary, #fff);
+}
+
+.tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 100%;
+    margin-left: 8px;
+}
+
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 100%;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-tertiary, #666);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: var(--color-text-primary, #e0e0e0);
+    background: var(--color-bg-hover, #2a2a2a);
+}
+
+.tab-btn.active {
+    color: var(--color-primary, #3b82f6);
+    border-bottom-color: var(--color-primary, #3b82f6);
+}
+
+/* Original styles below */
 .icon {
     width: 16px;
     height: 16px;
 }
 
-.toggle-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--color-text-primary, #e0e0e0);
-}
-
 .unread-badge {
     background: var(--color-error, #ef4444);
     color: white;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 10px;
-    min-width: 18px;
-    text-align: center;
+    padding: 0 5px;
+    border-radius: 8px;
+    min-width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .toggle-stats {
@@ -402,9 +516,21 @@ onUnmounted(() => {
     background: var(--color-info, #3b82f6);
 }
 
+.stat-dot.success {
+    background: var(--color-success, #22c55e);
+}
+
 .console-content {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+}
+
+.view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
     overflow: hidden;
 }
 

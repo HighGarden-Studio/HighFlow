@@ -69,6 +69,10 @@ const projectsAPI = {
     ) => ipcRenderer.invoke('projects:import', data, userData),
 
     resetResults: (id: number) => ipcRenderer.invoke('projects:resetResults', id),
+
+    syncLocalContext: (id: number) => ipcRenderer.invoke('projects:sync-local-context', id),
+
+    scanArtifacts: (id: number) => ipcRenderer.invoke('projects:scan-artifacts', id),
 };
 
 // ========================================
@@ -134,6 +138,34 @@ const appAPI = {
 
     updateDesktopNotifications: (config: any) =>
         ipcRenderer.send('settings:update-notifications', config),
+};
+
+// ========================================
+// Terminal API
+// ========================================
+
+const terminalAPI = {
+    create: (id: string, cwd?: string, cols?: number, rows?: number) =>
+        ipcRenderer.invoke('terminal:create', id, cwd, cols, rows),
+
+    write: (id: string, data: string) => ipcRenderer.invoke('terminal:write', id, data),
+
+    resize: (id: string, cols: number, rows: number) =>
+        ipcRenderer.invoke('terminal:resize', id, cols, rows),
+
+    kill: (id: string) => ipcRenderer.invoke('terminal:kill', id),
+
+    onData: (id: string, callback: (data: string) => void) => {
+        const handler = (_event: any, data: string) => callback(data);
+        ipcRenderer.on(`terminal:data:${id}`, handler);
+        return () => ipcRenderer.removeListener(`terminal:data:${id}`, handler);
+    },
+
+    onExit: (id: string, callback: (endpoint: { exitCode: number; signal: number }) => void) => {
+        const handler = (_event: any, data: { exitCode: number; signal: number }) => callback(data);
+        ipcRenderer.on(`terminal:exit:${id}`, handler);
+        return () => ipcRenderer.removeListener(`terminal:exit:${id}`, handler);
+    },
 };
 
 // ========================================
@@ -570,7 +602,7 @@ const localAgentsAPI = {
 
     // Create a new agent session
     createSession: (
-        agentType: 'claude' | 'codex',
+        agentType: 'claude' | 'codex' | 'gemini-cli',
         workingDirectory: string,
         sessionId?: string
     ): Promise<SessionInfo> =>
@@ -1229,10 +1261,13 @@ const aiAPI = {
         ipcRenderer.invoke('ai:fetchModels', providerId, apiKey),
     getModelsFromCache: (providerId: string) =>
         ipcRenderer.invoke('ai:getModelsFromCache', providerId),
+    saveModelsToCache: (providerId: string, models: any[]) =>
+        ipcRenderer.invoke('ai:saveModelsToCache', providerId, models),
     saveProviderConfig: (providerId: string, config: any) =>
         ipcRenderer.invoke('ai:saveProviderConfig', providerId, config),
     getProviderConfig: (providerId: string) =>
         ipcRenderer.invoke('ai:getProviderConfig', providerId),
+    getEnvApiKey: (providerId: string) => ipcRenderer.invoke('ai:getEnvApiKey', providerId),
 };
 
 // ========================================
@@ -1262,6 +1297,7 @@ const electronAPI = {
     auth: authAPI,
     http: httpAPI,
     ai: aiAPI,
+    terminal: terminalAPI,
 };
 
 // Expose to renderer
