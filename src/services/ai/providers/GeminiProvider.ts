@@ -64,11 +64,7 @@ export class GeminiProvider extends BaseAIProvider {
             return;
         }
 
-        try {
-            await super.validateConfig(config);
-        } catch (error) {
-            throw error;
-        }
+        await super.validateConfig(config);
     }
 
     /**
