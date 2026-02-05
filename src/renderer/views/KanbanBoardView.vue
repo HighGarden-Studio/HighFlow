@@ -28,6 +28,7 @@ import {
     type SubdivisionSuggestion,
 } from '../../services/ai/TaskSubdivisionService';
 import AgentViewer from '../../components/task/viewer/AgentViewer.vue';
+import OperatorPanel from '../../components/project/OperatorPanel.vue';
 
 // 미연동 Provider 정보 타입
 interface MissingProviderInfo {

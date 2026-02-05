@@ -137,6 +137,7 @@ export class LocalAgentSession extends EventEmitter {
     private executionMode: 'persistent' | 'oneshot' = 'persistent';
     private remoteThreadId: string | null = null; // Captured thread ID from agent
     private fullOutput: string = ''; // Capture full stdout for fallback
+    private accumulatedContent: string = ''; // Accumulate content from stream-json/other events
     private lastErrorReason: string | null = null; // Capture specific error reason from agent events
 
     constructor(
@@ -654,6 +655,11 @@ export class LocalAgentSession extends EventEmitter {
                     } else if (this.currentOnChunk && content) {
                         this.currentOnChunk(content);
                     }
+
+                    // Accumulate content for final result
+                    if (content) {
+                        this.accumulatedContent += content;
+                    }
                 }
                 return;
             }
@@ -814,6 +820,7 @@ export class LocalAgentSession extends EventEmitter {
                 message.content ||
                     message.text ||
                     message.result ||
+                    this.accumulatedContent ||
                     (this.executionMode === 'oneshot' && this.fullOutput ? this.fullOutput : '') ||
                     (this.transcript.length > 0 ? 'See transcript' : '')
             ),

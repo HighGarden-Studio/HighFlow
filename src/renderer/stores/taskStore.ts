@@ -288,6 +288,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // BUT wait, "task 의 전역 id 는 절대 사용하지 않고" means we CANNOT send an ID.
 
             const task = await api.tasks.get(projectId, sequence);
+            console.debug(`[TaskStore] api.tasks.get(${projectId}, ${sequence}) returned:`, task);
 
             if (task) {
                 // Ensure composite key matching for currentTask

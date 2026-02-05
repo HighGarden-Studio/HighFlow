@@ -514,6 +514,11 @@ async function saveBaseFolder(): Promise<void> {
         await projectStore.updateProject(props.project.id, {
             baseDevFolder: editedBaseFolder.value || null,
         });
+
+        // Auto-detect context after folder assignment
+        if (editedBaseFolder.value) {
+            await detectExistingContext();
+        }
     } catch (error) {
         console.error('Failed to update base folder:', error);
     }
@@ -527,11 +532,111 @@ async function pickBaseFolder(): Promise<void> {
     }
 }
 
+// ========================================
+// Context Recovery Feature
+// ========================================
+
+interface DetectedContext {
+    hasContext: boolean;
+    // Detection flags
+    hasClaudeMd?: boolean;
+    hasGeminiDir?: boolean;
+    hasCodexDir?: boolean;
+    hasGit?: boolean;
+    hasGeminiMd?: boolean;
+    hasAgentsMd?: boolean; // Codex AGENTS.md
+    hasTaskMd?: boolean; // Gemini task.md
+    hasPlanMd?: boolean; // implementation_plan.md
+    hasReadme?: boolean;
+    // Content
+    claudeMdContent?: string | null;
+    geminiMdContent?: string | null;
+    agentsMdContent?: string | null; // Codex
+    taskMdContent?: string | null;
+    planMdContent?: string | null;
+    geminiTaskMdContent?: string | null;
+    recentCommits?: string[];
+    error?: string;
+}
+
+const showContextRecoveryDialog = ref(false);
+const detectedContext = ref<DetectedContext | null>(null);
+
+async function detectExistingContext(): Promise<void> {
+    if (!props.project.id || !props.project.baseDevFolder) return;
+
+    try {
+        const result = await (window as any).electron.projects.detectContext(props.project.id);
+
+        if (result.hasContext) {
+            detectedContext.value = result;
+            showContextRecoveryDialog.value = true;
+        }
+    } catch (error) {
+        console.error('Failed to detect context:', error);
+    }
+}
+
+async function handleImportGuidelines(): Promise<void> {
+    const ctx = detectedContext.value;
+    if (!ctx) return;
+
+    // Combine all available guidelines content
+    const guidelinesParts: string[] = [];
+
+    // Claude Code
+    if (ctx.claudeMdContent) {
+        guidelinesParts.push('# Claude Code Guidelines\n\n' + ctx.claudeMdContent);
+    }
+
+    // Gemini CLI
+    if (ctx.geminiMdContent) {
+        guidelinesParts.push('# Gemini CLI Guidelines\n\n' + ctx.geminiMdContent);
+    }
+
+    // Codex (OpenAI)
+    if (ctx.agentsMdContent) {
+        guidelinesParts.push('# Codex Guidelines\n\n' + ctx.agentsMdContent);
+    }
+
+    if (guidelinesParts.length === 0) return;
+
+    const combinedGuidelines = guidelinesParts.join('\n\n---\n\n');
+
+    const projectStore = useProjectStore();
+    await projectStore.updateProject(props.project.id, {
+        aiGuidelines: combinedGuidelines,
+    });
+    showContextRecoveryDialog.value = false;
+}
+
+// Helper to check if any agent context source has importable guidelines
+const hasImportableGuidelines = computed(() => {
+    const ctx = detectedContext.value;
+    if (!ctx) return false;
+    return !!(ctx.claudeMdContent || ctx.geminiMdContent || ctx.agentsMdContent);
+});
+
+async function handleRunAnalysis(): Promise<void> {
+    showContextRecoveryDialog.value = false;
+    // Use existing analyzeProjectWithAI with git history included
+    await analyzeProjectWithAI(true);
+}
+
+function handleSkipRecovery(): void {
+    showContextRecoveryDialog.value = false;
+    detectedContext.value = null;
+}
+
 const isAnalyzing = ref(false);
 
 import { aiServiceManager } from '../../services/workflow/AIServiceManager';
+import { useLocalAgentExecution } from '../../composables/useLocalAgentExecution';
 
-async function analyzeProjectWithAI() {
+// Initialize local agent execution for analysis
+const localAgentExecution = useLocalAgentExecution();
+
+async function analyzeProjectWithAI(includeGitHistory: boolean = false) {
     if (!props.project.id || !props.project.baseDevFolder) return;
 
     isAnalyzing.value = true;
@@ -541,18 +646,40 @@ async function analyzeProjectWithAI() {
 
         if (!result.success || !result.artifacts || Object.keys(result.artifacts).length === 0) {
             console.warn('No artifacts found to analyze');
-            // Fallback to simple sync if no artifacts found? Or just alert.
             alert('No project artifacts (GEMINI.md, README.md, etc.) found in the base folder.');
             return;
         }
 
         const artifacts = result.artifacts;
-        const artifactsText = Object.entries(artifacts)
+        let artifactsText = Object.entries(artifacts)
             .map(([name, content]) => `--- File: ${name} ---\n${content}\n`)
             .join('\n');
 
-        // 2. Construct Prompt for AI
-        const systemPrompt = `
+        // Include git history if in recovery mode
+        if (includeGitHistory && detectedContext.value?.recentCommits?.length) {
+            artifactsText += `\n--- Recent Git Commits ---\n${detectedContext.value.recentCommits.join('\n')}\n`;
+        }
+
+        // 2. Construct Prompt for AI - use enhanced prompt in recovery mode
+        const systemPrompt = includeGitHistory
+            ? `
+You are recovering context from a previous development session.
+Analyze the project artifacts AND git history to understand:
+
+1. Project Goal (concise, high-level objective)
+2. AI Guidelines (rules, style guides, constraints from CLAUDE.md, GEMINI.md, etc.)
+3. Progress Summary (what has been done so far based on git history and artifacts)
+4. Suggested Next Step (what appears to be the logical next step)
+
+Output purely in JSON format:
+{
+  "goal": "string",
+  "guidelines": "string (markdown)",
+  "context_summary": "string (markdown) - include progress summary",
+  "suggested_next_step": "string (actionable recommendation)"
+}
+`
+            : `
 You are a specialized context management agent responsible for maintaining coherent state across multiple agent interactions and sessions.
 Your role is critical for complex, long-running projects.
 
@@ -569,42 +696,89 @@ Output purely in JSON format:
 }
 `;
         const userPrompt = `Here are the project artifacts found in ${props.project.baseDevFolder}:\n\n${artifactsText}`;
+        const fullPrompt = systemPrompt + '\n\n' + userPrompt;
 
-        // 3. Call AI Service
-        // Determine provider and model
-        // 3. Call AI Service
-        console.log('[ProjectInfoPanel] Analyzing with:', {
-            provider: props.project.aiProvider || 'openai',
-            model: props.project.aiModel, // Can be undefined (local agent)
-        });
+        // 3. Determine if using local agent or cloud API
+        const localAgentProviders = ['gemini-cli', 'claude-code', 'codex', 'claude'];
+        const configuredProvider = props.project.aiProvider || '';
+        const isLocalAgent = localAgentProviders.includes(configuredProvider);
 
-        const response = await aiServiceManager.generateContent(
-            systemPrompt + '\n\n' + userPrompt,
-            {
-                provider: props.project.aiProvider || 'openai', // fallback
-                model: props.project.aiModel || 'gemini-1.5-flash', // Keep the ORIGINAL fallback for now? No, user said "Remove defaults".
-                // But `generateContent` might expect a string.
-                // The user said: "Default model... remove it".
-                // "If user settings are empty, just send empty".
-                // Let's pass `props.project.aiModel` directly. If it's undefined, let the provider handle it (or fail, but that's what user wants: "request as is").
-                // Wait, the original code had `|| 'gemini-1.5-flash'`. The user specifically complained about "gemini-1.5".
-                // I will pass `props.project.aiModel as any` or just `props.project.aiModel || ''`.
-                // Looking at types, model is likely string.
-                // Let's try to pass it as is.
-                model: props.project.aiModel || '',
-                temperature: 0.2,
+        let responseContent: string | null = null;
+
+        if (isLocalAgent) {
+            // Use local agent via session
+            console.log('[ProjectInfoPanel] Using local agent for analysis:', configuredProvider);
+
+            // Map provider name to local agent type
+            const agentTypeMap: Record<string, 'claude' | 'codex' | 'gemini-cli'> = {
+                'gemini-cli': 'gemini-cli',
+                'claude-code': 'claude',
+                claude: 'claude',
+                codex: 'codex',
+            };
+            const agentType = agentTypeMap[configuredProvider] || 'gemini-cli';
+
+            // Create session and send message
+            const session = await localAgentExecution.createSession(
+                agentType,
+                props.project.baseDevFolder
+            );
+            if (!session) {
+                throw new Error(
+                    `Failed to start ${agentType} session. Make sure ${agentType} is installed and accessible.`
+                );
             }
-        );
 
-        if (response && response.content) {
+            try {
+                const response = await localAgentExecution.sendMessage(fullPrompt, {
+                    timeout: 120000, // 2 minute timeout for analysis
+                });
+
+                if (response?.success) {
+                    responseContent = response.content;
+                } else {
+                    throw new Error(response?.error || 'Local agent returned no response');
+                }
+            } finally {
+                // Always close the session after single-use analysis
+                await localAgentExecution.closeSession();
+            }
+        } else {
+            // Use cloud API
+            const provider = configuredProvider || 'google';
+            const getDefaultModel = (prov: string): string => {
+                switch (prov) {
+                    case 'openai':
+                        return 'gpt-4o-mini';
+                    case 'anthropic':
+                        return 'claude-sonnet-4-20250514';
+                    case 'google':
+                        return 'gemini-2.0-flash';
+                    default:
+                        return 'gemini-2.0-flash';
+                }
+            };
+            const model = props.project.aiModel || getDefaultModel(provider);
+
+            console.log('[ProjectInfoPanel] Using cloud API for analysis:', { provider, model });
+
+            const response = await aiServiceManager.generateContent(fullPrompt, {
+                provider,
+                model,
+                temperature: 0.2,
+            });
+            responseContent = response?.content || null;
+        }
+
+        // 4. Parse and apply results
+        if (responseContent) {
             let parsed: any = {};
             try {
                 // Try to clean markdown code blocks if present
-                const cleanJson = response.content.replace(/```json\n|\n```/g, '').trim();
+                const cleanJson = responseContent.replace(/```json\n|```\n|```/g, '').trim();
                 parsed = JSON.parse(cleanJson);
             } catch (e) {
                 console.warn('Failed to parse AI response as JSON, using raw text');
-                // Fallback: manually heuristics or just dump to description
             }
 
             const updateData: any = {};
@@ -630,6 +804,297 @@ Output purely in JSON format:
         alert('Failed to analyze project: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
         isAnalyzing.value = false;
+    }
+}
+
+// ========================================
+// AI-Powered Task Breakdown
+// ========================================
+
+const isGeneratingTasks = ref(false);
+
+interface GeneratedTask {
+    order: number;
+    title: string;
+    description: string;
+    prompt: string;
+    expectedOutputFormat: string;
+    estimatedMinutes: number;
+}
+
+async function generateTasksFromGoal() {
+    if (!props.project.id || !props.project.goal) {
+        alert('프로젝트 Goal이 설정되어 있지 않습니다. Goal을 먼저 설정해 주세요.');
+        return;
+    }
+
+    if (!props.project.baseDevFolder) {
+        alert('프로젝트 개발 폴더가 설정되어 있지 않습니다. 폴더를 먼저 지정해 주세요.');
+        return;
+    }
+
+    isGeneratingTasks.value = true;
+    try {
+        // 1. Scan current project state to understand what's already implemented
+        const scanResult = await (window as any).electron.projects.scanArtifacts(props.project.id);
+
+        let currentStateContext = '';
+        if (scanResult.success && scanResult.artifacts) {
+            currentStateContext = Object.entries(scanResult.artifacts)
+                .map(([name, content]) => `--- File: ${name} ---\n${content}\n`)
+                .join('\n');
+        }
+
+        // Also get git history if available
+        let gitContext = '';
+        if (detectedContext.value?.recentCommits?.length) {
+            gitContext = `\n--- Recent Git Commits ---\n${detectedContext.value.recentCommits.join('\n')}\n`;
+        }
+
+        // 2. Build the prompt for task breakdown with current state awareness
+        const systemPrompt = `You are an expert project planner and AI coding assistant. 
+Your task is to analyze a project goal, understand the CURRENT STATE of the project, and create tasks ONLY for work that still needs to be done.
+
+CRITICAL: You will be given the current project files and recent git history. 
+- Analyze what has ALREADY been implemented
+- Identify what is MISSING or INCOMPLETE
+- Generate tasks ONLY for the remaining work
+
+For each task, you must provide:
+1. A clear, concise title
+2. A detailed description of what needs to be done
+3. A well-crafted prompt that an AI coding agent can use to complete the task
+4. Expected output format (code, markdown, json, html, css, etc.)
+5. Estimated time in minutes
+
+The prompt for each task should:
+- Be specific and actionable
+- Reference any existing code or files that need to be modified
+- Include context from previous tasks
+- Reference the project guidelines if relevant
+- Be self-contained enough for an AI to execute
+- Mention specific file paths when modifying existing code
+
+Output JSON format:
+{
+  "analysis": {
+    "implemented": ["list of features/components already done"],
+    "remaining": ["list of features/components still needed"]
+  },
+  "tasks": [
+    {
+      "order": 1,
+      "title": "Task title",
+      "description": "Detailed description",
+      "prompt": "Full, detailed prompt for AI execution including all necessary context and requirements",
+      "expectedOutputFormat": "code|markdown|json|html|css|text",
+      "estimatedMinutes": 30
+    }
+  ]
+}
+
+Important rules:
+- SKIP any work that is already completed based on the current project state
+- Create tasks ONLY for remaining/incomplete work
+- Each task should be atomic and achievable in one AI session
+- Tasks should follow logical dependency order
+- Later tasks can reference outputs from earlier tasks
+- Be specific about which files to create or modify
+- The prompts should be comprehensive and include all necessary details`;
+
+        const userPrompt = `Project Goal: ${props.project.goal}
+
+${props.project.aiGuidelines ? `Project Guidelines:\n${props.project.aiGuidelines}` : ''}
+
+${props.project.description ? `Project Description:\n${props.project.description}` : ''}
+
+Working Directory: ${props.project.baseDevFolder}
+
+=== CURRENT PROJECT STATE ===
+The following files and content represent what has ALREADY been implemented:
+
+${currentStateContext || '(No project files found - this appears to be a new project)'}
+${gitContext}
+
+=== TASK GENERATION REQUEST ===
+Based on the goal and the CURRENT STATE above:
+1. First analyze what has been implemented vs what remains
+2. Then generate tasks ONLY for the remaining work
+3. Skip anything that is already complete`;
+
+        const fullPrompt = systemPrompt + '\n\n' + userPrompt;
+
+        // 2. Determine provider (same logic as analyzeProjectWithAI)
+        const localAgentProviders = ['gemini-cli', 'claude-code', 'codex', 'claude'];
+        const configuredProvider = props.project.aiProvider || '';
+        const isLocalAgent = localAgentProviders.includes(configuredProvider);
+
+        let responseContent: string | null = null;
+
+        if (isLocalAgent) {
+            // Use local agent via session
+            console.log(
+                '[ProjectInfoPanel] Using local agent for task generation:',
+                configuredProvider
+            );
+
+            const agentTypeMap: Record<string, 'claude' | 'codex' | 'gemini-cli'> = {
+                'gemini-cli': 'gemini-cli',
+                'claude-code': 'claude',
+                claude: 'claude',
+                codex: 'codex',
+            };
+            const agentType = agentTypeMap[configuredProvider] || 'gemini-cli';
+
+            const session = await localAgentExecution.createSession(
+                agentType,
+                props.project.baseDevFolder || '.'
+            );
+            if (!session) {
+                throw new Error(`Failed to start ${agentType} session.`);
+            }
+
+            try {
+                const response = await localAgentExecution.sendMessage(fullPrompt, {
+                    timeout: 180000, // 3 minute timeout for task generation
+                });
+
+                if (response?.success) {
+                    responseContent = response.content;
+                } else {
+                    throw new Error(response?.error || 'Local agent returned no response');
+                }
+            } finally {
+                await localAgentExecution.closeSession();
+            }
+        } else {
+            // Use cloud API
+            const provider = configuredProvider || 'google';
+            const getDefaultModel = (prov: string): string => {
+                switch (prov) {
+                    case 'openai':
+                        return 'gpt-4o-mini';
+                    case 'anthropic':
+                        return 'claude-sonnet-4-20250514';
+                    case 'google':
+                        return 'gemini-2.0-flash';
+                    default:
+                        return 'gemini-2.0-flash';
+                }
+            };
+            const model = props.project.aiModel || getDefaultModel(provider);
+
+            console.log('[ProjectInfoPanel] Using cloud API for task generation:', {
+                provider,
+                model,
+            });
+
+            const response = await aiServiceManager.generateContent(fullPrompt, {
+                provider,
+                model,
+                temperature: 0.3,
+            });
+            responseContent = response?.content || null;
+        }
+
+        // 3. Parse the response
+        if (!responseContent) {
+            throw new Error('AI did not return any response');
+        }
+
+        let parsedTasks: GeneratedTask[] = [];
+        let analysis: { implemented?: string[]; remaining?: string[] } = {};
+        try {
+            const cleanJson = responseContent.replace(/```json\n|```\n|```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+            parsedTasks = parsed.tasks || [];
+            analysis = parsed.analysis || {};
+        } catch (e) {
+            console.error('Failed to parse task breakdown response:', e);
+            throw new Error('AI 응답을 파싱하는데 실패했습니다. 다시 시도해 주세요.');
+        }
+
+        if (parsedTasks.length === 0) {
+            // Check if everything is already implemented
+            if (analysis.implemented?.length && !analysis.remaining?.length) {
+                alert(
+                    '✅ 프로젝트가 이미 완료된 것으로 보입니다!\n\n구현 완료된 항목:\n• ' +
+                        analysis.implemented.join('\n• ')
+                );
+                return;
+            }
+            throw new Error('AI가 태스크를 생성하지 않았습니다.');
+        }
+
+        // 4. Create tasks with dependencies
+        const createdTaskIds: number[] = [];
+
+        for (let i = 0; i < parsedTasks.length; i++) {
+            const task = parsedTasks[i];
+            if (!task) continue; // Skip undefined tasks
+
+            // Build dependencies (all previous tasks)
+            const dependencies = createdTaskIds.slice(); // Copy of all created task IDs so far
+
+            // Create the task
+            const newTask = await (window as any).electron.tasks.create({
+                projectId: props.project.id,
+                title: task.title,
+                description: task.description,
+                generatedPrompt: task.prompt,
+                expectedOutputFormat: task.expectedOutputFormat || 'markdown',
+                estimatedMinutes: task.estimatedMinutes || 30,
+                status: 'todo',
+                priority: 'medium',
+                taskType: 'ai',
+                // Inherit project AI settings
+                aiProvider: props.project.aiProvider || null,
+                aiModel: props.project.aiModel || null,
+                // Set execution order
+                executionOrder: i + 1,
+                // Dependencies (previous task)
+                dependencies:
+                    dependencies.length > 0 ? [dependencies[dependencies.length - 1]] : [],
+                // Auto-approve for intermediate tasks, review for final task
+                autoApprove: i < parsedTasks.length - 1,
+                autoReview: i === parsedTasks.length - 1,
+            });
+
+            if (newTask?.projectSequence) {
+                createdTaskIds.push(newTask.projectSequence);
+            }
+
+            console.log(
+                `[ProjectInfoPanel] Created task ${i + 1}/${parsedTasks.length}: ${task.title}`
+            );
+        }
+
+        // Build success message with analysis
+        let successMessage = `✅ ${parsedTasks.length}개의 태스크가 생성되었습니다!\n\n`;
+
+        if (analysis.implemented?.length) {
+            successMessage += `📦 이미 구현됨:\n• ${analysis.implemented.slice(0, 3).join('\n• ')}`;
+            if (analysis.implemented.length > 3) {
+                successMessage += `\n  ... 외 ${analysis.implemented.length - 3}개`;
+            }
+            successMessage += '\n\n';
+        }
+
+        if (analysis.remaining?.length) {
+            successMessage += `🎯 남은 작업:\n• ${analysis.remaining.slice(0, 5).join('\n• ')}`;
+            if (analysis.remaining.length > 5) {
+                successMessage += `\n  ... 외 ${analysis.remaining.length - 5}개`;
+            }
+        }
+
+        successMessage += '\n\n태스크들은 순서대로 의존성이 설정되어 있습니다.';
+
+        alert(successMessage);
+    } catch (err) {
+        console.error('Failed to generate tasks from goal:', err);
+        alert('태스크 생성 실패: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+        isGeneratingTasks.value = false;
     }
 }
 
@@ -1619,6 +2084,53 @@ function getAssistantLabel(type: string): string {
                                         <span>AI Project Analysis / Sync</span>
                                     </div>
                                 </button>
+
+                                <!-- AI Task Generation Button -->
+                                <button
+                                    v-if="project.goal && !isEditingGuidelines"
+                                    class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-600/20 to-teal-600/20 hover:from-emerald-600/30 hover:to-teal-600/30 border border-emerald-500/30 rounded-lg text-sm text-emerald-200 transition-all group"
+                                    :disabled="isGeneratingTasks"
+                                    @click="generateTasksFromGoal"
+                                >
+                                    <div v-if="isGeneratingTasks" class="flex items-center gap-2">
+                                        <svg
+                                            class="animate-spin h-4 w-4 text-emerald-400"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <circle
+                                                class="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                stroke-width="4"
+                                            ></circle>
+                                            <path
+                                                class="opacity-75"
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                            ></path>
+                                        </svg>
+                                        <span>태스크 생성 중...</span>
+                                    </div>
+                                    <div v-else class="flex items-center gap-2">
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                            class="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform"
+                                        >
+                                            <path
+                                                fill-rule="evenodd"
+                                                d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                        <span>🎯 AI로 태스크 생성</span>
+                                    </div>
+                                </button>
                             </div>
 
                             <!-- MCP 설정 -->
@@ -1959,6 +2471,138 @@ function getAssistantLabel(type: string): string {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+    </Teleport>
+
+    <!-- Context Recovery Dialog -->
+    <Teleport to="body">
+        <Transition name="fade">
+            <div
+                v-if="showContextRecoveryDialog"
+                class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center"
+                @click.self="handleSkipRecovery"
+            >
+                <div
+                    class="bg-gray-800 rounded-xl border border-gray-600 shadow-2xl p-6 max-w-md w-full mx-4"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center gap-3 mb-4">
+                        <div
+                            class="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center"
+                        >
+                            <span class="text-xl">🔄</span>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-100">
+                                이전 컨텍스트 감지됨
+                            </h3>
+                            <p class="text-sm text-gray-400">
+                                이 폴더에서 이전 개발 작업이 발견되었습니다
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Detected Files List -->
+                    <div class="bg-gray-900/50 rounded-lg p-4 mb-4 space-y-2">
+                        <!-- Claude -->
+                        <div
+                            v-if="detectedContext?.hasClaudeMd"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-purple-400">✓</span>
+                            <span class="text-gray-300">CLAUDE.md</span>
+                            <span class="text-gray-500 text-xs">(Claude 가이드라인)</span>
+                        </div>
+                        <!-- Gemini -->
+                        <div
+                            v-if="detectedContext?.hasGeminiMd"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-blue-400">✓</span>
+                            <span class="text-gray-300">GEMINI.md</span>
+                            <span class="text-gray-500 text-xs">(Gemini 가이드라인)</span>
+                        </div>
+                        <div
+                            v-if="detectedContext?.hasGeminiDir"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-blue-400">✓</span>
+                            <span class="text-gray-300">.gemini/</span>
+                            <span class="text-gray-500 text-xs">(Gemini 설정)</span>
+                        </div>
+                        <!-- Codex -->
+                        <div
+                            v-if="detectedContext?.hasAgentsMd"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-green-400">✓</span>
+                            <span class="text-gray-300">AGENTS.md</span>
+                            <span class="text-gray-500 text-xs">(Codex 가이드라인)</span>
+                        </div>
+                        <div
+                            v-if="detectedContext?.hasCodexDir"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-green-400">✓</span>
+                            <span class="text-gray-300">.codex/</span>
+                            <span class="text-gray-500 text-xs">(Codex 설정)</span>
+                        </div>
+                        <!-- Progress Files -->
+                        <div
+                            v-if="detectedContext?.hasTaskMd"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-yellow-400">✓</span>
+                            <span class="text-gray-300">task.md</span>
+                            <span class="text-gray-500 text-xs">(진행 상황)</span>
+                        </div>
+                        <div
+                            v-if="detectedContext?.hasPlanMd"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-yellow-400">✓</span>
+                            <span class="text-gray-300">implementation_plan.md</span>
+                            <span class="text-gray-500 text-xs">(구현 계획)</span>
+                        </div>
+                        <!-- Git -->
+                        <div
+                            v-if="detectedContext?.hasGit && detectedContext?.recentCommits?.length"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <span class="text-orange-400">✓</span>
+                            <span class="text-gray-300">Git 이력</span>
+                            <span class="text-gray-500 text-xs"
+                                >({{ detectedContext.recentCommits.length }}개 커밋)</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="space-y-2">
+                        <button
+                            v-if="hasImportableGuidelines"
+                            class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                            @click="handleImportGuidelines"
+                        >
+                            <span>📥</span>
+                            <span>가이드라인만 가져오기</span>
+                        </button>
+                        <button
+                            class="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                            @click="handleRunAnalysis"
+                        >
+                            <span>🤖</span>
+                            <span>AI 분석으로 컨텍스트 복구</span>
+                        </button>
+                        <button
+                            class="w-full py-2.5 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                            @click="handleSkipRecovery"
+                        >
+                            새로 시작하기
+                        </button>
                     </div>
                 </div>
             </div>

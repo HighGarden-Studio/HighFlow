@@ -16,6 +16,8 @@
         "success": "성공",
         "yes": "예",
         "no": "아니오",
+        "approve": "승인",
+        "reject": "거절",
         "retry": "재시도",
         "resume": "재개",
         "in_progress": "진행중",

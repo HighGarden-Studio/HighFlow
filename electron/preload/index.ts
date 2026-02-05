@@ -73,6 +73,8 @@ const projectsAPI = {
     syncLocalContext: (id: number) => ipcRenderer.invoke('projects:sync-local-context', id),
 
     scanArtifacts: (id: number) => ipcRenderer.invoke('projects:scan-artifacts', id),
+
+    detectContext: (id: number) => ipcRenderer.invoke('projects:detect-context', id),
 };
 
 // ========================================
@@ -766,6 +768,9 @@ const taskExecutionAPI = {
             currentPhase: string;
         }>
     > => ipcRenderer.invoke('taskExecution:getAllActive'),
+
+    getRecent: (projectId: number, limit?: number): Promise<any> =>
+        ipcRenderer.invoke('taskExecution:getRecent', projectId, limit),
 
     // NEEDS_APPROVAL state handlers
     requestApproval: (

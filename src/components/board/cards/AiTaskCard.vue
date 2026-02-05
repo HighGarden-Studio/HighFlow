@@ -1,16 +1,14 @@
 <script setup lang="ts">
-/**
- * AI & Script Task Card Component
- * Supports both 'ai' and 'script' task types with in_review workflow
- */
 import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
+import ConsoleTimeline from '../../common/console/ConsoleTimeline.vue';
 import { useTaskStatus } from '../../../composables/task/useTaskStatus';
 import { useTaskStore } from '../../../renderer/stores/taskStore';
 import { useMCPStore } from '../../../renderer/stores/mcpStore';
+import { useConsoleStore } from '../../../renderer/stores/consoleStore';
 import { getProviderIcon } from '../../../utils/iconMapping';
 
 interface Props {
@@ -65,8 +63,20 @@ const emit = defineEmits<{
 
 const taskStore = useTaskStore();
 const mcpStore = useMCPStore();
+const consoleStore = useConsoleStore();
 const { t } = useI18n();
 const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus(props);
+
+// Console Execution State
+const activeExecution = computed(() => {
+    if (!props.task.id) return null;
+    return consoleStore.getExecutionByTaskId(props.task.id);
+});
+
+const latestEvent = computed(() => {
+    if (!activeExecution.value?.transcript?.length) return null;
+    return activeExecution.value.transcript[activeExecution.value.transcript.length - 1];
+});
 
 // Operator state
 const assignedOperator = ref<any>(null);
@@ -148,16 +158,6 @@ const mcpSummary = computed(() => {
     const failed = mcpExecutions.value.filter((e) => e.status === 'failed').length;
 
     return { successful, running, failed, total: mcpExecutions.value.length };
-});
-
-const mcpStatusText = computed(() => {
-    if (mcpSummary.value.running > 0) {
-        return `🔄 ${mcpSummary.value.running} tool${mcpSummary.value.running > 1 ? 's' : ''} running...`;
-    }
-    if (mcpSummary.value.successful > 0) {
-        return `✓ ${mcpSummary.value.successful} tool${mcpSummary.value.successful > 1 ? 's' : ''} executed`;
-    }
-    return '';
 });
 
 // Provider Icon helper - uses centralized icon mapping
@@ -696,23 +696,20 @@ function hexToRgba(hex: string, alpha: number) {
                     >
                 </div>
 
-                <!-- MCP Tool Execution Status (if running) -->
+                <!-- Console Event Visualization (Rich Status) -->
                 <div
-                    v-if="mcpSummary.total > 0"
-                    class="mb-1.5 px-1.5 py-1 bg-white/50 dark:bg-black/20 rounded border border-blue-200/50 dark:border-blue-700/50"
+                    v-if="activeExecution && task.status === 'in_progress'"
+                    class="h-64 border-t border-gray-100 dark:border-gray-800"
                 >
-                    <div class="flex items-center justify-between text-[9px]">
-                        <span class="font-medium text-blue-700 dark:text-blue-300">{{
-                            mcpStatusText
-                        }}</span>
-                        <span v-if="mcpSummary.failed > 0" class="text-red-600 dark:text-red-400"
-                            >{{ mcpSummary.failed }} failed</span
-                        >
-                    </div>
+                    <ConsoleTimeline
+                        :transcript="activeExecution.transcript"
+                        :is-active="task.status === 'in_progress'"
+                    />
                 </div>
 
-                <!-- Streaming content -->
-                <div class="relative overflow-hidden" style="height: 40px">
+                <!-- Fallback's to old behavior if no active execution context (e.g. finished task or legacy) -->
+                <div v-else class="relative overflow-hidden" style="height: 40px">
+                    <!-- Image Preview -->
                     <div v-if="imageContent" class="h-full w-full flex items-center justify-start">
                         <img
                             :src="imageContent"
@@ -723,6 +720,23 @@ function hexToRgba(hex: string, alpha: number) {
                             >Image Generated</span
                         >
                     </div>
+
+                    <!-- SUCCESS STATE: Show Result Summary nicely if finished -->
+                    <div
+                        v-else-if="task.status === 'done'"
+                        class="h-full flex items-center text-[10px] text-green-700 dark:text-green-400 gap-2"
+                    >
+                        <span>✅</span>
+                        <div class="line-clamp-2">
+                            {{
+                                (task as any).result ||
+                                (task as any).executionResult?.content ||
+                                t('task.status.completed')
+                            }}
+                        </div>
+                    </div>
+
+                    <!-- Fallback Text Preview -->
                     <p
                         v-else-if="streamedContent || hasPreviousResult"
                         class="text-gray-700 dark:text-gray-200 font-mono leading-tight overflow-hidden text-[10px]"
@@ -733,25 +747,19 @@ function hexToRgba(hex: string, alpha: number) {
                         "
                     >
                         {{
-                            task.status === 'in_progress'
-                                ? streamedContent
-                                : task.status === 'todo'
-                                  ? ''
-                                  : streamedContent ||
-                                    (task as any).executionResult?.content?.slice(0, 300) ||
-                                    (task as any).result?.slice(0, 300) ||
-                                    t('task.status.no_result')
+                            task.status === 'todo'
+                                ? ''
+                                : streamedContent ||
+                                  (task as any).executionResult?.content?.slice(0, 300) ||
+                                  (task as any).result?.slice(0, 300) ||
+                                  t('task.status.no_result')
                         }}
                     </p>
                     <p
                         v-else
                         class="text-gray-400 dark:text-gray-500 italic text-[10px] flex items-center h-full"
                     >
-                        {{
-                            task.status === 'in_progress'
-                                ? `⏳ ${t('task.status.waiting')}`
-                                : t('task.status.not_started')
-                        }}
+                        {{ t('task.status.not_started') }}
                     </p>
                 </div>
             </div>

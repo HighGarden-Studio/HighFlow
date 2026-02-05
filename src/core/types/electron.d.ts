@@ -458,6 +458,10 @@ export interface TaskExecutionAPI {
             currentPhase: string;
         }>
     >;
+    getRecent: (
+        projectId: number,
+        limit?: number
+    ) => Promise<{ success: boolean; history?: unknown[]; error?: string }>;
 
     // Approval flow
     requestApproval: (

@@ -873,6 +873,10 @@ async function processInputSubmission(
         );
     }
 
+    // IMPORTANT: Clean up activeExecutions BEFORE checking dependents
+    // Without this, dependents see this task as "Active: true" and skip execution
+    activeExecutions.delete(getTaskKey(projectId, sequence));
+
     // Trigger dependents
     await checkAndExecuteDependentTasks(projectId, sequence, task as Task, options);
 
@@ -3820,6 +3824,22 @@ export function registerTaskExecutionHandlers(_mainWindow: BrowserWindow | null)
             }
         }
     );
+
+    /**
+     * Get recent execution history for a project
+     */
+    ipcMain.handle('taskExecution:getRecent', async (_, projectId: number, limit: number = 50) => {
+        try {
+            const history = await taskHistoryRepository.findByProject(projectId, limit);
+            return { success: true, history };
+        } catch (error) {
+            console.error('[TaskExecution] Failed to fetch recent history:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    });
 
     console.log('Task execution IPC handlers registered');
 

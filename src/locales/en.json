@@ -17,6 +17,8 @@
 
         "yes": "Yes",
         "no": "No",
+        "approve": "Approve",
+        "reject": "Reject",
         "retry": "Retry",
         "resume": "Resume",
         "in_progress": "In Progress",

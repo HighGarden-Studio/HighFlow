@@ -24,6 +24,7 @@ import { versionAPI } from './api/version';
 import type { VersionInfo } from './api/version';
 import { eventBus } from '../services/events/EventBus';
 import type { MCPErrorEvent } from '../services/events/EventBus';
+import { useTaskExecution } from '../composables/useTaskExecution';
 
 import { AIServiceManager } from '../services/workflow/AIServiceManager';
 
@@ -39,6 +40,10 @@ const { t, locale } = useI18n();
 
 // Sync AI Providers from SettingsStore to AIServiceManager
 const aiManager = AIServiceManager.getInstance();
+
+// Initialize global task execution listeners (for Console/Activity Log)
+console.debug('[App] Initializing global task execution listeners');
+useTaskExecution();
 
 // Watch for changes and sync
 

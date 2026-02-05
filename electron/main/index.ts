@@ -256,10 +256,9 @@ async function registerIpcHandlers(): Promise<void> {
                             }
 
                             // Append to description if sensible
+                            // MOVED TO projectGuidelines
                             if (context.guidelines) {
-                                data.description =
-                                    (data.description || '') +
-                                    `\n\n[Imported Guidelines]\n${context.guidelines}`;
+                                (data as any).projectGuidelines = context.guidelines;
                             }
                         }
                     } catch (scanErr) {
@@ -466,14 +465,9 @@ async function registerIpcHandlers(): Promise<void> {
                     };
                 }
 
-                // Append guidelines to description if present
+                // Update projectGuidelines if present
                 if (context.guidelines) {
-                    // Check if guidelines are not already in description to avoid duplication
-                    if (!project.description?.includes('[Imported Guidelines]')) {
-                        updateData.description =
-                            (project.description || '') +
-                            `\n\n[Imported Guidelines]\n${context.guidelines}`;
-                    }
+                    updateData.projectGuidelines = context.guidelines;
                 }
 
                 if (Object.keys(updateData).length > 0) {
@@ -505,6 +499,135 @@ async function registerIpcHandlers(): Promise<void> {
             console.error('Error scanning artifacts:', error);
             return {
                 success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    });
+
+    // Detect existing agent context for project recovery
+    ipcMain.handle('projects:detect-context', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project || !project.baseDevFolder) {
+                return { hasContext: false };
+            }
+
+            const folder = project.baseDevFolder;
+            const fs = await import('fs/promises');
+            const path = await import('path');
+
+            // Helper to check if path exists
+            const exists = async (p: string) => {
+                try {
+                    await fs.access(p);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            // Helper to read file safely
+            const readFileSafe = async (p: string): Promise<string | null> => {
+                try {
+                    return await fs.readFile(p, 'utf-8');
+                } catch {
+                    return null;
+                }
+            };
+
+            // Detect various context files
+            const hasClaudeMd = await exists(path.join(folder, 'CLAUDE.md'));
+            const hasGeminiDir = await exists(path.join(folder, '.gemini'));
+            const hasCodexDir = await exists(path.join(folder, '.codex'));
+            const hasGit = await exists(path.join(folder, '.git'));
+            const hasGeminiMd = await exists(path.join(folder, 'GEMINI.md'));
+            const hasAgentsMd = await exists(path.join(folder, 'AGENTS.md'));
+            const hasTaskMd = await exists(path.join(folder, 'task.md'));
+            const hasPlanMd = await exists(path.join(folder, 'implementation_plan.md'));
+            const hasReadme = await exists(path.join(folder, 'README.md'));
+
+            // Read Claude CLAUDE.md content
+            const claudeMdContent = hasClaudeMd
+                ? await readFileSafe(path.join(folder, 'CLAUDE.md'))
+                : null;
+
+            // Read Gemini GEMINI.md content
+            const geminiMdContent = hasGeminiMd
+                ? await readFileSafe(path.join(folder, 'GEMINI.md'))
+                : null;
+
+            // Read Codex AGENTS.md content (OpenAI Codex uses AGENTS.md)
+            const agentsMdContent = hasAgentsMd
+                ? await readFileSafe(path.join(folder, 'AGENTS.md'))
+                : null;
+
+            // Read task.md for Gemini CLI progress context
+            const taskMdContent = hasTaskMd
+                ? await readFileSafe(path.join(folder, 'task.md'))
+                : null;
+
+            // Read implementation_plan.md for Gemini CLI progress
+            const planMdContent = hasPlanMd
+                ? await readFileSafe(path.join(folder, 'implementation_plan.md'))
+                : null;
+
+            // Check .gemini/task.md as alternative location
+            let geminiTaskMdContent: string | null = null;
+            if (hasGeminiDir) {
+                geminiTaskMdContent = await readFileSafe(path.join(folder, '.gemini', 'task.md'));
+            }
+
+            // Get recent git commits if git exists
+            let recentCommits: string[] = [];
+            if (hasGit) {
+                try {
+                    const { exec } = await import('child_process');
+                    const { promisify } = await import('util');
+                    const execAsync = promisify(exec);
+                    const { stdout } = await execAsync('git log --oneline -n 5', { cwd: folder });
+                    recentCommits = stdout
+                        .trim()
+                        .split('\n')
+                        .filter((l: string) => l);
+                } catch (e) {
+                    console.warn('Could not get git history:', e);
+                }
+            }
+
+            const hasContext =
+                hasClaudeMd ||
+                hasGeminiDir ||
+                hasCodexDir ||
+                hasGeminiMd ||
+                hasAgentsMd ||
+                hasTaskMd ||
+                hasPlanMd;
+
+            return {
+                hasContext,
+                // Detection flags
+                hasClaudeMd,
+                hasGeminiDir,
+                hasCodexDir,
+                hasGit,
+                hasGeminiMd,
+                hasAgentsMd,
+                hasTaskMd,
+                hasPlanMd,
+                hasReadme,
+                // Content
+                claudeMdContent,
+                geminiMdContent,
+                agentsMdContent,
+                taskMdContent,
+                planMdContent,
+                geminiTaskMdContent,
+                recentCommits,
+            };
+        } catch (error) {
+            console.error('Error detecting context:', error);
+            return {
+                hasContext: false,
                 error: error instanceof Error ? error.message : String(error),
             };
         }

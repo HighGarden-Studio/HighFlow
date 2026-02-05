@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
+import { useTaskExecution } from '../composables/useTaskExecution';
 import InlineEdit from '../../components/common/InlineEdit.vue';
 import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import MarketplacePublishModal from '../components/marketplace/MarketplacePublishModal.vue';
@@ -18,6 +19,7 @@ const router = useRouter();
 const { t } = useI18n();
 const projectStore = useProjectStore();
 const taskStore = useTaskStore();
+const { loadRecentExecutions } = useTaskExecution();
 
 const props = defineProps<{
     id: string;
@@ -79,6 +81,7 @@ function goToBoard() {
 onMounted(async () => {
     await projectStore.fetchProject(projectId.value);
     await taskStore.fetchTasks(projectId.value);
+    await loadRecentExecutions(projectId.value);
 });
 </script>
 

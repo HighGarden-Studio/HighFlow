@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { useTaskExecution } from '../../composables/useTaskExecution';
 import { useSettingsStore } from '../../renderer/stores/settingsStore';
 import { useTaskStore } from '../../renderer/stores/taskStore';
+import { useConsoleStore } from '../../renderer/stores/consoleStore';
 import type { Task } from '@core/types/database';
 
 interface Props {
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 const taskExecution = useTaskExecution();
 const settingsStore = useSettingsStore();
 const taskStore = useTaskStore();
+const consoleStore = useConsoleStore();
 
 // Get streaming content from global taskStore as fallback
 const globalStreamedContent = computed(() => {
@@ -184,6 +186,13 @@ async function stopExecution() {
 }
 
 async function handleApprove() {
+    if (props.task.id) {
+        consoleStore.appendEvent(props.task.id, {
+            type: 'user',
+            content: approvalResponse.value || 'Approved',
+        });
+    }
+
     await taskExecution.approveTask(
         { projectId: props.task.projectId, projectSequence: props.task.projectSequence },
         approvalResponse.value
@@ -192,6 +201,13 @@ async function handleApprove() {
 }
 
 async function handleReject() {
+    if (props.task.id) {
+        consoleStore.appendEvent(props.task.id, {
+            type: 'user',
+            content: 'Rejected',
+        });
+    }
+
     await taskExecution.rejectTask({
         projectId: props.task.projectId,
         projectSequence: props.task.projectSequence,
