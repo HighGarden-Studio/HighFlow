@@ -18,7 +18,7 @@ import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import OperatorPanel from '../../components/project/OperatorPanel.vue';
 import TaskFlowNode from '../../components/dag/TaskFlowNode.vue';
 import ProjectHeader from '../../components/project/ProjectHeader.vue';
-import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import CustomEdge from '../../components/dag/CustomEdge.vue';
 import TaskCreateModal from '../../components/task/TaskCreateModal.vue';
 import TaskEditModal from '../../components/task/TaskEditModal.vue';
@@ -60,6 +60,10 @@ const selectedTask = computed(() => {
     return taskStore.tasks.find((t) => t.projectId === pId && t.projectSequence === seq) || null;
 });
 const showProjectInfoModal = ref(false);
+
+function handleProjectInfoClick() {
+    showProjectInfoModal.value = true;
+}
 const showCreateModal = ref(false);
 const createInColumn = ref<TaskStatus>('todo');
 
@@ -762,13 +766,6 @@ function getSegmentStats(
     }
 
     return { isValid: true, completionTime: maxTime };
-}
-
-async function handleProjectInfoUpdate() {
-    if (!projectId.value) return;
-    await projectStore.fetchProject(projectId.value);
-    await taskStore.fetchTasks(projectId.value);
-    rebuildGraphImmediate();
 }
 
 function handleNodeClick(task: Task) {
@@ -1558,7 +1555,7 @@ onMounted(async () => {
             current-view="dag"
             :show-project-info="true"
             :show-new-task="true"
-            @project-info="showProjectInfoModal = true"
+            @project-info="handleProjectInfoClick"
             @new-task="openCreateModal('todo')"
         />
         <!-- Operator Panel -->
@@ -1692,13 +1689,13 @@ onMounted(async () => {
             </div>
         </div>
 
-        <!-- Project Info Modal -->
-        <ProjectInfoModal
+        <!-- Project Info Panel -->
+        <ProjectInfoPanel
+            v-if="project"
             :project="project"
-            :open="showProjectInfoModal"
+            :show="showProjectInfoModal"
             @close="showProjectInfoModal = false"
             @edit="showProjectInfoModal = false"
-            @update="handleProjectInfoUpdate"
         />
 
         <!-- Context Menu -->

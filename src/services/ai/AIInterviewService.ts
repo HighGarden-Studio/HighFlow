@@ -495,6 +495,8 @@ export class AIInterviewService {
         'baidu',
         'claude-code',
 
+        'claude-code',
+        'gemini-cli',
         'codex',
         'local',
     ];

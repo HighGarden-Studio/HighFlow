@@ -1,16 +1,14 @@
 <script setup lang="ts">
-/**
- * AI & Script Task Card Component
- * Supports both 'ai' and 'script' task types with in_review workflow
- */
 import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Task } from '@core/types/database';
 import BaseTaskCard from './BaseTaskCard.vue';
 import IconRenderer from '../../common/IconRenderer.vue';
+import ConsoleTimeline from '../../common/console/ConsoleTimeline.vue';
 import { useTaskStatus } from '../../../composables/task/useTaskStatus';
 import { useTaskStore } from '../../../renderer/stores/taskStore';
 import { useMCPStore } from '../../../renderer/stores/mcpStore';
+import { useConsoleStore } from '../../../renderer/stores/consoleStore';
 import { getProviderIcon } from '../../../utils/iconMapping';
 
 interface Props {
@@ -65,8 +63,20 @@ const emit = defineEmits<{
 
 const taskStore = useTaskStore();
 const mcpStore = useMCPStore();
+const consoleStore = useConsoleStore();
 const { t } = useI18n();
 const { isMissingExecutionSettings, hasMissingProvider, outputFormatInfo } = useTaskStatus(props);
+
+// Console Execution State
+const activeExecution = computed(() => {
+    if (!props.task.id) return null;
+    return consoleStore.getExecutionByTaskId(props.task.id);
+});
+
+const latestEvent = computed(() => {
+    if (!activeExecution.value?.transcript?.length) return null;
+    return activeExecution.value.transcript[activeExecution.value.transcript.length - 1];
+});
 
 // Operator state
 const assignedOperator = ref<any>(null);
@@ -150,16 +160,6 @@ const mcpSummary = computed(() => {
     return { successful, running, failed, total: mcpExecutions.value.length };
 });
 
-const mcpStatusText = computed(() => {
-    if (mcpSummary.value.running > 0) {
-        return `🔄 ${mcpSummary.value.running} tool${mcpSummary.value.running > 1 ? 's' : ''} running...`;
-    }
-    if (mcpSummary.value.successful > 0) {
-        return `✓ ${mcpSummary.value.successful} tool${mcpSummary.value.successful > 1 ? 's' : ''} executed`;
-    }
-    return '';
-});
-
 // Provider Icon helper - uses centralized icon mapping
 // Prioritize operator's AI provider if operator is assigned (matches AI settings priority)
 const aiProviderIcon = computed(() => {
@@ -187,7 +187,7 @@ const hasPreviousResult = computed(() => {
 
 const isLocalProvider = computed(() => {
     const provider = assignedOperator.value?.aiProvider || props.task.aiProvider;
-    return ['claude-code', 'codex'].includes(provider || '');
+    return ['claude-code', 'gemini-cli', 'codex'].includes(provider || '');
 });
 
 const displayModel = computed(() => {
@@ -304,6 +304,24 @@ function handleConnectProviderClick() {
         emit('connectProvider', props.missingProvider.id);
     }
 }
+// Error Message Computation
+const errorMessage = computed(() => {
+    const t = props.task as any;
+    if (props.task.status === 'blocked') {
+        return props.task.blockedReason || t.error || 'Task execution blocked';
+    }
+    if (props.task.status === 'failed') {
+        return (
+            t.executionResult?.error ||
+            t.error ||
+            t.result ||
+            t.errorMessage ||
+            'Task execution failed'
+        );
+    }
+    return null;
+});
+
 function hexToRgba(hex: string, alpha: number) {
     // Remove hash if present
     hex = hex.replace('#', '');
@@ -678,23 +696,20 @@ function hexToRgba(hex: string, alpha: number) {
                     >
                 </div>
 
-                <!-- MCP Tool Execution Status (if running) -->
+                <!-- Console Event Visualization (Rich Status) -->
                 <div
-                    v-if="mcpSummary.total > 0"
-                    class="mb-1.5 px-1.5 py-1 bg-white/50 dark:bg-black/20 rounded border border-blue-200/50 dark:border-blue-700/50"
+                    v-if="activeExecution && task.status === 'in_progress'"
+                    class="h-64 border-t border-gray-100 dark:border-gray-800"
                 >
-                    <div class="flex items-center justify-between text-[9px]">
-                        <span class="font-medium text-blue-700 dark:text-blue-300">{{
-                            mcpStatusText
-                        }}</span>
-                        <span v-if="mcpSummary.failed > 0" class="text-red-600 dark:text-red-400"
-                            >{{ mcpSummary.failed }} failed</span
-                        >
-                    </div>
+                    <ConsoleTimeline
+                        :transcript="activeExecution.transcript"
+                        :is-active="task.status === 'in_progress'"
+                    />
                 </div>
 
-                <!-- Streaming content -->
-                <div class="relative overflow-hidden" style="height: 40px">
+                <!-- Fallback's to old behavior if no active execution context (e.g. finished task or legacy) -->
+                <div v-else class="relative overflow-hidden" style="height: 40px">
+                    <!-- Image Preview -->
                     <div v-if="imageContent" class="h-full w-full flex items-center justify-start">
                         <img
                             :src="imageContent"
@@ -705,6 +720,23 @@ function hexToRgba(hex: string, alpha: number) {
                             >Image Generated</span
                         >
                     </div>
+
+                    <!-- SUCCESS STATE: Show Result Summary nicely if finished -->
+                    <div
+                        v-else-if="task.status === 'done'"
+                        class="h-full flex items-center text-[10px] text-green-700 dark:text-green-400 gap-2"
+                    >
+                        <span>✅</span>
+                        <div class="line-clamp-2">
+                            {{
+                                (task as any).result ||
+                                (task as any).executionResult?.content ||
+                                t('task.status.completed')
+                            }}
+                        </div>
+                    </div>
+
+                    <!-- Fallback Text Preview -->
                     <p
                         v-else-if="streamedContent || hasPreviousResult"
                         class="text-gray-700 dark:text-gray-200 font-mono leading-tight overflow-hidden text-[10px]"
@@ -715,25 +747,19 @@ function hexToRgba(hex: string, alpha: number) {
                         "
                     >
                         {{
-                            task.status === 'in_progress'
-                                ? streamedContent
-                                : task.status === 'todo'
-                                  ? ''
-                                  : streamedContent ||
-                                    (task as any).executionResult?.content?.slice(0, 300) ||
-                                    (task as any).result?.slice(0, 300) ||
-                                    t('task.status.no_result')
+                            task.status === 'todo'
+                                ? ''
+                                : streamedContent ||
+                                  (task as any).executionResult?.content?.slice(0, 300) ||
+                                  (task as any).result?.slice(0, 300) ||
+                                  t('task.status.no_result')
                         }}
                     </p>
                     <p
                         v-else
                         class="text-gray-400 dark:text-gray-500 italic text-[10px] flex items-center h-full"
                     >
-                        {{
-                            task.status === 'in_progress'
-                                ? `⏳ ${t('task.status.waiting')}`
-                                : t('task.status.not_started')
-                        }}
+                        {{ t('task.status.not_started') }}
                     </p>
                 </div>
             </div>
@@ -929,7 +955,6 @@ function hexToRgba(hex: string, alpha: number) {
                             {{ task.reviewFailed ? '실패 분석' : t('project.actions.view_result') }}
                         </button>
                         <button
-                            v-if="!task.triggerConfig?.dependsOn"
                             class="px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                             title="다시 실행"
                             @click="handleRetry"
@@ -981,9 +1006,30 @@ function hexToRgba(hex: string, alpha: number) {
 
                 <!-- 5. BLOCKED / FAILED: RETRY -->
                 <template v-if="task.status === 'blocked' || task.status === 'failed'">
+                    <div
+                        v-if="errorMessage"
+                        class="w-full mb-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400 break-words"
+                    >
+                        <div class="font-bold flex items-center gap-1 mb-1">
+                            <svg
+                                class="w-3 h-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            {{ task.status === 'blocked' ? 'Blocked' : 'Failed' }}
+                        </div>
+                        {{ errorMessage }}
+                    </div>
                     <button
-                        v-if="!task.triggerConfig?.dependsOn"
-                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
+                        class="flex-1 px-1.5 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm transition-colors"
                         @click.stop="(e) => handleRetry(e)"
                     >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -996,40 +1042,6 @@ function hexToRgba(hex: string, alpha: number) {
                         </svg>
                         {{ t('task.retry') }}
                     </button>
-                    <div
-                        v-else
-                        class="flex-1 px-2 py-1.5 text-xs font-medium text-center text-gray-500 flex items-center justify-center gap-1"
-                    >
-                        <svg
-                            v-if="task.status === 'blocked'"
-                            class="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        <svg
-                            v-else
-                            class="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        {{ task.status === 'blocked' ? '대기중' : '실패' }}
-                    </div>
                 </template>
             </div>
         </template>

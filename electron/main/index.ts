@@ -26,6 +26,7 @@ import { registerLocalProviderHandlers } from './ipc/local-providers-handlers';
 import { registerAuthHandlers } from './ipc/auth-handlers';
 import { registerAiSettingsHandlers } from './ipc/ai-settings-handlers';
 import { registerScriptTemplateHandlers } from './ipc/script-template-handlers';
+import { registerTerminalHandlers } from './services/terminal';
 // import { registerHttpHandlers } from './ipc/http-handlers';
 import { seedDatabase } from './database/seed';
 import type { NewTask, Task } from './database/schema';
@@ -219,9 +220,56 @@ async function registerIpcHandlers(): Promise<void> {
                 ownerId: number;
                 baseDevFolder?: string | null;
                 projectGuidelines?: string | null;
+                // Scanner overrides
+                goal?: string;
+                memory?: any;
             }
         ) => {
             try {
+                // If baseDevFolder is provided, try to scan for local agent context
+                if (data.baseDevFolder) {
+                    try {
+                        const { localAgentScanner } =
+                            await import('./services/local-agent-scanner');
+                        console.log(
+                            `[ProjectCreate] Scanning folder for local agents: ${data.baseDevFolder}`
+                        );
+                        const context = await localAgentScanner.scanFolder(data.baseDevFolder);
+
+                        if (context) {
+                            console.log(`[ProjectCreate] Found context from ${context.source}`);
+                            // Auto-populate goal if empty
+                            if (!data.goal && context.goal) {
+                                data.goal = context.goal;
+                            }
+
+                            // Auto-populate memory if empty
+                            // Convert string memory to required JSON structure or just store as is if schema allowed text
+                            // Schema says memory is json: { summary: string, ... }
+                            if (!data.memory && context.memory) {
+                                data.memory = {
+                                    summary: context.memory,
+                                    importedFrom: context.source,
+                                    scannedAt: new Date().toISOString(),
+                                    // Use gathered context as 'long term memory' or just append to summary
+                                };
+                            }
+
+                            // Append to description if sensible
+                            // MOVED TO projectGuidelines
+                            if (context.guidelines) {
+                                (data as any).projectGuidelines = context.guidelines;
+                            }
+                        }
+                    } catch (scanErr) {
+                        console.warn(
+                            '[ProjectCreate] Failed to scan local agent context:',
+                            scanErr
+                        );
+                        // Continue creation even if scan fails
+                    }
+                }
+
                 const project = await projectRepo.create(data as any);
                 mainWindow?.webContents.send('project:created', project);
                 return project;
@@ -385,6 +433,205 @@ async function registerIpcHandlers(): Promise<void> {
             }
         }
     );
+
+    ipcMain.handle('projects:sync-local-context', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project) throw new Error('Project not found');
+            if (!project.baseDevFolder) {
+                console.warn('[SyncContext] Project has no baseDevFolder');
+                return { success: false, message: 'No base folder set' };
+            }
+
+            const { localAgentScanner } = await import('./services/local-agent-scanner');
+            console.log(`[SyncContext] Scanning folder for local agents: ${project.baseDevFolder}`);
+            const context = await localAgentScanner.scanFolder(project.baseDevFolder);
+
+            if (context) {
+                console.log(`[SyncContext] Found context from ${context.source}`);
+                const updateData: any = {};
+
+                // Update goal if present
+                if (context.goal) {
+                    updateData.goal = context.goal;
+                }
+
+                // Update memory if present
+                if (context.memory) {
+                    updateData.memory = {
+                        summary: context.memory,
+                        importedFrom: context.source,
+                        scannedAt: new Date().toISOString(),
+                    };
+                }
+
+                // Update projectGuidelines if present
+                if (context.guidelines) {
+                    updateData.projectGuidelines = context.guidelines;
+                }
+
+                if (Object.keys(updateData).length > 0) {
+                    const updatedProject = await projectRepo.update(projectId, updateData);
+                    mainWindow?.webContents.send('project:updated', updatedProject);
+                    return { success: true, context, project: updatedProject };
+                }
+            }
+
+            return { success: false, message: 'No local agent context found' };
+        } catch (error) {
+            console.error('Error syncing local context:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('projects:scan-artifacts', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project || !project.baseDevFolder) {
+                return { success: false, message: 'Project or base folder not found' };
+            }
+
+            const { localAgentScanner } = await import('./services/local-agent-scanner');
+            const artifacts = await localAgentScanner.scanProjectArtifacts(project.baseDevFolder);
+
+            return { success: true, artifacts };
+        } catch (error) {
+            console.error('Error scanning artifacts:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    });
+
+    // Detect existing agent context for project recovery
+    ipcMain.handle('projects:detect-context', async (_event, projectId: number) => {
+        try {
+            const project = await projectRepo.findById(projectId);
+            if (!project || !project.baseDevFolder) {
+                return { hasContext: false };
+            }
+
+            const folder = project.baseDevFolder;
+            const fs = await import('fs/promises');
+            const path = await import('path');
+
+            // Helper to check if path exists
+            const exists = async (p: string) => {
+                try {
+                    await fs.access(p);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            // Helper to read file safely
+            const readFileSafe = async (p: string): Promise<string | null> => {
+                try {
+                    return await fs.readFile(p, 'utf-8');
+                } catch {
+                    return null;
+                }
+            };
+
+            // Detect various context files
+            const hasClaudeMd = await exists(path.join(folder, 'CLAUDE.md'));
+            const hasGeminiDir = await exists(path.join(folder, '.gemini'));
+            const hasCodexDir = await exists(path.join(folder, '.codex'));
+            const hasGit = await exists(path.join(folder, '.git'));
+            const hasGeminiMd = await exists(path.join(folder, 'GEMINI.md'));
+            const hasAgentsMd = await exists(path.join(folder, 'AGENTS.md'));
+            const hasTaskMd = await exists(path.join(folder, 'task.md'));
+            const hasPlanMd = await exists(path.join(folder, 'implementation_plan.md'));
+            const hasReadme = await exists(path.join(folder, 'README.md'));
+
+            // Read Claude CLAUDE.md content
+            const claudeMdContent = hasClaudeMd
+                ? await readFileSafe(path.join(folder, 'CLAUDE.md'))
+                : null;
+
+            // Read Gemini GEMINI.md content
+            const geminiMdContent = hasGeminiMd
+                ? await readFileSafe(path.join(folder, 'GEMINI.md'))
+                : null;
+
+            // Read Codex AGENTS.md content (OpenAI Codex uses AGENTS.md)
+            const agentsMdContent = hasAgentsMd
+                ? await readFileSafe(path.join(folder, 'AGENTS.md'))
+                : null;
+
+            // Read task.md for Gemini CLI progress context
+            const taskMdContent = hasTaskMd
+                ? await readFileSafe(path.join(folder, 'task.md'))
+                : null;
+
+            // Read implementation_plan.md for Gemini CLI progress
+            const planMdContent = hasPlanMd
+                ? await readFileSafe(path.join(folder, 'implementation_plan.md'))
+                : null;
+
+            // Check .gemini/task.md as alternative location
+            let geminiTaskMdContent: string | null = null;
+            if (hasGeminiDir) {
+                geminiTaskMdContent = await readFileSafe(path.join(folder, '.gemini', 'task.md'));
+            }
+
+            // Get recent git commits if git exists
+            let recentCommits: string[] = [];
+            if (hasGit) {
+                try {
+                    const { exec } = await import('child_process');
+                    const { promisify } = await import('util');
+                    const execAsync = promisify(exec);
+                    const { stdout } = await execAsync('git log --oneline -n 5', { cwd: folder });
+                    recentCommits = stdout
+                        .trim()
+                        .split('\n')
+                        .filter((l: string) => l);
+                } catch (e) {
+                    console.warn('Could not get git history:', e);
+                }
+            }
+
+            const hasContext =
+                hasClaudeMd ||
+                hasGeminiDir ||
+                hasCodexDir ||
+                hasGeminiMd ||
+                hasAgentsMd ||
+                hasTaskMd ||
+                hasPlanMd;
+
+            return {
+                hasContext,
+                // Detection flags
+                hasClaudeMd,
+                hasGeminiDir,
+                hasCodexDir,
+                hasGit,
+                hasGeminiMd,
+                hasAgentsMd,
+                hasTaskMd,
+                hasPlanMd,
+                hasReadme,
+                // Content
+                claudeMdContent,
+                geminiMdContent,
+                agentsMdContent,
+                taskMdContent,
+                planMdContent,
+                geminiTaskMdContent,
+                recentCommits,
+            };
+        } catch (error) {
+            console.error('Error detecting context:', error);
+            return {
+                hasContext: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    });
 
     // ========================================
     // Task IPC Handlers
@@ -662,6 +909,9 @@ async function registerIpcHandlers(): Promise<void> {
 
     // Register script template handlers
     registerScriptTemplateHandlers();
+
+    // Register terminal handlers
+    registerTerminalHandlers(mainWindow);
 
     console.log('IPC handlers registered');
 }

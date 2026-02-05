@@ -54,7 +54,27 @@ export function detectTextSubType(value: string): DetectionResult {
             JSON.parse(trimmed);
             return { kind: 'data', subType: 'json', mime: 'application/json' };
         } catch {
-            // fallthrough
+            // Check for NDJSON
+            const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
+            if (lines.length > 1) {
+                try {
+                    // Check if all non-empty lines are valid JSON
+                    const allJson = lines.every((line) => {
+                        try {
+                            JSON.parse(line);
+                            return true;
+                        } catch {
+                            return false;
+                        }
+                    });
+
+                    if (allJson) {
+                        return { kind: 'data', subType: 'json', mime: 'application/x-ndjson' };
+                    }
+                } catch {
+                    // ignore
+                }
+            }
         }
     }
 

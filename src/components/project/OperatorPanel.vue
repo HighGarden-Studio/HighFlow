@@ -306,6 +306,7 @@ function getProviderLabel(providerId: string): string {
         google: 'Gemini',
         groq: 'Groq',
         'claude-code': 'Claude Code',
+        'gemini-cli': 'Gemini CLI',
 
         codex: 'Codex',
     };

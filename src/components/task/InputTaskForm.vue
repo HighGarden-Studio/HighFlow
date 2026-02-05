@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Task, InputTaskConfig } from '@core/types/database';
 import { getAPI } from '../../utils/electron';
 import { FolderOpen } from 'lucide-vue-next';
@@ -13,6 +14,8 @@ const emit = defineEmits<{
     (e: 'submit', data: any): void;
     (e: 'cancel'): void;
 }>();
+
+const { t } = useI18n();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -168,6 +171,13 @@ const removeFile = (index: number) => {
     formData.value = formData.filePaths.join(', ');
 };
 
+const submitConfirmation = (confirmed: boolean) => {
+    formData.confirmed = confirmed;
+    // Bypass standard validation for confirm mode since explicit button click is valid
+    const submission = { confirmed };
+    emit('submit', submission);
+};
+
 const handleSubmit = () => {
     if (validate()) {
         let submission: any;
@@ -178,6 +188,7 @@ const handleSubmit = () => {
                 filePath: formData.filePaths[0], // Legacy/Compat
             };
         } else if (config.value?.userInput?.mode === 'confirm') {
+            // Should usually be handled by submitConfirmation, but fallback here
             submission = { confirmed: formData.confirmed };
         } else {
             // Determine final value
@@ -323,20 +334,53 @@ const handleSubmit = () => {
                     <!-- Confirmation -->
                     <div
                         v-else-if="config.userInput.mode === 'confirm'"
-                        class="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
+                        class="flex flex-col gap-3"
                     >
-                        <input
-                            id="confirm-check"
-                            v-model="formData.confirmed"
-                            type="checkbox"
-                            class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-                        />
-                        <label
-                            for="confirm-check"
-                            class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none"
-                        >
-                            {{ config.userInput.placeholder || 'I confirm appropriately' }}
-                        </label>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                            {{ config.userInput.placeholder || '승인 또는 거절을 선택해주세요.' }}
+                        </p>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm font-medium transition-colors flex items-center justify-center gap-1.5 text-sm"
+                                @click="submitConfirmation(true)"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 13l4 4L19 7"
+                                    ></path>
+                                </svg>
+                                {{ t('common.approve') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm font-medium transition-colors flex items-center justify-center gap-1.5 text-sm"
+                                @click="submitConfirmation(false)"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    ></path>
+                                </svg>
+                                {{ t('common.reject') }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -445,7 +489,10 @@ const handleSubmit = () => {
             </div>
 
             <!-- Actions -->
-            <div class="flex justify-end space-x-3 pt-2">
+            <div
+                v-if="config.userInput?.mode !== 'confirm'"
+                class="flex justify-end space-x-3 pt-2"
+            >
                 <button
                     type="button"
                     class="px-6 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"

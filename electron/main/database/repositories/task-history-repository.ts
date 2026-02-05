@@ -39,6 +39,20 @@ export class TaskHistoryRepository {
         return result[0]!;
     }
 
+    async findByProject(projectId: number, limit?: number): Promise<TaskHistory[]> {
+        let query = db
+            .select()
+            .from(taskHistory)
+            .where(eq(taskHistory.taskProjectId, projectId))
+            .orderBy(desc(taskHistory.createdAt), desc(taskHistory.id));
+
+        if (limit) {
+            query = query.limit(limit) as typeof query;
+        }
+
+        return await query;
+    }
+
     /**
      * Find all history entries for a task
      */

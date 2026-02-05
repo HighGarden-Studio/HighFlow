@@ -43,7 +43,7 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
     }
 
     // Whitelist of allowed commands for security
-    const allowedCommands = ['claude', 'codex', 'gemini'];
+    const allowedCommands = ['claude', 'codex', 'gemini', 'gemini-cli'];
 
     if (!allowedCommands.includes(command)) {
         console.warn(`Command not in whitelist: ${command}`);
@@ -52,14 +52,24 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
         return result;
     }
 
+    // Map internal IDs to actual CLI commands
+    const commandMap: Record<string, string> = {
+        'gemini-cli': 'gemini',
+    };
+
+    const actualCommand = commandMap[command] || command;
+
     const enhancedPath = getEnhancedPath();
-    // console.log(`[LocalAgents] Checking ${command} with PATH: ...`);
+    // console.log(`[LocalAgents] Checking ${actualCommand} with PATH: ...`);
+
+    // Use actualCommand for execution
+    const cmdToCheck = actualCommand;
 
     let result: AgentCheckResult;
 
     try {
         // Try to get version using --version flag
-        const { stdout } = await execAsync(`${command} --version`, {
+        const { stdout } = await execAsync(`${cmdToCheck} --version`, {
             timeout: 5000,
             env: { ...process.env, PATH: enhancedPath },
         });
@@ -76,14 +86,14 @@ async function checkCommandInstalled(command: string): Promise<AgentCheckResult>
         // If --version fails, try which/where command
         try {
             const whichCmd = process.platform === 'win32' ? 'where' : 'which';
-            const { stdout } = await execAsync(`${whichCmd} ${command}`, {
+            const { stdout } = await execAsync(`${whichCmd} ${cmdToCheck}`, {
                 timeout: 5000,
                 env: { ...process.env, PATH: enhancedPath },
             });
-            console.log(`[LocalAgents] ${whichCmd} ${command} found:`, stdout.trim());
+            console.log(`[LocalAgents] ${whichCmd} ${cmdToCheck} found:`, stdout.trim());
             result = { installed: true };
         } catch (whichError) {
-            console.log(`[LocalAgents] ${command} not found:`, (whichError as Error).message);
+            console.log(`[LocalAgents] ${cmdToCheck} not found:`, (whichError as Error).message);
             result = { installed: false };
         }
     }

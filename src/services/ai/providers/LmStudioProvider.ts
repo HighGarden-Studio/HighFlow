@@ -147,7 +147,7 @@ export class LmStudioProvider extends BaseAIProvider {
         config: AIConfig,
         _context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const start = Date.now();
         const payload = this.buildPayload(messages, config);
         const data = await this.sendRequest(payload);
@@ -309,7 +309,7 @@ export class LmStudioProvider extends BaseAIProvider {
      * Override validateConfig to allow any model name for LM Studio
      * since users can load any model locally.
      */
-    protected validateConfig(config: AIConfig): void {
+    protected async validateConfig(config: AIConfig): Promise<void> {
         if (
             config.temperature !== undefined &&
             (config.temperature < 0 || config.temperature > 2)

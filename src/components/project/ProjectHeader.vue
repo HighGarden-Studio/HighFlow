@@ -10,19 +10,23 @@ interface Props {
     showConnectionMode?: boolean;
     showNewTask?: boolean;
     isConnectionMode?: boolean;
+    baseDevFolder?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+    projectTitle: '',
     showProjectInfo: true,
     showConnectionMode: false,
     showNewTask: false,
     isConnectionMode: false,
+    baseDevFolder: null,
 });
 
 const emit = defineEmits<{
     (e: 'projectInfo'): void;
     (e: 'newTask'): void;
     (e: 'toggleConnection'): void;
+    (e: 'openWorkspace'): void;
 }>();
 
 const router = useRouter();
@@ -99,6 +103,22 @@ onMounted(async () => {
                                 stroke-linejoin="round"
                                 stroke-width="2"
                                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                        </svg>
+                    </button>
+                    <!-- Project Workspace Button -->
+                    <button
+                        v-if="baseDevFolder"
+                        class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Project Workspace"
+                        @click="emit('openWorkspace')"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                             />
                         </svg>
                     </button>

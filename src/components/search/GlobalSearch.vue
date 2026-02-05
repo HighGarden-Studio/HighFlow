@@ -305,11 +305,11 @@ onUnmounted(() => {
                 @keydown="handleKeyDown"
             >
                 <!-- Backdrop -->
-                <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="close" />
+                <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="close" />
 
                 <!-- Search Modal -->
                 <div
-                    class="relative w-full max-w-2xl mx-4 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden"
+                    class="relative w-full max-w-2xl mx-4 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col max-h-[85vh]"
                 >
                     <!-- Search Input -->
                     <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-700">
@@ -379,7 +379,7 @@ onUnmounted(() => {
                     </div>
 
                     <!-- Results -->
-                    <div class="max-h-[60vh] overflow-y-auto">
+                    <div class="flex-1 overflow-y-auto min-h-0">
                         <!-- Empty State (No Query) -->
                         <div
                             v-if="!searchQuery.trim() && recentSearches.length === 0"

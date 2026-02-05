@@ -288,6 +288,7 @@ export const useTaskStore = defineStore('tasks', () => {
             // BUT wait, "task 의 전역 id 는 절대 사용하지 않고" means we CANNOT send an ID.
 
             const task = await api.tasks.get(projectId, sequence);
+            console.debug(`[TaskStore] api.tasks.get(${projectId}, ${sequence}) returned:`, task);
 
             if (task) {
                 // Ensure composite key matching for currentTask
@@ -946,6 +947,25 @@ export const useTaskStore = defineStore('tasks', () => {
                 // If backend already handled status update (e.g. set to failed), do not rollback
                 if ((result as any).statusHandled) {
                     return { success: false, error: result.error || 'Failed to execute task' };
+                }
+
+                // [Changed] Special handling for 429/Capacity errors - Move to BLOCKED instead of rollback
+                const errorMessage = result.error || '';
+                const lowerMsg = errorMessage.toLowerCase();
+                if (
+                    lowerMsg.includes('429') ||
+                    lowerMsg.includes('capacity') ||
+                    lowerMsg.includes('quota exceeded') ||
+                    lowerMsg.includes('resource_exhausted') ||
+                    lowerMsg.includes('rate limit') ||
+                    lowerMsg.includes('too many requests') ||
+                    lowerMsg.includes('overloaded')
+                ) {
+                    await updateTask(projectId, sequence, {
+                        status: 'blocked',
+                        blockedReason: `AI Provider Error: ${errorMessage}`,
+                    });
+                    return { success: false, error: errorMessage };
                 }
 
                 // 실패 시 상태 롤백 (단, 이미 상태가 변경된 경우 - 예: failed 이벤트 수신 - 롤백하지 않음)

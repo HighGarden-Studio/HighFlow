@@ -119,4 +119,49 @@ export function registerLocalProviderHandlers(): void {
             return [];
         }
     });
+
+    // Save models to cache (DB)
+    ipcMain.handle(
+        'ai:saveModelsToCache',
+        async (_event, providerId: string, models: any[]): Promise<void> => {
+            try {
+                const { providerModelsRepository } =
+                    await import('../database/repositories/provider-models-repository');
+                await providerModelsRepository.saveModels(providerId, models);
+            } catch (error) {
+                console.error(`[AI] Failed to save cached models for ${providerId}:`, error);
+            }
+        }
+    );
+
+    // Get API key from system environment (Bridge for external auth)
+    ipcMain.handle(
+        'ai:getEnvApiKey',
+        async (_event, providerId: string): Promise<string | null> => {
+            try {
+                console.log(`[IPC] ai:getEnvApiKey called for ${providerId}`);
+                // Only expose specific keys for security
+                if (providerId === 'google') {
+                    const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+                    console.log(`[IPC] Key found for google? ${!!key}`);
+                    return key || null;
+                }
+                if (providerId === 'gemini-cli') {
+                    const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+                    console.log(`[IPC] Key found for gemini-cli? ${!!key}`);
+                    return key || null;
+                }
+                if (providerId === 'openai') {
+                    return process.env.OPENAI_API_KEY || null;
+                }
+                if (providerId === 'anthropic') {
+                    return process.env.ANTHROPIC_API_KEY || null;
+                }
+                return null;
+            } catch (error) {
+                console.error(`[AI] Failed to get env key for ${providerId}:`, error);
+                return null;
+            }
+        }
+    );
 }

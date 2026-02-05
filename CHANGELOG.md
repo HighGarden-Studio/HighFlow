@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Operators**: Reusable AI personas with drag-and-drop assignment
 - **Project Memory System**: Automatic context management with Curator
 - **MCP Server Integration**: Filesystem, Shell, Git, HTTP Fetch, and third-party tools
-- **Local Agent Support**: Antigravity and Claude-Code integrations
+- **Local Agent Support**: Claude-Code integrations
 - **Marketplace**: Share and discover workflows, operators, and templates
 - **Four Task Types**: AI tasks, Script tasks (JavaScript), Input tasks, Output tasks
 - **Webhooks**: Task completion notifications

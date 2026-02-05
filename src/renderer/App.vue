@@ -4,7 +4,7 @@
  *
  * Root component with layout and navigation
  */
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUIStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -24,6 +24,9 @@ import { versionAPI } from './api/version';
 import type { VersionInfo } from './api/version';
 import { eventBus } from '../services/events/EventBus';
 import type { MCPErrorEvent } from '../services/events/EventBus';
+import { useTaskExecution } from '../composables/useTaskExecution';
+
+import { AIServiceManager } from '../services/workflow/AIServiceManager';
 
 const router = useRouter();
 const route = useRoute();
@@ -34,6 +37,15 @@ const activityLogStore = useActivityLogStore();
 const mcpStore = useMCPStore();
 const userStore = useUserStore();
 const { t, locale } = useI18n();
+
+// Sync AI Providers from SettingsStore to AIServiceManager
+const aiManager = AIServiceManager.getInstance();
+
+// Initialize global task execution listeners (for Console/Activity Log)
+console.debug('[App] Initializing global task execution listeners');
+useTaskExecution();
+
+// Watch for changes and sync
 
 const currentLocaleLabel = computed(() => {
     return locale.value === 'ko' ? '한국어' : 'English';
@@ -430,6 +442,24 @@ onMounted(async () => {
             }
         }
     }
+
+    // Sync AI Providers from SettingsStore to AIServiceManager
+    // This ensures that the AIServiceManager in the Renderer process has the correct API keys and configuration
+    const { AIServiceManager } = await import('../services/workflow/AIServiceManager');
+    const aiManager = AIServiceManager.getInstance();
+
+    // Initial sync
+    aiManager.setEnabledProviders(settingsStore.enabledProviders, false);
+
+    // Watch for changes
+    watch(
+        () => settingsStore.enabledProviders,
+        (newProviders) => {
+            console.debug('[App] Syncing AI providers to AIServiceManager:', newProviders.length);
+            aiManager.setEnabledProviders(newProviders, false);
+        },
+        { deep: true }
+    );
 });
 
 onUnmounted(() => {

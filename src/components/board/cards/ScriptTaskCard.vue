@@ -484,10 +484,9 @@ function handleViewScript(event: Event) {
                     </div>
                 </template>
 
-                <!-- DONE: History -->
-                <template v-if="task.status === 'done' || task.status === 'blocked'">
+                <!-- DONE -->
+                <template v-if="task.status === 'done'">
                     <button
-                        v-if="task.status === 'done'"
                         class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-slate-600 text-white hover:bg-slate-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
@@ -500,8 +499,42 @@ function handleViewScript(event: Event) {
                     </button>
                     <!-- Show retry button if task has no auto-execute dependencies -->
                     <button
-                        v-if="task.status === 'done' && !task.triggerConfig?.dependsOn"
+                        v-if="!task.triggerConfig?.dependsOn"
                         class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm"
+                        @click="
+                            (e) => {
+                                e.stopPropagation();
+                                emit('retry', task);
+                            }
+                        "
+                    >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                        </svg>
+                        {{ t('common.retry') }}
+                    </button>
+                    <button
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50"
+                        @click="
+                            (e) => {
+                                e.stopPropagation();
+                                emit('viewHistory', task);
+                            }
+                        "
+                    >
+                        {{ t('task.detail.history') }}
+                    </button>
+                </template>
+
+                <!-- BLOCKED / FAILED -->
+                <template v-if="task.status === 'blocked' || task.status === 'failed'">
+                    <button
+                        class="flex-1 px-2 py-1 text-[10px] font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 flex items-center justify-center gap-1 shadow-sm"
                         @click="
                             (e) => {
                                 e.stopPropagation();

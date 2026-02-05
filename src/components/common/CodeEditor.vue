@@ -310,8 +310,8 @@ defineExpose({
 </script>
 
 <template>
-    <div class="code-editor-wrapper">
-        <div ref="editorContainer" :style="{ height: height }" class="code-editor"></div>
+    <div class="code-editor-wrapper" :style="{ height: height }">
+        <div ref="editorContainer" class="code-editor" style="height: 100%"></div>
     </div>
 </template>
 

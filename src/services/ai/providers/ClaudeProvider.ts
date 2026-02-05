@@ -96,7 +96,7 @@ export class ClaudeProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AiResult> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const enrichedMessages = this.enforceJsonCompliance(messages);
         const response = await this.chat(enrichedMessages, config, context);
@@ -174,7 +174,7 @@ export class ClaudeProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -264,7 +264,7 @@ export class ClaudeProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AIResponse> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -352,7 +352,7 @@ export class ClaudeProvider extends BaseAIProvider {
         onToken: (token: string) => void,
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const prompt = this.getPromptText(input);
 
         const client = this.getClient();

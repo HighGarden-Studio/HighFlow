@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { Task, TaskHistoryEntry, InputTaskConfig } from '@core/types/database';
@@ -36,6 +36,7 @@ function isLocalAgentProvider(provider: string | null): {
 
     const localAgentMap: Record<string, LocalAgentType> = {
         'claude-code': 'claude',
+        'gemini-cli': 'gemini-cli',
         codex: 'codex',
     };
 
@@ -47,7 +48,7 @@ function isLocalAgentProvider(provider: string | null): {
 }
 
 // Local Agent types
-type LocalAgentType = 'claude' | 'codex';
+type LocalAgentType = 'claude' | 'codex' | 'gemini-cli';
 
 interface Props {
     task: Task | null;
@@ -135,6 +136,8 @@ const aiProvider = ref<AIProvider | null>(null);
 const aiModel = ref<string | null>(null);
 const reviewAiProvider = ref<AIProvider | null>(null);
 const reviewAiModel = ref<string | null>(null);
+const reviewExecutionMode = ref<'api' | 'local'>('api');
+const selectedReviewLocalAgent = ref<string | null>(null);
 const currentProvider = computed(() =>
     aiProvider.value ? settingsStore.aiProviders.find((p) => p.id === aiProvider.value) : undefined
 );
@@ -193,14 +196,16 @@ const streamingResult = ref('');
 const comments = ref<Array<{ id: number; author: string; text: string; timestamp: Date }>>([]);
 const newComment = ref('');
 
-// Task Title Editing
 const isEditingTitle = ref(false);
 const editedTitle = ref('');
 
 function startEditTitle() {
-    if (!props.task) return;
-    editedTitle.value = props.task.title;
+    if (!localTask.value) return;
+    editedTitle.value = localTask.value.title;
     isEditingTitle.value = true;
+    nextTick(() => {
+        // Input autofocus handles focus
+    });
 }
 
 function cancelEditTitle() {
@@ -208,20 +213,14 @@ function cancelEditTitle() {
     editedTitle.value = '';
 }
 
-async function saveTitle() {
-    if (!props.task || !editedTitle.value.trim()) return;
-    try {
-        await taskStore.updateTask(props.task.projectId, props.task.projectSequence, {
-            title: editedTitle.value,
-        });
-        // Manually update localTask to reflect changes immediately
-        if (localTask.value) {
-            localTask.value.title = editedTitle.value;
-        }
-        isEditingTitle.value = false;
-    } catch (error) {
-        console.error('Failed to update task title:', error);
+function saveTitle() {
+    if (!localTask.value) return;
+    const newTitle = editedTitle.value.trim();
+    if (newTitle) {
+        localTask.value.title = newTitle;
+        emit('save', localTask.value);
     }
+    isEditingTitle.value = false;
 }
 
 // Details tab state
@@ -347,6 +346,39 @@ const templateToCreate = computed(() => {
         defaultOptions: (localTask.value as Record<string, any>).defaultOptions || {},
     };
 });
+
+// Panel width and resize state
+const panelWidth = ref(60); // Default 60% width
+const isResizing = ref(false);
+const isMaximized = ref(false);
+
+const startResize = (e: MouseEvent) => {
+    e.preventDefault();
+    isResizing.value = true;
+    window.addEventListener('mousemove', doResize);
+    window.addEventListener('mouseup', stopResize);
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+};
+
+const doResize = (e: MouseEvent) => {
+    if (!isResizing.value) return;
+    const windowWidth = window.innerWidth;
+    const newWidth = ((windowWidth - e.clientX) / windowWidth) * 100;
+    panelWidth.value = Math.max(30, Math.min(100, newWidth));
+};
+
+const stopResize = () => {
+    isResizing.value = false;
+    window.removeEventListener('mousemove', doResize);
+    window.removeEventListener('mouseup', stopResize);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+};
+
+const toggleMaximize = () => {
+    isMaximized.value = !isMaximized.value;
+};
 
 async function handleSaveTemplate(data: Record<string, any>) {
     try {
@@ -481,6 +513,17 @@ watch(
                     newTask.reviewAiModel ||
                     effectiveModel ||
                     getDefaultModelForProvider(reviewAiProvider.value);
+
+                // Initialize Review Execution Mode based on loaded provider
+                if (
+                    reviewAiProvider.value &&
+                    isLocalAgentProvider(reviewAiProvider.value).isLocal
+                ) {
+                    reviewExecutionMode.value = 'local';
+                    selectedReviewLocalAgent.value = reviewAiProvider.value;
+                } else {
+                    reviewExecutionMode.value = 'api';
+                }
                 autoReview.value = newTask.autoReview || false;
                 selectedMCPTools.value = Array.isArray(newTask.requiredMCPs)
                     ? [...newTask.requiredMCPs]
@@ -579,6 +622,7 @@ watch(selectedLocalAgent, (newAgent) => {
     if (executionMode.value === 'local' && newAgent) {
         const agentTypeToProviderId: Record<LocalAgentType, string> = {
             claude: 'claude-code',
+            'gemini-cli': 'gemini-cli',
             codex: 'codex',
         };
         const newProvider = agentTypeToProviderId[newAgent] as AIProvider;
@@ -597,6 +641,7 @@ watch(executionMode, (newMode) => {
         if (selectedLocalAgent.value) {
             const agentTypeToProviderId: Record<LocalAgentType, string> = {
                 claude: 'claude-code',
+                'gemini-cli': 'gemini-cli',
                 codex: 'codex',
             };
             const newProvider = agentTypeToProviderId[selectedLocalAgent.value] as AIProvider;
@@ -682,8 +727,43 @@ watch(
 );
 
 watch(reviewAiModel, () => {
-    if (isInitializing.value) return;
-    persistExecutionSettings();
+    // Only update if we are not in local mode - local mode updates happen via selectedReviewLocalAgent
+    if (reviewExecutionMode.value !== 'local') {
+        if (isInitializing.value) return;
+        persistExecutionSettings();
+    }
+});
+
+// Watch for Review Execution Mode changes
+watch(reviewExecutionMode, (newMode) => {
+    if (newMode === 'local') {
+        if (selectedReviewLocalAgent.value) {
+            reviewAiProvider.value = selectedReviewLocalAgent.value as AIProvider;
+            reviewAiModel.value = selectedReviewLocalAgent.value; // Model is same as provider for local
+            if (isInitializing.value) return;
+            persistExecutionSettings();
+        }
+    } else {
+        // Reset to default API provider if switching back to API mode
+        // Or keep current if it's already an API provider
+        if (reviewAiProvider.value && isLocalAgentProvider(reviewAiProvider.value).isLocal) {
+            const defaultProvider = settingsStore.aiProviders[0]?.id || null;
+            reviewAiProvider.value = defaultProvider as AIProvider;
+            reviewAiModel.value = getDefaultModelForProvider(defaultProvider as AIProvider);
+            if (isInitializing.value) return;
+            persistExecutionSettings();
+        }
+    }
+});
+
+// Watch for selected review local agent changes
+watch(selectedReviewLocalAgent, (newAgentId) => {
+    if (reviewExecutionMode.value === 'local' && newAgentId) {
+        reviewAiProvider.value = newAgentId as AIProvider;
+        reviewAiModel.value = newAgentId;
+        if (isInitializing.value) return;
+        persistExecutionSettings();
+    }
 });
 
 // Enforce mutual exclusivity between autoReview and autoApprove
@@ -721,10 +801,13 @@ watch(activeTab, (newTab) => {
     }
 });
 
+// Event listener cleanup
+let unsubscribeHistory: (() => void) | null = null;
+
 // Listen for new history events to refresh list
 onMounted(() => {
     if (window.electron.events) {
-        window.electron.events.on('task-history:created', (data: any) => {
+        unsubscribeHistory = window.electron.events.on('task-history:created', (data: any) => {
             console.log('📜 [TaskDetailPanel] Received task-history:created event:', data);
 
             // Handle both schema property names (taskProjectId) and potential standard names (projectId)
@@ -745,6 +828,13 @@ onMounted(() => {
                 }
             }
         });
+    }
+});
+
+onUnmounted(() => {
+    if (unsubscribeHistory) {
+        unsubscribeHistory();
+        unsubscribeHistory = null;
     }
 });
 
@@ -973,6 +1063,7 @@ const availableLocalAgents = computed(() => {
         version?: string;
     }[] = [
         { id: 'claude', name: 'Claude Code', icon: '🤖', installed: false },
+        { id: 'gemini-cli', name: 'Gemini CLI', icon: '✨', installed: false },
         { id: 'codex', name: 'OpenAI Codex', icon: '💻', installed: false },
     ];
 
@@ -1712,23 +1803,36 @@ async function handleOpenFile(filePath: string) {
 </script>
 
 <template>
-    <!-- Center Modal -->
-    <div v-if="open" class="fixed inset-0 z-50 overflow-y-auto" @click.self="handleClose">
+    <Teleport to="body">
         <!-- Backdrop -->
-        <div
-            class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-            @click="handleClose"
-        ></div>
-
-        <!-- Modal Container -->
-        <div class="flex min-h-full items-center justify-center p-4">
+        <Transition name="fade">
             <div
-                class="relative w-full max-w-4xl transform transition-all"
-                :class="open ? 'scale-100 opacity-100' : 'scale-95 opacity-0'"
+                v-if="open && !isMaximized"
+                class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+                @click="handleClose"
+            ></div>
+        </Transition>
+
+        <!-- Right-Side Slide Panel -->
+        <Transition name="slide-right">
+            <div
+                v-if="open"
+                class="fixed top-0 right-0 z-50 flex shadow-2xl"
+                :style="{
+                    width: isMaximized ? '100%' : `${panelWidth}%`,
+                    bottom: '0',
+                }"
             >
+                <!-- Resize Handle -->
                 <div
-                    class="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-h-[90vh]"
-                    style="min-height: 900px"
+                    v-if="!isMaximized"
+                    class="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500 transition-colors z-10"
+                    @mousedown="startResize"
+                ></div>
+
+                <!-- Panel Content -->
+                <div
+                    class="flex flex-col h-full bg-white dark:bg-gray-800 shadow-2xl w-full overflow-hidden relative z-20"
                 >
                     <!-- Header -->
                     <div
@@ -1737,12 +1841,15 @@ async function handleOpenFile(filePath: string) {
                         <div class="flex items-start justify-between">
                             <div class="flex-1">
                                 <!-- Title -->
-                                <div class="flex items-center gap-2 mb-2">
+                                <div
+                                    class="flex items-center gap-2 mb-2"
+                                    style="-webkit-app-region: no-drag"
+                                >
                                     <div v-if="isEditingTitle" class="flex-1 flex gap-2">
                                         <input
                                             v-model="editedTitle"
                                             class="flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xl font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            autoFocus
+                                            autofocus
                                             @keyup.enter="saveTitle"
                                             @keyup.esc="cancelEditTitle"
                                         />
@@ -1762,14 +1869,14 @@ async function handleOpenFile(filePath: string) {
                                     <div v-else class="flex-1 flex items-center gap-2 group">
                                         <h2
                                             class="text-xl font-semibold text-gray-900 dark:text-white cursor-pointer hover:underline decoration-dashed decoration-gray-400 decoration-1 underline-offset-4"
-                                            @click="startEditTitle"
+                                            @click.stop="startEditTitle"
                                         >
                                             {{ localTask?.title || t('task.detail.title_default') }}
                                         </h2>
                                         <button
                                             class="p-1 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-500"
                                             :title="t('task.detail.edit_title.edit')"
-                                            @click="startEditTitle"
+                                            @click.stop="startEditTitle"
                                         >
                                             <svg
                                                 class="w-4 h-4"
@@ -1821,25 +1928,64 @@ async function handleOpenFile(filePath: string) {
                                 </div>
                             </div>
 
-                            <!-- Close button -->
-                            <button
-                                class="ml-4 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
-                                @click="handleClose"
-                            >
-                                <svg
-                                    class="h-6 w-6"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                            <!-- Action buttons -->
+                            <div class="ml-4 flex items-center gap-2">
+                                <!-- Maximize/Restore button -->
+                                <button
+                                    class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1"
+                                    :title="isMaximized ? 'Restore' : 'Maximize'"
+                                    @click="toggleMaximize"
                                 >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
+                                    <svg
+                                        v-if="!isMaximized"
+                                        class="h-5 w-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                        />
+                                    </svg>
+                                    <svg
+                                        v-else
+                                        class="h-5 w-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                                        />
+                                    </svg>
+                                </button>
+
+                                <!-- Close button -->
+                                <button
+                                    class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                                    @click="handleClose"
+                                >
+                                    <svg
+                                        class="h-6 w-6"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Tabs -->
@@ -3777,7 +3923,143 @@ async function handleOpenFile(filePath: string) {
                                         </p>
                                     </div>
                                     <div>
+                                        <!-- Review Execution Mode Selection -->
+                                        <div class="mb-4">
+                                            <label
+                                                class="block text-sm font-medium text-blue-900 dark:text-blue-100 mb-2"
+                                            >
+                                                {{ t('task.execution_mode.label') }}
+                                            </label>
+                                            <div class="grid grid-cols-2 gap-3">
+                                                <!-- AI API Mode -->
+                                                <label
+                                                    :class="[
+                                                        'flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all',
+                                                        reviewExecutionMode === 'api'
+                                                            ? 'border-blue-500 bg-blue-100 dark:bg-blue-800/40'
+                                                            : 'border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700',
+                                                    ]"
+                                                >
+                                                    <input
+                                                        v-model="reviewExecutionMode"
+                                                        type="radio"
+                                                        value="api"
+                                                        class="sr-only"
+                                                    />
+                                                    <div
+                                                        class="flex-shrink-0 w-8 h-8 bg-blue-200 dark:bg-blue-700 rounded-lg flex items-center justify-center"
+                                                    >
+                                                        <svg
+                                                            class="w-5 h-5 text-blue-700 dark:text-blue-200"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                                                            />
+                                                        </svg>
+                                                    </div>
+                                                    <span
+                                                        class="text-sm font-medium text-blue-900 dark:text-blue-100"
+                                                        >AI API</span
+                                                    >
+                                                </label>
+
+                                                <!-- Local Agent Mode -->
+                                                <label
+                                                    :class="[
+                                                        'flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all',
+                                                        reviewExecutionMode === 'local'
+                                                            ? 'border-green-500 bg-green-100 dark:bg-green-800/40'
+                                                            : 'border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700',
+                                                        (!hasInstalledLocalAgent ||
+                                                            !isDevProject) &&
+                                                            'opacity-50',
+                                                    ]"
+                                                >
+                                                    <input
+                                                        v-model="reviewExecutionMode"
+                                                        type="radio"
+                                                        value="local"
+                                                        :disabled="
+                                                            !hasInstalledLocalAgent || !isDevProject
+                                                        "
+                                                        class="sr-only"
+                                                    />
+                                                    <div
+                                                        class="flex-shrink-0 w-8 h-8 bg-green-200 dark:bg-green-700 rounded-lg flex items-center justify-center"
+                                                    >
+                                                        <svg
+                                                            class="w-5 h-5 text-green-700 dark:text-green-200"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                                            />
+                                                        </svg>
+                                                    </div>
+                                                    <span
+                                                        class="text-sm font-medium text-blue-900 dark:text-blue-100"
+                                                        >Local Agent</span
+                                                    >
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <!-- Local Agent Selection -->
+                                        <div
+                                            v-if="reviewExecutionMode === 'local'"
+                                            class="space-y-2"
+                                        >
+                                            <label
+                                                v-for="agent in availableLocalAgents"
+                                                :key="agent.id"
+                                                :class="[
+                                                    'flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-all',
+                                                    selectedReviewLocalAgent === agent.id
+                                                        ? 'border-green-500 bg-green-50 dark:bg-green-900/40'
+                                                        : 'border-blue-200 dark:border-blue-800 hover:border-green-400',
+                                                    !agent.installed &&
+                                                        'opacity-50 cursor-not-allowed',
+                                                ]"
+                                            >
+                                                <input
+                                                    v-model="selectedReviewLocalAgent"
+                                                    type="radio"
+                                                    :value="agent.id"
+                                                    :disabled="!agent.installed"
+                                                    class="sr-only"
+                                                />
+                                                <IconRenderer :emoji="agent.icon" class="w-4 h-4" />
+                                                <div
+                                                    class="flex-1 flex items-center justify-between"
+                                                >
+                                                    <span
+                                                        class="text-sm font-medium text-blue-900 dark:text-blue-100"
+                                                        >{{ agent.name }}</span
+                                                    >
+                                                    <span
+                                                        v-if="agent.installed"
+                                                        class="text-xs px-1.5 py-0.5 rounded bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200"
+                                                    >
+                                                        {{ t('task.local_agent.installed') }}
+                                                    </span>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <!-- API Selector -->
                                         <AIProviderSelector
+                                            v-else
                                             v-model:provider="reviewAiProvider"
                                             v-model:model="reviewAiModel"
                                             :label="t('task.auto_review.ai_label')"
@@ -4355,147 +4637,152 @@ async function handleOpenFile(filePath: string) {
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Footer Actions -->
-                        <div
-                            class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4"
-                        >
-                            <div class="flex items-center justify-between gap-4">
-                                <div class="flex gap-2 items-center">
-                                    <!-- Execute button or Provider connection required message -->
-                                    <template v-if="aiProvider && !isSelectedProviderConnected">
-                                        <div
-                                            class="flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-lg font-medium"
+                    </div>
+                    <!-- Footer Actions -->
+                    <div
+                        class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4"
+                    >
+                        <div class="flex items-center justify-between gap-4">
+                            <div class="flex gap-2 items-center">
+                                <!-- Execute button or Provider connection required message -->
+                                <template v-if="aiProvider && !isSelectedProviderConnected">
+                                    <div
+                                        class="flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-lg font-medium"
+                                    >
+                                        <svg
+                                            class="w-5 h-5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                            />
+                                        </svg>
+                                        {{ t('task.footer.provider_required') }}
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <button
+                                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        :disabled="!canExecute"
+                                        @click="handleExecute"
+                                    >
+                                        <template
+                                            v-if="
+                                                isGloballyExecuting ||
+                                                localTask?.status === 'in_progress'
+                                            "
                                         >
                                             <svg
-                                                class="w-5 h-5"
+                                                class="w-4 h-4 animate-spin"
                                                 fill="none"
-                                                stroke="currentColor"
                                                 viewBox="0 0 24 24"
                                             >
+                                                <circle
+                                                    class="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    stroke-width="4"
+                                                ></circle>
                                                 <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                                />
-                                            </svg>
-                                            {{ t('task.footer.provider_required') }}
-                                        </div>
-                                    </template>
-                                    <template v-else>
-                                        <button
-                                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                            :disabled="!canExecute"
-                                            @click="handleExecute"
-                                        >
-                                            <template
-                                                v-if="
-                                                    isGloballyExecuting ||
-                                                    localTask?.status === 'in_progress'
-                                                "
-                                            >
-                                                <svg
-                                                    class="w-4 h-4 animate-spin"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <circle
-                                                        class="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        stroke-width="4"
-                                                    ></circle>
-                                                    <path
-                                                        class="opacity-75"
-                                                        fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                    ></path>
-                                                </svg>
-                                                <span>{{ t('task.footer.executing') }}</span>
-                                            </template>
-                                            <template v-else>
-                                                <svg
-                                                    class="w-4 h-4"
+                                                    class="opacity-75"
                                                     fill="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path d="M8 5v14l11-7z" />
-                                                </svg>
-                                                <span>{{
-                                                    localTask?.status === 'blocked' ||
-                                                    localTask?.status === 'failed'
-                                                        ? t('task.retry') || '재시도'
-                                                        : t('task.footer.execute')
-                                                }}</span>
-                                            </template>
-                                        </button>
-                                    </template>
-
-                                    <button
-                                        class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
-                                        @click="handleSave"
-                                    >
-                                        {{ t('task.footer.save') }}
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                            </svg>
+                                            <span>{{ t('task.footer.executing') }}</span>
+                                        </template>
+                                        <template v-else>
+                                            <svg
+                                                class="w-4 h-4"
+                                                fill="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path d="M8 5v14l11-7z" />
+                                            </svg>
+                                            <span>{{
+                                                localTask?.status === 'blocked' ||
+                                                localTask?.status === 'failed'
+                                                    ? t('task.retry') || '재시도'
+                                                    : t('task.footer.execute')
+                                            }}</span>
+                                        </template>
                                     </button>
-                                </div>
+                                </template>
 
                                 <button
-                                    class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                    @click="handleClose"
+                                    class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                                    @click="handleSave"
                                 >
-                                    {{ t('task.footer.close') }}
+                                    {{ t('task.footer.save') }}
                                 </button>
                             </div>
+
+                            <button
+                                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                @click="handleClose"
+                            >
+                                {{ t('task.footer.close') }}
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </Transition>
 
-    <!-- Prompt Enhancer Modal -->
-    <Teleport to="body">
-        <div
-            v-if="showPromptEnhancer"
-            class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-        >
-            <div class="fixed inset-0 bg-black/60" @click="showPromptEnhancer = false" />
-            <div class="relative w-full max-w-3xl max-h-[85vh] overflow-hidden">
-                <PromptEnhancerPanel
-                    :initial-prompt="promptText"
-                    :task-id="localTask?.id"
-                    @apply="applyEnhancedPrompt"
-                    @close="showPromptEnhancer = false"
+        <!-- Prompt Enhancer Modal -->
+        <Teleport to="body">
+            <div
+                v-if="showPromptEnhancer"
+                class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            >
+                <div
+                    class="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                    @click="showPromptEnhancer = false"
                 />
+                <div class="relative w-full max-w-3xl max-h-[85vh] overflow-hidden">
+                    <PromptEnhancerPanel
+                        :initial-prompt="promptText"
+                        :task-id="localTask?.id"
+                        @apply="applyEnhancedPrompt"
+                        @close="showPromptEnhancer = false"
+                    />
+                </div>
             </div>
-        </div>
-    </Teleport>
+        </Teleport>
 
-    <!-- Template Picker Modal -->
-    <Teleport to="body">
-        <div
-            v-if="showTemplatePicker"
-            class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-        >
-            <div class="fixed inset-0 bg-black/60" @click="showTemplatePicker = false" />
-            <div class="relative w-full max-w-5xl max-h-[85vh] overflow-hidden">
-                <PromptTemplatePicker
-                    @apply="applyTemplatePrompt"
-                    @close="showTemplatePicker = false"
+        <!-- Template Picker Modal -->
+        <Teleport to="body">
+            <div
+                v-if="showTemplatePicker"
+                class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            >
+                <div
+                    class="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                    @click="showTemplatePicker = false"
                 />
+                <div class="relative w-full max-w-5xl max-h-[85vh] overflow-hidden">
+                    <PromptTemplatePicker
+                        @apply="applyTemplatePrompt"
+                        @close="showTemplatePicker = false"
+                    />
+                </div>
             </div>
-        </div>
-    </Teleport>
+        </Teleport>
 
-    <ScriptTemplateModal
-        :open="showSaveTemplateModal"
-        :template="templateToCreate"
-        @close="showSaveTemplateModal = false"
-        @save="handleSaveTemplate"
-    />
+        <ScriptTemplateModal
+            :open="showSaveTemplateModal"
+            :template="templateToCreate"
+            @close="showSaveTemplateModal = false"
+            @save="handleSaveTemplate"
+        />
+    </Teleport>
 </template>
 
 <style scoped>
@@ -4520,5 +4807,60 @@ async function handleOpenFile(filePath: string) {
 
 .dark .overflow-y-auto::-webkit-scrollbar-thumb {
     background: #475569;
+}
+
+/* Vue Transition Animations */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+.slide-right-enter-active {
+    transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.slide-right-leave-active {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.slide-right-enter-from {
+    transform: translateX(100%);
+}
+
+.slide-right-leave-to {
+    transform: translateX(100%);
+}
+</style>
+
+<!-- Unscoped styles for Vue Transitions -->
+<style>
+/* Fade transition for backdrop */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+/* Slide-right transition for panel */
+.slide-right-enter-active {
+    transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.slide-right-leave-active {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
+    transform: translateX(100%);
 }
 </style>

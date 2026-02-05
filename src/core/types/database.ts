@@ -11,6 +11,9 @@ import type { AiResult } from './ai';
 export type { TaskKey } from '../../utils/taskKey';
 export { taskKeyToString, stringToTaskKey, taskKeyEquals } from '../../utils/taskKey';
 
+import type { AIProvider } from './ai';
+export type { AIProvider };
+
 // ========================================
 // Enum Types
 // ========================================
@@ -93,41 +96,7 @@ export type TaskType = 'ai' | 'script' | 'input' | 'output';
 
 export type ScriptLanguage = 'javascript' | 'typescript' | 'python';
 
-export type AIProvider =
-    | 'openai'
-    | 'anthropic'
-    | 'google'
-    | 'default-highflow'
-    | 'default-gemini'
-    | 'azure-openai'
-    | 'mistral'
-    | 'cohere'
-    | 'groq'
-    | 'perplexity'
-    | 'together'
-    | 'fireworks'
-    | 'deepseek'
-    | 'ollama'
-    | 'lmstudio'
-    | 'openrouter'
-    | 'huggingface'
-    | 'replicate'
-    | 'stability'
-    | 'runway'
-    | 'pika'
-    | 'figma-ai'
-    | 'galileo'
-    | 'uizard'
-    | 'google-tts'
-    | 'elevenlabs'
-    | 'suno'
-    | 'zhipu'
-    | 'moonshot'
-    | 'qwen'
-    | 'baidu'
-    | 'claude-code'
-    | 'codex'
-    | 'local';
+// End of database types
 
 export type UserRole = 'admin' | 'member' | 'viewer';
 

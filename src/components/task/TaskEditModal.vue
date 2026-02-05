@@ -122,11 +122,11 @@ watch(
                 }
 
                 if (localRepoTypes.includes('claude-code')) {
-                    autoProvider = 'anthropic';
+                    autoProvider = 'claude-code';
                     autoModel = currentProject.aiModel || 'claude-3-5-sonnet-20240620';
-
-                    autoProvider = 'google';
-                    autoModel = currentProject.aiModel || 'gemini-2.5-pro';
+                } else if (localRepoTypes.includes('gemini-cli')) {
+                    autoProvider = 'gemini-cli';
+                    autoModel = currentProject.aiModel || 'gemini-2.0-flash-thinking-exp-1219';
                 } else if (localRepoTypes.includes('codex')) {
                     autoProvider = 'openai';
                     autoModel = currentProject.aiModel || 'gpt-4o';
@@ -174,6 +174,7 @@ const aiProviderOptions: Array<{
     { value: 'openai', label: 'GPT', icon: '🟢', description: 'OpenAI GPT-4' },
     { value: 'google', label: 'Gemini', icon: '🔵', description: 'Google Gemini' },
     { value: 'claude-code', label: 'Claude Code', icon: '💻', description: 'Claude Code Agent' },
+    { value: 'gemini-cli', label: 'Gemini CLI', icon: '✨', description: 'Gemini CLI Agent' },
 
     { value: 'codex', label: 'Codex', icon: '⚡', description: 'Codex AI Agent' },
     { value: 'local', label: 'Local', icon: '🏠', description: 'Local LLM' },
@@ -203,7 +204,9 @@ const providerModelOptions: Record<string, { value: string; label: string }[]> =
         { value: 'llama3-8b-8192', label: 'Llama 3 8B' },
     ],
     'claude-code': [{ value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' }],
-
+    'gemini-cli': [
+        { value: 'gemini-2.0-flash-thinking-exp-1219', label: 'Gemini 2.0 Flash Thinking' },
+    ],
     codex: [{ value: 'gpt-4o', label: 'GPT-4o (Codex)' }],
     local: [
         { value: 'llama3', label: 'Llama 3' },
@@ -370,10 +373,12 @@ async function estimateTimeWithAI() {
             <!-- Modal -->
             <div class="flex min-h-full items-center justify-center p-4">
                 <div
-                    class="relative w-full max-w-2xl transform transition-all"
+                    class="relative w-full max-w-2xl transform transition-all flex flex-col max-h-[85vh]"
                     :class="open ? 'scale-100 opacity-100' : 'scale-95 opacity-0'"
                 >
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl">
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col h-full overflow-hidden"
+                    >
                         <!-- Header -->
                         <div
                             class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700"
@@ -403,7 +408,7 @@ async function estimateTimeWithAI() {
                         </div>
 
                         <!-- Body -->
-                        <div class="px-6 py-4 space-y-6 max-h-[70vh] overflow-y-auto">
+                        <div class="px-6 py-4 space-y-6 flex-1 overflow-y-auto min-h-0">
                             <!-- Title -->
                             <div>
                                 <label

@@ -96,7 +96,7 @@ export class GroqProvider extends BaseAIProvider {
         config: AIConfig,
         context?: ExecutionContext
     ): Promise<AiResult> {
-        this.validateConfig(config);
+        await this.validateConfig(config);
         const client = this.getClient();
 
         const systemPrompt = this.buildSystemPrompt(config, context);
@@ -258,7 +258,7 @@ export class GroqProvider extends BaseAIProvider {
         context?: ExecutionContext
     ): Promise<AIResponse> {
         await this.ensureModelsLoaded();
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const startTime = Date.now();
         const client = this.getClient();
@@ -336,7 +336,7 @@ export class GroqProvider extends BaseAIProvider {
         context?: ExecutionContext
     ): AsyncGenerator<StreamChunk> {
         await this.ensureModelsLoaded();
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
         const client = this.getClient();
         const systemPrompt = this.buildSystemPrompt(config, context);

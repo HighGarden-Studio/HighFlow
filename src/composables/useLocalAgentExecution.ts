@@ -147,21 +147,8 @@ export function useLocalAgentExecution() {
 
                     // Handle streaming message content for legacy support
                     if (typeof message === 'object' && message !== null) {
-                        const msg = message as Record<string, unknown>;
-                        if (msg.type === 'assistant' && msg.message) {
-                            const msgBody = msg.message as any;
-                            if (msgBody?.content && Array.isArray(msgBody.content)) {
-                                const text = msgBody.content
-                                    .filter((c: any) => c.type === 'text')
-                                    .map((c: any) => c.text)
-                                    .join('');
-                                if (text) {
-                                    streamedContent.value += text;
-                                }
-                            }
-                        } else if (msg.content && typeof msg.content === 'string') {
-                            streamedContent.value += msg.content;
-                        }
+                        // serialize the message as NDJSON line to preserve structure for AgentViewer
+                        streamedContent.value += JSON.stringify(message) + '\n';
                     }
                 }
             }

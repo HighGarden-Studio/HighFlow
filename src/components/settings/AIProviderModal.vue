@@ -429,8 +429,12 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
 
             <!-- Modal -->
             <div class="flex min-h-full items-center justify-center p-4">
-                <div class="relative w-full max-w-lg transform transition-all">
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
+                <div
+                    class="relative w-full max-w-lg transform transition-all flex flex-col max-h-[85vh]"
+                >
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden flex flex-col h-full"
+                    >
                         <!-- Header -->
                         <div
                             class="relative px-6 py-5 border-b border-gray-200 dark:border-gray-700"
@@ -518,7 +522,7 @@ function setAuthMethod(method: 'apiKey' | 'oauth') {
                         </div>
 
                         <!-- Body -->
-                        <div class="px-6 py-4 space-y-6 max-h-[calc(100vh-280px)] overflow-y-auto">
+                        <div class="px-6 py-4 space-y-6 flex-1 overflow-y-auto min-h-0">
                             <!-- Provider Features -->
                             <div class="flex flex-wrap gap-2">
                                 <span

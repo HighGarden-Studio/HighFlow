@@ -126,20 +126,63 @@ export class DefaultHighFlowProvider extends GeminiProvider {
 
     /**
      * Check if user is authenticated
-     * Note: This code runs in Electron main process, so we use direct imports
+     * Supports both Renderer (via IPC) and Main (via direct import) processes
+     * @param strict If true, verifies the session with the backend (slower). If false, only checks for token existence (fast).
      */
-    private async checkAuthentication(): Promise<{ authenticated: boolean; token?: string }> {
+    private async checkAuthentication(
+        strict: boolean = false
+    ): Promise<{ authenticated: boolean; token?: string }> {
+        // 1. Renderer Environment (IPC)
+        if (typeof window !== 'undefined' && window.electron?.auth) {
+            try {
+                const token = await window.electron.auth.getSessionToken();
+                if (!token) {
+                    return { authenticated: false };
+                }
+
+                if (strict) {
+                    // Verify session by fetching current user
+                    // This ensures the token is not just present but also valid (not expired)
+                    const user = await window.electron.auth.getCurrentUser();
+                    if (!user) {
+                        console.warn(
+                            '[DefaultHighFlowProvider] No active user session (Renderer check failed)'
+                        );
+                        return { authenticated: false };
+                    }
+                }
+
+                return {
+                    authenticated: true,
+                    token,
+                };
+            } catch (error) {
+                console.error('[DefaultHighFlowProvider] Auth check failed (Renderer):', error);
+                return { authenticated: false };
+            }
+        }
+
+        // 2. Main Environment (Direct Import)
         try {
-            // In Electron main process, we can't use window.electron
-            // Instead, we dynamically import the auth module
-            const { loadSessionToken } =
+            // Dynamically import auth module
+            const { loadSessionToken, getCurrentUser } =
                 await import('../../../../electron/main/auth/google-oauth');
 
             const token = loadSessionToken();
-
             if (!token) {
-                console.warn('[DefaultHighFlowProvider] No session token found');
                 return { authenticated: false };
+            }
+
+            if (strict) {
+                // Verify with backend
+                // For now, we'll try to get the user to confirm validity
+                const user = await getCurrentUser();
+                if (!user) {
+                    console.warn(
+                        '[DefaultHighFlowProvider] Token invalid or expired (Main check failed)'
+                    );
+                    return { authenticated: false };
+                }
             }
 
             return {
@@ -147,9 +190,21 @@ export class DefaultHighFlowProvider extends GeminiProvider {
                 token: token,
             };
         } catch (error) {
-            console.error('[DefaultHighFlowProvider] Authentication check failed:', error);
+            console.error('[DefaultHighFlowProvider] Auth check failed (Main):', error);
             return { authenticated: false };
         }
+    }
+
+    /**
+     * Check if provider is ready (authenticated)
+     * Performs strict check to ensure we don't select this provider if session is expired
+     */
+    async isReady(): Promise<boolean> {
+        const auth = await this.checkAuthentication(true);
+        // console.log(
+        //    `[DefaultHighFlowProvider] isReady called. Authenticated: ${auth.authenticated}`
+        // );
+        return auth.authenticated;
     }
 
     /**
@@ -268,10 +323,10 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             config.model = 'gemini-2.5-flash';
         }
 
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
-        // Check authentication
-        const auth = await this.checkAuthentication();
+        // Check authentication (Non-strict to save latency, let API handle 401)
+        const auth = await this.checkAuthentication(false);
         if (!auth.authenticated || !auth.token) {
             throw new Error(
                 'Default HighFlow Provider를 사용하려면 로그인이 필요합니다. Settings에서 로그인해주세요.'
@@ -498,10 +553,10 @@ export class DefaultHighFlowProvider extends GeminiProvider {
             config.model = 'gemini-2.5-flash';
         }
 
-        this.validateConfig(config);
+        await this.validateConfig(config);
 
-        // Check authentication
-        const auth = await this.checkAuthentication();
+        // Check authentication (Non-strict)
+        const auth = await this.checkAuthentication(false);
         if (!auth.authenticated || !auth.token) {
             throw new Error(
                 'Default HighFlow Provider를 사용하려면 로그인이 필요합니다. Settings에서 로그인해주세요.'

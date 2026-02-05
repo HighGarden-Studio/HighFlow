@@ -50,7 +50,9 @@ export class CuratorService {
         project: Project,
         executionService: any, // Not used directly but kept for interface compatibility
         repo: any, // Pass repository
-        preComputedContext?: any // Optional pre-computed context from agent
+        preComputedContext?: any, // Optional pre-computed context from agent
+        defaultAiConfig?: { providerId: string; modelId: string } | null,
+        isLoggedIn: boolean = false
     ): Promise<void> {
         console.log(`[Curator] Starting memory update for task ${projectId}-${projectSequence}...`);
 
@@ -254,13 +256,15 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                     // ===============================
                     // CURATOR OPERATOR HIERARCHY
                     // ===============================
-                    // 1. Check project curator setting
-                    // 2. Fallback to global curator
-                    // 3. Fallback to cost-effective provider
+                    // 1. Check project curator setting (Specific Override)
+                    // 2. Check User's Default AI (Preferred User Setting)
+                    // 3. Fallback to global curator (System Default)
+                    // 4. Fallback to cost-effective provider (Automated Fallback)
 
                     const { operatorRepository } =
                         await import('../../../electron/main/database/repositories/operator-repository');
                     let curatorOperator = null;
+                    let selectedStrategy = 'fallback'; // 'project' | 'user-default' | 'global' | 'fallback'
 
                     // Priority 1: Project curator
                     if (project.curatorOperatorId) {
@@ -268,39 +272,101 @@ IMPORTANT: Respond ONLY in valid JSON format with this exact structure:
                             project.curatorOperatorId
                         );
                         if (curatorOperator) {
-                            console.log(`[Curator] Using project curator: ${curatorOperator.name}`);
+                            selectedStrategy = 'project';
+                            console.log(
+                                `[Curator] Strategy: Projectator - ${curatorOperator.name}`
+                            );
                         }
                     }
 
-                    // Priority 2: Global curator
-                    if (!curatorOperator) {
-                        curatorOperator = await operatorRepository.findGlobalCurator();
-                        if (curatorOperator) {
-                            console.log(`[Curator] Using global curator: ${curatorOperator.name}`);
-                        }
-                    }
-
-                    // Use ProviderFactory to get a configured provider
+                    // Priority 2: User Default AI (if provided and valid)
+                    // This respects the "Initial Setup Wizard" choice.
                     const { ProviderFactory } = await import('./providers/ProviderFactory');
                     const providerFactory = new ProviderFactory();
-
                     let providerResult = null;
 
-                    // Priority 3: Use curator operator's AI settings if found
-                    if (curatorOperator) {
+                    if (!curatorOperator && defaultAiConfig && defaultAiConfig.providerId) {
+                        const isHighFlow = defaultAiConfig.providerId === 'default-highflow';
+
+                        // Safety Check: Don't use HighFlow if not logged in
+                        if (isHighFlow && !isLoggedIn) {
+                            console.warn(
+                                `[Curator] Default AI is HighFlow but user is not logged in. Skipping user default.`
+                            );
+                        } else {
+                            // Attempt to use user default
+                            try {
+                                providerFactory.setApiKeys(this.apiKeys);
+                                const provider = await providerFactory.getProvider(
+                                    defaultAiConfig.providerId
+                                );
+                                if (provider) {
+                                    // Verify model exists or use default
+                                    const model =
+                                        defaultAiConfig.modelId || provider.models[0]?.name;
+                                    providerResult = { provider, model };
+                                    selectedStrategy = 'user-default';
+                                    console.log(
+                                        `[Curator] Strategy: User Default - ${provider.name} (${model})`
+                                    );
+                                }
+                            } catch (err) {
+                                console.warn(`[Curator] Failed to load User Default AI:`, err);
+                            }
+                        }
+                    }
+
+                    // Priority 3: Global curator (if no project curator and no user default used)
+                    if (!curatorOperator && !providerResult) {
+                        curatorOperator = await operatorRepository.findGlobalCurator();
+                        if (curatorOperator) {
+                            // Check if Global Curator uses HighFlow and valid login
+                            const isGlobalHighFlow =
+                                curatorOperator.aiProvider === 'default-highflow';
+                            if (isGlobalHighFlow && !isLoggedIn) {
+                                console.warn(
+                                    '[Curator] Global Curator uses HighFlow but user is not logged in. Skipping global curator.'
+                                );
+                                curatorOperator = null; // Skip it
+                            } else {
+                                selectedStrategy = 'global';
+                                console.log(
+                                    `[Curator] Strategy: Global Curator - ${curatorOperator.name}`
+                                );
+                            }
+                        }
+                    }
+
+                    // Execution based on selected strategy
+                    // If we have a providerResult from Priority 2, use it.
+                    // If we have a curatorOperator (Priority 1 or 3), use it.
+
+                    if (curatorOperator && !providerResult) {
                         providerFactory.setApiKeys(this.apiKeys);
-                        const provider = await providerFactory.getProvider(
-                            curatorOperator.aiProvider
-                        );
-                        providerResult = {
-                            provider,
-                            model: curatorOperator.aiModel,
-                        };
-                    } else {
-                        // Priority 4: Fallback to cost-effective provider
+                        try {
+                            // Cast to any to avoid strict union type errors
+                            const providerId = curatorOperator.aiProvider as any;
+                            const provider = await providerFactory.getProvider(providerId);
+                            providerResult = {
+                                provider,
+                                model: curatorOperator.aiModel,
+                            };
+                        } catch (e) {
+                            console.error(
+                                `[Curator] Failed to load operator provider ${curatorOperator.aiProvider}:`,
+                                e
+                            );
+                        }
+                    }
+
+                    // Priority 4: Fallback to cost-effective provider
+                    if (!providerResult) {
                         console.log(
-                            '[Curator] No curator operator found, using cost-effective provider'
+                            '[Curator] No confirmed curator strategy found, using cost-effective fallback'
                         );
+                        // Explicitly tell fallback to avoid HighFlow if not logged in
+                        // (Logic inside selectCostEffectiveProvider currently prefers Flash/Mini/Haiku which are usually Key-based.
+                        // It doesn't default to HighFlow. So this is safe.)
                         providerResult = await this.selectCostEffectiveProvider(providerFactory);
                     }
 

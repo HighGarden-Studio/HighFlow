@@ -224,7 +224,10 @@ export abstract class BaseAIProvider {
     /**
      * Validate config before execution
      */
-    protected validateConfig(config: AIConfig): void {
+    /**
+     * Validate config before execution
+     */
+    protected async validateConfig(config: AIConfig): Promise<void> {
         if (
             config.temperature !== undefined &&
             (config.temperature < 0 || config.temperature > 2)
@@ -238,6 +241,20 @@ export abstract class BaseAIProvider {
 
         if (config.topP !== undefined && (config.topP < 0 || config.topP > 1)) {
             throw new Error('topP must be between 0 and 1');
+        }
+
+        // Lazy Load Fallback:
+        // If dynamic models effectively empty, try to fetch them once (which should load from DB cache or API)
+        if (!this.models || this.models.length === 0) {
+            try {
+                // console.log(`[BaseAIProvider] No models loaded for ${this.name}, attempting lazy fetch...`);
+                const fetched = await this.fetchModels();
+                if (fetched && fetched.length > 0) {
+                    this.setDynamicModels(fetched);
+                }
+            } catch (err) {
+                console.warn(`[BaseAIProvider] Lazy fetch failed for ${this.name}:`, err);
+            }
         }
 
         const modelInfo = this.getModelInfo(config.model);

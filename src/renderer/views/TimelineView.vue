@@ -8,7 +8,7 @@ import { onMounted, computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
-import ProjectInfoModal from '../../components/project/ProjectInfoModal.vue';
+import ProjectInfoPanel from '../../components/project/ProjectInfoPanel.vue';
 import TaskDetailPanel from '../../components/task/TaskDetailPanel.vue';
 import EnhancedResultPreview from '../../components/task/EnhancedResultPreview.vue';
 import GanttChart from '../../components/timeline/GanttChart.vue';
@@ -94,12 +94,6 @@ function handleViewResults(task: Task) {
 
 function closeResultPreview() {
     showResultPreview.value = false;
-}
-
-async function handleProjectInfoUpdate() {
-    if (!projectId.value) return;
-    await projectStore.fetchProject(projectId.value);
-    await taskStore.fetchTasks(projectId.value);
 }
 
 // Lifecycle
@@ -238,13 +232,12 @@ onMounted(async () => {
             <!-- ... -->
         </main>
 
-        <!-- Project Info Modal -->
-        <ProjectInfoModal
+        <!-- Project Info Panel -->
+        <ProjectInfoPanel
             v-if="project"
             :project="project"
-            :open="showInfoPanel"
+            :show="showInfoPanel"
             @close="showInfoPanel = false"
-            @update="handleProjectInfoUpdate"
         />
 
         <!-- Task Detail Panel -->

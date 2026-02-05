@@ -79,14 +79,24 @@ export class TaskRepository {
         const [result] = await db
             .select()
             .from(tasks)
-            .where(
-                and(
-                    eq(tasks.projectId, projectId),
-                    eq(tasks.projectSequence, projectSequence),
-                    isNull(tasks.deletedAt)
-                )
-            )
+            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence)))
             .limit(1);
+
+        if (result?.executionResult?.content) {
+            const safeResult = {
+                ...result,
+                executionResult: { ...result.executionResult, content: '(truncated)' },
+            };
+            console.log(
+                `[TaskRepo] findByKey(${projectId}, ${projectSequence}) raw result:`,
+                safeResult
+            );
+        } else {
+            console.log(
+                `[TaskRepo] findByKey(${projectId}, ${projectSequence}) raw result:`,
+                result
+            );
+        }
 
         return result;
     }
@@ -244,14 +254,110 @@ export class TaskRepository {
     /**
      * Soft delete task by composite key
      */
+    /**
+     * Soft delete task by composite key and clean up dependencies
+     */
     async deleteByKey(projectId: number, projectSequence: number): Promise<void> {
-        await db
-            .update(tasks)
-            .set({
-                deletedAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .where(and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence)));
+        // 1. Find tasks that depend on this task
+        const dependentTasks = await db
+            .select()
+            .from(tasks)
+            .where(
+                and(
+                    eq(tasks.projectId, projectId),
+                    isNull(tasks.deletedAt)
+                    // We can't easily filter JSON in SQLite efficiently for all cases,
+                    // so we'll fetch project tasks and filter in memory or rely on broader fetch.
+                    // Given findByProject usage pattern, fetching all active tasks for project is safe/standard here.
+                )
+            );
+
+        const tasksToUpdate_TriggerConfig: Task[] = [];
+        const tasksToUpdate_Dependencies: Task[] = [];
+
+        for (const task of dependentTasks) {
+            // Check triggerConfig
+            if (
+                task.triggerConfig &&
+                task.triggerConfig.dependsOn &&
+                Array.isArray(task.triggerConfig.dependsOn.taskIds)
+            ) {
+                if (task.triggerConfig.dependsOn.taskIds.includes(projectSequence)) {
+                    tasksToUpdate_TriggerConfig.push(task);
+                }
+            }
+
+            // Check dependencies (legacy or simple array)
+            if (Array.isArray(task.dependencies) && task.dependencies.includes(projectSequence)) {
+                tasksToUpdate_Dependencies.push(task);
+            }
+        }
+
+        // 2. Update dependent tasks
+        await db.transaction(async (tx) => {
+            // Update triggerConfigs
+            for (const task of tasksToUpdate_TriggerConfig) {
+                if (!task.triggerConfig?.dependsOn?.taskIds) continue;
+
+                const newTaskIds = task.triggerConfig.dependsOn.taskIds.filter(
+                    (id) => id !== projectSequence
+                );
+                const newTriggerConfig = {
+                    ...task.triggerConfig,
+                    dependsOn: {
+                        ...task.triggerConfig.dependsOn,
+                        taskIds: newTaskIds,
+                    },
+                };
+
+                // If no dependencies left, remove dependsOn entirely?
+                // Or keep empty array? Keeping empty array might be safer or user might want to add more.
+                // User request says "remove from dependency".
+                // If taskIds becomes empty, the task might auto-trigger or never trigger depending on logic.
+                // Usually empty dependency means "no dependency".
+
+                await tx
+                    .update(tasks)
+                    .set({
+                        triggerConfig: newTriggerConfig,
+                        updatedAt: new Date(),
+                    })
+                    .where(
+                        and(
+                            eq(tasks.projectId, projectId),
+                            eq(tasks.projectSequence, task.projectSequence)
+                        )
+                    );
+            }
+
+            // Update dependencies column
+            for (const task of tasksToUpdate_Dependencies) {
+                const newDeps = (task.dependencies || []).filter((id) => id !== projectSequence);
+                await tx
+                    .update(tasks)
+                    .set({
+                        dependencies: newDeps,
+                        updatedAt: new Date(),
+                    })
+                    .where(
+                        and(
+                            eq(tasks.projectId, projectId),
+                            eq(tasks.projectSequence, task.projectSequence)
+                        )
+                    );
+            }
+
+            // 3. Perform the soft delete
+            await tx
+                .update(tasks)
+                .set({
+                    deletedAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .where(
+                    and(eq(tasks.projectId, projectId), eq(tasks.projectSequence, projectSequence))
+                );
+        });
     }
 
     /**

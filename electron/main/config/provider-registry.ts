@@ -76,6 +76,13 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
         executionStrategy: 'local-session',
         agentCommand: 'codex',
     },
+    'gemini-cli': {
+        id: 'gemini-cli',
+        name: 'Gemini CLI',
+        type: 'local-agent',
+        executionStrategy: 'local-session',
+        agentCommand: 'gemini',
+    },
 };
 
 /**
@@ -104,14 +111,15 @@ export function isApiProvider(providerId: string): boolean {
 /**
  * Get local agent type for provider
  */
-export function getLocalAgentType(providerId: string): 'claude' | 'codex' | null {
+export function getLocalAgentType(providerId: string): 'claude' | 'codex' | 'gemini-cli' | null {
     const config = getProviderConfig(providerId);
     if (config?.type !== 'local-agent') return null;
 
     // Map provider ID to agent type
-    const agentMap: Record<string, 'claude' | 'codex'> = {
+    const agentMap: Record<string, 'claude' | 'codex' | 'gemini-cli'> = {
         'claude-code': 'claude',
         codex: 'codex',
+        'gemini-cli': 'gemini-cli',
     };
 
     return agentMap[providerId] || null;
